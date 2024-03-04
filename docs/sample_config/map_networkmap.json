@@ -1,0 +1,8 @@
+{
+	"name": "networkmap",
+	"type": "map",
+	"storeClass": "storage.idmap.redis.NetworkOperationMap",
+	"host": "localhost",
+	"port": 6379,
+	"db": 2
+}

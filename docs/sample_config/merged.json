@@ -1,0 +1,11 @@
+{
+	"name": "merged",
+	"type": "results",
+	"namespace": "https://your.local.domain/data/",
+	"idmap_name": "idmap",
+
+	"recordcacheClass": "storage.cache.postgres.MergedRecordCache",
+    "mapperClass": "sources.lux.final.mapper.Cleaner",
+    "reconcilerClass": "sources.lux.final.reconciler.CsvReconciler",
+    "acquirerClass": null
+}

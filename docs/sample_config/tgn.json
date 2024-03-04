@@ -1,0 +1,15 @@
+{
+    "name": "tgn",
+    "type": "external",
+    "namespace": "http://vocab.getty.edu/tgn/",
+    "matches": ["vocab.getty.edu/tgn/"],
+    "fetch": "https://data.getty.edu/vocab/tgn/{identifier}",
+    "activitystreams": ["https://data.getty.edu/vocab/activity-stream"],
+    "wikidata_property": ["P1667"],
+    "merge_order": 12,
+    
+    "harvesterClass": "sources.authorities.getty.harvester.GettyHarvester2",
+    "fetcherClass": "sources.authorities.getty.fetcher.GettyFetcher",
+    "mapperClass": "sources.authorities.getty.mapper.TgnMapper",
+    "cycleBreakPath": "tgn_cycle_breaks.json"
+}

@@ -1,0 +1,16 @@
+
+{
+    "name": "ml_dev",
+    "type": "marklogic",
+    "storeClass": "storage.marklogic.rest.MarkLogicStore",
+    "search": "https://local-ml.domain:8000/LATEST/search",
+    "rest": "https://local-ml.domain:8000/LATEST/documents", 
+    "sparql": "https://local-ml.domain:8000/LATEST/graphs/sparql",
+    "xquery": "https://local-ml.domain:8000/LATEST/eval",
+    "database": "lux-content",
+    "auth": {
+        "type": "HTTPDigestAuth",
+        "user": "ACCOUNT NAME HERE",
+        "password": "PASSWORD HERE"
+    } 
+}

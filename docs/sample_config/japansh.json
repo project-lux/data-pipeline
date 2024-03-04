@@ -1,0 +1,13 @@
+{
+    "name": "japansh",
+    "type": "external",
+    "namespace": "http://id.ndl.go.jp/auth/ndlsh/",
+    "matches": ["id.ndl.go.jp/auth/ndlsh/"],
+    "uniquePerRecord": true,
+    "fetch": "http://id.ndl.go.jp/auth/ndlsh/{identifier}.json",
+    "wikidata_property": ["P349"],
+    "merge_order": 36,
+    
+    "fetcherClass": "sources.libraries.japan.fetcher.JapanShFetcher",
+    "mapperClass": "sources.libraries.japan.mapper.JapanShMapper"
+}

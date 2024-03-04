@@ -1,0 +1,23 @@
+{
+    "name": "lcnaf",
+    "type": "external",
+    "namespace": "http://id.loc.gov/authorities/names/",
+    "matches": ["id.loc.gov/authorities/names/"],
+    "fetch": "http://id.loc.gov/authorities/names/{identifier}.json",
+    "wikidata_property": ["P244"],
+    "merge_order": 22,
+    
+    "fetcherClass": "sources.authorities.lc.fetcher.LcnafFetcher",
+    "mapperClass": "sources.authorities.lc.mapper.LcnafMapper",
+    "loaderClass": "sources.authorities.lc.loader.LcLoader",
+    "indexLoaderClass": "sources.authorities.lc.index_loader.LCIndexLoader",
+    "reconcilerClass": "sources.authorities.lc.reconciler.LcnafReconciler",
+
+    "reconcileDbPath": "label_to_lcnaf.sqlite",
+    "inverseEquivDbPath": "id_to_lcnaf.sqlite",
+    "dumpFilePath": "lcnaf/names.madsrdf.jsonld.gz",
+    "externalLinksPath": "lcsh/external_links.nt",
+    "cycleBreakPath": "lcnaf_cycle_breaks.json",
+    
+    "totalRecords": 11000000
+}

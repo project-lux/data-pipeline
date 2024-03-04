@@ -1,0 +1,59 @@
+{
+	"*": {
+		"id": ["", "string"],
+		"text": ["*AnyText", "string"],
+		"name": ["*PrimaryName", "string"],
+		"identifier": ["*Identifier", "xstring"],
+		"classification": ["lux:*ClassifedAs", "Concept"],
+		"any": ["lux:*Any", "Reference"],
+		"noteText": ["*NoteText", "string"]
+	},
+	"Reference": {},
+	"Agent": {
+		"bornAt": ["lux:placeOfBeginning", "Place"],
+		"diedAt": ["lux:placeOfEnding", "Place"],
+		"bornTime": ["agentStartDateFloat", "date"],
+		"diedTime": ["agentEndDateFloat", "date"],	
+		"nationality": ["lux:agentNationality", "Concept"],
+		"gender": ["lux:agentGender", "Concept"],
+		"occupation": ["lux:agentOccupation", "Concept"],
+		"agentMemberOf": ["crm:P107i_is_current_or_former_member_of", "Agent"]
+
+	},
+	"Set": {
+		"usedFor": ["crm:P16i_was_used_for", "Activity"]
+	},
+	"Activity": {
+		"carriedOutBy": ["crm:P14_carried_out_by", "Agent"],
+		"startTime": ["eventStartDateFloat", "date"],
+		"endTime": ["eventEndDateFloat", "date"],
+		"tookPlaceAt": ["crm:P7_took_place_at", "Place"],
+		"used": ["crm:P16_used_specific_object", "Set"]
+	},
+
+	"Place": {
+		"partOf": ["crm:P89_falls_within", "Place"]
+	},
+	"Concept": {
+		"broader": ["skos:broader", "Concept"]
+	},
+	"Item": {
+		"material": ["crm:P45_consists_of", "Concept"],
+		"producedTime": ["itemProductionDateFloat", "date"],
+		"producedAt": ["lux:placeOfProduction", "Place"],
+		"producedBy": ["lux:agentOfProduction", "Agent"],
+		"carries": ["lux:carries_or_shows", "Work"],
+		"memberOf": ["la:member_of", "Set"],
+        "height": ["itemHeightDimensionValue", "number"],
+        "width": ["itemWidthDimensionValue", "number"]
+	},
+	"Work": {
+		"subject": ["lux:about_or_depicts", "Reference"],
+		"publishedTime": ["workPublicationDateFloat", "date"],
+		"publishedAt": ["lux:placeOfPublication", "Place"],
+		"publishedBy": ["lux:agentOfPublication", "Agent"],
+		"createdTime": ["workCreationDateFloat", "date"],
+		"createdAt": ["lux:placeOfCreation", "Place"],
+		"createdBy": ["lux:agentOfCreation", "Agent"]
+	}
+}

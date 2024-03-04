@@ -1,0 +1,19 @@
+{
+    "name": "ycba",
+    "type": "internal",
+    "namespace": "https://ycba-lux.s3.amazonaws.com/v3/",
+    "matches": ["ycba-lux.s3.amazonaws.com/v3/"],
+    "fetch": "https://ycba-lux.s3.amazonaws.com/v3/{identifier}",
+    "activitystreams": [
+	"https://ycba-lux.s3.amazonaws.com/activity_stream/collection1.json"
+    ],
+    "merge_order": 1,
+    
+    "mapperClass": "sources.yale.ycba.mapper.YcbaMapper",
+    "loaderClass": "sources.yale.ycba.loader.YcbaLoader",
+    "harvesterClass": "process.base.harvester.ASHarvester",
+
+    "dumpFilePath": "ycba/linked_art.tar.gz",
+    "totalRecords": 197711
+    
+}

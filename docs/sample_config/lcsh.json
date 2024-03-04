@@ -1,0 +1,22 @@
+{
+    "name": "lcsh",
+    "type": "external",
+    "namespace": "http://id.loc.gov/authorities/subjects/",
+    "matches": ["id.loc.gov/authorities/subjects/"],
+    "fetch": "http://id.loc.gov/authorities/subjects/{identifier}.json",
+    "wikidata_property": ["P244"],
+    "merge_order": 22,
+    
+    "fetcherClass": "sources.authorities.lc.fetcher.LcshFetcher",
+    "mapperClass": "sources.authorities.lc.mapper.LcshMapper",
+    "loaderClass": "sources.authorities.lc.loader.LcLoader",
+    "indexLoaderClass": "process.base.index_loader.IndexLoader",
+    "reconcilerClass": "sources.authorities.lc.reconciler.LcshReconciler",
+    "reconcileDbPath": "label_to_lcsh.sqlite",
+    "inverseEquivDbPath": "id_to_lcsh.sqlite",
+    "dumpFilePath": "lcsh/subjects.madsrdf.jsonld.gz",
+    "externalLinksPath": "lcsh/external_links.nt",
+    "cycleBreakPath": "lcsh_cycle_breaks.json",
+    
+    "totalRecords": 450000
+}

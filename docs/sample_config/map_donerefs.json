@@ -1,0 +1,8 @@
+{
+	"name": "done_refs",
+	"type": "map",
+	"storeClass": "storage.idmap.redis.ReferenceMap",
+	"host": "localhost",
+	"port": 6379,
+	"db": 4
+}

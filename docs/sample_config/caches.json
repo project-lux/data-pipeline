@@ -1,0 +1,18 @@
+{
+    "name": "_caches",
+    "type": "caches",
+
+    "host": "",
+    "port": 5432,
+    "user": "USERNAME",
+    "password": "PASSWORD",
+    "dbname": "DBNAME",
+
+    "connect": true,
+    "overwrite": true,
+    "change_types": false,
+    "refresh_delta": null,
+    "cursor_size": 1000,
+    "export_path": "data/output/dbs"
+    
+}

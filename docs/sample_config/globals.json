@@ -1,0 +1,34 @@
+{
+    "type": "globals",
+    "idmap_name": "idmap",
+    
+    "primaryName": "300404670",
+    "sortName": "300404672",
+    "alternateName": "300264273",
+    "alternateTitle": "300417227",
+    "translatedTitle": "300417194",
+    "officialName": "300404686",
+    "displayName": "300404669",
+    
+    "statementType": "300418049",
+    "active": "300393177",
+
+    "typeOfWork": "300435443",
+    "typeOfPart": "300241583",
+    "style": "300015646",
+    "gender": "300055147",
+    "nationality": "300379842",
+    "occupation": "300263369",
+    "collectionItem": "300404024",
+    "curation": "300054277",
+    "archives": "300375748",
+    "archivalMaterial": "300379505",
+    
+    "lang_en": "300388277",
+    "lang_fr": "300388306",
+    "lang_de": "300388344",
+    "lang_es": "300389311",
+    "lang_ar": "300387843",
+    "lang_nl": "300388256",
+    "lang_zh": "300388118"
+}

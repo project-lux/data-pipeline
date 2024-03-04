@@ -1,0 +1,17 @@
+redis
+psycopg2-binary
+cromulent>=0.16.8
+requests
+requests_toolbelt
+SPARQLWrapper
+dateutils
+edtf
+dateparser
+shapely
+lxml
+jsonschema
+sqlitedict
+numpy
+bs4
+python-dotenv
+pyluach

@@ -1,0 +1,13 @@
+{
+    "name": "gbif",
+    "type": "external",
+    "namespace": "https://www.gbif.org/species/",
+    "matches": ["www.gbif.org/species/"],
+    "fetch": "https://api.gbif.org/v1/species/{identifier}",
+    "wikidata_property": ["P846"],
+    "merge_order": 41,
+    
+    "fetcherClass": "process.base.fetcher.Fetcher",
+    "mapperClass": "sources.authorities.gbif.mapper.GbifMapper"
+
+}

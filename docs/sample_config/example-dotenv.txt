@@ -1,0 +1,1 @@
+LUX_BASEPATH="/path/to/lux/config"

@@ -1,0 +1,16 @@
+
+{
+    "name": "ml_local",
+    "type": "marklogic",
+    "storeClass": "storage.marklogic.rest.MarkLogicStore",
+    "search": "http://localhost:8000/LATEST/search",
+    "rest": "http://localhost:8000/LATEST/documents",
+    "xquery": "http://localhost:8000/LATEST/eval",
+    "sparql": "http://localhost:8000/LATEST/graphs/sparql",
+    "database": "lux-content", 
+    "auth": {
+        "type": "HTTPDigestAuth",
+        "user": "admin",
+        "password": ""
+    }           
+}

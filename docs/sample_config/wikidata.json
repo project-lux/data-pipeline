@@ -1,0 +1,20 @@
+{
+    "name": "wikidata",
+    "type": "external",
+    "namespace": "http://www.wikidata.org/entity/",
+    "matches": ["wikidata.org/entity/", "wikidata.org/wiki/"],
+    "fetch": "https://www.wikidata.org/wiki/Special:EntityData/{identifier}.json",
+    "merge_order": 50,
+    
+    "fetcherClass": "sources.general.wikidata.fetcher.WdFetcher",
+    "mapperClass": "sources.general.wikidata.mapper.WdMapper",
+    "loaderClass": "sources.general.wikidata.loader.WdLoader",
+    "indexLoaderClass": "sources.general.wikidata.index_loader.RawWdIndexLoader",
+    "reconcilerClass": "sources.general.wikidata.reconciler.WdReconciler",
+
+    "inverseEquivDbPath": "id_to_wikidata.sqlite",
+    "dumpFilePath": "wikidata/latest-all.json.gz",
+    "cycleBreakPath": "wikidata_cycle_breaks.json",
+    "totalRecords": 100000000
+
+}

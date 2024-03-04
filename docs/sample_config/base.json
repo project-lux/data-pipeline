@@ -1,0 +1,74 @@
+{
+    "type": "base",
+
+    "allow_network": false,
+    "debug_reconciliation": false,
+    "max_distance": 3,
+    "validatorClass": "pipeline.process.validator.Validator",
+    "validate_allow_underscore_properties": true,
+
+    "internal_uri": "https://your.local.domain/data/",
+    "do_not_reidentify": ["/creativecommons.org/", "/rightsstatements.org/"],
+    
+    "ok_record_types": {
+        "HumanMadeObject":"object", 
+        "Type":"concept",
+        "Material":"concept",
+        "Language":"concept",
+        "Currency":"concept",
+        "MeasurementUnit":"concept",
+        "Person":"person", 
+        "Group":"group", 
+        "Set":"set", 
+        "Place":"place",
+        "VisualItem":"visual",
+        "LinguisticObject":"text", 
+        "DigitalObject":"digital",
+        "Activity":"activity",
+        "Event":"activity",
+        "Period":"activity"
+    },
+    "parent_record_types": {
+        "Material": "Type",
+        "Language": "Type",
+        "Currency": "Type",
+        "MeasurementUnit": "Type"
+    },
+
+    "reconcile_record_types": [
+	"Person", "Group", "Place",
+	"Type", "Language", "Material",
+	"MeasurementUnit", "Currency"],
+
+    "base_dir": "/home/lux/pipeline",
+    "indexes_dir": "data/processing",
+    "dumps_dir": "data/input",
+    "exports_dir": "data/output/latest",
+    "data_dir": "data/files",
+    "log_dir": "data/logs",
+    "tests_dir": "data/tests",
+    
+    "path_types": {
+	"reconcileDbPath": "indexes_dir",
+	"reconcileDumpPath": "dumps_dir",
+	"dumpFilePath": "dumps_dir",
+	"exportPath": "exports_dir",
+	"inverseEquivDbPath": "indexes_dir",
+	"cycleBreakPath": "data_dir"
+    },
+
+    "other_external_matches":[
+        "libris.kb.se/",
+        "n2t.net/ark:/99166/",
+        "isni.org/isni",
+        "worldcat.org/fast/",
+        "datos.bne.es",
+	    "www.gbif.org",
+        "creativecommons.org",
+        "rightsstatements.org"
+    ],
+
+    "external_uri_rewrites": {
+        "http://isni-url.oclc.nl/isni/": "http://isni.org/isni/"
+    }
+}

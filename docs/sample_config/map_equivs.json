@@ -1,0 +1,8 @@
+{
+	"name": "equivalents",
+	"type": "map",
+	"storeClass": "storage.idmap.redis.TransitiveMultiMap",
+	"host": "localhost",
+	"port": 6379,
+	"db": 5
+}

@@ -1,0 +1,13 @@
+{
+    "name": "bne",
+    "type": "external",
+    "namespace": "https://datos.bne.es/resource/",
+    "matches": ["datos.bne.es/resource/"],
+    "fetch": "https://datos.bne.es/resource/{identifier}.jsonld",
+    "wikidata_property": ["P950"],
+    "merge_order": 100,
+    
+    "fetcherClass": "process.base.fetcher.Fetcher",
+    "mapperClass": "sources.libraries.bne.mapper.BneMapper",
+    "cycleBreakPath": "bne_cycle_breaks.json"
+}

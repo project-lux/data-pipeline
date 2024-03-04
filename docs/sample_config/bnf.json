@@ -1,0 +1,13 @@
+{
+    "name": "bnf",
+    "type": "external",
+    "namespace": "https://data.bnf.fr/ark:/12148/",
+    "matches": ["data.bnf.fr/ark:/12148/"],
+    "fetch": "https://data.bnf.fr/ark:/12148/{identifier}",
+    "wikidata_property": ["P268"],
+    "merge_order": 30,
+    
+    "fetcherClass": "sources.libraries.bnf.fetcher.BnfXmlFetcher",
+    "mapperClass": "sources.libraries.bnf.mapper.BnfXmlMapper",
+    "cycleBreakPath": "bnf_cycle_breaks.json"
+}

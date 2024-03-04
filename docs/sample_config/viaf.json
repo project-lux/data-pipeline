@@ -1,0 +1,20 @@
+{
+	"name": "viaf",
+	"type": "external",
+	"namespace": "http://viaf.org/viaf/",
+	"matches": ["viaf.org/viaf/"],
+	"fetch": "https://viaf.org/viaf/{identifier}/viaf.xml",
+    "wikidata_property": ["P214"],
+    "merge_order": 70,
+    
+	"fetcherClass": "sources.authorities.oclc.fetcher.ViafFetcher",
+	"mapperClass": "sources.authorities.oclc.mapper.ViafMapper",
+	"loaderClass": "sources.authorities.oclc.loader.ViafLoader",
+	"indexLoaderClass": "sources.authorities.oclc.index_loader.ViafIndexLoader",
+	"reconcilerClass": "sources.authorities.oclc.reconciler.ViafReconciler",
+
+    "inverseEquivDbPath": "id_to_viaf.sqlite",        
+	"reconcileDumpPath": "viaf/viaf-links.txt.gz",
+    "dumpFilePath": "viaf/viaf-clusters.xml.gz"
+
+}
