@@ -158,6 +158,7 @@ class SqliteReconciler(Reconciler):
         if reconcileType in ['all', 'name']:
             # Get name from Record
             vals = self.extract_names(rec)
+            vals.sort(key=len,reverse=True)
             for val in vals:
                 if val in self.name_index:
                     try:
