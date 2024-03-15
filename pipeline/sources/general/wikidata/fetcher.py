@@ -34,7 +34,7 @@ class WdFetcher(Fetcher):
         new['altLabel'] = altLbls
         new['description'] = descs
 
-        part_ofs = {}
+        report = False
 
         for (prop, vals) in js['claims'].items():
             newvals = []
@@ -48,19 +48,10 @@ class WdFetcher(Fetcher):
                     continue
                 if prop in ['P131','P17']:
                     if 'qualifiers' in val and 'P582' in val['qualifiers']:
-                        if js['id'] in part_ofs:
-                            part_ofs[js['id']].append({prop:False})
-                        else:
-                            part_ofs[js['id']] = [{prop:False}]
-                        #record it has a prop and a bad qualifier
-                        #don't add it to newvals
+                        report = True
                         continue
                     else:
-                        #record it has a prop and it can go through
-                        if js['id'] in part_ofs:
-                            part_ofs[js['id']].append({prop:True})
-                        else:
-                            part_ofs[js['id']] = [{prop:True}]
+                        report = False
 
                 dv = val['mainsnak']['datavalue']
                 dvt = dv['type']
@@ -88,10 +79,7 @@ class WdFetcher(Fetcher):
                 newvals.append(dvv)
             new[prop] = newvals
 
-        for k, v in part_ofs.items():
-            for x in v:
-                res = all(val == False for val in x.values())
-        if res == True:
-            print(f"All place partitions for {k} were rejected by an ending qualifier.")
+        if report:
+            print(f"{js['id']} has only parts with ends via P582")
 
         return new
