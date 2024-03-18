@@ -34,7 +34,7 @@ class WdFetcher(Fetcher):
         new['altLabel'] = altLbls
         new['description'] = descs
 
-        report = False
+        report = []
 
         for (prop, vals) in js['claims'].items():
             newvals = []
@@ -48,10 +48,10 @@ class WdFetcher(Fetcher):
                     continue
                 if prop in ['P131','P17']:
                     if 'qualifiers' in val and 'P582' in val['qualifiers']:
-                        report = True
+                        report.append(True)
                         continue
                     else:
-                        report = False
+                        report.append(False)
 
                 dv = val['mainsnak']['datavalue']
                 dvt = dv['type']
@@ -79,7 +79,7 @@ class WdFetcher(Fetcher):
                 newvals.append(dvv)
             new[prop] = newvals
 
-        if report:
+        if all(report) == True:
             print(f"{js['id']} has only parts with ends via P582")
 
         return new
