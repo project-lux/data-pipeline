@@ -79,7 +79,7 @@ class WdFetcher(Fetcher):
                 newvals.append(dvv)
             new[prop] = newvals
 
-        if all(report) == True:
+        if all(str(report)) == True:
             print(f"{js['id']} has only parts with ends via P582")
 
         return new
