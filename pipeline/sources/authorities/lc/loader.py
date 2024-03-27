@@ -73,4 +73,11 @@ class LcLoader(Loader):
             for chunk in js['@graph']:
                 if '@id' in chunk and chunk['@id'].endswith(ident):
                     chunk['madsrdf:hasCloseExternalAuthority'] = [{"@id": x} for x in closeAuths]
+
+        #Don't process undifferentiated records
+        for chunk in js['@graph']:
+            if 'madsrdf:isMemberOfMADSCollection' in chunk:
+                for c in chunk['madsrdf:isMemberOfMADSCollection']:
+                    if '@id' in c and c['@id'] == 'http://id.loc.gov/authorities/names/collection_NamesUndifferentiated':
+                        return None
         return js
