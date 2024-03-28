@@ -34,9 +34,10 @@ class WdReconciler(SqliteReconciler, WdConfigManager):
             "http://id.ndl.go.jp/auth/ndlsh/": "ndl",
             "http://data.whosonfirst.org/": "wof",
             "https://libris.kb.se/": "snl",
-            "https://bionomia.net/": "bionomia"
+            "https://bionomia.net/": "bionomia",
+            "https://nsf.gov/data/awards/": "nsf",
+            "https://ringgold.com/": "ringgold"    # ringgold:5755 == Yale/Q49112
         }
-
 
         # 'P305': 'lang', # this is the IETF/BCP47 language tag, not an actual URI
         # 'P1149': 'lcc', # https://id.loc.gov/authorities/classification/ Not useful?

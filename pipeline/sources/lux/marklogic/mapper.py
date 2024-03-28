@@ -220,9 +220,11 @@ class MlMapper(Mapper):
                 apred = f"agentOf{predClass}"
                 ppred = f"placeOf{predClass}"
                 tpred = f"techniqueOf{predClass}"
+                cpred = f"causeOf{predClass}"
                 agents = []
                 places = []
                 techs = []
+                causes = []
 
                 if type(node) == dict:
                     node = [node]
@@ -234,6 +236,8 @@ class MlMapper(Mapper):
                         places.extend([x['id'] for x in n['took_place_at'] if 'id' in x])
                     if 'technique' in n:
                         techs.extend([x['id'] for x in n['technique'] if 'id' in x])
+                    if 'caused_by' in n:
+                        causes.extend([x['id'] for x in n['caused_by'] if 'id' in x])
                     if 'part' in n:
                         for p in n['part']:
                             if 'carried_out_by' in p:
@@ -272,6 +276,9 @@ class MlMapper(Mapper):
                     ml['triples'].append({'triple': t})
                 for tt in techs:
                     t = {"subject": me, "predicate": f"{luxns}{tpred}", "object": tt}
+                    ml['triples'].append({'triple': t})
+                for c in causes:
+                    t = {"subject": me, "predicate": f"{luxns}{cpred}", "object": c}
                     ml['triples'].append({'triple': t})
 
         # extracted data for indexes/facets

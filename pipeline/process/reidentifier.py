@@ -69,15 +69,18 @@ class Reidentifier(object):
                 uu = None
                 for eq in equivs:
                     qeq = self.configs.make_qua(eq, qcls)
-                    if qeq in self.idmap:
-                        equiv_map[eq] = self.idmap[qeq]
+                    myqeq = self.idmap[qeq]
+                    if myqeq is not None:
+                        equiv_map[eq] = myqeq
                     else:
                         print(f"{qeq} not in idmap, but in equivs of {recid}")
 
-            if recid and qrecid in self.idmap:
-                # We know about this entity/record already
+            if recid:
                 uu = self.idmap[qrecid]
-                equiv_map[recid] = uu
+                if uu is not None:
+                    # We know about this entity/record already
+                    uu = self.idmap[qrecid]
+                    equiv_map[recid] = uu
                           
             if not equiv_map:
                 # Don't know anything at all, ask for a new yuid??
@@ -118,7 +121,7 @@ class Reidentifier(object):
                             except:
                                 result['equivalent'] = [{'id': eq, 'type': record['type'], '_label':lbl}]
                 else:
-                    result['equivalent'] = record['equivalent']
+                    result['equivalent'] = record.get('equivalent', [])
             elif recid and "/aat/" in recid:
                 # we're embedded reference, if external, put into equivalent
                 # for now only process aat

@@ -20,72 +20,44 @@ class Acquirer(object):
         # allow rec = acquirer['ident'] code pattern
         return self.acquire(identifier)
 
-    def acquire(self, identifier, rectype=None, dataonly=False, store=True, reference=False):
-        # Given an identifier, ensure that datacache and recordcache are populated
-        # Return resulting record
+    def returns_multiple(self, record=None):
+        return self.mapper.returns_multiple(record)
 
-        # validate identifier
-        if not self.fetcher.validate_identifier(identifier):
-            if self.debug: print(f"{identifier} is not a valid identifier for {self.name}")
-            return None
-
-        # Return already built record
-        if not dataonly and not reference:
-            if identifier in self.recordcache:
-                return self.recordcache[identifier]
-            elif rectype is not None and self.config['type'] == 'external':
-                qrecid = self.configs.make_qua(identifier, rectype)
-                if qrecid in self.recordcache:
-                    return self.recordcache[qrecid]
-
-        if identifier in self.datacache and not self.force_rebuild:
-            # Already have it loaded, good
+    def do_fetch(self, identifier, store=True):
+        rec = None
+        if not self.force_rebuild:
             rec = self.datacache[identifier]
-        else:
-            # Don't have it, and config says to ignore
-            if self.name in self.ignore_sources:
-                if self.debug: print(f"       Skipping {source['name']}:{identifier} in collect due to ignore_sources")
-                return None
+            if rec is not None:
+                return rec
 
-            if self.fetcher.enabled:
-                rec = self.fetcher.fetch(identifier)
-                if rec is None:
-                    if self.debug: print(f"Got no record fetching {self.name}/{identifier}; skipping")
-                    return None                    
-                if 'identifier' in rec and rec['identifier'] != identifier:
-                    # Might have been redirected
-                    identifier = rec['identifier']
-                if store:
-                    self.datacache[identifier] = rec
-            else:
-                # don't have it, can't fetch it...
-                if self.debug: print(f"Cannot fetch {self.name}/{identifier}; skipping")
-                return None
-
-        if dataonly:
-            return rec
-
-        # Map it
-        if rectype is None and 'type' in rec['data']:
-            if type(rec['data']) == list:
-                rec['data'].remove('Type') # Prefer Language/Material to Type
-                rec['data'] = rec['data'][0]
-            if rec['data']['type'] in self.configs.ok_record_types:    
-                rectype = rec['data']['type']
-
-        rec2 = self.mapper.transform(rec, rectype, reference=reference)
-
-        if rec2 is None:
-            if self.debug: print(f"Cannot map {self.name}/{identifier} into Linked Art (as {rectype})")
+        # Don't have it, and config says to ignore
+        if self.name in self.ignore_sources:
+            if self.debug: print(f"       Skipping {self.name}/{identifier} in acquire due to ignore_sources")
             return None
-        rec2['identifier'] = identifier 
-        if reference:
-            return rec2
 
-        rec2 = self.mapper.post_mapping(rec2, rectype)
-        if rec2:
+        if self.fetcher.enabled:
+            rec = self.fetcher.fetch(identifier)
+            if rec is None:
+                if self.debug: print(f"Got no record fetching {self.name}/{identifier}; skipping")
+                return None                    
+            if 'identifier' in rec and rec['identifier'] != identifier:
+                # Might have been redirected
+                identifier = rec['identifier']
+            if store:
+                self.datacache[identifier] = rec
+        else:
+            # don't have it, can't fetch it...
+            if self.debug: print(f"Cannot fetch {self.name}/{identifier}; skipping")
+            return None
+        return rec
+
+
+    def do_post_map(self, rec, rectype, store):
+        identifier = rec['identifier']
+        rec3 = self.mapper.post_mapping(rec, rectype)
+        if rec3:
             if self.validate:
-                errs = self.validator.validate(rec2)
+                errs = self.validator.validate(rec3)
                 if errs:
                     # err... now what?
                     for error in errs:
@@ -97,14 +69,73 @@ class Acquirer(object):
             if store:
                 if self.config['type'] == 'external':
                     try:
-                        qrecid = self.configs.make_qua(identifier, rec2['data']['type'])    
+                        qrecid = self.configs.make_qua(rec3['identifier'], rectype)    
                     except:
-                        print(f"{rec2['identifier']} in {self.config['name']} has no type?? {rec2['data']}")
+                        print(f"{rec3['identifier']} in {self.config['name']} has no type?? {rec3['data']}")
                         raise
-                    rec2['identifier'] = qrecid
-                    self.recordcache[qrecid] = rec2
+                    rec3['identifier'] = qrecid
+                    self.recordcache[qrecid] = rec3
                 else:
-                    self.recordcache[identifier] = rec2
+                    self.recordcache[identifier] = rec3
         else:
             if self.debug: print(f"Post Mapping killed {rectype} record {self.name}/{identifier}")
-        return rec2
+        return rec3
+
+    def acquire_all(self, identifier, store=True):
+        if not self.mapper.returns_multiple():
+            return None
+        data = self.acquire(identifier, None, True, False, False)
+        recs = self.mapper.transform_all(data)
+        result = []
+        for rec in recs:
+            result.append(self.do_post_map(rec, rec['data']['type'], store))
+        return result
+
+    def acquire(self, identifier, rectype=None, dataonly=False, store=True, reference=False):
+        # Given an identifier, ensure that datacache and recordcache are populated
+        # Return resulting record
+
+        # validate identifier
+        if self.fetcher and not self.fetcher.validate_identifier(identifier):
+            if self.debug: print(f"{identifier} is not a valid identifier for {self.name}")
+            return None
+
+        # Return already built record
+        if not dataonly and not reference:
+            rec = self.recordcache[identifier]
+            if rec is not None:
+                return rec
+            elif rectype is not None and self.config['type'] == 'external':
+                qrecid = self.configs.make_qua(identifier, rectype)
+                rec = self.recordcache[qrecid]
+                if rec is not None:
+                    return rec
+
+        rec = self.do_fetch(identifier, store)
+        if dataonly or rec is None:
+            return rec
+
+        identifier = rec['identifier'] # might have mutated during fetch
+        if rectype is None and 'type' in rec['data']:
+            if type(rec['data']) == list:
+                rec['data'].remove('Type') # Prefer Language/Material to Type
+                rec['data'] = rec['data'][0]
+            if rec['data']['type'] in self.configs.ok_record_types:    
+                rectype = rec['data']['type']
+
+        try:
+            rec2 = self.mapper.transform(rec, rectype, reference=reference)
+        except:
+            print(f"Failed to map record {identifier} for {self.name}")
+            return None
+
+        if rec2 is None:
+            if self.debug: print(f"Cannot map {self.name}/{identifier} into Linked Art (as {rectype})")
+            return None
+        rec2['identifier'] = identifier 
+
+        if reference:
+            return rec2
+
+        rec3 = self.do_post_map(rec2, rec2['data']['type'], store=store)
+        return rec3

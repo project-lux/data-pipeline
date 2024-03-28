@@ -76,8 +76,18 @@ for name, cfg in to_do:
     for recid in recids:
         sys.stdout.write('.');sys.stdout.flush()
         # Acquire the record from cache or network
-        rec = acquirer.acquire(recid)
-        if rec is not None:
+        # XXX acquire_all() to get multiple records from a single one?
+        if acquirer.returns_multiple():
+            recs = acquirer.acquire_all(recid)
+        else:
+            rec = acquirer.acquire(recid)
+            if rec is not None:
+                recs = [rec]
+            else:
+                recs = []
+        if not recs:
+            print(f" *** Failed to acquire any record for {name}/{recid} ***")
+        for rec in recs:
             # Reconcile it
             rec2 = reconciler.reconcile(rec)
             # Do any post-reconciliation clean up
@@ -89,8 +99,7 @@ for name, cfg in to_do:
 
             # Manage identifiers for rec now we've reconciled and collected
             ref_mgr.manage_identifiers(rec, rebuild=True)
-        else:
-            print(f"*** Failed to acquire an internal record: {name}/{recid} ***")
+
     recids = []
 
 # now do references
@@ -147,7 +156,7 @@ while item:
         # Manage identifiers for rec now we've reconciled and collected
         ref_mgr.manage_identifiers(rec, rebuild=True)
     else:
-        print(f"Failed to acquire reference: {source['name']}/{recid}")    
+        print(f"Failed to acquire {rectype} reference: {source['name']}:{recid}")    
 
 # final tidy up
 ref_mgr.write_metatypes(my_slice)

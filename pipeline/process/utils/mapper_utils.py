@@ -132,6 +132,10 @@ def test_birth_death(person):
 	except:
 		return True
 	if end - start > max_life_delta:
+		# Can't live longer than 122 years
+		return False
+	elif end < start:
+		# Can't die before being born
 		return False
 	else:
 		return True

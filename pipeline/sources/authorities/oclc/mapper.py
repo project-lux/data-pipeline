@@ -177,7 +177,7 @@ class ViafMapper(Mapper):
                 done[eq] = True
             else:
                 continue
-            rec.equivalent = topCls(ident=eq, label=primary)
+            rec.equivalent = topCls(ident=eq, label=rec._label)
 
         equivs = top.xpath('./viaf:sources/viaf:source/text()', namespaces=nss)
         for eq in equivs:
@@ -191,7 +191,7 @@ class ViafMapper(Mapper):
                 val = val.replace('fst', '')
             if which in self.viaf_prefixes:
                 val = val.replace(" ","") # eg sometimes LC is "n  123456" and should be n123456
-                rec.equivalent = topCls(ident=f"{self.viaf_prefixes[which]}{val}", label=primary)
+                rec.equivalent = topCls(ident=f"{self.viaf_prefixes[which]}{val}", label=rec._label)
 
         if nameType in ['Personal', 'Corporate']:
             birthdate = top.xpath('./viaf:birthDate/text()', namespaces=nss)

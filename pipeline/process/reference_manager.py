@@ -60,30 +60,28 @@ class ReferenceManager(object):
 
     # a ref is {'dist': int, 'type': str}
     def add_ref(self, ref, refs, distance, ctype): 
-        if ref in self.all_refs:
-            xr = self.all_refs[ref]
-            if not xr:
-                # Something else has deleted it 
-                return
-            else:
-                xdist = xr['dist']
-                xctype = xr['type']
+        xr = self.all_refs[ref]
+        dref = self.done_refs[ref]
+        if xr is not None:
+            xdist = xr['dist']
+            xctype = xr['type']
             # Test distance
-            if xdist is None:
-                if ref in self.done_refs:
-                    dref = self.done_refs[ref]
-                    if dref is not None and dref['dist'] > distance:
-                        del self.done_refs[ref]
-                        self.all_refs[ref] = {'dist': distance, 'type': ctype}
-            elif distance < xdist:
-                xr['dist'] = distance
+            try:
+                if xdist is None and dref is not None and dref['dist'] > distance:
+                    del self.done_refs[ref]
+                    self.all_refs[ref] = {'dist': distance, 'type': ctype}
+                elif distance < xdist:
+                    xr['dist'] = distance
+            except:
+                # Sometimes this tries to test None using >
+                print(f" *** dref-dist {dref['dist']} > distance: {distance}")
+                return None
             # Test concept type
             if not xctype and ctype:
                 xr['type'] = ctype
-        elif ref in self.done_refs:
+        elif dref is not None:
             # Test Distance
-            dref = self.done_refs[ref]
-            if dref is not None and dref['dist'] is not None and dref['dist'] > distance:
+            if distance is not None and dref['dist'] is not None and dref['dist'] > distance:
                 # Add it back in
                 del self.done_refs[ref]
                 self.all_refs[ref] = {'dist': distance, 'type': ctype}
@@ -221,8 +219,10 @@ class ReferenceManager(object):
                     self.idmap._force_delete(qeq)
                     equivs.remove(eq)
                     continue
-                if qeq not in existing and qeq in self.idmap:
-                    equiv_map[eq] = self.idmap[qeq]
+                if qeq not in existing:
+                    myqeq = self.idmap[qeq]
+                    if myqeq is not None:
+                        equiv_map[eq] = myqeq
 
         # Ensure existing from idmap are in equivalent map
         # This will only make changes on second and subsequent times
