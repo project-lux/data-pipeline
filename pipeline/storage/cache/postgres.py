@@ -3,17 +3,18 @@ from psycopg2.extras import RealDictCursor, Json
 from psycopg2.pool import SimpleConnectionPool
 import time
 import datetime
+import sys
 
 #
-# How to index into JSONB arrays in SELECT:
+# How to index into JSONB arrays:
 # SELECT identifier FROM ycba_record_cache, 
 #    jsonb_array_elements(data -> 'produced_by'->'carried_out_by') ids
 #    WHERE ids->>'id' = 'https://ycba-lux.s3.amazonaws.com/v3/person/00/00628d01-deea-4811-b262-5ea81b732fba.json'
 #
 
-# How to dump/restore the databases using pg_dump:
-# pg_dump -U USERNAME -F c --clean --no-owner -t aat_data_cache record_cache > aat_data_cache.pgdump
-# pg_restore -a -U USERNAME -W --host HOSTNAME -d DBNAME wof_data_cache.pgdump 
+# How to dump the databases using pg_dump:
+# pg_dump -U rs2668 -F c --clean --no-owner -t aat_data_cache record_cache > aat_data_cache.pgdump
+# pg_restore -a -U pipeline -W --host dev-lux-db.cn1isedzd1wu.us-east-1.rds.amazonaws.com -d lux wof_data_cache.pgdump 
 
 
 class PoolManager(object):
@@ -109,19 +110,15 @@ class PGCache(object):
             change VARCHAR,
             data jsonb NOT NULL);"""        
 
-        #             change public.change_type,
-
         # Create an index on PK and insert time
-        # PK index allows fast sorting by identifier (I think)
         # idxQry = f"""CREATE INDEX {self.name}_id_idx ON {self.name} ( {self.key} ASC NULLS LAST )"""
-        # This is made by default as _PKEY
+        # This is made by default as _PKEY ; no need to make it manually
 
         idxQry2 = f"""CREATE INDEX {self.name}_time_idx ON {self.name} ( insert_time  DESC NULLS LAST )"""
 
         with self._cursor(internal=False) as cursor:
             try:
                 cursor.execute(qry)
-                # cursor.execute(idxQry)
                 cursor.execute(idxQry2)
                 self.conn.commit()
             except Exception as e:
@@ -205,6 +202,8 @@ class PGCache(object):
         self._close()
         if rows:
             rows['source'] = self.config['name']
+
+        # sys.stdout.write('G');sys.stdout.flush()
         return rows
 
     def get_like(self, key, _key_type=None):
@@ -289,7 +288,6 @@ class PGCache(object):
                 yield res[self.key]
         self._close(is_iter=True)
 
-
     def iter_records_since(self, timestamp=None):
         if timestamp is None:
             qry = f"SELECT * FROM {self.name} ORDER BY insert_time DESC"
@@ -337,7 +335,7 @@ class PGCache(object):
         if not type(data) == dict:
             raise ValueError("Data must be a dict()")
         else:
-            data = Json(data)
+            jdata = Json(data)
         if yuid is not None and not type(yuid) == str:
             yuid = str(yuid)
 
@@ -350,7 +348,7 @@ class PGCache(object):
             format = "JSON-LD"
 
         qnames  = ['data', 'identifier', 'yuid', 'insert_time', 'record_time', 'refresh_time', 'valid', 'change']
-        qvals = (data, identifier, yuid, insert_time, record_time, refresh_time, valid, change)            
+        qvals = (jdata, identifier, yuid, insert_time, record_time, refresh_time, valid, change)            
         qd = dict(zip(qnames, qvals))
         qps = [qn for qn in qnames if qd[qn] is not None]
         qvs = tuple([qv for qv in qvals if qv is not None])
@@ -366,7 +364,8 @@ class PGCache(object):
                 self.conn.commit()
             except Exception as e:
                 # Could be a psycopg2.errors.UniqueViolation if we're trying to insert without delete
-                print(f"Failed to upsert: {e}?\n{qpstr} = {qvs}")
+                print(f"DATA: {data}")
+                print(f"Failed to upsert!: {e}?\n{qpstr} = {qvs}")
                 self.conn.rollback()                
         else:
             try:
@@ -378,6 +377,7 @@ class PGCache(object):
                 print(f"Duplicate key for {identifier}/{yuid} in {self.name}: {e}?")
                 self.conn.rollback()                
         cursor.close()
+        # sys.stdout.write('S');sys.stdout.flush()
         self._close()
 
     def delete(self, key, _key_type=None):
@@ -414,6 +414,7 @@ class PGCache(object):
         cursor.close()
         self.conn.commit()
         self._close()
+        # sys.stdout.write('?');sys.stdout.flush()
         return bool(rows)
 
     def commit(self):

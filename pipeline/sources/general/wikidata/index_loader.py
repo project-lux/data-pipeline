@@ -40,6 +40,8 @@ class WdIndexLoader(IndexLoader, WdConfigManager):
 			'P269': 'idref',
 			'P227': 'gnd',
 			'P213': 'isni',
+			'P11858': 'nsf',
+			'P3500': 'ringgold',
 			'P6782': 'ror', # https://ror.org/00qb4ds53
 			'P3430': 'snac', # https://snaccooperative.org/ark:/99166/{ident}
 			'P496': 'orcid', # https://orcid.org/<ident>

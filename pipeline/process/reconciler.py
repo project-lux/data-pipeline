@@ -6,6 +6,7 @@ class Reconciler(object):
         self.reconcilers = []
         self.debug = config.debug_reconciliation
         self.reconcileTypes = config.reconcile_record_types
+        self.config = config
 
         for src in config.external.values():
             rlr = src.get('reconciler', None)
@@ -17,7 +18,14 @@ class Reconciler(object):
                 self.reconcilers.append(rlr)
         self.distinct = config.instantiate_map('distinct')['store']
         self.collector = Collector(config, idmap, networkmap)
-
+        try:
+            self.min_equivs = config.reconcile_min_equivs
+        except:
+            self.min_equivs = 3
+        try:
+            self.filter_internal = config.reconcile_filter_internal_equivs
+        except:
+            self.filter_internal = False
 
     def reconcile(self, record):
 
@@ -25,13 +33,31 @@ class Reconciler(object):
         if not record['data']['type'] in self.reconcileTypes:
             return record
 
-        if self.debug: print(f"\n--- {rec['data']['id']} ---")
+        # Inject the record's URI into equivalents at this point
+        # in order to work through a consistent list
+        me = {"id": record['data']['id'], "type": record['data']['type']}
+        if 'equivalent' in record['data']:
+            record['data']['equivalent'].append(me)
+        else:
+            record['data']['equivalent'] = [me]
+
+        if self.debug: print(f"\n--- {record['data']['id']} ---")
         leq = len(record['data'].get('equivalent', []))
         try:
             if self.debug: print("    (uris)")
             self.reconcile_uris(record)
-            nleq = len(record['data'].get('equivalent', []))
-            if nleq == leq and nleq < 3:
+            leqs = record['data'].get('equivalent', [])
+            if self.filter_internal:
+                to_remove = []
+                for e in leqs:
+                    for i in self.config.internal.values():
+                        if e['id'].startswith(i['namespace']):
+                            to_remove.append(e)
+                for tr in to_remove:
+                    leqs.remove(tr)
+
+            nleq = len(leqs)
+            if nleq == leq and nleq < self.min_equivs:
                 # Try and reconcile based on names
                 if self.debug: print("    (names)")
                 self.call_reconcilers(record, reconcileType="name")

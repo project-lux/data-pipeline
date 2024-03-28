@@ -17,6 +17,8 @@ class MergeHandler(object):
 
     def merge(self, record, to_merge):
 
+        record['sources'] = [record['source']]
+
         to_do = []
         for eq in to_merge:
             if eq.startswith('__'):
@@ -48,6 +50,7 @@ class MergeHandler(object):
                 if ext_rec2:
                     ext_src['recordcache2'][ext_rec2['yuid']] = ext_rec2['data']
                     try:
+                        # This returns record, but it's mutated directly so no need to assign it
                         self.merger.merge(record, ext_rec2)
                     except:
                         raise
@@ -768,7 +771,11 @@ class RecordMerger(object):
                 except:
                     pass
             for rep in merge['representation']:
-                rap = rep['digitally_shown_by'][0]['access_point'][0]['id']
+                try:
+                    rap = rep['digitally_shown_by'][0]['access_point'][0]['id']
+                except:
+                    print(f" -- no dsb or access_point in {rep}")
+                    continue
                 if rap and not rap in curr:
                     rec['representation'].append(rep)
 
@@ -821,24 +828,20 @@ class RecordMerger(object):
     ### API ###
 
     def merge(self, base, to_merge):
-        # Merge data from `merge` into `rec`
-
+        # Merge data from `to_merge` into `base`
 
         # rec, merge are wrapped with meta-metadata, to enable source dependent processing
+        # We need this for tracking sources, so fail if not present
+
         if 'data' in base:
             rec = base['data']
-        elif 'id' in base and 'type' in base:
-            rec = base
         else:
             print(base)
             raise ValueError("Passed in a non-record as base")
 
-        if 'data' in to_merge:
+        if 'data' in to_merge and 'source' in to_merge:
             merge = to_merge['data']
             msource = to_merge['source']
-        elif 'id' in to_merge and 'type' in to_merge:
-            merge = to_merge
-            msource = ""
         else:
             raise ValueError("Passed in a non-record as merge")
 
@@ -873,9 +876,10 @@ class RecordMerger(object):
             # delete context
             del merge['@context']
             self.merge_common(rec, merge, msource)
+            base['sources'].append(to_merge['source'])
         else:
             try:
                 print(f"Did not merge {to_merge['identifier']} into {base['yuid']}")
             except:
                 print(f"Skipped merging {to_merge} into {base}")
-        return rec
+        return base

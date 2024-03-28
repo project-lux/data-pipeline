@@ -1,8 +1,7 @@
 from pipeline.process.base.mapper import Mapper
 from cromulent import model, vocab
 
-
-class GnMapper(Mapper):
+class RorMapper(Mapper):
 
     def __init__(self, config):
         Mapper.__init__(self, config)
@@ -13,7 +12,7 @@ class GnMapper(Mapper):
 
     def transform(self, record, rectype, reference=False):
 
-        # NOTE v2 of the API
+        # NOTE this is v2 of the API
         # api.ror.org/v2/organizations/{ident}
         rec = record['data']
 
@@ -64,7 +63,6 @@ class GnMapper(Mapper):
                     lo.digitally_carried_by = do
                     top.subject_of = lo
 
-
         known_typs = {"ISNI": "isni", "Wikidata": "wd"}
         if 'external_ids' in rec and rec['external_ids']:
             for ext in rec['external_ids']:
@@ -73,8 +71,11 @@ class GnMapper(Mapper):
                     for a in ext['all']:
                         top.equivalent = model.Group(ident=f"{known_typs[typ]}{a}")
 
-
-
+        # Relationships
+        if 'relationships' in rec and rec['relationships']:
+            for rel in rec['relationships']:
+                if 'type' in rel and rel['type'].lower() == "parent":
+                    top.member_of = model.Group(ident=rel['id'], label=rel['label'])
 
         data = model.factory.toJSON(top)
         recid = record['identifier']

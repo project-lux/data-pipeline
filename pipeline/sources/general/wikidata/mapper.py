@@ -33,8 +33,24 @@ class WdMapper(Mapper, WdConfigManager):
             "P4801": "http://id.loc.gov/vocabulary/{ident}",
             "P268": "http://data.bnf.fr/ark:/12148/cb{ident}",
             "P8516": "https://id.loc.gov/authorities/performanceMediums/{ident}",
-            "P3763": "http://www.mimo-db.eu/InstrumentsKeywords/{ident}"
+            "P3763": "http://www.mimo-db.eu/InstrumentsKeywords/{ident}",
+            "P846": "https://www.gbif.org/species/{ident}",
+            "P227": "https://d-nb.info/gnd/{ident}",
+            "P11858": "https://nsf.gov/awards/{ident}",
+            "P3500": "https://ringgold.com/{ident}",
+            "P6782": "https://ror.org/{ident}",
+            "P496": "https://orcid.org/{ident}",
+            "P3430": "https://snaccooperative.org/ark:/99166/{ident}"
         }
+
+            #'P830': 'eol',
+            #'P6944': 'bionomia',
+            #'P213': 'isni',
+            #'P8516': 'lcpm', # https://id.loc.gov/authorities/performanceMediums/{ident}
+            #'P3763': 'mimo', # http://www.mimo-db.eu/InstrumentsKeywords/{ident}
+            #'P402': 'osm', # Open Street Map relation id
+            #'P349': 'ndl', # Japan
+            #'P5587': 'snl' # Sweden
 
 
     def clean_date(self, date):
