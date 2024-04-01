@@ -148,9 +148,10 @@ if '--clean-idmap' in sys.argv:
         if not x % 100000:
             durn = int(time.time() - start)
             print(f"{x} in {durn} = {x/durn}/sec = {total/(x/durn)} total")
-    print("Cleaned idmap:")
-    print(killed)
+            print(killed)
 
+    print("Cleaned idmap")
+    print(killed)
 
 ### CLEAR DATABASES
 
