@@ -116,13 +116,13 @@ if '--clean-idmap' in sys.argv:
     killed = {None:0}
     token = idmap.update_token
     x = 0
-    total = len(idmap)
+    total = 47300000
     start = time.time()
     for key in idmap.iter_keys(match="yuid:*", count=20000):
         x += 1
         val = idmap[key]
         done = False
-        kill = True
+        kill = False
         for v in val:
             if v.startswith('__'):
                 if v.startswith('__2023'):

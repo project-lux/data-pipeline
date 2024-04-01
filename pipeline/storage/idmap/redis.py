@@ -132,7 +132,7 @@ class IdMap(RedisCache):
         for (k,v) in self.prefix_map_out.items():
             self.prefix_map_in[v] = k
         self.memory_cache = {}
-        self.clean_on_remove = False
+        self.clean_on_remove = True
 
         fh = open(os.path.join(self.configs.data_dir, 'idmap_update_token.txt'))
         token = fh.read()
