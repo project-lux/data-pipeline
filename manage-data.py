@@ -122,20 +122,29 @@ if '--clean-idmap' in sys.argv:
         x += 1
         val = idmap[key]
         done = False
+        kill = True
         for v in val:
             if v.startswith('__'):
                 if v.startswith('__2023'):
-                    del idmap[key]
-                    try:
-                        killed[v] += 1
-                    except:
-                        killed[v] = 1
+                    kill = True
                 done = True
                 break
         if not done:
             # no token at all
-            del idmap[key]
-            killed[None] += 1
+            kill = True
+            v = None
+        if kill:
+            # Can't trash YUIDs directly, only kill their constituents
+            for v2 in val:
+                if not v2.startswith('__'):
+                    try:
+                        del idmap[v2]
+                    except Exception as e:
+                        print(f"Failed to delete {v2}: {e}")
+            try:
+                killed[v] += 1
+            except:
+                killed[v] = 1
         if not x % 100000:
             durn = int(time.time() - start)
             print(f"{x} in {durn} = {x/durn}/sec = {total/(x/durn)} total")
