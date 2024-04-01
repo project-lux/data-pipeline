@@ -110,6 +110,39 @@ if '--validate' in sys.argv:
             pass
 
 
+### CLEAN IDMAP
+
+if '--clean-idmap' in sys.argv:
+    killed = {None:0}
+    token = idmap.update_token
+    x = 0
+    total = len(idmap)
+    start = time.time()
+    for key in idmap.iter_keys(match="yuid:*", count=20000):
+        x += 1
+        val = idmap[key]
+        done = False
+        for v in val:
+            if v.startswith('__'):
+                if v.startswith('__2023'):
+                    del idmap[key]
+                    try:
+                        killed[v] += 1
+                    except:
+                        killed[v] = 1
+                done = True
+                break
+        if not done:
+            # no token at all
+            del idmap[key]
+            killed[None] += 1
+        if not x % 100000:
+            durn = int(time.time() - start)
+            print(f"{x} in {durn} = {x/durn}/sec = {total/(x/durn)} total")
+    print("Cleaned idmap:")
+    print(killed)
+
+
 ### CLEAR DATABASES
 
 if '--clear' in sys.argv:
