@@ -190,33 +190,38 @@ if '--vacuum' in sys.argv:
 
 
 if '--counts' in sys.argv:
+    ttl = 0
     for c in cfgs.internal.values():
         for t in [ 'datacache', 'recordcache', 'recordcache2']:
             if t in c and c[t] is not None:
                 est = c[t].len_estimate()
                 pref = "~"
-                if est < 30000:
+                if est < 100000:
                     est = len(c[t])
                     pref = "="
                 print(f"{c['name']} {t}: {pref}{est}")
+                ttl += est
     for c in cfgs.external.values():
         for t in [ 'datacache', 'recordcache', 'reconciledRecordcache', 'recordcache2']:
             if t in c and c[t] is not None:
                 est = c[t].len_estimate()
                 pref = "~"
-                if est < 30000:
+                if est < 100000:
                     est = len(c[t])
                     pref = "="
                 print(f"{c['name']} {t}: {pref}{est}")
+                ttl += est
     for c in cfgs.results.values():
         for t in ['recordcache', 'recordcache2']:
             if t in c and c[t] is not None:
                 est = c[t].len_estimate()
                 pref = "~"
-                if est < 50000:
+                if est < 100000:
                     est = len(c[t])
                     pref = "="
                 print(f"{c['name']} {t}: {pref}{est}")
+                ttl += est
+    print(f"Total in Postgres: {ttl}")
     print(f"idmap: {len(idmap)}")
     print(f"references found: {len(all_refs)}")
     print(f"references done: {len(done_refs)}")
