@@ -32,4 +32,5 @@ last_update = None
 for src, cfg in to_do:
     if last_update:
         cfg['harvester'].last_update = last_update
+    print(f"Harvesting {stc} records")
     mgr.harvest_single(src)
