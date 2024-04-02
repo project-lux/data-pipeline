@@ -13,8 +13,8 @@ import sys
 #
 
 # How to dump the databases using pg_dump:
-# pg_dump -U rs2668 -F c --clean --no-owner -t aat_data_cache record_cache > aat_data_cache.pgdump
-# pg_restore -a -U pipeline -W --host dev-lux-db.cn1isedzd1wu.us-east-1.rds.amazonaws.com -d lux wof_data_cache.pgdump 
+# pg_dump -U USER -F c --clean --no-owner -t aat_data_cache record_cache > aat_data_cache.pgdump
+# pg_restore -a -U pipeline -W --host HOST -d DATABASE wof_data_cache.pgdump 
 
 
 class PoolManager(object):
