@@ -246,6 +246,7 @@ class ReferenceManager(object):
                 # This will never resolve so raise an error
                 raise ValueError(f"Unknown type: {typ} for generating slug")
             uu = self.idmap.mint(qrecid, slug)
+            self.idmap.add_update_token(uu)
             if self.debug: print(f"Minted {slug}/{uu} for {qrecid} ")
 
             for eq in equivs:
