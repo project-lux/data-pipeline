@@ -132,7 +132,7 @@ class IdMap(RedisCache):
         for (k,v) in self.prefix_map_out.items():
             self.prefix_map_in[v] = k
         self.memory_cache = {}
-        self.clean_on_remove = True
+        self.clean_on_remove = False
 
         fh = open(os.path.join(self.configs.data_dir, 'idmap_update_token.txt'))
         token = fh.read()
@@ -177,6 +177,7 @@ class IdMap(RedisCache):
         self.conn.srem(key, value) 
         if self.clean_on_remove:
             # If the only thing left is an update token, then delete
+            # Can't enable this yet as rebuilding cleans and reproduces
             val = self.conn.smembers(key)
             out = [self._manage_value_out(x) for x in val]
             if len(out) == 1 and out[0].startswith("__"):
