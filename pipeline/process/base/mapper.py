@@ -72,6 +72,9 @@ class Mapper(object):
         self.debug = False
 
 
+    def returns_multiple(self, record=None):
+        return False
+
     def should_merge_into(self, base, merge):
         return True
 
@@ -211,6 +214,9 @@ class Mapper(object):
 class MultiMapper(Mapper):
     # A mapper that will return a list of extracted records via transform_all
     # Or only the "main" record via transform
+
+    def returns_multiple(self, record=None):
+        return True
 
     def transform_all(self, record):
         return [record]
