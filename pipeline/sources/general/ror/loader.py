@@ -1,21 +1,20 @@
 
 from pipeline.process.base.loader import Loader
-import json_stream   # pip install json-stream
+import json
 import os
 import time
 
 class RorLoader(Loader):
     
     def load(self):
-        # Load external links from separate file, temporarily!
-
+        # Just load it all into memory
         fh = open(self.in_path)
-        recs = json_stream.load(fh)
+        recs = json.load(fh)
+        fh.close()
         x = 0
         start = time.time()
         for r in recs:
             x += 1
-            rec = json_stream.to_standard_types(r)
             ident = rec['id']
             ident = ident.split('/')[-1]
             self.out_cache[ident] = rec
@@ -24,5 +23,4 @@ class RorLoader(Loader):
                 xps = x/t
                 ttls = self.total / xps
                 print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-        fh.close()
         self.out_cache.commit()

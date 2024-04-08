@@ -7,7 +7,6 @@ class UpdateManager(object):
         self.internal_nss = [x['namespace'] for x in configs.internal.values()]
         self.changed = []
 
-
     def process_change(self, config, change, ident, record, changeTime):
         storage = config['datacache']
         storage2 = config['recordcache']
@@ -25,11 +24,9 @@ class UpdateManager(object):
                     del storage2[ident]
                 else:
                     del storage2[quaUri.rsplit('/', 1)[-1]]                   
-
                 yuid = idmap[quaUri]
                 all_ids = idmap[yuid]
                 del idmap[quaUri]
-
                 has_internal = False
                 for i in all_ids:
                     for ns in self.internal_nss:
@@ -38,7 +35,6 @@ class UpdateManager(object):
                             break
                     if has_internal:
                         break
-
                 if has_internal:
                     # If there are other internal records then just rebuild
                     # without deleted record
@@ -59,14 +55,10 @@ class UpdateManager(object):
                 storage.set(record['data'], identifier=ident, record_time=changeTime, change=change)
                 self.changed.append((record, ident, config))
 
-
-
     def harvest_all(self, store_only=False):
-
         self.changed = []
         for cfg in self.configs.internal.values():
             self.harvest(cfg)
-
         if not store_only:
             # This should do the same as run-integrated
             # Meaning it should be a function not a script
@@ -78,21 +70,18 @@ class UpdateManager(object):
         if name in self.configs.internal:
             cfg = self.configs.internal[name]
             self.harvest(cfg)
-
             if not store_only:
                 # FIXME: rebuild
                 pass
-
         else:
             raise ValueError(f"No known source with name {name}")
-
 
     def harvest(self, config):      
         storage = config['datacache']
         harvester = config['harvester']
         if harvester.last_harvest[:4] == "0001":
             harvester.last_harvest = storage.latest()
-
+        print(f"Harvesting until {harvester.last_harvest}")
         for (change, ident, record, changeTime) in harvester.crawl():
             self.process_change(config, change, ident, record, changeTime)
  

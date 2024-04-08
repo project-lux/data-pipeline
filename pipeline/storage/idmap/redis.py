@@ -12,7 +12,7 @@ class RedisCache(object):
         self.host = config.get('host', 'localhost')
         self.port = int(config.get('port', 6379))
         self.db = config.get('db', 0)
-        self.conn = redis.Redis(host=self.host, port=self.port, db=self.db)
+        self.conn = redis.Redis(host=self.host, port=self.port, db=self.db, decode_responses=True)
         self._restoring_data_state = False
         self.prefix_map_in = {}
         self.prefix_map_out = {}
@@ -27,12 +27,12 @@ class RedisCache(object):
                 if key.startswith(k):
                     key = key.replace(k, f"{v}:")
                     break
-        key = key.encode('utf-8')
+        #key = key.encode('utf-8')
         return key
 
     def _manage_key_out(self, key):
         # from bytes to str
-        key = key.decode('utf-8')
+        #key = key.decode('utf-8')
         if not key.startswith('http'):
             # replace prefix with full
             for (k,v) in self.prefix_map_out.items():
@@ -151,11 +151,11 @@ class IdMap(RedisCache):
                 if value.startswith(k):
                     value = value.replace(k, f"{v}:")
                     break
-        value = value.encode('utf-8')
+        #value = value.encode('utf-8')
         return value
 
     def _manage_value_out(self, value):
-        value = value.decode('utf-8')
+        #value = value.decode('utf-8')
         if not value.startswith('http'):
             # replace prefix with full
             for (k,v) in self.prefix_map_out.items():
@@ -177,6 +177,7 @@ class IdMap(RedisCache):
         self.conn.srem(key, value) 
         if self.clean_on_remove:
             # If the only thing left is an update token, then delete
+            # Can't enable this yet as rebuilding cleans and reproduces
             val = self.conn.smembers(key)
             out = [self._manage_value_out(x) for x in val]
             if len(out) == 1 and out[0].startswith("__"):
@@ -228,28 +229,28 @@ class IdMap(RedisCache):
         key = self._manage_key_in(key)
 
         # memory cache for frequent lookups (aat terms) to avoid the network
-        if b"/aat/" in key and key in self.memory_cache:
+        if "/aat/" in key and key in self.memory_cache:
             return self.memory_cache[key]
 
         t = self.conn.type(key)
-        if t == b'string':
+        if t == 'string':
             val = self.conn.get(key)
             if not val:
                 print(f"idmap was asked for {key} but got {val}")
                 return None
             out = self._manage_value_out(val)
-        elif t == b'set':
+        elif t == 'set':
             val = self.conn.smembers(key)
             if not val:
                 print(f"idmap was asked for {key} but got {val}")
                 return None
             out = {self._manage_value_out(x) for x in val}
-        elif t == b'none':
+        elif t == 'none':
             # Asked for a non-existent key
             return None
         else:
             raise ValueError(f"Unknown key type {t}")
-        if b"/aat/" in key: 
+        if "/aat/" in key: 
             self.memory_cache[key] = out
         return out
 
@@ -311,7 +312,7 @@ class IdMap(RedisCache):
 
         ikey = self._manage_key_in(key)
         t = self.conn.type(ikey)
-        if t == b'string':
+        if t == 'string':
             value = self.get(key)
             self.conn.delete(ikey)
             self._remove(value, key)

@@ -13,13 +13,24 @@ idmap = cfgs.instantiate_map('idmap')['store']
 cfgs.cache_globals()
 cfgs.instantiate_all()
 
+to_do = []
 
-### FIXME: Process command line in the same way as other 
-# scripts, e.g. --ypm --yuag --all (etc)
+if '--all' in sys.argv:
+    to_do = list(cfgs.internal.items()) 
+else:
+    for src, cfg in cfgs.internal.items():
+        if f"--{src}" in sys.argv:
+            to_do.append((src, cfg))
 
-ypm = cfgs.internal['ypm']
-#last_update = "2024-01-22T19:17:17"
-#ypm['harvester'].last_update = last_update
+if not to_do:
+    print("No source to havest given")
+    sys.exit()
 
 mgr = UpdateManager(cfgs, idmap)
-mgr.harvest_single('ypm')
+last_update = None
+#last_update = "2024-01-22T19:17:17"
+for src, cfg in to_do:
+    if last_update:
+        cfg['harvester'].last_update = last_update
+    print(f"Harvesting {stc} records")
+    mgr.harvest_single(src)

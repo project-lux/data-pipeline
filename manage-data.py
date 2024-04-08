@@ -110,6 +110,49 @@ if '--validate' in sys.argv:
             pass
 
 
+### CLEAN IDMAP
+
+if '--clean-idmap' in sys.argv:
+    killed = {None:0}
+    token = idmap.update_token
+    x = 0
+    total = 47300000
+    start = time.time()
+    for key in idmap.iter_keys(match="yuid:*", count=20000):
+        x += 1
+        val = idmap[key]
+        done = False
+        kill = False
+        for v in val:
+            if v.startswith('__'):
+                if v.startswith('__2023'):
+                    kill = True
+                done = True
+                break
+        if not done:
+            # no token at all
+            kill = True
+            v = None
+        if kill:
+            # Can't trash YUIDs directly, only kill their constituents
+            for v2 in val:
+                if not v2.startswith('__'):
+                    try:
+                        del idmap[v2]
+                    except Exception as e:
+                        print(f"Failed to delete {v2}: {e}")
+            try:
+                killed[v] += 1
+            except:
+                killed[v] = 1
+        if not x % 100000:
+            durn = int(time.time() - start)
+            print(f"{x} in {durn} = {x/durn}/sec = {total/(x/durn)} total")
+            print(killed)
+
+    print("Cleaned idmap")
+    print(killed)
+
 ### CLEAR DATABASES
 
 if '--clear' in sys.argv:
@@ -147,33 +190,38 @@ if '--vacuum' in sys.argv:
 
 
 if '--counts' in sys.argv:
+    ttl = 0
     for c in cfgs.internal.values():
         for t in [ 'datacache', 'recordcache', 'recordcache2']:
             if t in c and c[t] is not None:
                 est = c[t].len_estimate()
                 pref = "~"
-                if est < 30000:
+                if est < 100000:
                     est = len(c[t])
                     pref = "="
                 print(f"{c['name']} {t}: {pref}{est}")
+                ttl += est
     for c in cfgs.external.values():
         for t in [ 'datacache', 'recordcache', 'reconciledRecordcache', 'recordcache2']:
             if t in c and c[t] is not None:
                 est = c[t].len_estimate()
                 pref = "~"
-                if est < 30000:
+                if est < 100000:
                     est = len(c[t])
                     pref = "="
                 print(f"{c['name']} {t}: {pref}{est}")
+                ttl += est
     for c in cfgs.results.values():
         for t in ['recordcache', 'recordcache2']:
             if t in c and c[t] is not None:
                 est = c[t].len_estimate()
                 pref = "~"
-                if est < 50000:
+                if est < 100000:
                     est = len(c[t])
                     pref = "="
                 print(f"{c['name']} {t}: {pref}{est}")
+                ttl += est
+    print(f"Total in Postgres: {ttl}")
     print(f"idmap: {len(idmap)}")
     print(f"references found: {len(all_refs)}")
     print(f"references done: {len(done_refs)}")

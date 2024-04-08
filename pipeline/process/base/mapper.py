@@ -56,6 +56,7 @@ class Mapper(object):
             self.cycle_breaks = json.load(fh)
             fh.close()
 
+        self.config = config
         self.configs = config['all_configs']
         fn = os.path.join(self.configs.data_dir,'type_overrides.json')
         self.type_overrides = {}
@@ -70,7 +71,12 @@ class Mapper(object):
         self.globals = self.configs.globals
         self.distinct = self.configs.instantiate_map('distinct')['store']
         self.debug = False
+        self.acquirer = None
 
+
+
+    def returns_multiple(self, record=None):
+        return False
 
     def should_merge_into(self, base, merge):
         return True
@@ -85,6 +91,8 @@ class Mapper(object):
         return self.namespace + identifier
 
     def get_reference(self, identifier):
+        if not self.acquirer:
+            self.acquirer = self.config['acquirer']
         try:
             fetchedrec = self.acquirer.acquire(identifier, reference=True)
         except:
@@ -92,10 +100,9 @@ class Mapper(object):
         if fetchedrec is not None:
             rectype = fetchedrec['data']['type']
             crmcls = getattr(model, rectype)
-            return crmcls(ident=identifier, label=fetchedrec['data'].get('_label', ""))
+            return crmcls(ident=self.expand_uri(identifier), label=fetchedrec['data'].get('_label', ""))
         else:
             return None
-
 
     def _walk_fix_links(self, node, topid):
         if 'id' in node and node['id'] != topid:
@@ -211,6 +218,9 @@ class Mapper(object):
 class MultiMapper(Mapper):
     # A mapper that will return a list of extracted records via transform_all
     # Or only the "main" record via transform
+
+    def returns_multiple(self, record=None):
+        return True
 
     def transform_all(self, record):
         return [record]
