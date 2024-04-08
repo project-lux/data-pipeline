@@ -100,7 +100,7 @@ class Mapper(object):
         if fetchedrec is not None:
             rectype = fetchedrec['data']['type']
             crmcls = getattr(model, rectype)
-            return crmcls(ident=identifier, label=fetchedrec['data'].get('_label', ""))
+            return crmcls(ident=self.expand_uri(identifier), label=fetchedrec['data'].get('_label', ""))
         else:
             return None
 
