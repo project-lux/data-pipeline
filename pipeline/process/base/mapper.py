@@ -56,6 +56,7 @@ class Mapper(object):
             self.cycle_breaks = json.load(fh)
             fh.close()
 
+        self.config = config
         self.configs = config['all_configs']
         fn = os.path.join(self.configs.data_dir,'type_overrides.json')
         self.type_overrides = {}
@@ -70,6 +71,8 @@ class Mapper(object):
         self.globals = self.configs.globals
         self.distinct = self.configs.instantiate_map('distinct')['store']
         self.debug = False
+        self.acquirer = None
+
 
 
     def returns_multiple(self, record=None):
@@ -88,6 +91,8 @@ class Mapper(object):
         return self.namespace + identifier
 
     def get_reference(self, identifier):
+        if not self.acquirer:
+            self.acquirer = self.config['acquirer']
         try:
             fetchedrec = self.acquirer.acquire(identifier, reference=True)
         except:
@@ -98,7 +103,6 @@ class Mapper(object):
             return crmcls(ident=identifier, label=fetchedrec['data'].get('_label', ""))
         else:
             return None
-
 
     def _walk_fix_links(self, node, topid):
         if 'id' in node and node['id'] != topid:
