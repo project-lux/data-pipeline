@@ -74,7 +74,9 @@ class ReferenceManager(object):
                     xr['dist'] = distance
             except:
                 # Sometimes this tries to test None using >
-                print(f" *** dref-dist {dref['dist']} > distance: {distance}")
+                # This is when some other process has handled the reference
+                # and thus fetching it from redis returns None
+                print(f" *** dref-dist {dref} > distance: {distance}")
                 return None
             # Test concept type
             if not xctype and ctype:
