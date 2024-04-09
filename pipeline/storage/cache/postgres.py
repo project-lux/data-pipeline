@@ -199,7 +199,7 @@ class PGCache(object):
         rows = cursor.fetchone()
         cursor.close()        
         self.conn.commit()
-        self._close()
+        # self._close()
         if rows:
             rows['source'] = self.config['name']
 
@@ -223,7 +223,7 @@ class PGCache(object):
         rows = cursor.fetchone()
         cursor.close()        
         self.conn.commit()
-        self._close()
+        # self._close()
         if rows:
             rows['source'] = self.config['name']
         return rows
@@ -242,7 +242,7 @@ class PGCache(object):
         with self._cursor() as cursor:
             cursor.execute(qry, params)
             rows = cursor.fetchall()
-        self._close()
+        # self._close()
         return [x[self.key] for x in rows]
 
     # SELECT t.* FROM (SELECT *, row_number() OVER 
@@ -378,7 +378,7 @@ class PGCache(object):
                 self.conn.rollback()                
         cursor.close()
         # sys.stdout.write('S');sys.stdout.flush()
-        self._close()
+        # self._close()
 
     def delete(self, key, _key_type=None):
         if _key_type is None:
@@ -388,7 +388,7 @@ class PGCache(object):
         with self._cursor(internal=False) as cursor:            
             cursor.execute(qry, params)
             self.conn.commit()
-        self._close()
+        # self._close()
 
     def clear(self):
         # WARNING WARNING ... trash all the data in the cache
@@ -413,7 +413,7 @@ class PGCache(object):
         rows = cursor.fetchone()
         cursor.close()
         self.conn.commit()
-        self._close()
+        # self._close()
         # sys.stdout.write('?');sys.stdout.flush()
         return bool(rows)
 
