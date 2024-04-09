@@ -21,7 +21,7 @@ class PoolManager(object):
 
     def __init__(self):
         self.mincxn = 2
-        self.maxcxn = 4
+        self.maxcxn = 5
         self.pools = {}
 
     def make_pool(self, name, *args, **kw):
@@ -30,6 +30,7 @@ class PoolManager(object):
 
     def get_conn(self, name, key=None):
         if name in self.pools:
+            print(f"connection requested")
             return self.pools[name].getconn(key)
         else:
             return None
