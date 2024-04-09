@@ -118,7 +118,10 @@ class SqliteReconciler(Reconciler):
                     vals.append(f"{val2} ({val1})")
                     vals.append(f"{val1} ({val2})")
 
-        if typ == 'Person':
+
+        ### OPTIMIZE: This seems very expensive
+        ### Can we do it as a preprocessing step somehow?
+        if typ == 'Person-FALSE':
             birth = self.get_year_from_timespan(rec.get('born',{}))
             death = self.get_year_from_timespan(rec.get('died',{}))
             if birth or death:
@@ -140,6 +143,7 @@ class SqliteReconciler(Reconciler):
                     plus_deaths = self.get_keys_like('name', v)
                     if len(plus_deaths) == 1:
                         vals.append(plus_deaths[0])
+                        print(f" %%% Found +death for {rec['data']['id']}")
         return vals
 
 
