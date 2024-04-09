@@ -23,8 +23,7 @@ np_precisions = ['', 'Y','M','D', 'h', 'm', 's'] # number of -s in the string
 max_life_delta = np.datetime64('2122-01-01') - np.datetime64('2000-01-01')
 non_four_year_date = re.compile('(-?)([0-9]{2,3})(-[0-9][0-9]-[0-9][0-9]([^0-9].*|$))')
 de_bc_abbr = re.compile('(([0-9][0-9]).([0-9][0-9]).)?v([0-9]{2,3})$')
-valid_date_re = re.compile(r'([0-9]{4})(-[0-1][0-9]-[0-3][0-9]([ T][0-2][0-9]:[0-5][0-9]:[0-5][0-9]Z?$|$))')
-
+valid_date_re = re.compile(r'([0-2][0-9]{3})(-[0-1][0-9]-[0-3][0-9]([ T][0-2][0-9]:[0-5][0-9]:[0-5][0-9]Z?$|$))')
 
 time_rectype = {
 	"Person": ["born", "died", "carried_out", "participated_in"],
@@ -158,13 +157,13 @@ def convert_hebrew_date(dt):
 def process_np_datetime(dt, value):
 	is_bc = dt.astype('<M8[s]').astype(np.int64) < -62135596800
 	start = dt.astype('<M8[s]').astype(str)
+	if ':' in value or 'T' in value:
+		mod = value.count(':') + 1
+	else:
+		mod = 0
 	if value in ['Y', 'M', 'D', 'h', 'm', 's']:
 		prec = value
 	elif is_bc:		
-		if ':' in value or 'T' in value:
-			mod = value.count(':') + 1
-		else:
-			mod = 0
 		prec = np_precisions[value.count('-') + mod]
 	else:
 		prec = np_precisions[value.count('-') + mod +1]
@@ -277,6 +276,7 @@ def make_datetime(value, precision=""):
 				return process_np_datetime(dt, value)
 			else:
 				return process_np_datetime(dt, precision)		
+
 
 	# dateutils treats year with leading 0s as current century :(
 	# e.g.parser.parse("0052") --> datetime.datetime(2052, 12, 18, 0, 0)
