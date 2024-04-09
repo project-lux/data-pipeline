@@ -30,7 +30,6 @@ class PoolManager(object):
 
     def get_conn(self, name, key=None):
         if name in self.pools:
-            print(f"connection requested")
             return self.pools[name].getconn(key)
         else:
             return None
@@ -200,7 +199,7 @@ class PGCache(object):
         rows = cursor.fetchone()
         cursor.close()        
         self.conn.commit()
-        # self._close()
+        self._close()
         if rows:
             rows['source'] = self.config['name']
 
@@ -224,7 +223,7 @@ class PGCache(object):
         rows = cursor.fetchone()
         cursor.close()        
         self.conn.commit()
-        # self._close()
+        self._close()
         if rows:
             rows['source'] = self.config['name']
         return rows
@@ -243,7 +242,7 @@ class PGCache(object):
         with self._cursor() as cursor:
             cursor.execute(qry, params)
             rows = cursor.fetchall()
-        # self._close()
+        self._close()
         return [x[self.key] for x in rows]
 
     # SELECT t.* FROM (SELECT *, row_number() OVER 
@@ -379,7 +378,7 @@ class PGCache(object):
                 self.conn.rollback()                
         cursor.close()
         # sys.stdout.write('S');sys.stdout.flush()
-        # self._close()
+        self._close()
 
     def delete(self, key, _key_type=None):
         if _key_type is None:
@@ -389,7 +388,7 @@ class PGCache(object):
         with self._cursor(internal=False) as cursor:            
             cursor.execute(qry, params)
             self.conn.commit()
-        # self._close()
+        self._close()
 
     def clear(self):
         # WARNING WARNING ... trash all the data in the cache
@@ -414,7 +413,7 @@ class PGCache(object):
         rows = cursor.fetchone()
         cursor.close()
         self.conn.commit()
-        # self._close()
+        self._close()
         # sys.stdout.write('?');sys.stdout.flush()
         return bool(rows)
 
@@ -488,11 +487,11 @@ class PooledCache(PGCache):
                 print(f"Making cache table {self.name}")
                 self.conn.rollback()
                 self._make_table()
-        # self._close()
+        # This will either close, or return to pool
+        self._close()
 
 
     def _connect(self):
-        print(f"{self.name} requesting connection in _connect")
         self.conn = poolman.get_conn(self.pool_name)
 
     def shutdown(self):
@@ -511,11 +510,11 @@ class PooledCache(PGCache):
             self.conn = None
         elif is_iter:
             print(f"returned iterator")
-            poolman.put_conn(self.pool_name, self.iterating_conn)
+            poolman.put_conn(self.pool_name, self.iterating_conn, close=True)
             self.iterating_conn = None
         elif conn is not None:
             print(f"returned specific connection")
-            poolman.put_conn(self.pool_name, conn)
+            poolman.put_conn(self.pool_name, conn, close=True)
 
 
     def _cursor(self, internal=True, iter=False):
