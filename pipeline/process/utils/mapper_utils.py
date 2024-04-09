@@ -268,13 +268,15 @@ def make_datetime(value, precision=""):
 		# so just pass it through
 	elif valid_date_re.match(value):
 		try:
+			dt = np.datetime64(value)
+		except:
+			# I guess not
+			dt = None
+		if dt is not None:
 			if not precision:
 				return process_np_datetime(dt, value)
 			else:
 				return process_np_datetime(dt, precision)		
-		except:
-			# okay, maybe not
-			pass
 
 	# dateutils treats year with leading 0s as current century :(
 	# e.g.parser.parse("0052") --> datetime.datetime(2052, 12, 18, 0, 0)
