@@ -492,7 +492,7 @@ class PooledCache(PGCache):
 
 
     def _connect(self):
-        print(f"{self.name} requesting connection")
+        print(f"{self.name} requesting connection in _connect")
         self.conn = poolman.get_conn(self.pool_name)
 
     def shutdown(self):
@@ -524,6 +524,7 @@ class PooledCache(PGCache):
 
         # Get a connection from the pool
         if not self.conn:
+            print(f"{self.name} requesting connection in _cursor")
             self.conn = poolman.get_conn(self.pool_name)
         return PGCache._cursor(self, internal, iter)
 
