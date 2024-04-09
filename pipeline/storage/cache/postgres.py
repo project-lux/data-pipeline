@@ -487,7 +487,7 @@ class PooledCache(PGCache):
                 print(f"Making cache table {self.name}")
                 self.conn.rollback()
                 self._make_table()
-        self._close()
+        # self._close()
 
 
     def _connect(self):
