@@ -492,8 +492,8 @@ class PooledCache(PGCache):
 
 
     def _connect(self):
+        print(f"{self.name} requesting connection")
         self.conn = poolman.get_conn(self.pool_name)
-
 
     def shutdown(self):
         # Close our connections
@@ -503,7 +503,6 @@ class PooledCache(PGCache):
         if self.iterating_conn is not None:
             self.iterating_conn.close()
             poolman.put_conn(self.pool_name, self.iterating_conn)            
-
 
     def _close(self, conn=None, is_iter=False):
         if conn is None and is_iter == False:
