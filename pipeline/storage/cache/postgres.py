@@ -18,6 +18,36 @@ import sys
 
 
 class PoolManager(object):
+    def __init__(self):
+        self.conn = None
+        self.iterating_conn = None
+        self.pool = None
+
+    def make_pool(self, name, host=None, port=None, user=None, password=None, dbname=None):   
+        if self.conn is None:
+            if host:
+                # TCP/IP
+                self.conn = psycopg2.connect(host=host, port=port, user=user, password=password, dbname=dbname)
+                self.iterating_conn = psycopg2.connect(host=host, port=port, user=user, password=password, dbname=dbname)
+            else:
+                # local socket
+                self.conn = psycopg2.connect(user=user, dbname=dbname)
+                self.iterating_conn = psycopg2.connect(user=user, dbname=dbname)
+            self.pool = name
+
+    def get_conn(self, name, key=None, itr=False):
+        if itr == False:
+            return self.conn
+        else:
+            return self.iterating_conn
+
+    def put_conn(self, name, key=None, close=False, itr=False):
+        pass
+
+    def put_all(self, name):
+        pass
+
+class PoolManager_orig(object):
 
     def __init__(self):
         self.mincxn = 2
@@ -28,13 +58,13 @@ class PoolManager(object):
         if not name in self.pools:
             self.pools[name] = SimpleConnectionPool(self.mincxn, self.maxcxn, *args, **kw)
 
-    def get_conn(self, name, key=None):
+    def get_conn(self, name, key=None, itr=False):
         if name in self.pools:
             return self.pools[name].getconn(key)
         else:
             return None
 
-    def put_conn(self, name, conn, key=None, close=False):
+    def put_conn(self, name, conn, key=None, close=False, itr=False):
         if name in self.pools:
             self.pools[name].putconn(conn, key, close)
         else:
@@ -58,6 +88,8 @@ class PoolManager(object):
                     pass
         else:
             return None
+
+
 
 
 poolman = PoolManager()
@@ -457,7 +489,6 @@ class PGCache(object):
         print(f"*** code somewhere is asking for a cache as a boolean value and shouldn't ***")
         return True
 
-
 class PooledCache(PGCache):
 
     def __init__(self, config):
@@ -504,28 +535,63 @@ class PooledCache(PGCache):
             poolman.put_conn(self.pool_name, self.iterating_conn)            
 
     def _close(self, conn=None, is_iter=False):
+        return None
+
         if conn is None and is_iter == False:
-            print(f"returned main connection")
             poolman.put_conn(self.pool_name, self.conn)
             self.conn = None
         elif is_iter:
-            print(f"returned iterator")
-            poolman.put_conn(self.pool_name, self.iterating_conn, close=True)
+            poolman.put_conn(self.pool_name, self.iterating_conn)
             self.iterating_conn = None
         elif conn is not None:
-            print(f"returned specific connection")
-            poolman.put_conn(self.pool_name, conn, close=True)
+            poolman.put_conn(self.pool_name, conn)
 
 
     def _cursor(self, internal=True, iter=False):
         # Ensure cursor is managed server-side otherwise select * from table
         # will return EVERYTHING into python (without a manual LIMIT/OFFSET)
-
         # Get a connection from the pool
-        if not self.conn:
-            print(f"{self.name} requesting connection in _cursor")
-            self.conn = poolman.get_conn(self.pool_name)
-        return PGCache._cursor(self, internal, iter)
+
+        if iter and not self.iterating_conn:
+            self.iterating_conn = poolman.get_conn(self.pool_name, itr=True)
+        elif iter is False and not self.conn:
+            self.conn = poolman.get_conn(self.pool_name, itr=False)
+
+        if iter:
+            conn = self.iterating_conn
+        else:
+            conn = self.conn
+
+        if internal:
+            # ensure uniqueness across multiple instances of the code
+            name = f"server_cursor_{self.name}_{time.time()}".replace('.', '_')
+            cursor = conn.cursor(name=name, cursor_factory=RealDictCursor)
+            cursor.itersize = self.config['cursor_size']
+        else:
+            # Need this for creating the tables/indexes
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
+
+        return cursor
+
+        # if not self.conn:
+        #     self.conn = poolman.get_conn(self.pool_name, itr=iter)
+
+        # if internal:
+        #     # ensure uniqueness across multiple instances of the code
+        #     name = f"server_cursor_{self.name}_{time.time()}".replace('.', '_')
+        #     cursor = self.conn.cursor(name=name, cursor_factory=RealDictCursor)
+        #     cursor.itersize = self.config['cursor_size']
+        # else:
+        #     # Need this for creating the tables/indexes
+        #     cursor = self.conn.cursor(cursor_factory=RealDictCursor)
+
+        # if is_iter:
+        #     self.iterating_conn = self.conn
+        #     self.conn = None
+        #     self._connect()
+
+        # return cursor
+
 
 
     def optimize(self):
