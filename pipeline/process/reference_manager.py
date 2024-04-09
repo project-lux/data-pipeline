@@ -30,6 +30,8 @@ class ReferenceManager(object):
             getty_redirects[f] = t
         self.redirects = getty_redirects
 
+        self.ref_count = {}
+
 
     def write_metatypes(self, my_slice):
         # write out our slice of metatypes
@@ -40,7 +42,6 @@ class ReferenceManager(object):
         fh = open(fn, 'w')
         fh.write(json.dumps(self.metatypes_seen))
         fh.close()        
-
 
     def pop_ref(self):
         return self.all_refs.popitem()
@@ -60,6 +61,10 @@ class ReferenceManager(object):
 
     # a ref is {'dist': int, 'type': str}
     def add_ref(self, ref, refs, distance, ctype): 
+        try:
+            self.ref_count[ref] += 1
+        except:
+            self.ref_count[ref] = 1
         xr = self.all_refs[ref]
         dref = self.done_refs[ref]
         if xr is not None:
