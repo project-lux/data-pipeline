@@ -53,8 +53,13 @@ else:
         my_slice = int(sys.argv[1])
         max_slice = int(sys.argv[2])
 
-# --- set up environment ---
+    # order to_do from smallest to biggest datacache
+    s_to_do = [(x, x[1]['datacache'].len_estimate()) for x in to_do]
+    s_to_do.sort(key=lambda x: x[1])
+    to_do = [x[0] for x in s_to_do]
 
+
+# --- set up environment ---
 reconciler = Reconciler(cfgs, idmap, networkmap)
 ref_mgr = ReferenceManager(cfgs, idmap)
 debug = cfgs.debug_reconciliation

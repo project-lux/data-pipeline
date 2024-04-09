@@ -21,7 +21,7 @@ class PoolManager(object):
 
     def __init__(self):
         self.mincxn = 2
-        self.maxcxn = 12
+        self.maxcxn = 4
         self.pools = {}
 
     def make_pool(self, name, *args, **kw):
