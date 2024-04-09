@@ -506,12 +506,15 @@ class PooledCache(PGCache):
 
     def _close(self, conn=None, is_iter=False):
         if conn is None and is_iter == False:
+            print(f"returned main connection")
             poolman.put_conn(self.pool_name, self.conn)
             self.conn = None
         elif is_iter:
+            print(f"returned iterator")
             poolman.put_conn(self.pool_name, self.iterating_conn)
             self.iterating_conn = None
         elif conn is not None:
+            print(f"returned specific connection")
             poolman.put_conn(self.pool_name, conn)
 
 
