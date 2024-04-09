@@ -30,7 +30,7 @@ class ReferenceManager(object):
             getty_redirects[f] = t
         self.redirects = getty_redirects
 
-        self.ref_count = {}
+        self.ref_cache = {}
 
 
     def write_metatypes(self, my_slice):
@@ -59,12 +59,16 @@ class ReferenceManager(object):
             # didn't exist anyway
             pass
 
+
+    # OPTIMIZE: This seems unnecessary as type is in the ref key
+    # as ref is now a qua, not a raw URI
+
     # a ref is {'dist': int, 'type': str}
     def add_ref(self, ref, refs, distance, ctype): 
-        try:
-            self.ref_count[ref] += 1
-        except:
-            self.ref_count[ref] = 1
+
+        if distance == 1 and ref in self.ref_cache:
+            return None
+
         xr = self.all_refs[ref]
         dref = self.done_refs[ref]
         if xr is not None:
@@ -94,6 +98,8 @@ class ReferenceManager(object):
                 self.all_refs[ref] = {'dist': distance, 'type': ctype}
         elif not ref in refs:
             refs[ref] = {'dist': distance, 'type': ctype}
+            if distance == 1 and "vocab.getty.edu/aat" in ref:
+                self.ref_cache[ref] = distance
 
     def walk_for_refs(self, node, refs, distance, top=False):
         # Test if we need to record the node
