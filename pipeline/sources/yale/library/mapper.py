@@ -275,7 +275,7 @@ class YulMapper(Mapper):
                                             try:
                                                 b,e = make_datetime(dates)
                                             except:
-                                                b,e = None
+                                                b = e = None
                                             template = {"type":"TimeSpan","begin_of_the_begin":"","end_of_the_end":"","identified_by":[{"type":"Name","classified_as":[{"id":"http://vocab.getty.edu/aat/300404669","type":"Type","_label":"Display Title"}],"content":dates}]}
                                             if b and e:
                                                 template["begin_of_the_begin"] = b
