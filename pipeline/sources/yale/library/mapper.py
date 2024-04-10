@@ -259,7 +259,7 @@ class YulMapper(Mapper):
                 classes = data['classified_as']
                 classes.append({"id": "http://vocab.getty.edu/aat/300081446", "type":"Type", "_label": "Period"})
             else:
-                data.classified_as = [{"id": "http://vocab.getty.edu/aat/300081446", "type":"Type", "_label": "Period"}]
+                data['classified_as'] = [{"id": "http://vocab.getty.edu/aat/300081446", "type":"Type", "_label": "Period"}]
 
             #try to parse dates for timespan
             if not "timespan" in data:
@@ -285,7 +285,7 @@ class YulMapper(Mapper):
                                             elif e:
                                                 template["end_of_the_end"] = e
                                             if b or e:
-                                                data.timespan = template
+                                                data['timespan'] = template
 
                             
         return rec
