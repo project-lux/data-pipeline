@@ -441,6 +441,8 @@ class TransitiveMultiMap(MultiMap):
 
 
 class RedisDictValue(object):
+    ### NOTE WELL: This is just a reference into redis
+    ### NOT a copy of the information from redis
 
     def __init__(self, key, refmap):
         self.persistence = refmap

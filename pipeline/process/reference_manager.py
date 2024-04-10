@@ -30,6 +30,8 @@ class ReferenceManager(object):
             getty_redirects[f] = t
         self.redirects = getty_redirects
 
+        self.ref_cache = {}
+
 
     def write_metatypes(self, my_slice):
         # write out our slice of metatypes
@@ -40,7 +42,6 @@ class ReferenceManager(object):
         fh = open(fn, 'w')
         fh.write(json.dumps(self.metatypes_seen))
         fh.close()        
-
 
     def pop_ref(self):
         return self.all_refs.popitem()
@@ -58,8 +59,16 @@ class ReferenceManager(object):
             # didn't exist anyway
             pass
 
+
+    # OPTIMIZE: This seems unnecessary as type is in the ref key
+    # as ref is now a qua, not a raw URI
+
     # a ref is {'dist': int, 'type': str}
     def add_ref(self, ref, refs, distance, ctype): 
+
+        if distance == 1 and ref in self.ref_cache:
+            return None
+
         xr = self.all_refs[ref]
         dref = self.done_refs[ref]
         if xr is not None:
@@ -83,12 +92,18 @@ class ReferenceManager(object):
                 xr['type'] = ctype
         elif dref is not None:
             # Test Distance
-            if distance is not None and dref['dist'] is not None and dref['dist'] > distance:
-                # Add it back in
-                del self.done_refs[ref]
-                self.all_refs[ref] = {'dist': distance, 'type': ctype}
+            try:
+                if distance is not None and dref['dist'] is not None and dref['dist'] > distance:
+                    # Add it back in
+                    del self.done_refs[ref]
+                    self.all_refs[ref] = {'dist': distance, 'type': ctype}
+            except:
+                print(f" *** dref-dist {dref} > distance {distance}")
+                return None
         elif not ref in refs:
             refs[ref] = {'dist': distance, 'type': ctype}
+            if distance == 1 and "vocab.getty.edu/aat" in ref:
+                self.ref_cache[ref] = distance
 
     def walk_for_refs(self, node, refs, distance, top=False):
         # Test if we need to record the node

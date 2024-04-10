@@ -8,6 +8,11 @@ from pipeline.process.reconciler import Reconciler
 from pipeline.process.reference_manager import ReferenceManager
 from pipeline.storage.cache.postgres import poolman
 
+import io
+import cProfile
+import pstats
+from pstats import SortKey
+
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
 cfgs = Config(basepath=basepath)
@@ -21,6 +26,12 @@ cfgs.instantiate_all()
 my_slice = -1
 max_slice = -1
  
+if '--profile' in sys.argv:
+    sys.argv.remove('--profile')
+    profiling = True
+else:
+    profiling = False
+
 # NOTE: This implies the existence and use of AAT
 if '--baseline' in sys.argv:
     # Only do global terms. Only needed with a new idmap
@@ -59,12 +70,19 @@ else:
     to_do = [x[0] for x in s_to_do]
 
 
+
+
+
 # --- set up environment ---
 reconciler = Reconciler(cfgs, idmap, networkmap)
 ref_mgr = ReferenceManager(cfgs, idmap)
 debug = cfgs.debug_reconciliation
 
 print("Starting...")
+
+if profiling:
+    pr = cProfile.Profile()
+    pr.enable()
 
 for name, cfg in to_do:
     print(f" *** {name} ***")
@@ -106,6 +124,17 @@ for name, cfg in to_do:
             ref_mgr.manage_identifiers(rec, rebuild=True)
 
     recids = []
+
+
+if profiling:
+    pr.disable()
+    s = io.StringIO()
+    sortby = SortKey.CUMULATIVE
+    # sortby = SortKey.TIME
+    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+    ps.print_stats()
+    print(s.getvalue())
+    raise ValueError()
 
 # now do references
 
