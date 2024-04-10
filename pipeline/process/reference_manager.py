@@ -92,10 +92,14 @@ class ReferenceManager(object):
                 xr['type'] = ctype
         elif dref is not None:
             # Test Distance
-            if distance is not None and dref['dist'] is not None and dref['dist'] > distance:
-                # Add it back in
-                del self.done_refs[ref]
-                self.all_refs[ref] = {'dist': distance, 'type': ctype}
+            try:
+                if distance is not None and dref['dist'] is not None and dref['dist'] > distance:
+                    # Add it back in
+                    del self.done_refs[ref]
+                    self.all_refs[ref] = {'dist': distance, 'type': ctype}
+            except:
+                print(f" *** dref-dist {dref} > distance {distance}")
+                return None
         elif not ref in refs:
             refs[ref] = {'dist': distance, 'type': ctype}
             if distance == 1 and "vocab.getty.edu/aat" in ref:
