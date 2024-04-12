@@ -192,7 +192,7 @@ class PooledCache(object):
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry, params)
             rows = cursor.fetchone()     
-        self.conn.commit()
+        # self.conn.commit()
         if rows:
             rows['source'] = self.config['name']
         # sys.stdout.write('G');sys.stdout.flush()
@@ -213,7 +213,7 @@ class PooledCache(object):
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry, params)
             rows = cursor.fetchone()     
-        self.conn.commit()
+        # self.conn.commit()
         if rows:
             rows['source'] = self.config['name']
         return rows
@@ -390,7 +390,7 @@ class PooledCache(object):
             cursor.execute(qry, params)
             rows = cursor.fetchone()
 
-        self.conn.commit()
+        # self.conn.commit()
         # sys.stdout.write('?');sys.stdout.flush()
         return bool(rows)
 

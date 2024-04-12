@@ -8,6 +8,11 @@ from pipeline.process.merger import MergeHandler
 from pipeline.process.reference_manager import ReferenceManager
 from pipeline.storage.cache.postgres import poolman
 
+import io
+import cProfile
+import pstats
+from pstats import SortKey
+
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
 cfgs = Config(basepath=basepath)
@@ -26,6 +31,17 @@ if not token.startswith('__') or not token.endswith('__'):
 else:
     idmap.update_token = token
     #idmap.update_token = f"__{int(time.time())}__"
+
+if '--profile' in sys.argv:
+    sys.argv.remove('--profile')
+    profiling = True
+else:
+    profiling = False
+if '--norefs' in sys.argv:
+    sys.argv.remove('--norefs')
+    DO_REFERENCES = False
+else:
+    DO_REFERENCES = True
 
 max_slice = -1
 my_slice = -1
@@ -65,6 +81,9 @@ merged_cache.config['overwrite'] = True
 final = cfgs.results['merged']['mapper']
 
 # -------------------------------------------------
+if profiling:
+    pr = cProfile.Profile()
+    pr.enable()
 
 for src_name, src in to_do:
     rcache = src['recordcache']
@@ -123,74 +142,85 @@ for src_name, src in to_do:
             print(f"*** Final transform returned None")
     recids = []
 
+if profiling:
+    pr.disable()
+    s = io.StringIO()
+    sortby = SortKey.CUMULATIVE
+    # sortby = SortKey.TIME
+    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+    ps.print_stats()
+    print(s.getvalue())
+    raise ValueError()
 
-item = 1
-while item:
-    try:
-        (ext_uri, ddist) = ref_mgr.pop_done_ref()
-    except TypeError:
-        break
-    uri = idmap[ext_uri]
-    if not uri:
-        print(f" *** No YUID for reference {ext_uri} from done_refs ({ddist})")
-        continue
-    try:
-        distance = ddist['dist']
-    except:
-        print(f" *** No distance for {ext_uri} / {uri}: {ddist}")
-        continue
-    uu = uri.rsplit('/',1)[-1]
-    if uu in merged_cache:
-        continue
-    if distance > MAX_DISTANCE:
-        continue
 
-    equivs = idmap[uri] 
-    # get a base record
-    rec2 = None
-    stop = False
-    for pref in PREF_ORDER:
-        for eq in equivs:
-            if pref in eq:
-                baseUri = eq
-                (src, recid) = cfgs.split_uri(baseUri)
-                if recid in src['recordcache']:
-                    rec = src['recordcache'][recid]
-                    if rec is not None:
-                        rec2 = reider.reidentify(rec)
-                        if rec2:
-                            equivs.remove(baseUri)
-                            del rec2['identifier']
-                            src['recordcache2'][rec2['yuid']] = rec2
-                            stop = True
-                            break
-                        else:
-                            print(f" *** Could not reidentify {src['name']} {recid}")
-        if stop:
-            break
+if DO_REFERENCES:
 
-    if rec2 is None:
-        print(f" *** Could not find ANY record for {uri} in {equivs}")
-        #raise ValueError()
-    else:
-        # print(f" ... Processing equivs for {recid}")
-        sys.stdout.write('+');sys.stdout.flush()
-        rec3 = merger.merge(rec2, equivs)
-        # Final tidy up
+    item = 1
+    while item:
         try:
-            rec3 = final.transform(rec3, rec3['data']['type'])
+            (ext_uri, ddist) = ref_mgr.pop_done_ref()
+        except TypeError:
+            break
+        uri = idmap[ext_uri]
+        if not uri:
+            print(f" *** No YUID for reference {ext_uri} from done_refs ({ddist})")
+            continue
+        try:
+            distance = ddist['dist']
         except:
-            print(f"*** Final transform raised exception for {rec2['identifier']}")
-        # Store it
-        if rec3 is not None:
-            try:
-                del rec3['identifier']
-            except:
-                pass
-            merged_cache[rec3['yuid']] = rec3
-        else:
-            print(f"*** Final transform returned None")
+            print(f" *** No distance for {ext_uri} / {uri}: {ddist}")
+            continue
+        uu = uri.rsplit('/',1)[-1]
+        if uu in merged_cache:
+            continue
+        if distance > MAX_DISTANCE:
+            continue
 
+        equivs = idmap[uri] 
+        # get a base record
+        rec2 = None
+        stop = False
+        for pref in PREF_ORDER:
+            for eq in equivs:
+                if pref in eq:
+                    baseUri = eq
+                    (src, recid) = cfgs.split_uri(baseUri)
+                    if recid in src['recordcache']:
+                        rec = src['recordcache'][recid]
+                        if rec is not None:
+                            rec2 = reider.reidentify(rec)
+                            if rec2:
+                                equivs.remove(baseUri)
+                                del rec2['identifier']
+                                src['recordcache2'][rec2['yuid']] = rec2
+                                stop = True
+                                break
+                            else:
+                                print(f" *** Could not reidentify {src['name']} {recid}")
+            if stop:
+                break
+
+        if rec2 is None:
+            print(f" *** Could not find ANY record for {uri} in {equivs}")
+            #raise ValueError()
+        else:
+            # print(f" ... Processing equivs for {recid}")
+            sys.stdout.write('+');sys.stdout.flush()
+            rec3 = merger.merge(rec2, equivs)
+            # Final tidy up
+            try:
+                rec3 = final.transform(rec3, rec3['data']['type'])
+            except:
+                print(f"*** Final transform raised exception for {rec2['identifier']}")
+            # Store it
+            if rec3 is not None:
+                try:
+                    del rec3['identifier']
+                except:
+                    pass
+                merged_cache[rec3['yuid']] = rec3
+            else:
+                print(f"*** Final transform returned None")
 
 # force all postgres connections to close
 poolman.put_all('localsocket')
