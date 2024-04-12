@@ -113,11 +113,19 @@ class ReferenceManager(object):
                 node['id'] = self.redirects[node['id']]
 
             val = self.configs.make_qua(node['id'], node['type'])
-            t = node.get('type', '')
-            ct = t if t in self.configs.parent_record_types else ""
-            self.add_ref(val, refs, distance, ct)
+            should_add_ref = True
+            for i in self.internal_uris:
+                if val.startswith(i):
+                    # these will get built as 0 regardless
+                    # so don't record refs to them
+                    should_add_ref = False
+                    break
+            if should_add_ref:
+                t = node.get('type', '')
+                ct = t if t in self.configs.parent_record_types else ""
+                self.add_ref(val, refs, distance, ct)
 
-            # save meta-types
+            # but still want to save meta-types
             if (node['type'] in self.configs.parent_record_types or node['type'] == 'Type') and 'classified_as' in node:
                 cxids = [x['id'] for x in node['classified_as'] if 'id' in x]
                 if not node['id'] in self.metatypes_seen:
@@ -158,18 +166,6 @@ class ReferenceManager(object):
                 t = rec.get('type', '')
                 ct = t if t in self.configs.parent_record_types else ""
                 self.add_ref(k, refs, distance, ct)
-
-
-        # OPTIMIZE: Shouldn't this be in walk_for_refs?
-        # Otherwise we test for it all the time
-        # but then never add it
-        topid = rec['id']
-        ks = list(refs.keys())
-        for k in ks:
-            for i in self.internal_uris:
-                if k.startswith(i) and topid.startswith(i):
-                    del refs[k]
-                    break
 
         self.all_refs.update(refs)
         return refs
