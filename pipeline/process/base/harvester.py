@@ -219,6 +219,7 @@ class ASHarvester(Harvester):
 		while self.collection_index < len(self.collections):
 			if not self.page:
 				collection = self.collections[self.collection_index]
+				print(f" {collection}")
 				self.fetch_collection(collection)
 			while self.page:
 				items = self.fetch_page()
