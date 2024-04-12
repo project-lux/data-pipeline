@@ -135,7 +135,7 @@ for src_name, src in to_do:
         sys.stdout.write('.');sys.stdout.flush()
 
         rec3 = merger.merge(rec2, equivs)
-        # Final tidy up
+        # Final tidy up after merges
         try:
             rec3 = final.transform(rec3, rec3['data']['type'])
         except:

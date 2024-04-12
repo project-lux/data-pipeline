@@ -121,7 +121,7 @@ class SqliteReconciler(Reconciler):
 
         ### OPTIMIZE: This seems very expensive
         ### Can we do it as a preprocessing step somehow?
-        if typ == 'Person-FALSE':
+        if typ == 'Person':
             birth = self.get_year_from_timespan(rec.get('born',{}))
             death = self.get_year_from_timespan(rec.get('died',{}))
             if birth or death:
@@ -132,18 +132,18 @@ class SqliteReconciler(Reconciler):
                         vals.append(f"{v}, -{death}")
                     if birth and death:
                         vals.append(f"{v}, {birth}-{death}")
+
             # FIXME Out of pipeline:
             # subst out b. if after two ,s and followed by numbers
             # e.g. pierce, e. dana (edwin dana), b. 1871
             # but not jones, fred b., 1871-
-
-            for v in vals[:]:
-                if v.endswith('-'):
-                    # Check if there's v with a death date
-                    plus_deaths = self.get_keys_like('name', v)
-                    if len(plus_deaths) == 1:
-                        vals.append(plus_deaths[0])
-                        print(f" %%% Found +death for {rec['data']['id']}")
+            #for v in vals[:]:
+            #    if v.endswith('-'):
+            #        # Check if there's v with a death date
+            #        plus_deaths = self.get_keys_like('name', v)
+            #        if len(plus_deaths) == 1:
+            #            vals.append(plus_deaths[0])
+            #            print(f" %%% Found +death for {rec['data']['id']}")
         return vals
 
 
