@@ -156,7 +156,7 @@ class PooledCache(object):
         return res['count']
 
 
-    def insert_time(self, key):
+    def insert_time(self, key, _key_type=None):
         if _key_type is None:
             _key_type = self.key
         if _key_type == 'yuid' and len(key) != 36:
