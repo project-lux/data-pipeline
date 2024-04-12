@@ -156,6 +156,19 @@ class PooledCache(object):
         return res['count']
 
 
+    def insert_time(self, key):
+        if _key_type is None:
+            _key_type = self.key
+        if _key_type == 'yuid' and len(key) != 36:
+            print(f"{self.name} has UUIDs as keys")
+            return None
+        qry = f"SELECT insert_time FROM {self.name} WHERE {_key_type} = %s"
+        params = (key,)
+        with self._cursor(internal=False) as cursor:
+            cursor.execute(qry, params)
+            rows = cursor.fetchone()
+        return rows
+
     def latest(self):
         qry = f"SELECT insert_time FROM {self.name} ORDER BY insert_time DESC LIMIT 1"
         with self._cursor() as cursor:
