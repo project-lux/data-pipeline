@@ -125,6 +125,7 @@ class ASHarvester(Harvester):
 
 	def fetch_page(self):
 		# fetch page in self.page
+		print(f"    {self.page}")
 		page = self.fetch_json(self.page, 'page')
 		try:
 			items = page['orderedItems']
