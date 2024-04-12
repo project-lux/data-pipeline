@@ -229,7 +229,7 @@ class IdMap(RedisCache):
         key = self._manage_key_in(key)
 
         # memory cache for frequent lookups (aat terms) to avoid the network
-        if "/aat/" in key and key in self.memory_cache:
+        if key.startswith("aat:") and key in self.memory_cache:
             return self.memory_cache[key]
 
         t = self.conn.type(key)
@@ -251,9 +251,7 @@ class IdMap(RedisCache):
         else:
             raise ValueError(f"Unknown key type {t}")
 
-        print(key)
-        print(out)
-        if "/aat/" in key: 
+        if key.startswith("aat:"): 
             self.memory_cache[key] = out
         return out
 
