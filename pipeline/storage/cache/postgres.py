@@ -194,7 +194,7 @@ class PooledCache(object):
             rows = cursor.fetchone()     
         if rows:
             rows['source'] = self.config['name']
-        sys.stdout.write('G');sys.stdout.flush()
+        # sys.stdout.write('G');sys.stdout.flush()
         return rows
 
     def get_like(self, key, _key_type=None):
@@ -355,7 +355,7 @@ class PooledCache(object):
                     # Could be a psycopg2.errors.UniqueViolation if we're trying to insert without delete
                     print(f"Duplicate key for {identifier}/{yuid} in {self.name}: {e}?")
                     self.conn.rollback()                
-        sys.stdout.write('S');sys.stdout.flush()
+        # sys.stdout.write('S');sys.stdout.flush()
 
 
     def delete(self, key, _key_type=None):
@@ -387,7 +387,7 @@ class PooledCache(object):
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry, params)
             rows = cursor.fetchone()
-        sys.stdout.write('?');sys.stdout.flush()
+        # sys.stdout.write('?');sys.stdout.flush()
         return bool(rows)
 
     def commit(self):
