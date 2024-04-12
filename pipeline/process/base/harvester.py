@@ -138,6 +138,8 @@ class ASHarvester(Harvester):
 			if prev != self.page:
 				# infinite loop
 				self.page = prev
+			else:
+				self.page = None
 		except:
 			# This is normal behavior for first page
 			self.page = None
@@ -152,8 +154,8 @@ class ASHarvester(Harvester):
 				print(f"Missing endTime for item:\n{it}")
 				continue
 			if dt < self.last_harvest:
-				# We're done!
-				return
+				# We're done with the stream, not just this page
+				raise StopIteration()
 			elif self.harvest_from and dt > self.harvest_from:
 				# This is useful if we have to restart from the middle for some reason
 				# but won't actually get called unless we set harvest_from in config
