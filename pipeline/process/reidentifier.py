@@ -42,12 +42,15 @@ class Reidentifier(object):
         equivs = record.get('equivalent', [])
 
         if recid:
+            # Don't rewrite some URIs like creativecommons
             for dnri in self.do_not_reidentify:
                 if dnri in recid:
                     # Don't try to rewrite them
                     return {'id': recid} 
-            if recid in self.redirects:
-                recid = self.redirects[recid]
+            # pre-rewrite redirected uris
+            redir = self.redirects[recid]
+            if redir:
+                recid = redir
 
             if not top or not qcls:
                 qcls = record.get('type', None)
