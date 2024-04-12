@@ -155,7 +155,8 @@ class ASHarvester(Harvester):
 				continue
 			if dt < self.last_harvest:
 				# We're done with the stream, not just this page
-				raise StopIteration()
+				self.page = None
+				return
 			elif self.harvest_from and dt > self.harvest_from:
 				# This is useful if we have to restart from the middle for some reason
 				# but won't actually get called unless we set harvest_from in config
