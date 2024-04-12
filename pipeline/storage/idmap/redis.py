@@ -250,6 +250,9 @@ class IdMap(RedisCache):
             return None
         else:
             raise ValueError(f"Unknown key type {t}")
+
+        print(key)
+        print(out)
         if "/aat/" in key: 
             self.memory_cache[key] = out
         return out
