@@ -48,7 +48,10 @@ class Reidentifier(object):
                     # Don't try to rewrite them
                     return {'id': recid} 
             # pre-rewrite redirected uris
-            redir = self.redirects[recid]
+            try:
+                redir = self.redirects[recid]
+            except:
+                redir = None
             if redir:
                 recid = redir
 
