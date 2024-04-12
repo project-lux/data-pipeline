@@ -72,6 +72,9 @@ MAX_DISTANCE = cfgs.max_distance
 order = sorted([(x['namespace'], x.get('merge_order', -1)) for x in cfgs.external.values()], key=lambda x: x[1])
 PREF_ORDER = [x[0] for x in order if x[1] >= 0]
 
+FORCE_REBUILD = True
+
+
 reider = Reidentifier(cfgs, idmap)
 ref_mgr = ReferenceManager(cfgs, idmap)
 merger = MergeHandler(cfgs, idmap, ref_mgr)
@@ -109,7 +112,7 @@ for src_name, src in to_do:
             print(f" !!! Couldn't find YUID for internal record: {qrecid}")
             continue
         yuid = yuid.rsplit('/',1)[1]
-        if yuid in merged_cache:
+        if not FORCE_REBUILD and yuid in merged_cache:
             continue
         elif not yuid in src['recordcache2']:
             rec2 = reider.reidentify(rec)
