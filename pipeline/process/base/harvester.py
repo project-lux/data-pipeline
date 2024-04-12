@@ -134,7 +134,10 @@ class ASHarvester(Harvester):
 			print(f"Failed to get items from page {self.page}")
 			items = []
 		try:
-			self.page = page.get('prev', {'id': ''})['id']
+			prev = page.get('prev', {'id': ''})['id']
+			if prev != self.page:
+				# infinite loop
+				self.page = prev
 		except:
 			# This is normal behavior for first page
 			self.page = None
