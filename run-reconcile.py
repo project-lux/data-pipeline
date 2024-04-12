@@ -31,6 +31,11 @@ if '--profile' in sys.argv:
     profiling = True
 else:
     profiling = False
+if '--norefs' in sys.argv:
+    sys.argv.remove('--norefs')
+    DO_REFERENCES = False
+else:
+    DO_REFERENCES = True
 
 # NOTE: This implies the existence and use of AAT
 if '--baseline' in sys.argv:
@@ -138,59 +143,61 @@ if profiling:
 
 # now do references
 
-print("\nProcessing References...")
+if DO_REFERENCES:
 
-item = 1
-while item:
-    # Item is uri, {dist, type} or None
-    item = ref_mgr.pop_ref()
-    try:
-        (uri, dct) = item
-        distance = dct['dist']
-    except:
-        continue
-    try:
-        maptype = dct['type']
-    except:
-        continue
-    if distance > cfgs.max_distance:
-        continue
+    print("\nProcessing References...")
 
-    ref_mgr.did_ref(uri, distance)
+    item = 1
+    while item:
+        # Item is uri, {dist, type} or None
+        item = ref_mgr.pop_ref()
+        try:
+            (uri, dct) = item
+            distance = dct['dist']
+        except:
+            continue
+        try:
+            maptype = dct['type']
+        except:
+            continue
+        if distance > cfgs.max_distance:
+            continue
 
-    if cfgs.is_qua(uri):
-        uri, rectype = cfgs.split_qua(uri)
-    else:
-        raise ValueError(f"No qua in referenced {uri} and needed")
-    try:
-        (source, recid) = cfgs.split_uri(uri)
-    except:
-        if debug: print(f"Not processing: {uri}")
-        continue
-    if not source['type'] == 'external':
-        # Don't process internal or results
-        continue
+        ref_mgr.did_ref(uri, distance)
 
-    # put back the qua to the id after splitting/canonicalizing in split_uri
-    mapper = source['mapper']
-    acquirer = source['acquirer']
+        if cfgs.is_qua(uri):
+            uri, rectype = cfgs.split_qua(uri)
+        else:
+            raise ValueError(f"No qua in referenced {uri} and needed")
+        try:
+            (source, recid) = cfgs.split_uri(uri)
+        except:
+            if debug: print(f"Not processing: {uri}")
+            continue
+        if not source['type'] == 'external':
+            # Don't process internal or results
+            continue
 
-    # Acquire the record from cache or network
-    rec = acquirer.acquire(recid, rectype=rectype)
-    if rec is not None:
-        sys.stdout.write('.');sys.stdout.flush()
-        # Reconcile it
-        rec2 = reconciler.reconcile(rec)
-        # Do any post-reconciliation clean up
-        mapper.post_reconcile(rec2)
-        # XXX Shouldn't this be stored somewhere after reconciliation?
+        # put back the qua to the id after splitting/canonicalizing in split_uri
+        mapper = source['mapper']
+        acquirer = source['acquirer']
 
-        # Find references from this record
-        ref_mgr.walk_top_for_refs(rec['data'], distance)
-        # Manage identifiers for rec now we've reconciled and collected
-        ref_mgr.manage_identifiers(rec, rebuild=True)
-    else:
-        print(f"Failed to acquire {rectype} reference: {source['name']}:{recid}")    
+        # Acquire the record from cache or network
+        rec = acquirer.acquire(recid, rectype=rectype)
+        if rec is not None:
+            sys.stdout.write('.');sys.stdout.flush()
+            # Reconcile it
+            rec2 = reconciler.reconcile(rec)
+            # Do any post-reconciliation clean up
+            mapper.post_reconcile(rec2)
+            # XXX Shouldn't this be stored somewhere after reconciliation?
+
+            # Find references from this record
+            ref_mgr.walk_top_for_refs(rec['data'], distance)
+            # Manage identifiers for rec now we've reconciled and collected
+            ref_mgr.manage_identifiers(rec, rebuild=True)
+        else:
+            print(f"Failed to acquire {rectype} reference: {source['name']}:{recid}")    
 
 # final tidy up
 ref_mgr.write_metatypes(my_slice)

@@ -159,6 +159,10 @@ class ReferenceManager(object):
                 ct = t if t in self.configs.parent_record_types else ""
                 self.add_ref(k, refs, distance, ct)
 
+
+        # OPTIMIZE: Shouldn't this be in walk_for_refs?
+        # Otherwise we test for it all the time
+        # but then never add it
         topid = rec['id']
         ks = list(refs.keys())
         for k in ks:
