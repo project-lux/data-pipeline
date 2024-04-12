@@ -8,6 +8,7 @@ from pipeline.process.merger import MergeHandler
 from pipeline.process.reference_manager import ReferenceManager
 from pipeline.storage.cache.postgres import poolman
 
+import datetime
 import io
 import cProfile
 import pstats
@@ -72,9 +73,6 @@ MAX_DISTANCE = cfgs.max_distance
 order = sorted([(x['namespace'], x.get('merge_order', -1)) for x in cfgs.external.values()], key=lambda x: x[1])
 PREF_ORDER = [x[0] for x in order if x[1] >= 0]
 
-FORCE_REBUILD = True
-
-
 reider = Reidentifier(cfgs, idmap)
 ref_mgr = ReferenceManager(cfgs, idmap)
 merger = MergeHandler(cfgs, idmap, ref_mgr)
@@ -82,6 +80,12 @@ merger = MergeHandler(cfgs, idmap, ref_mgr)
 merged_cache = cfgs.results['merged']['recordcache']
 merged_cache.config['overwrite'] = True
 final = cfgs.results['merged']['mapper']
+
+# if merged is not empty, then only want to write to it if the record
+# hasn't already been written this build
+# OTOH, if merged starts off empty, it must have been this build
+merged_is_empty = merged_cache.len_estimate() < 10
+start = datetime.datetime.now()
 
 # -------------------------------------------------
 if profiling:
@@ -112,7 +116,9 @@ for src_name, src in to_do:
             print(f" !!! Couldn't find YUID for internal record: {qrecid}")
             continue
         yuid = yuid.rsplit('/',1)[1]
-        if not FORCE_REBUILD and yuid in merged_cache:
+        ins_time = merged_cache.insert_time(yuid)
+        if ins_time is not None and ins_time > start_time:
+            # Already processed this record this build
             continue
         elif not yuid in src['recordcache2']:
             rec2 = reider.reidentify(rec)
