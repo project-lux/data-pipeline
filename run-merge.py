@@ -117,7 +117,7 @@ for src_name, src in to_do:
             continue
         yuid = yuid.rsplit('/',1)[1]
         ins_time = merged_cache.insert_time(yuid)
-        if ins_time is not None and ins_time > start_time:
+        if ins_time is not None and ins_time['insert_time'] > start_time:
             # Already processed this record this build
             continue
         elif not yuid in src['recordcache2']:
