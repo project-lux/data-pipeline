@@ -85,7 +85,7 @@ final = cfgs.results['merged']['mapper']
 # hasn't already been written this build
 # OTOH, if merged starts off empty, it must have been this build
 merged_is_empty = merged_cache.len_estimate() < 10
-start = datetime.datetime.now()
+start_time = datetime.datetime.now()
 
 # -------------------------------------------------
 if profiling:
