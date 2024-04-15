@@ -165,24 +165,14 @@ if profiling:
 if DO_REFERENCES:
 
     item = 1
-    while item:
-        try:
-            (ext_uri, ddist) = ref_mgr.pop_done_ref()
-        except TypeError:
-            break
+    for ext_uri in ref_mgr.iter_done_refs(my_slice, max_slice):
+
         uri = idmap[ext_uri]
         if not uri:
             print(f" *** No YUID for reference {ext_uri} from done_refs ({ddist})")
             continue
-        try:
-            distance = ddist['dist']
-        except:
-            print(f" *** No distance for {ext_uri} / {uri}: {ddist}")
-            continue
         uu = uri.rsplit('/',1)[-1]
         if uu in merged_cache:
-            continue
-        if distance > MAX_DISTANCE:
             continue
 
         equivs = idmap[uri] 

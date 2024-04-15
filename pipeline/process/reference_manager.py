@@ -59,6 +59,18 @@ class ReferenceManager(object):
         fh.close()
 
 
+    def iter_done_refs(self, my_slice, max_slice):
+        fh = open('reference_uris.txt')
+        okay = True
+        while okay:
+            uri = [fh.readline() for x in range(max_slice)][my_slice]
+            uri = uri.strip()
+            if not uri:
+                okay = False
+            else:
+                yield uri
+        fh.close()
+
     def pop_ref(self):
         return self.all_refs.popitem()
 
