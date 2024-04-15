@@ -245,6 +245,9 @@ class YulMapper(Mapper):
 
         if 'identified_by' in data:
             for ident in data['identified_by']:
+                if 'attributed_by' in ident:
+                    ident['assigned_by'] = ident['attributed_by']
+                    del ident['attributed_by']
                 if 'classified_as' in ident:
                     for c in ident['classified_as']:
                         cxnid = c.get('id','')
