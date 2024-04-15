@@ -510,6 +510,14 @@ class ReferenceMap(NetworkOperationMap):
         for (k,v) in value.items():
             self._setitem(key, k, v)
 
+    # Make an iterator for keys, that match type and/or pattern
+    def iter_keys(self, **kw):
+        # match: glob style expression for keys to match
+        # scan is defined in redis, but at this scale would be terrible
+        # FIXME: match is on the internal form, but can't manage_key_in as it's a glob?
+        for key in self.conn.scan_iter(**kw):
+            yield RedisDictValue(key, self)
+
     def popitem(self):
         if len(self) ==  0:
             return None

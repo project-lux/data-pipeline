@@ -43,6 +43,22 @@ class ReferenceManager(object):
         fh.write(json.dumps(self.metatypes_seen))
         fh.close()        
 
+
+    def write_done_refs(self):
+        # step through all entries in done_refs and write URI
+        # to a file, if distance <= MAX_DISTANCE
+        maxd = self.configs.max_distance
+        fh = open('reference_uris.txt', 'w')
+        x = 0
+        for k in self.done_refs.iter_keys():
+            x += 1
+            if not x % 100000:
+                print(x)
+            if k['dist'] <= maxd:
+                fh.write(f"{k}\n")
+        fh.close()
+
+
     def pop_ref(self):
         return self.all_refs.popitem()
 
