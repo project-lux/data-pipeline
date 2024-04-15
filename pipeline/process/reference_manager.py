@@ -59,10 +59,7 @@ class ReferenceManager(object):
             # didn't exist anyway
             pass
 
-
-    # OPTIMIZE: This seems unnecessary as type is in the ref key
-    # as ref is now a qua, not a raw URI
-
+    # type is needed for Concepts, as the qua is Type but the type is Material (etc)
     # a ref is {'dist': int, 'type': str}
     def add_ref(self, ref, refs, distance, ctype): 
 

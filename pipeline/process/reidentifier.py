@@ -93,7 +93,7 @@ class Reidentifier(object):
             if not equiv_map:
                 # Don't know anything at all, ask for a new yuid??
                 # This shouldn't happen if previous phases have worked
-                if self.debug: print(f"\n!!! reidentifier couldn't find YUID for {recid} --> {qrecid} / {equivs}")
+                print(f"\n!!! reidentifier couldn't find YUID for {recid} --> {qrecid} / {equivs}")
                 return result
             else:                
                 # We have something from the data
