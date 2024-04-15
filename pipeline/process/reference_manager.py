@@ -55,7 +55,7 @@ class ReferenceManager(object):
             if not x % 100000:
                 print(x)
             if k['dist'] <= maxd:
-                fh.write(f"{k}\n")
+                fh.write(f"{k.pkey}\n")
         fh.close()
 
 
