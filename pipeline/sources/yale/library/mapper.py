@@ -255,6 +255,3 @@ class YulMapper(Mapper):
                             c['id'] = cxnid.replace('https://','http://')
                             
         return rec
-
-
-

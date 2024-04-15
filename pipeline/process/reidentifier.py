@@ -79,7 +79,9 @@ class Reidentifier(object):
                     if myqeq is not None:
                         equiv_map[eq] = myqeq
                     else:
-                        print(f"{qeq} not in idmap, but in equivs of {recid}")
+                        # print(f"{qeq} not in idmap, but in equivs of {recid}")
+                        # ISNI, FAST, WC Entities etc
+                        pass
 
             if recid:
                 uu = self.idmap[qrecid]

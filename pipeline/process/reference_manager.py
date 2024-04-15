@@ -66,8 +66,7 @@ class ReferenceManager(object):
     # a ref is {'dist': int, 'type': str}
     def add_ref(self, ref, refs, distance, ctype): 
 
-
-        if distance == 1 and ref in self.ref_cache:
+        if ref in self.ref_cache:
             return None
 
         xr = self.all_refs[ref]
@@ -125,8 +124,6 @@ class ReferenceManager(object):
                 t = node.get('type', '')
                 ct = t if t in self.configs.parent_record_types else ""
                 self.add_ref(val, refs, distance, ct)
-                print(f"added ref: {val} at {distance}")
-
 
             # but still want to save meta-types
             if (node['type'] in self.configs.parent_record_types or node['type'] == 'Type') and 'classified_as' in node:
