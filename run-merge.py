@@ -166,7 +166,7 @@ if DO_REFERENCES:
     for ext_uri in ref_mgr.iter_done_refs(my_slice, max_slice):
         uri = idmap[ext_uri]
         if not uri:
-            print(f" *** No YUID for reference {ext_uri} from done_refs ({ddist})")
+            print(f" *** No YUID for reference {ext_uri} from done_refs")
             continue
         uu = uri.rsplit('/',1)[-1]
         if uu in merged_cache:
