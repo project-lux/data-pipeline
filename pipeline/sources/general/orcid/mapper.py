@@ -171,8 +171,30 @@ class OrcidMapper(Mapper):
                 val = self.get_text(ext, './common:external-id-value')
                 url = self.get_text(ext, './common:external-id-url')
                 # rel will always be self
-                print(f"{typ}/{val} -- {url}")
-
+                if typ == "Scopus Author ID":
+                    # Create a web page
+                    url = f"https://www.scopus.com/authid/detail.uri?authorId={val}"
+                    nm = "Scopus Homepage"
+                elif typ == "Loop profile":
+                    url = f"http://loop.frontiersin.org/people/{val}/overview"
+                    nm = "Loop Homepage"
+                elif typ == "SciProfiles":
+                    pass # url is okay as is
+                    nm = "SciProfiles Homepage"
+                elif typ == "GND":
+                    # ahha we can be equivalent!
+                    top.equivalent = model.Person(ident=f"https://d-nb.info/gnd/{val}")
+                    url = None
+                elif typ == "ISNI":
+                    # another equivalent
+                    top.equivalent = model.Person(ident=f"http://isni.org/isni/{val}")
+                    url = None
+                else:
+                    # kill the rest, including researcherID which is weird UI
+                    url = None
+                if url is not None:
+                    lo = self.make_webpage(url, name=nm)
+                    top.subject_of = lo
 
             ### Activities
             acts = rec.xpath('./activities:activities-summary', namespaces=self.nss)[0]
