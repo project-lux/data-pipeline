@@ -245,6 +245,7 @@ class ReferenceManager(object):
                     print(f"Found existing: {existing}")
         else:
             uu = None
+            if self.debug: print("Got None for {qrecid}, will mint or find")
 
         # Ensure that previous bad reconciliations are undone
         if uu and rebuild:
@@ -326,14 +327,12 @@ class ReferenceManager(object):
                 uu = uus.pop()
                 if not qrecid in equiv_map:
                     # e.g. second occurence of Wiley painting
-                    if qrecid is not None:
-                        try:
-                            self.idmap[qrecid] = uu
-                        except:
-                            print(f"Failed to set {qrecid} to {uu} from {equiv_map} / {uus}")
-                            raise
-                    else:
-                        print(f"\nERROR: *** In manage_identifiers for {recid}, qrecid is None?!")
+                    try:
+                        if self.debug: print(f"Setting {qrecid} to {uu} as uus=1")
+                        self.idmap[qrecid] = uu
+                    except:
+                        print(f"Failed to set {qrecid} to {uu} from {equiv_map} / {uus}")
+                        raise
             else:
                 # Merge the yuids together
                 print(f" --- Merging {uus}")
