@@ -100,38 +100,39 @@ class ReferenceManager(object):
             return None
 
         xr = self.all_refs[ref]
-        dref = self.done_refs[ref]
         if xr is not None:
             xdist = xr['dist']
             xctype = xr['type']
-            # Test distance
-            try:
-                if xdist is None and dref is not None and dref['dist'] > distance:
-                    del self.done_refs[ref]
-                    self.all_refs[ref] = {'dist': distance, 'type': ctype}
-                elif distance < xdist:
-                    xr['dist'] = distance
-            except:
-                # Sometimes this tries to test None using >
-                # This is when some other process has handled the reference
-                # and thus fetching it from redis returns None
-                print(f" *** dref-dist {dref} > distance: {distance}")
-                return None
-            # Test concept type
+        else:
+            xdist = None
+            xctype = None            
+        dref = self.done_refs[ref]
+        if dref is not None:
+            ddist = dref['dist']
+        else:
+            ddist = None
+
+        if xr is not None:
+            # Test distance: In all, and in done, but less distance
+            if ddist is not None and ddist > distance:
+                # need to re-add it to all with new distance
+                del self.done_refs[ref]
+                self.all_refs[ref] = {'dist': distance, 'type': ctype}
+            elif distance < xdist:
+                # in all, not in done, less distance: update in all
+                xr['dist'] = distance
             if not xctype and ctype:
                 xr['type'] = ctype
         elif dref is not None:
             # Test Distance
-            try:
-                if distance is not None and dref['dist'] is not None and dref['dist'] > distance:
-                    # Add it back in
-                    del self.done_refs[ref]
-                    self.all_refs[ref] = {'dist': distance, 'type': ctype}
-            except:
-                print(f" *** dref-dist {dref} > distance {distance}")
-                return None
+            if ddist is not None and ddist > distance:
+                # Add it back in
+                del self.done_refs[ref]
+                self.all_refs[ref] = {'dist': distance, 'type': ctype}
         elif not ref in refs:
-            refs[ref] = {'dist': distance, 'type': ctype}
+            val = {'dist': distance, 'type': ctype}
+            refs[ref] = val
+            self.all_refs[ref] = val 
             if distance == 1 and "vocab.getty.edu/aat" in ref:
                 self.ref_cache[ref] = distance
 
@@ -205,7 +206,6 @@ class ReferenceManager(object):
                     ct = t if t in self.configs.parent_record_types else ""
                     self.add_ref(k, refs, distance, ct)
 
-        self.all_refs.update(refs)
         return refs
 
 
