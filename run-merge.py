@@ -92,6 +92,9 @@ if profiling:
     pr = cProfile.Profile()
     pr.enable()
 
+
+NAME = "ycba"
+
 for src_name, src in to_do:
     rcache = src['recordcache']
 
@@ -116,7 +119,7 @@ for src_name, src in to_do:
             print(f" !!! Couldn't find YUID for internal record: {qrecid}")
             continue
         yuid = yuid.rsplit('/',1)[1]
-        ins_time = merged_cache.insert_time(yuid)
+        ins_time = merged_cache.metadata(yuid, "insert_time")
         if ins_time is not None and ins_time['insert_time'] > start_time:
             # Already processed this record this build
             continue
@@ -125,6 +128,13 @@ for src_name, src in to_do:
             src['recordcache2'][rec2['yuid']] = rec2['data']
         else:
             rec2 = src['recordcache2'][yuid]
+
+        if NAME is not None and ins_time is not None:
+            # We're in merged previously
+            curr_name = merged_cache.metadata(yuid, "change")
+        else:
+            curr_name = ""
+
         equivs = idmap[rec2['data']['id']]
         if equivs:
             if qrecid in equivs: equivs.remove(qrecid)
@@ -147,6 +157,16 @@ for src_name, src in to_do:
             except:
                 pass
             merged_cache[rec3['yuid']] = rec3
+            if NAME:
+                if curr_name:
+                    if NAME in curr_name:
+                        new_name = None
+                    else:
+                        new_name = f"{curr_name}|{NAME}"
+                else:
+                    new_name = NAME
+                if new_name:
+                    merged_cache.set_metadata(yuid, "change", new_name)
         else:
             print(f"*** Final transform returned None")
     recids = []
@@ -168,9 +188,17 @@ if DO_REFERENCES:
         if not uri:
             print(f" *** No YUID for reference {ext_uri} from done_refs")
             continue
-        uu = uri.rsplit('/',1)[-1]
-        if uu in merged_cache:
+        yuid = uri.rsplit('/',1)[-1]
+        ins_time = merged_cache.metadata(yuid, "insert_time")
+        if ins_time is not None and ins_time['insert_time'] > start_time:
+            # Already processed this record this build
             continue
+        if NAME is not None and ins_time is not None:
+            # We're in merged previously case
+            curr_name = merged_cache.metadata(yuid, "change")
+        else:
+            # No record in merged
+            curr_name = ""
 
         equivs = idmap[uri] 
         # get a base record
@@ -215,6 +243,17 @@ if DO_REFERENCES:
                 except:
                     pass
                 merged_cache[rec3['yuid']] = rec3
+                if NAME:
+                    if curr_name:
+                        if NAME in curr_name:
+                            # Already added don't make name|name
+                            new_name = None
+                        else:
+                            new_name = f"{curr_name}|{NAME}"
+                    else:
+                        new_name = NAME
+                    if new_name:
+                        merged_cache.set_metadata(yuid, "change", new_name)
             else:
                 print(f"*** Final transform returned None")
 

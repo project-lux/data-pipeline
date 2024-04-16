@@ -156,18 +156,36 @@ class PooledCache(object):
         return res['count']
 
 
-    def insert_time(self, key, _key_type=None):
+    def metadata(self, key, field="insert_time", _key_type=None):
         if _key_type is None:
             _key_type = self.key
         if _key_type == 'yuid' and len(key) != 36:
             print(f"{self.name} has UUIDs as keys")
             return None
-        qry = f"SELECT insert_time FROM {self.name} WHERE {_key_type} = %s"
+        if not field in ["insert_time", "record_time", "refresh_time", "valid", "change"]:
+            raise ValueError(f"Unknown metadata field in cache: {field}")
+        qry = f"SELECT {field} FROM {self.name} WHERE {_key_type} = %s"
         params = (key,)
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry, params)
             rows = cursor.fetchone()
         return rows
+
+    def set_metadata(self, key, field, value, _key_type=None):
+        if _key_type is None:
+            _key_type = self.key
+        if _key_type == 'yuid' and len(key) != 36:
+            print(f"{self.name} has UUIDs as keys")
+            return None
+        if not field in ["record_time", "refresh_time", "valid", "change"]:
+            raise ValueError(f"Attempt to set unsettable metadata field in cache: {field}")        
+        qry = f"UPDATE {self.name} SET {field} = %s WHERE {_key_type} = %s"
+        params = (value, key)
+        with self._cursor(internal=False) as cursor:
+            cursor.execute(qry, params)
+            rows = cursor.fetchone()
+        return rows
+
 
     def latest(self):
         qry = f"SELECT insert_time FROM {self.name} ORDER BY insert_time DESC LIMIT 1"
@@ -460,6 +478,7 @@ class PooledCache(object):
             self.conn.commit()
         self.conn.set_isolation_level(old_iso)
 
+    ### Behave like a dict
 
     def __getitem__(self, what):
         return self.get(what)
