@@ -75,9 +75,6 @@ else:
     to_do = [x[0] for x in s_to_do]
 
 
-
-
-
 # --- set up environment ---
 reconciler = Reconciler(cfgs, idmap, networkmap)
 ref_mgr = ReferenceManager(cfgs, idmap)
