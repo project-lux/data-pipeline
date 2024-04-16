@@ -377,5 +377,6 @@ class ReferenceManager(object):
                     qeq = self.configs.make_qua(eq, typ)
                 else:
                     qeq = eq
+                if self.debug: print(f"Setting {qeq} to {uu} in idmap")
                 self.idmap[qeq] = uu
      
