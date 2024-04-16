@@ -228,6 +228,7 @@ class ReferenceManager(object):
         if qrecid in self.idmap:
             # We know about this entity/record already
             uu = self.idmap[qrecid]
+            if self.debug: print(f"Found {uu} for {qrecid}")
             if uu is None:
                 print(f"got None? waiting and trying again...")
                 time.sleep(1)
@@ -241,6 +242,7 @@ class ReferenceManager(object):
                     existing = []
                 else:
                     existing = list(uuset)
+                    print(f"Found existing: {existing}")
         else:
             uu = None
 
@@ -259,6 +261,7 @@ class ReferenceManager(object):
                             if not x.startswith("__"):
                                 try:
                                     del self.idmap[x]
+                                    if self.debug: print(f"deleted {x}")
                                 except:
                                     print(f"\nWhile processing {recid} found {equivs} in record")
                                     print(f"Tried to delete {x} for {uu}")
@@ -281,6 +284,7 @@ class ReferenceManager(object):
                     myqeq = self.idmap[qeq]
                     if myqeq is not None:
                         equiv_map[eq] = myqeq
+                    if self.debug: print(f"qeq: {qeq} / {myqeq}")
 
         # Ensure existing from idmap are in equivalent map
         # This will only make changes on second and subsequent times
@@ -320,7 +324,7 @@ class ReferenceManager(object):
             uus = set(uul)
             if len(uus) == 1:
                 uu = uus.pop()
-                if not recid in equiv_map:
+                if not qrecid in equiv_map:
                     # e.g. second occurence of Wiley painting
                     if qrecid is not None:
                         try:
@@ -379,4 +383,5 @@ class ReferenceManager(object):
                     qeq = eq
                 if self.debug: print(f"Setting {qeq} to {uu} in idmap")
                 self.idmap[qeq] = uu
-     
+            else:
+                if self.debug: print(f"Saw {eq} in existing, not setting")
