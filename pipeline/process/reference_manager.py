@@ -29,9 +29,7 @@ class ReferenceManager(object):
             t = r['to']['value']
             getty_redirects[f] = t
         self.redirects = getty_redirects
-
         self.ref_cache = {}
-
 
     def write_metatypes(self, my_slice):
         # write out our slice of metatypes
@@ -42,7 +40,6 @@ class ReferenceManager(object):
         fh = open(fn, 'w')
         fh.write(json.dumps(self.metatypes_seen))
         fh.close()        
-
 
     def write_done_refs(self):
         # step through all entries in done_refs and write URI
@@ -58,17 +55,25 @@ class ReferenceManager(object):
                 fh.write(f"{k.pkey}\n")
         fh.close()
 
-
     def iter_done_refs(self, my_slice, max_slice):
-        fh = open('reference_uris.txt')
-        okay = True
-        while okay:
-            uri = [fh.readline() for x in range(max_slice)][my_slice]
-            uri = uri.strip()
-            if not uri:
-                okay = False
-            else:
-                yield uri
+        fh = open('reference_uris.txt', 'r')
+        if my_slice < 0 or max_slice < 0:
+            # just read the whole file            
+            line = fh.readline()
+            line.strip()
+            while line:
+                yield line
+                line = fh.readline()
+                line.strip()
+        else:
+            okay = True
+            while okay:
+                uri = [fh.readline() for x in range(max_slice)][my_slice]
+                uri = uri.strip()
+                if not uri:
+                    okay = False
+                else:
+                    yield uri
         fh.close()
 
     def pop_ref(self):

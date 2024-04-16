@@ -4,6 +4,7 @@ import json
 import time
 from dotenv import load_dotenv
 from pipeline.config import Config
+from pipeline.process.reference_manager import ReferenceManager
 
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
@@ -16,7 +17,6 @@ cfgs.instantiate_all()
 
 
 ### HARVEST EXTERNAL NON-DUMP DATASETS
-
 if '--harvest' in sys.argv:
     if '--aat' in sys.argv:
         which = 'aat'
@@ -38,7 +38,6 @@ if '--harvest' in sys.argv:
         print(ident)
 
 ### LOAD DATABASES
-
 if '--load' in sys.argv:
     if '--ycba' in sys.argv or '--all' in sys.argv:
         cfgs.internal['ycba']['datacache'].clear()
@@ -66,7 +65,6 @@ if '--load' in sys.argv:
         cfgs.external['lcsh']['loader'].load()
 
 ### LOAD INDEXES
-
 if '--load-index' in sys.argv:
     if '--wikidata' in sys.argv or '--all' in sys.argv:
         cfgs.external['wikidata']['indexLoader'].load()
@@ -82,11 +80,8 @@ if '--load-index' in sys.argv:
         cfgs.external['ulan']['indexLoader'].load()
 
 ### VALIDATION
-
 if '--validate' in sys.argv:
-
     ignore_matches = []
-
     rc = cfgs.internal['ils']['recordcache']
     v = cfgs.validator
     for rec in rc.iter_records():
@@ -109,9 +104,14 @@ if '--validate' in sys.argv:
             # print(f"{rec['identifier']}: Valid")
             pass
 
+### EXPORT REFERENCE LIST
+if '--write_refs' in sys.argv:
+    ref_mgr = ReferenceManager(cfgs, idmap)
+    ref_mgr.write_done_refs()
+    done_refs.clear()
+
 
 ### CLEAN IDMAP
-
 if '--clean-idmap' in sys.argv:
     killed = {None:0}
     token = idmap.update_token
