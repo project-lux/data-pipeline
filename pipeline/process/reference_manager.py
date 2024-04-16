@@ -187,15 +187,23 @@ class ReferenceManager(object):
         try:
             self.walk_for_refs(rec, refs, distance+1, top=True)
         except ValueError as e:        
-            print(f"\nERROR: Walk error in {rec['id']}: {e}")
-            # raise
+            print(f"\nERROR: Reference walk error in {rec['id']}: {e}")
+            raise
 
         if 'equivalent' in rec:
             for eq in rec['equivalent']:
                 k = self.configs.make_qua(eq['id'], rec['type'])
-                t = rec.get('type', '')
-                ct = t if t in self.configs.parent_record_types else ""
-                self.add_ref(k, refs, distance, ct)
+                should_add_ref = True
+                for i in self.internal_uris:
+                    if k.startswith(i):
+                        # these will get built as 0 regardless
+                        # so don't record refs to them
+                        should_add_ref = False
+                        break
+                if should_add_ref:
+                    t = rec.get('type', '')
+                    ct = t if t in self.configs.parent_record_types else ""
+                    self.add_ref(k, refs, distance, ct)
 
         self.all_refs.update(refs)
         return refs

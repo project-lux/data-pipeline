@@ -161,12 +161,9 @@ if profiling:
     print(s.getvalue())
     raise ValueError()
 
-
 if DO_REFERENCES:
-
     item = 1
     for ext_uri in ref_mgr.iter_done_refs(my_slice, max_slice):
-
         uri = idmap[ext_uri]
         if not uri:
             print(f" *** No YUID for reference {ext_uri} from done_refs ({ddist})")
