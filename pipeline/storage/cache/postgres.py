@@ -183,9 +183,7 @@ class PooledCache(object):
         params = (value, key)
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry, params)
-            rows = cursor.fetchone()
-        return rows
-
+            self.conn.commit()
 
     def latest(self):
         qry = f"SELECT insert_time FROM {self.name} ORDER BY insert_time DESC LIMIT 1"
