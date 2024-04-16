@@ -235,7 +235,7 @@ class ReferenceManager(object):
                 if uu is None:
                     print(f"WTF... Still none... treating as ... None")
             if uu is not None:
-                equiv_map[recid] = uu
+                equiv_map[qrecid] = uu
                 uuset = self.idmap[uu]
                 if not uuset:
                     existing = []
