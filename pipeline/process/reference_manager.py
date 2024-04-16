@@ -220,6 +220,9 @@ class ReferenceManager(object):
         # This should be called after ALL reconciliation processing has happened
         # including id->id, name->id and id collection to minimize duplicate records
         qrecid = self.configs.make_qua(recid, typ)
+        # make sure we know ourselves
+        qequivs.append(qrecid)
+
         equiv_map = {}
         existing = []
         if qrecid in self.idmap:
