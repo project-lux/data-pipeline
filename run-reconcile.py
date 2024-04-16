@@ -80,6 +80,8 @@ reconciler = Reconciler(cfgs, idmap, networkmap)
 ref_mgr = ReferenceManager(cfgs, idmap)
 debug = cfgs.debug_reconciliation
 
+ref_mgr.debug = True
+
 print("Starting...")
 
 if profiling:
