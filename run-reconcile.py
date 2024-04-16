@@ -122,10 +122,10 @@ for name, cfg in to_do:
             # XXX Shouldn't this be stored somewhere after reconciliation?
 
             # Find references from the record
-            ref_mgr.walk_top_for_refs(rec['data'], 0)
+            ref_mgr.walk_top_for_refs(rec2['data'], 0)
 
             # Manage identifiers for rec now we've reconciled and collected
-            ref_mgr.manage_identifiers(rec, rebuild=True)
+            ref_mgr.manage_identifiers(rec2, rebuild=True)
 
     recids = []
 
@@ -192,9 +192,9 @@ if DO_REFERENCES:
             # XXX Shouldn't this be stored somewhere after reconciliation?
 
             # Find references from this record
-            ref_mgr.walk_top_for_refs(rec['data'], distance)
+            ref_mgr.walk_top_for_refs(rec2['data'], distance)
             # Manage identifiers for rec now we've reconciled and collected
-            ref_mgr.manage_identifiers(rec, rebuild=True)
+            ref_mgr.manage_identifiers(rec2, rebuild=True)
         else:
             print(f"Failed to acquire {rectype} reference: {source['name']}:{recid}")    
 
