@@ -250,7 +250,10 @@ class ReferenceManager(object):
         # if reference is True, then test if rebuild should
 
         updated_token = False
-        has_update = self.idmap.has_update_token(uu)
+        if uu is not None:
+            has_update = self.idmap.has_update_token(uu)
+        else:
+            has_update = False
 
         # Ensure that previous bad reconciliations are undone
         if uu and rebuild and not has_update:
