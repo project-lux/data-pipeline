@@ -249,30 +249,31 @@ class ReferenceManager(object):
 
         # if reference is True, then test if rebuild should
 
+        updated_token = False
+        has_update = self.idmap.has_update_token(uu)
+
         # Ensure that previous bad reconciliations are undone
-        if uu and rebuild:
-            if self.debug: print(f"Testing update token for {uu}")
-            has_update = self.idmap.has_update_token(uu)
-            if not has_update:
-                if self.debug: print("No update token!")
-                self.idmap.add_update_token(uu)
-                if self.debug: print(f"Tried to add. Now has_() is: {self.idmap.has_update_token(uu)}")
-                if existing:
-                    # replace existing with equivs if no or old update token
-                    to_delete = []
-                    for x in existing.copy():
-                        if not x in qequivs:
-                            if self.debug: print(f"Removing {x} not in new equivs")
-                            existing.remove(x)
-                            if not x.startswith("__"):
-                                try:
-                                    del self.idmap[x]
-                                    if self.debug: print(f"deleted {x}")
-                                except:
-                                    print(f"\nWhile processing {recid} found {equivs} in record")
-                                    print(f"Tried to delete {x} for {uu}")
-                        else:
-                            if self.debug: print(f"Found {x} in existing and new")
+        if uu and rebuild and not has_update:
+            if self.debug: print("No update token!")
+            self.idmap.add_update_token(uu)
+            updated_token = True
+            if self.debug: print(f"Tried to add. Now has_() is: {self.idmap.has_update_token(uu)}")
+            if existing:
+                # replace existing with equivs if no or old update token
+                to_delete = []
+                for x in existing.copy():
+                    if not x in qequivs:
+                        if self.debug: print(f"Removing {x} not in new equivs")
+                        existing.remove(x)
+                        if not x.startswith("__"):
+                            try:
+                                del self.idmap[x]
+                                if self.debug: print(f"deleted {x}")
+                            except:
+                                print(f"\nWhile processing {recid} found {equivs} in record")
+                                print(f"Tried to delete {x} for {uu}")
+                    else:
+                        if self.debug: print(f"Found {x} in existing and new")
             else:
                 if self.debug: print(f"Got update token")
 
@@ -318,6 +319,7 @@ class ReferenceManager(object):
                 raise ValueError(f"Unknown type: {typ} for generating slug")
             uu = self.idmap.mint(qrecid, slug)
             self.idmap.add_update_token(uu)
+            updated_token = True
             if self.debug: print(f"Minted {slug}/{uu} for {qrecid} ")
 
             for eq in equivs:
@@ -333,6 +335,9 @@ class ReferenceManager(object):
             uus = set(uul)
             if len(uus) == 1:
                 uu = uus.pop()
+                if not updated_token:
+                    self.idmap.add_update_token(uu)
+                    updated_token = True
                 if not qrecid in equiv_map:
                     # e.g. second occurence of Wiley painting
                     try:
@@ -371,6 +376,9 @@ class ReferenceManager(object):
                 else:
                     # ? Just pick one at random
                     uu = uus.pop()
+
+                if not updated_token:
+                    self.idmap.add_update_token(uu)
 
                 # Delete the others and set new uu
                 for ud in uus:

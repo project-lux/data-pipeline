@@ -148,6 +148,7 @@ if DO_REFERENCES:
     x = 0
     item = 1
     while item:
+        x += 1
 
         if x > 6:
             break
