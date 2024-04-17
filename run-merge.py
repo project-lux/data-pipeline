@@ -73,8 +73,7 @@ if len(sys.argv) > 2 and sys.argv[1].isnumeric() and sys.argv[2].isnumeric():
     max_slice = int(sys.argv[2])
 
 if len(to_do) == 1:
-    NAME = to_do[0][0]['name']
-
+    NAME = to_do[0][0]
 
 MAX_DISTANCE = cfgs.max_distance
 order = sorted([(x['namespace'], x.get('merge_order', -1)) for x in cfgs.external.values()], key=lambda x: x[1])
