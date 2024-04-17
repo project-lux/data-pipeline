@@ -299,6 +299,9 @@ class WdMapper(Mapper, WdConfigManager):
         # just take the first one
         if site:
             site = site[0]
+            #trash pdfs
+            if site.endswith(".pdf"):
+                return None
             lo = model.LinguisticObject(label="Website Text")
             do = vocab.WebPage(label="Home Page")            
             do.access_point = model.DigitalObject(ident=site)
