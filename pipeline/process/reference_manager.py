@@ -209,7 +209,7 @@ class ReferenceManager(object):
         return refs
 
 
-    def manage_identifiers(self, rec, rebuild=False):
+    def manage_identifiers(self, rec, rebuild=False, reference=False):
         if not rec or not 'data' in rec or not 'id' in rec['data']:
             return
         recid = rec['data']['id']
@@ -247,11 +247,16 @@ class ReferenceManager(object):
         else:
             if self.debug: print(f"Got None for {qrecid}, will mint or find")
 
+        # if reference is True, then test if rebuild should
+
         # Ensure that previous bad reconciliations are undone
         if uu and rebuild:
+            if self.debug: print(f"Testing update token for {uu}")
             has_update = self.idmap.has_update_token(uu)
             if not has_update:
+                if self.debug: print("No update token!")
                 self.idmap.add_update_token(uu)
+                if self.debug: print(f"Tried to add. Now has_() is: {self.idmap.has_update_token(uu)}")
                 if existing:
                     # replace existing with equivs if no or old update token
                     to_delete = []
@@ -268,6 +273,9 @@ class ReferenceManager(object):
                                     print(f"Tried to delete {x} for {uu}")
                         else:
                             if self.debug: print(f"Found {x} in existing and new")
+            else:
+                if self.debug: print(f"Got update token")
+
           
         # Build map of equivalent ids given in current record
         if equivs:

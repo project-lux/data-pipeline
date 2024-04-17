@@ -143,8 +143,13 @@ if DO_REFERENCES:
 
     print("\nProcessing References...")
 
+    x = 0
     item = 1
     while item:
+
+        if x > 6:
+            break
+
         # Item is uri, {dist, type} or None
         item = ref_mgr.pop_ref()
         try:
@@ -194,7 +199,10 @@ if DO_REFERENCES:
             # Find references from this record
             ref_mgr.walk_top_for_refs(rec2['data'], distance)
             # Manage identifiers for rec now we've reconciled and collected
-            ref_mgr.manage_identifiers(rec2, rebuild=True)
+
+            # rebuild should be False if this is an equivalent of an internal rec
+            # as we've already seen it, so don't remove URIs (e.g. internal uris)
+            ref_mgr.manage_identifiers(rec2, rebuild=True, reference=True)
         else:
             print(f"Failed to acquire {rectype} reference: {source['name']}:{recid}")    
 
