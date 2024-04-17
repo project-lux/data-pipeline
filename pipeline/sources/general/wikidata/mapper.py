@@ -296,6 +296,11 @@ class WdMapper(Mapper, WdConfigManager):
         site = data.get('P856', None)
         if not site:
             site = data.get('P973', None)
+        if not site:
+            try:
+                site = data['sitelinks']['enwiki']['url']
+            except:
+                site = None
         # just take the first one
         if site:
             site = site[0]
