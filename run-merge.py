@@ -195,7 +195,7 @@ if DO_REFERENCES:
             continue
         if NAME is not None and ins_time is not None:
             # We're in merged previously case
-            curr_name = merged_cache.metadata(yuid, "change")
+            curr_name = merged_cache.metadata(yuid, "change")['change']
         else:
             # No record in merged
             curr_name = ""
