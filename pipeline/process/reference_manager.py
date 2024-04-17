@@ -255,6 +255,10 @@ class ReferenceManager(object):
         else:
             has_update = False
 
+        if rebuild and has_update and reference:
+            # we're a reference and a previous pass has already seen it
+            rebuild = False
+
         # Ensure that previous bad reconciliations are undone
         if uu and rebuild and not has_update:
             if self.debug: print("No update token!")
@@ -382,6 +386,7 @@ class ReferenceManager(object):
 
                 if not updated_token:
                     self.idmap.add_update_token(uu)
+                    updated_token = True
 
                 # Delete the others and set new uu
                 for ud in uus:
@@ -392,6 +397,7 @@ class ReferenceManager(object):
                                 self.idmap.delete(eqd) 
                                 self.idmap[eqd] = uu
 
+        if self.debug: print(f"updated token: {updated_token}")
         # Ensure all equivs match to the yuid
         for eq in equiv_map.keys():
             if not eq.startswith("__") and not eq in existing:
