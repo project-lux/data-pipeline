@@ -64,7 +64,7 @@ sleep 30
 
 ### Export referenced URIs
 echo "Exporting Referenced URIs to file"
-python ./manage-data.py --write_refs
+python ./manage-data.py --write-refs
 sleep 10
 
 

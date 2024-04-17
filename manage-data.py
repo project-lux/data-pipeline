@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import time
+import datetime
 from dotenv import load_dotenv
 from pipeline.config import Config
 from pipeline.process.reference_manager import ReferenceManager
@@ -104,8 +105,31 @@ if '--validate' in sys.argv:
             # print(f"{rec['identifier']}: Valid")
             pass
 
+### WRITE NEW IDMAP TOKEN
+
+if '--new-token' in sys.argv:
+
+    now = datetime.datetime.now()
+    mm = f"0{now.month}" if now.month < 10 else now.month
+    dd = f"0{now.day}" if now.day < 10 else now.day
+    stok = f"__{now.year}{mm}{dd}"
+    if idmap.update_token.startswith(stok):
+        if idmap.update_token[-3].isalpha():
+            letter = chr(ord(idmap.update_token[-3])+1)
+        else:
+            letter = "a"
+        tok = f"{stok}{letter}__"
+    else:
+        tok = f"{stok}__"
+    fn = os.path.join(cfgs.data_dir, 'idmap_update_token.txt')
+    fh = open(fn, 'w')
+    fh.write(f"{tok}\n")
+    fh.close()
+    print(f"New update token: {tok}")
+
+
 ### EXPORT REFERENCE LIST
-if '--write_refs' in sys.argv:
+if '--write-refs' in sys.argv:
     ref_mgr = ReferenceManager(cfgs, idmap)
     ref_mgr.write_done_refs()
     done_refs.clear()
