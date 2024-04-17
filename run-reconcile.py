@@ -80,7 +80,7 @@ reconciler = Reconciler(cfgs, idmap, networkmap)
 ref_mgr = ReferenceManager(cfgs, idmap)
 debug = cfgs.debug_reconciliation
 
-ref_mgr.debug = True
+# ref_mgr.debug = True
 
 print("Starting...")
 
@@ -123,7 +123,6 @@ for name, cfg in to_do:
 
             # Find references from the record
             ref_mgr.walk_top_for_refs(rec2['data'], 0)
-
             # Manage identifiers for rec now we've reconciled and collected
             ref_mgr.manage_identifiers(rec2, rebuild=True)
 
