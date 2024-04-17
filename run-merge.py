@@ -44,6 +44,9 @@ if '--norefs' in sys.argv:
 else:
     DO_REFERENCES = True
 
+
+NAME = None
+
 max_slice = -1
 my_slice = -1
 recids = []
@@ -69,6 +72,10 @@ if len(sys.argv) > 2 and sys.argv[1].isnumeric() and sys.argv[2].isnumeric():
     my_slice = int(sys.argv[1])
     max_slice = int(sys.argv[2])
 
+if len(to_do) == 1:
+    NAME = to_do[0][0]['name']
+
+
 MAX_DISTANCE = cfgs.max_distance
 order = sorted([(x['namespace'], x.get('merge_order', -1)) for x in cfgs.external.values()], key=lambda x: x[1])
 PREF_ORDER = [x[0] for x in order if x[1] >= 0]
@@ -92,8 +99,6 @@ if profiling:
     pr = cProfile.Profile()
     pr.enable()
 
-
-NAME = "yuag"
 
 for src_name, src in to_do:
     rcache = src['recordcache']
@@ -132,6 +137,8 @@ for src_name, src in to_do:
         if NAME is not None and ins_time is not None:
             # We're in merged previously
             curr_name = merged_cache.metadata(yuid, "change")['change']
+            if curr_name in ['create', 'update']:
+                curr_name = ""
         else:
             curr_name = ""
 
@@ -196,6 +203,8 @@ if DO_REFERENCES:
         if NAME is not None and ins_time is not None:
             # We're in merged previously case
             curr_name = merged_cache.metadata(yuid, "change")['change']
+            if curr_name in ['create', 'update']:
+                curr_name = ""
         else:
             # No record in merged
             curr_name = ""
