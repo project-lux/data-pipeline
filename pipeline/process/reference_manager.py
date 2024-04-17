@@ -245,7 +245,7 @@ class ReferenceManager(object):
                     print(f"Found existing: {existing}")
         else:
             uu = None
-            if self.debug: print("Got None for {qrecid}, will mint or find")
+            if self.debug: print(f"Got None for {qrecid}, will mint or find")
 
         # Ensure that previous bad reconciliations are undone
         if uu and rebuild:
