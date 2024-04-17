@@ -84,6 +84,8 @@ ref_mgr.debug = True
 
 print("Starting...")
 
+print(f"Update token is: {idmap.update_token}")
+
 if profiling:
     pr = cProfile.Profile()
     pr.enable()
