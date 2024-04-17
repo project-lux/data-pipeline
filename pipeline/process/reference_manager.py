@@ -243,7 +243,7 @@ class ReferenceManager(object):
                     existing = []
                 else:
                     existing = list(uuset)
-                    print(f"Found existing: {existing}")
+                    if self.debug: print(f"Found existing: {existing}")
         else:
             if self.debug: print(f"Got None for {qrecid}, will mint or find")
 

@@ -143,11 +143,8 @@ if profiling:
 if DO_REFERENCES:
 
     print("\nProcessing References...")
-
-    x = 0
     item = 1
     while item:
-        x += 1
         # Item is uri, {dist, type} or None
         item = ref_mgr.pop_ref()
         try:
@@ -161,8 +158,6 @@ if DO_REFERENCES:
             continue
         if distance > cfgs.max_distance:
             continue
-
-        # print(uri)
 
         ref_mgr.did_ref(uri, distance)
 
