@@ -125,7 +125,7 @@ for name, cfg in to_do:
             # Find references from the record
             ref_mgr.walk_top_for_refs(rec2['data'], 0)
             # Manage identifiers for rec now we've reconciled and collected
-            ref_mgr.manage_identifiers(rec2, rebuild=True)
+            ref_mgr.manage_identifiers(rec2)
     recids = []
 
 if profiling:
@@ -195,7 +195,7 @@ if DO_REFERENCES:
 
             # rebuild should be False if this is an equivalent of an internal rec
             # as we've already seen it, so don't remove URIs (e.g. internal uris)
-            ref_mgr.manage_identifiers(rec2, rebuild=True, reference=True)
+            ref_mgr.manage_identifiers(rec2)
         else:
             print(f"Failed to acquire {rectype} reference: {source['name']}:{recid}")    
 

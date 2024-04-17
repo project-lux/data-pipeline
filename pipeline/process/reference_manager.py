@@ -209,7 +209,7 @@ class ReferenceManager(object):
         return refs
 
 
-    def manage_identifiers(self, rec, rebuild=False, reference=False):
+    def manage_identifiers(self, rec):
         if not rec or not 'data' in rec or not 'id' in rec['data']:
             return
         recid = rec['data']['id']
@@ -247,20 +247,18 @@ class ReferenceManager(object):
         else:
             if self.debug: print(f"Got None for {qrecid}, will mint or find")
 
-        # if reference is True, then test if rebuild should
-
         updated_token = False
+
+        # if we have the current update token, then we've already been touched
+        # so rebuild from scratch is == has_update
         if uu is not None:
             has_update = self.idmap.has_update_token(uu)
         else:
             has_update = False
-
-        if rebuild and has_update and reference:
-            # we're a reference and a previous pass has already seen it
-            rebuild = False
+        rebuild = has_update
 
         # Ensure that previous bad reconciliations are undone
-        if uu and rebuild and not has_update:
+        if uu and rebuild:
             if self.debug: print("No update token!")
             self.idmap.add_update_token(uu)
             updated_token = True
