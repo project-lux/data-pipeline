@@ -131,7 +131,7 @@ for src_name, src in to_do:
 
         if NAME is not None and ins_time is not None:
             # We're in merged previously
-            curr_name = merged_cache.metadata(yuid, "change")
+            curr_name = merged_cache.metadata(yuid, "change")['change']
         else:
             curr_name = ""
 
