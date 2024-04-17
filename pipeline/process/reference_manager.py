@@ -225,9 +225,10 @@ class ReferenceManager(object):
 
         equiv_map = {}
         existing = []
-        if qrecid in self.idmap:
+
+        uu = self.idmap[qrecid]
+        if uu is not None:
             # We know about this entity/record already
-            uu = self.idmap[qrecid]
             if self.debug: print(f"Found {uu} for {qrecid}")
             if uu is None:
                 print(f"got None? waiting and trying again...")
@@ -244,7 +245,6 @@ class ReferenceManager(object):
                     existing = list(uuset)
                     print(f"Found existing: {existing}")
         else:
-            uu = None
             if self.debug: print(f"Got None for {qrecid}, will mint or find")
 
         # Ensure that previous bad reconciliations are undone
