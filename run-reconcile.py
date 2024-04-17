@@ -125,9 +125,7 @@ for name, cfg in to_do:
             ref_mgr.walk_top_for_refs(rec2['data'], 0)
             # Manage identifiers for rec now we've reconciled and collected
             ref_mgr.manage_identifiers(rec2, rebuild=True)
-
     recids = []
-
 
 if profiling:
     pr.disable()
@@ -161,6 +159,8 @@ if DO_REFERENCES:
         if distance > cfgs.max_distance:
             continue
 
+        print(uri)
+
         ref_mgr.did_ref(uri, distance)
 
         if cfgs.is_qua(uri):
@@ -174,7 +174,8 @@ if DO_REFERENCES:
             continue
         if not source['type'] == 'external':
             # Don't process internal or results
-            continue
+            print(f"Got internal reference! {uri}")
+            raise ValueError(uri)
 
         # put back the qua to the id after splitting/canonicalizing in split_uri
         mapper = source['mapper']
