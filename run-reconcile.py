@@ -80,10 +80,9 @@ reconciler = Reconciler(cfgs, idmap, networkmap)
 ref_mgr = ReferenceManager(cfgs, idmap)
 debug = cfgs.debug_reconciliation
 
-ref_mgr.debug = True
+# ref_mgr.debug = True
 
 print("Starting...")
-
 print(f"Update token is: {idmap.update_token}")
 
 if profiling:
@@ -149,10 +148,6 @@ if DO_REFERENCES:
     item = 1
     while item:
         x += 1
-
-        if x > 6:
-            break
-
         # Item is uri, {dist, type} or None
         item = ref_mgr.pop_ref()
         try:
@@ -167,7 +162,7 @@ if DO_REFERENCES:
         if distance > cfgs.max_distance:
             continue
 
-        print(uri)
+        # print(uri)
 
         ref_mgr.did_ref(uri, distance)
 
