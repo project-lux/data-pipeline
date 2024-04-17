@@ -118,7 +118,7 @@ class ReferenceManager(object):
                 # need to re-add it to all with new distance
                 del self.done_refs[ref]
                 self.all_refs[ref] = {'dist': distance, 'type': ctype}
-            elif distance < xdist:
+            elif xdist is not None and distance < xdist:
                 # in all, not in done, less distance: update in all
                 xr['dist'] = distance
             if not xctype and ctype:
