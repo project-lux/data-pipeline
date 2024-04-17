@@ -93,7 +93,7 @@ if profiling:
     pr.enable()
 
 
-NAME = "ycba"
+NAME = "yuag"
 
 for src_name, src in to_do:
     rcache = src['recordcache']
