@@ -43,14 +43,15 @@ outh = open(fn, 'w')
 x = 0
 for rec in merged.iter_records_slice(my_slice, max_slice):
     yuid = rec['yuid']
-    if yuid in ml:
-        continue
-    try:
-        rec2 = mapper.transform(rec, rec['data']['type'])
-    except Exception as e:
-        print(f"{yuid} errored in final mapper: {e}")
-        continue
-    ml[yuid] = rec2
+    if not yuid in ml:
+        try:
+            rec2 = mapper.transform(rec, rec['data']['type'])
+        except Exception as e:
+            print(f"{yuid} errored in final mapper: {e}")
+            continue
+        ml[yuid] = rec2
+    else:
+        rec2 = ml[yuid]
     jstr = json.dumps(rec2, separators=(',',':'))
     outh.write(jstr)
     outh.write('\n')
