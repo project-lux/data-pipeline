@@ -195,9 +195,13 @@ class LcMapper(Mapper):
             ex = [ex]
         later = new.get('madsrdf:hasLaterEstablishedForm', [])
         if later:
+            if type(later) != list:
+                later = [later]
             ex.extend(later)
         earlier = new.get('madsrdf:hasEarlierEstablishedForm', [])
         if earlier:
+            if type(earlier) != list:
+                earlier = [earlier]
             ex.extend(earlier) 
 
         # skos:closeMatch -- Only as a last resort
