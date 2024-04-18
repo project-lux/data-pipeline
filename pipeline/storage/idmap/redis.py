@@ -234,8 +234,9 @@ class IdMap(RedisCache):
         key = self._manage_key_in(key)
 
         # memory cache for frequent lookups (aat terms) to avoid the network
-        if key.startswith("aat:") and key in self.memory_cache:
-            return self.memory_cache[key]
+        # Causes errors with multiple processes
+        #if key.startswith("aat:") and key in self.memory_cache:
+        #    return self.memory_cache[key]
 
         t = self.conn.type(key)
         if t == 'string':
