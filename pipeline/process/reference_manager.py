@@ -367,7 +367,6 @@ class ReferenceManager(object):
                 if not updated_token:
                     self.idmap.add_update_token(uu)
                     updated_token = True
-
                 # Delete the others and set new uu
                 for ud in uus:
                     existing_ud = self.idmap[ud]
@@ -377,7 +376,11 @@ class ReferenceManager(object):
                                 self.idmap.delete(eqd) 
                                 self.idmap[eqd] = uu
 
-        if self.debug: print(f"updated token: {updated_token}")
+        # Ensure we touch the token
+        if not updated_token and not has_update:
+            if self.debug: print(f"Fell through to final touch! {uu} in {qrecid}")
+            self.idmap.add_update_token(uu)
+
         # Ensure all equivs match to the yuid
         for eq in equiv_map.keys():
             if not eq.startswith("__") and not eq in existing:
