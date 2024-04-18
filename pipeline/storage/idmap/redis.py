@@ -275,6 +275,10 @@ class IdMap(RedisCache):
             raise ValueError(f"Unknown YUID {value}")
         ikey = self._manage_key_in(key)
         ivalue = self._manage_value_in(value)
+
+        if ikey.startswith('aat:'):
+            self.memory_cache[ikey] = value
+
         if self.conn.exists(ikey):
             # Could be just setting to the same value
             old = self.conn.get(ikey)
@@ -322,6 +326,8 @@ class IdMap(RedisCache):
             value = self.get(key)
             self.conn.delete(ikey)
             self._remove(value, key)
+            if ikey.startswith('aat:') and ikey in self.memory_cache:
+                del self.memory_cache[ikey]
         else:
             raise ValueError(f"{key} is a YUID ({t}) and cannot be manually deleted")
         return None
