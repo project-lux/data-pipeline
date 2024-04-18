@@ -378,7 +378,7 @@ class ReferenceManager(object):
 
         # Ensure we touch the token
         if not updated_token and not has_update:
-            if self.debug: print(f"Fell through to final touch! {uu} in {qrecid}")
+            print(f"Fell through to final touch! {uu} in {qrecid}")
             self.idmap.add_update_token(uu)
 
         # Ensure all equivs match to the yuid
