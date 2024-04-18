@@ -43,6 +43,8 @@ outh = open(fn, 'w')
 x = 0
 for rec in merged.iter_records_slice(my_slice, max_slice):
     yuid = rec['yuid']
+    if yuid in ml:
+        continue
     try:
         rec2 = mapper.transform(rec, rec['data']['type'])
     except Exception as e:

@@ -191,6 +191,13 @@ class ReferenceManager(object):
             print(f"\nERROR: Reference walk error in {rec['id']}: {e}")
             raise
 
+        # Do we need these?
+        # We need to walk for references
+        # but they're already in the idmap if they're equivalents
+        # However records referenced from them might not be in the idmap
+        # equivalents of internal records will be distance 0...
+        # could detect that way?
+
         if 'equivalent' in rec:
             for eq in rec['equivalent']:
                 k = self.configs.make_qua(eq['id'], rec['type'])
