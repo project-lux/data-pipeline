@@ -193,11 +193,16 @@ class IdMap(RedisCache):
         ikey = self._manage_key_in(key)
         val = self.conn.smembers(ikey)
         out = {self._manage_value_out(x) for x in val}
+        found = False
         for o in out:
             if o.startswith('__') and o.endswith('__'):
                 # delete previous tokens
-                self._remove(key, o)
-        self._add(key, self.update_token)
+                if o != self.update_token:
+                    self._remove(key, o)
+                else:
+                    found = True
+        if not found:
+            self._add(key, self.update_token)
 
     def mint(self, key, slug, typ=""):
         if typ in self.configs.ok_record_types:

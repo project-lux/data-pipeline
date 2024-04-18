@@ -193,6 +193,7 @@ class ReferenceManager(object):
 
         # Do we need these?
         # We need to walk for references
+
         # but they're already in the idmap if they're equivalents
         # However records referenced from them might not be in the idmap
         # equivalents of internal records will be distance 0...
@@ -227,7 +228,6 @@ class ReferenceManager(object):
         # This should be called after ALL reconciliation processing has happened
         # including id->id, name->id and id collection to minimize duplicate records
         qrecid = self.configs.make_qua(recid, typ)
-        # make sure we know ourselves
         qequivs.append(qrecid)
 
         equiv_map = {}
@@ -237,25 +237,16 @@ class ReferenceManager(object):
         if uu is not None:
             # We know about this entity/record already
             if self.debug: print(f"Found {uu} for {qrecid}")
-            if uu is None:
-                print(f"got None? waiting and trying again...")
-                time.sleep(1)
-                uu = self.idmap[qrecid]
-                if uu is None:
-                    print(f"WTF... Still none... treating as ... None")
-            if uu is not None:
-                equiv_map[qrecid] = uu
-                uuset = self.idmap[uu]
-                if not uuset:
-                    existing = []
-                else:
-                    existing = list(uuset)
-                    if self.debug: print(f"Found existing: {existing}")
+            equiv_map[qrecid] = uu
+            uuset = self.idmap[uu]
+            if uuset:
+                existing = list(uuset)
+                if self.debug: print(f"Found existing: {existing}")
         else:
             if self.debug: print(f"Got None for {qrecid}, will mint or find")
 
-        updated_token = False
 
+        updated_token = False
         # if we have the current update token, then we've already been touched
         # so rebuild from scratch is == has_update
         if uu is not None:
@@ -265,11 +256,11 @@ class ReferenceManager(object):
         rebuild = not has_update
 
         # Ensure that previous bad reconciliations are undone
+        # But only the first time we see this uuid
         if uu and rebuild:
             if self.debug: print("No update token!")
             self.idmap.add_update_token(uu)
             updated_token = True
-            if self.debug: print(f"Tried to add. Now has_() is: {self.idmap.has_update_token(uu)}")
             if existing:
                 # replace existing with equivs if no or old update token
                 to_delete = []
@@ -286,22 +277,11 @@ class ReferenceManager(object):
                                 print(f"Tried to delete {x} for {uu}")
                     else:
                         if self.debug: print(f"Found {x} in existing and new")
-            else:
-                if self.debug: print(f"Got update token")
-
           
         # Build map of equivalent ids given in current record
         if equivs:
             for eq in equivs.copy():
                 qeq = self.configs.make_qua(eq, typ)
-                if not qeq:
-                    print(f"Made id {qeq} from {eq},{typ}?!")
-                    continue
-                if "'" in eq or ')' in eq:
-                    print(f"\nERROR: *** Found bad character in {eq} from {recid}")
-                    self.idmap._force_delete(qeq)
-                    equivs.remove(eq)
-                    continue
                 if qeq not in existing:
                     myqeq = self.idmap[qeq]
                     if myqeq is not None:
@@ -313,11 +293,6 @@ class ReferenceManager(object):
         # we encounter the YUID
         if existing:
             for xq in existing.copy():
-                if "'" in xq or ')' in xq:
-                    print(f"\nERROR: *** Found bad character in {xq} from idmap:{uu}")
-                    self.idmap._force_delete(self.configs.make_qua(xq, typ))
-                    existing.remove(xq)
-                    continue
                 if not xq.startswith('__'):
                     equiv_map[xq] = uu
 
