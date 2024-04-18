@@ -51,7 +51,7 @@ for rec in merged.iter_records_slice(my_slice, max_slice):
             continue
         ml[yuid] = rec2
     else:
-        rec2 = ml[yuid]
+        rec2 = ml[yuid]['data']
     jstr = json.dumps(rec2, separators=(',',':'))
     outh.write(jstr)
     outh.write('\n')
