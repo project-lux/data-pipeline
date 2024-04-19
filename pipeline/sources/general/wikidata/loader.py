@@ -31,51 +31,36 @@ class WdLoader(WdFetcher, Loader):
         # Call on Fetcher parent class
         return self.post_process(js, identifier)
 
-    def load(self):
+    def load(self, slicen=None, maxSlice=None):
         # ensure we have the dump file
         self.fetch_dump()
 
         fh = gzip.open(self.in_path)
         fh.readline() # chomp initial [
         x = 0 
-        done_x = 0
         l = 1
 
         self.out_cache.start_bulk()
-
-        xx = 0
-        xstart = time.time()
-        while xx < self.skip_lines:
-            xx += 1
-            l = fh.readline()
-            if not xx % 1000000:
-                print(f"skipped lines: {xx} in {time.time() - xstart}")
-
         start = time.time()
         while l:
             l = fh.readline()
             if not l:
                 break
+            if maxSlice is not None and x % maxSlice - slicen != 0:
+                x+= 1
+                continue
+
+            x += 1
             if self.filter_line(l):
                 continue
 
             l = l.decode('utf-8').strip()
-
-            # Find id and check if already exists before processing JSON
             what = self.get_identifier_raw(l)
-
-            if what in self.out_cache:
-                done_x += 1
-                if not done_x % 10000:
-                    print(f"Skipping past {done_x} {time.time() - start}")
-                continue
-
             if l.endswith(','):
                 js = json.loads(l[:-1])
             else:
                 js = json.loads(l)
 
-            x += 1
             try:
                 new = self.post_process_json(js, what)
             except:
