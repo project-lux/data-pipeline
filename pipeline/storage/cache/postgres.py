@@ -423,9 +423,8 @@ class PooledCache(object):
         # We commit after every transaction, so no need
         pass
 
-    def start_bulk(self):
-        self.bulk_conn = poolman.get_conn(self.pool_name)        
-        self.bulk_cursor = self.bulk_conn.cursor(cursor_factory=RealDictCursor)
+    def start_bulk(self):    
+        self.bulk_cursor = self.iterating_conn.cursor(cursor_factory=RealDictCursor)
 
     def set_bulk(self, data, identifier=None, yuid=None, format=None, valid=None,
             record_time=None, refresh_time=None, change=None):
@@ -460,8 +459,6 @@ class PooledCache(object):
         self.bulk_conn.commit()
         self.bulk_cursor.close()
         self.bulk_cursor = None
-        poolman.put_conn(self.pool_name, self.bulk_conn)
-        self.bulk_conn = None
 
     def optimize(self):
         # Call VACUUM on the table
