@@ -59,7 +59,7 @@ class WdLoader(WdFetcher, Loader):
             if self.filter_line(l):
                 continue
 
-            l = l.decode('utf-8')
+            l = l.decode('utf-8').strip()
 
             # Find id and check if already exists before processing JSON
             what = self.get_identifier_raw(l)
@@ -69,12 +69,12 @@ class WdLoader(WdFetcher, Loader):
                 if not done_x % 10000:
                     print(f"Skipping past {done_x} {time.time() - start}")
                 continue
-            try:
-                js = json.loads(l[:-2])
-            except:
-                # very last record won't have a ','
-                if len(l) > 3:
-                    js = json.loads(l[:-1])     
+
+            if l.endswith(','):
+                js = json.loads(l[:-1])
+            else:
+                js = json.loads(l)
+
             x += 1
             try:
                 new = self.post_process_json(js, what)
