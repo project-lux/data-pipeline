@@ -39,6 +39,7 @@ class WdLoader(WdFetcher, Loader):
         fh.readline() # chomp initial [
         x = 0 
         l = 1
+        done_x = 0
 
         self.out_cache.start_bulk()
         start = time.time()
@@ -53,7 +54,7 @@ class WdLoader(WdFetcher, Loader):
             x += 1
             if self.filter_line(l):
                 continue
-
+            done_x += 1
             l = l.decode('utf-8').strip()
             what = self.get_identifier_raw(l)
             if l.endswith(','):
@@ -68,7 +69,7 @@ class WdLoader(WdFetcher, Loader):
                 raise
                 continue
             self.out_cache.set_bulk(new, identifier=what)
-            if not x % 10000:
+            if not done_x % 10000:
                 t = time.time() - start
                 xps = x/t
                 ttls = self.total / xps
