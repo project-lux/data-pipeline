@@ -61,6 +61,10 @@ if '--load' in sys.argv:
     if '--lcsh' in sys.argv or '--all' in sys.argv:
         cfgs.external['lcsh']['datacache'].clear()
         cfgs.external['lcsh']['loader'].load()
+    if '--ils' in sys.argv:
+        my_slice = sys.argv[1]
+        max_slice = sys.argv[2]
+        cfgs.internal['ils']['loader'].load(my_slice, max_slice)
 
 
 ### LOAD INDEXES
