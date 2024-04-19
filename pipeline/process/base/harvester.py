@@ -146,7 +146,7 @@ class ASHarvester(Harvester):
 		sys.stdout.write('P');sys.stdout.flush()
 		return items
 
-	def process_items(self, items):
+	def process_items(self, items, refsonly=False):
 		for it in items:
 			try:
 				dt = it['endTime']
@@ -190,13 +190,16 @@ class ASHarvester(Harvester):
 			elif uri.startswith('http://') and self.namespace.startswith('https://'):
 				uri = uri.replace('http://', 'https://')
 
+			ident = uri.replace(self.namespace, "")
+			if refsonly:
+				yield (chg, ident, {}, "")
+				continue
+
 			if uri in self.seen:
 				# already processed, continue
 				continue
 			else:
 				self.seen[uri] = 1
-
-			ident = uri.replace(self.namespace, "")
 
 			if chg == 'delete':
 				yield (chg, ident, {}, "")
@@ -221,7 +224,7 @@ class ASHarvester(Harvester):
 			sys.stdout.write('.');sys.stdout.flush()
 
 	# API function for Harvester
-	def crawl(self, last_harvest=None):
+	def crawl(self, last_harvest=None, refsonly=False):
 		Harvester.crawl(self, last_harvest)
 		while self.collection_index < len(self.collections):
 			if not self.page:
@@ -230,7 +233,7 @@ class ASHarvester(Harvester):
 				self.fetch_collection(collection)
 			while self.page:
 				items = self.fetch_page()
-				for rec in self.process_items(items):
+				for rec in self.process_items(items, refsonly):
 					yield rec
 			self.collection_index += 1
 			self.page = None

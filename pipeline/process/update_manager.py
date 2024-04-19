@@ -95,7 +95,7 @@ class UpdateManager(object):
 
         records = {}
         deleted = {}
-        for (change, ident, record, changeTime) in harvester.crawl():
+        for (change, ident, record, changeTime) in harvester.crawl(refsonly=True):
             if ident in deleted:
                 # already seen a delete, ignore
                 pass
