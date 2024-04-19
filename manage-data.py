@@ -49,9 +49,6 @@ if '--load' in sys.argv:
     if '--ypm' in sys.argv or '--all' in sys.argv:
         cfgs.internal['ypm']['datacache'].clear()
         cfgs.internal['ypm']['loader'].load()
-    if '--wikidata' in sys.argv or '--all' in sys.argv:
-        cfgs.external['wikidata']['datacache'].clear()
-        cfgs.external['wikidata']['loader'].load()
     if '--viaf' in sys.argv or '--all' in sys.argv:
         cfgs.external['viaf']['datacache'].clear()
         cfgs.external['viaf']['loader'].load()
@@ -61,11 +58,15 @@ if '--load' in sys.argv:
     if '--lcsh' in sys.argv or '--all' in sys.argv:
         cfgs.external['lcsh']['datacache'].clear()
         cfgs.external['lcsh']['loader'].load()
+
     if '--ils' in sys.argv:
         my_slice = int(sys.argv[1])
         max_slice = int(sys.argv[2])
         cfgs.internal['ils']['loader'].load(my_slice, max_slice)
-
+    if '--wikidata' in sys.argv:
+        my_slice = int(sys.argv[1])
+        max_slice = int(sys.argv[2])
+        cfgs.external['wikidata']['loader'].load(my_slice, max_slice)
 
 ### LOAD INDEXES
 if '--load-index' in sys.argv:
