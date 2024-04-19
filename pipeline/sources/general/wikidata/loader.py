@@ -59,6 +59,8 @@ class WdLoader(WdFetcher, Loader):
             if self.filter_line(l):
                 continue
 
+            l = l.decode('utf-8')
+
             # Find id and check if already exists before processing JSON
             what = self.get_identifier_raw(l)
 
