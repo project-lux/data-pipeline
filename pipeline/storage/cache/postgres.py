@@ -458,7 +458,7 @@ class PooledCache(object):
             raise
 
     def end_bulk(self):
-        self.bulk_conn.commit()
+        self.iterating_conn.commit()
         self.bulk_cursor.close()
         self.bulk_cursor = None
 
