@@ -14,9 +14,9 @@ class WdLoader(WdFetcher, Loader):
         self.skip_lines = 0
 
     def get_identifier_raw(self, line):
-        ididx = line.find(b'"id":"Q')
-        endidx =line[ididx+7:ididx+100].find(b'"')
-        what = line[ididx+6:ididx+7+endidx].decode('ascii')
+        ididx = line.find('"id":"Q')
+        endidx =line[ididx+7:ididx+100].find('"')
+        what = line[ididx+6:ididx+7+endidx]
         return what
 
     def get_identifier_json(self, js):
@@ -25,7 +25,7 @@ class WdLoader(WdFetcher, Loader):
 
     def filter_line(self, line):
         # Filter out properties
-        return line[:100].find(b'"type":"property",') > 0
+        return line[:100].find('"type":"property",') > 0
 
     def post_process_json(self, js, identifier):
         # Call on Fetcher parent class
