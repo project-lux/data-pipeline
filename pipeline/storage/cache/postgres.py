@@ -424,6 +424,8 @@ class PooledCache(object):
         pass
 
     def start_bulk(self):    
+        if self.iterating_conn is None:
+            self.iterating_conn = poolman.get_conn(self.pool_name, itr=True)
         self.bulk_cursor = self.iterating_conn.cursor(cursor_factory=RealDictCursor)
 
     def set_bulk(self, data, identifier=None, yuid=None, format=None, valid=None,
