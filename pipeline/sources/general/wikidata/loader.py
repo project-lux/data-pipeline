@@ -80,6 +80,7 @@ class WdLoader(WdFetcher, Loader):
                 new = self.post_process_json(js, what)
             except:
                 print(f"Failed to process {l}")
+                raise
                 continue
             self.out_cache.set_bulk(new, identifier=what)
             if not x % 10000:

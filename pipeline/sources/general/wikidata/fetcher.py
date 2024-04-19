@@ -36,7 +36,7 @@ class WdFetcher(Fetcher):
 
         # Include enwiki sitelink
         if 'sitelinks' in js and 'enwiki' in js['sitelinks']:
-            new['sitelinks']['enwiki'] = js['sitelinks']['enwiki']
+            new['sitelinks'] = {'enwiki': js['sitelinks']['enwiki']}
 
         report = []
         for (prop, vals) in js['claims'].items():
