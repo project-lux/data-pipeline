@@ -46,9 +46,14 @@ class YulLoader(Loader):
         done_x = 0
         start = time.time()
         for f in files:
-            if not f.endswith('jsonl'):
+            if not 'jsonl' in f:
                 continue
-            fh = open(os.path.join(self.in_path, f))
+
+            if f.endswith('jsonl'):
+                fh = open(os.path.join(self.in_path, f))
+            elif f.endswith('gz'):
+                fh = gzip.open(os.path.join(self.in_path, f))
+
             l = 1
             while l:
                 l = fh.readline()

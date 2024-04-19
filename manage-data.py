@@ -49,9 +49,6 @@ if '--load' in sys.argv:
     if '--ypm' in sys.argv or '--all' in sys.argv:
         cfgs.internal['ypm']['datacache'].clear()
         cfgs.internal['ypm']['loader'].load()
-    if '--aspace' in sys.argv or '--all' in sys.argv:
-        cfgs.internal['aspace']['datacache'].clear()
-        cfgs.internal['aspace']['loader'].load()
     if '--wikidata' in sys.argv or '--all' in sys.argv:
         cfgs.external['wikidata']['datacache'].clear()
         cfgs.external['wikidata']['loader'].load()
@@ -64,6 +61,7 @@ if '--load' in sys.argv:
     if '--lcsh' in sys.argv or '--all' in sys.argv:
         cfgs.external['lcsh']['datacache'].clear()
         cfgs.external['lcsh']['loader'].load()
+
 
 ### LOAD INDEXES
 if '--load-index' in sys.argv:

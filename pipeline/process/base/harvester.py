@@ -192,7 +192,7 @@ class ASHarvester(Harvester):
 
 			ident = uri.replace(self.namespace, "")
 			if refsonly:
-				yield (chg, ident, {}, "")
+				yield (chg, ident, {}, dt)
 				continue
 
 			if uri in self.seen:
