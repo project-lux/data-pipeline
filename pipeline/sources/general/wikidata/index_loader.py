@@ -121,7 +121,7 @@ class RawWdIndexLoader(WdIndexLoader, WdLoader, WdFetcher):
 			# Find id and check if already exists before processing JSON
 			what = self.get_identifier_raw(l)
 			try:
-				js = json.loads(l[:-2])
+				js = json.loads(l[:-1])
 			except:
 				print(l)
 				continue
