@@ -67,11 +67,12 @@ class YulLoader(Loader):
                         print(f"Skipping past {done_x} {time.time() - start}")
                     continue
                 # Cache assumes JSON as input, so need to parse it
+                x += 1
                 try:
                     js = json.loads(l)
                 except:
-                    raise    
-                x += 1
+                    print(f"Failed to parse JSON in {what}")                        
+                    continue
                 try:
                     new = self.post_process_json(js)
                 except:
