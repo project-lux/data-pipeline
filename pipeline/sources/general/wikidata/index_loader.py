@@ -117,6 +117,7 @@ class RawWdIndexLoader(WdIndexLoader, WdLoader, WdFetcher):
 			if l[:100].find(b'"type":"property",') > 0:
 				# filter properties
 				continue
+			l = l.decode('utf-8').strip()
 			# Find id and check if already exists before processing JSON
 			what = self.get_identifier_raw(l)
 			try:
