@@ -157,12 +157,12 @@ class RawWdIndexLoader(WdIndexLoader, WdLoader, WdFetcher):
 			#   index[Q567] = [Q123]
 			#   index[Q678] = [Q123]
 
-			if self.different_prop in new:
-				val = new[self.different_prop]
-				if type(val) == str:
-					val = [val]
-				for i in val:
-					pass
+			#if self.different_prop in new:
+			#	val = new[self.different_prop]
+			#	if type(val) == str:
+			#		val = [val]
+			#	for i in val:
+			#		pass
 
 			if not x % 50000:
 				t = time.time() - start
