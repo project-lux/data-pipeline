@@ -10,11 +10,11 @@ from pipeline.process.reference_manager import ReferenceManager
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
 cfgs = Config(basepath=basepath)
-idmap = cfgs.instantiate_map('idmap')['store']
-all_refs = cfgs.instantiate_map('all_refs')['store']
-done_refs = cfgs.instantiate_map('done_refs')['store']
-cfgs.cache_globals()
-cfgs.instantiate_all()
+#idmap = cfgs.instantiate_map('idmap')['store']
+#all_refs = cfgs.instantiate_map('all_refs')['store']
+#done_refs = cfgs.instantiate_map('done_refs')['store']
+#cfgs.cache_globals()
+#cfgs.instantiate_all()
 
 
 ### HARVEST EXTERNAL NON-DUMP DATASETS
@@ -72,6 +72,7 @@ if '--load' in sys.argv:
 ### LOAD INDEXES
 if '--load-index' in sys.argv:
     if '--wikidata' in sys.argv or '--all' in sys.argv:
+        cfgs.instantiate('wikidata', 'external')
         cfgs.external['wikidata']['indexLoader'].load()
     if '--viaf' in sys.argv or '--all' in sys.argv:
         cfgs.external['viaf']['indexLoader'].load()
