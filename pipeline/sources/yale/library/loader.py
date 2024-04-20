@@ -6,6 +6,7 @@ import time
 import gzip
 import zipfile
 import json
+import sys
 
 from pipeline.process.base.loader import Loader
 
@@ -89,5 +90,6 @@ class YulLoader(Loader):
                     xps = x/t
                     ttls = (self.total / (maxSlice+1)) / xps
                     print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
+                    sys.stdout.flush()
             fh.close()
         self.out_cache.commit()
