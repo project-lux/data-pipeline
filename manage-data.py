@@ -49,9 +49,6 @@ if '--load' in sys.argv:
     if '--ypm' in sys.argv or '--all' in sys.argv:
         cfgs.internal['ypm']['datacache'].clear()
         cfgs.internal['ypm']['loader'].load()
-    if '--viaf' in sys.argv or '--all' in sys.argv:
-        cfgs.external['viaf']['datacache'].clear()
-        cfgs.external['viaf']['loader'].load()
     if '--lcnaf' in sys.argv or '--all' in sys.argv:
         cfgs.external['lcnaf']['datacache'].clear()
         cfgs.external['lcnaf']['loader'].load()
@@ -59,6 +56,10 @@ if '--load' in sys.argv:
         cfgs.external['lcsh']['datacache'].clear()
         cfgs.external['lcsh']['loader'].load()
 
+    if '--viaf' in sys.argv or '--all' in sys.argv:
+        my_slice = int(sys.argv[1])
+        max_slice = int(sys.argv[2])
+        cfgs.internal['viaf']['loader'].load(my_slice, max_slice)
     if '--ils' in sys.argv:
         my_slice = int(sys.argv[1])
         max_slice = int(sys.argv[2])
