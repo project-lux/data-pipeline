@@ -59,7 +59,7 @@ if '--load' in sys.argv:
     if '--viaf' in sys.argv or '--all' in sys.argv:
         my_slice = int(sys.argv[1])
         max_slice = int(sys.argv[2])
-        cfgs.internal['viaf']['loader'].load(my_slice, max_slice)
+        cfgs.external['viaf']['loader'].load(my_slice, max_slice)
     if '--ils' in sys.argv:
         my_slice = int(sys.argv[1])
         max_slice = int(sys.argv[2])
