@@ -10,11 +10,11 @@ from pipeline.process.reference_manager import ReferenceManager
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
 cfgs = Config(basepath=basepath)
-#idmap = cfgs.instantiate_map('idmap')['store']
-#all_refs = cfgs.instantiate_map('all_refs')['store']
-#done_refs = cfgs.instantiate_map('done_refs')['store']
-#cfgs.cache_globals()
-#cfgs.instantiate_all()
+idmap = cfgs.instantiate_map('idmap')['store']
+all_refs = cfgs.instantiate_map('all_refs')['store']
+done_refs = cfgs.instantiate_map('done_refs')['store']
+cfgs.cache_globals()
+cfgs.instantiate_all()
 
 
 ### HARVEST EXTERNAL NON-DUMP DATASETS
