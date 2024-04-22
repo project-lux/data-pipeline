@@ -51,9 +51,10 @@ class GettyFetcher(Fetcher):
             try:
                 print(f"Fetching {newurl}")
                 resp = requests.get(newurl)
-            except:
+            except Exception as e:
                 # FIXME: Log network failure
                 self.networkmap[newurl] = 0
+                print(e)
                 return None
             if resp.status_code == 200:
                 data = resp.json()

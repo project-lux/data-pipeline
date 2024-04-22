@@ -219,6 +219,10 @@ class ASHarvester(Harvester):
 					itjs = self.fetcher.fetch(ident)
 				except:
 					continue
+			if not itjs:
+				# Could have gotten None
+				print(f"Got {itjs} from {ident}")
+				continue
 			yield (chg, ident, itjs, dt)
 			sys.stdout.write('.');sys.stdout.flush()
 
