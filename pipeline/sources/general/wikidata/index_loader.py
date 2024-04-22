@@ -55,7 +55,7 @@ class WdFileIndexLoader(IndexLoader, WdConfigManager):
 		files = [x for x in os.listdir(self.configs.temp_dir) if x.startswith('wd_equivs_')]
 		print("Starting...")
 		for fn in files:
-	        efh = open(os.path.join(self.configs.temp_dir, fn))
+			efh = open(os.path.join(self.configs.temp_dir, fn))
 			l = efh.readline()
 			while l:
 				(x,y) = l.strip().rsplit(',', 1)
