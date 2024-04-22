@@ -85,6 +85,8 @@ class Config(object):
             self.log_dir = os.path.join(self.base_dir, self.log_dir)
         if hasattr(self, 'tests_dir') and not self.tests_dir.startswith('/'):
             self.tests_dir = os.path.join(self.base_dir, self.tests_dir)
+        if hasattr(self, 'temp_dir') and not self.temp_dir.startswith('/'):
+            self.temp_dir = os.path.join(self.base_dir, self.temp_dir)
 
         if hasattr(self, 'validatorClass'):
             vcls = importObject(self.validatorClass)
