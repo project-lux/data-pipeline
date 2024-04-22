@@ -17,7 +17,7 @@ class GettyHarvester(ASHarvester):
                 # https://data.getty.edu/vocab/aat/300404670
                 # --> http://vocab.getty.edu/aat/300404670
                 ident = what.rsplit('/', 1)[-1]
-                item['object']['id'] = f"{self.namespace}/{ident}"                
+                item['object']['id'] = f"{self.namespace}{ident}"                
                 filtered_items.append(item)
         if filtered_items:
             for rec in ASHarvester.process_items(self, filtered_items, refsonly):
