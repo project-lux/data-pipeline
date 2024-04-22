@@ -51,7 +51,7 @@ if '--load' in sys.argv:
 ### LOAD INDEXES
 if '--load-index' in sys.argv:
     if '--wikidata' in sys.argv or '--all' in sys.argv:
-        cfgs.instantiate('wikidata', 'external')
+        # cfgs.instantiate('wikidata', 'external')
         cfgs.external['wikidata']['indexLoader'].load()
     if '--viaf' in sys.argv or '--all' in sys.argv:
         cfgs.external['viaf']['indexLoader'].load()

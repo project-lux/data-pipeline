@@ -30,10 +30,15 @@ if not to_do:
     sys.exit()
 
 mgr = UpdateManager(cfgs, idmap)
-last_update = None
-last_update = "2024-01-01T00:00:00"
+#last_update = None
+#harvest_from = None
+last_update = "2023-01-01T00:00:00"
+harvest_from = "2024-01-01T00:00:00"
+
 for src, cfg in to_do:
     if last_update:
         cfg['harvester'].last_harvest = last_update
+    if harvest_from:
+        cfg['harvester'].harvest_from = harvest_from
     print(f"Harvesting {src} records")
     mgr.harvest_single(src)
