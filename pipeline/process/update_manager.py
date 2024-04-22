@@ -58,7 +58,7 @@ class UpdateManager(object):
                 except:
                     print(f"Failed to process {ident}")
                     print(f"Got: {record['data']}")
-                    raise
+                    
 
     def harvest_all(self, store_only=False):
         self.changed = []

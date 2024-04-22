@@ -17,27 +17,6 @@ cfgs.cache_globals()
 cfgs.instantiate_all()
 
 
-### HARVEST EXTERNAL NON-DUMP DATASETS
-if '--harvest' in sys.argv:
-    if '--aat' in sys.argv:
-        which = 'aat'
-    elif '--ulan' in sys.argv:
-        which = 'ulan'
-    else:
-        print("Need to know which database to harvest, --aat or --ulan")
-        sys.exit(0)
-    fh = open(os.path.join(cfgs.data_dir, f'all_{which}s.csv'))
-    uris = fh.readlines()
-    fh.close()
-    uris = uris[1:] # chomp header
-    acq = cfgs.external[which]['acquirer']
-    acq.debug = True
-    acq.fetcher.enabled = True
-    for uri in uris:
-        ident = uri.split('/')[-1][:-1] # chomp off \n
-        acq.acquire(ident, dataonly=True)
-        print(ident)
-
 ### LOAD DATABASES
 if '--load' in sys.argv:
     if '--ycba' in sys.argv or '--all' in sys.argv:
