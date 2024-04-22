@@ -76,7 +76,7 @@ class WdLoader(WdFetcher, WdConfigManager, Loader):
             self.out_cache.set_bulk(new, identifier=what)
 
             # Create intermediate files for indexing
-            sames, diffs = self.process_equivs(new)
+            sames, diffs = self.process_equivs({'data':new})
             for x,y in sames:
                 efh.write(f'{x},{y}\n')
             for x,y in diffs:
