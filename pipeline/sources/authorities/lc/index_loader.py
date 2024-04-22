@@ -75,6 +75,9 @@ class LCIndexLoader(object):
                 if not prefs:
                     continue
                 for p in prefs:
+                    if type(p) != dict:
+                        print(f"Got weird prefLabel {p} in {recid}")
+                        continue
                     val = p['@value']
                     index[val.lower()] = [recid, typ]
 
