@@ -21,6 +21,9 @@ else:
     for src, cfg in cfgs.internal.items():
         if f"--{src}" in sys.argv:
             to_do.append((src, cfg))
+    for src, cfg in cfgs.external.items():
+        if f"--{src}" in sys.argv:
+            to_do.append((src, cfg))        
 
 if not to_do:
     print("No source to havest given")
