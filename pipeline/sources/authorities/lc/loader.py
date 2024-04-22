@@ -70,14 +70,20 @@ class LcLoader(Loader):
         # Add in madsrdf:hasCloseExternalAuthority to the record from extAuths        
         if ident in self.extAuths:
             closeAuths = self.extAuths[ident]
-            for chunk in js['@graph']:
+            graph = js['@graph']
+            if type(graph) != list:
+                graph = [graph]
+            for chunk in graph:                
                 if '@id' in chunk and chunk['@id'].endswith(ident):
                     chunk['madsrdf:hasCloseExternalAuthority'] = [{"@id": x} for x in closeAuths]
 
         #Don't process undifferentiated records
         for chunk in js['@graph']:
             if 'madsrdf:isMemberOfMADSCollection' in chunk:
-                for c in chunk['madsrdf:isMemberOfMADSCollection']:
+                imc = chunk['madsrdf:isMemberOfMADSCollection']
+                if type(imc) != list:
+                    imc = [imc]
+                for c in imc:
                     if '@id' in c and c['@id'] == 'http://id.loc.gov/authorities/names/collection_NamesUndifferentiated':
                         return None
         return js
