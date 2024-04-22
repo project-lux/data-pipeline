@@ -52,8 +52,13 @@ class UpdateManager(object):
         else:
             # upsert
             if record is not None and (overwrite or not ident in storage):
-                storage.set(record['data'], identifier=ident, record_time=changeTime, change=change)
-                self.changed.append((record, ident, config))
+                try:
+                    storage.set(record['data'], identifier=ident, record_time=changeTime, change=change)
+                    self.changed.append((record, ident, config))
+                except:
+                    print(f"Failed to process {ident}")
+                    print(f"Got: {record['data']}")
+                    raise
 
     def harvest_all(self, store_only=False):
         self.changed = []

@@ -218,7 +218,6 @@ class ASHarvester(Harvester):
 				try:
 					itjs = self.fetcher.fetch(ident)
 				except:
-					# State updated in fetch_item already
 					continue
 			yield (chg, ident, itjs, dt)
 			sys.stdout.write('.');sys.stdout.flush()
