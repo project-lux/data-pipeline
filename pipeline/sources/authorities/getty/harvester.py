@@ -4,7 +4,7 @@ import sys
 
 class GettyHarvester(ASHarvester):
     
-    def process_items(self, items): 
+    def process_items(self, items, refsonly=False): 
         # self.namespace = f"http://data.getty.edu/vocab/{self.prefix}/"
         filtered_items = []
         for item in items:
@@ -20,7 +20,7 @@ class GettyHarvester(ASHarvester):
                 item['object']['id'] = f"{self.namespace}/{ident}"                
                 filtered_items.append(item)
         if filtered_items:
-            Harvester.process_items(self, filtered_items, refsonly=False)
+            Harvester.process_items(self, filtered_items, refsonly)
                                                      
 class GettyHarvester2(ASHarvester):
 
