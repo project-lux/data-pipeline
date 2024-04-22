@@ -33,6 +33,9 @@ do
     nohup python ./run-reconcile.py $count 24 --all > ../data/logs/reconcile_$count.txt 2>&1 &
 done
 
+# Wait while the processes spin up and write to the log files
+sleep 30
+
 # And wait for reconcile to finish
 current=`ls -1 ../data/logs/flags/reconcile_is_done*txt 2> /dev/null | wc -l`
 while [[ $current -lt 24 ]]
@@ -58,6 +61,12 @@ python ./merge-metatypes.py
 rm metatypes-*.json
 mv metatypes.json ../data/files/
 sleep 30
+
+### Export referenced URIs
+echo "Exporting Referenced URIs to file"
+python ./manage-data.py --write-refs
+sleep 10
+
 
 ### Merge Phase
 #

@@ -131,6 +131,10 @@ class MlMapper(Mapper):
 
         ml = {'json': data, 'triples': [], 'admin': {"conversion-date": self.start_str}}
 
+        if 'change' in record and record['change']:
+            sources = record['change'].split('|')
+            ml['admin']['sources'] = sources
+
         facets = {}
         # Add in triples for ML
 

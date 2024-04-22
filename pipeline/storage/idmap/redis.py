@@ -193,11 +193,16 @@ class IdMap(RedisCache):
         ikey = self._manage_key_in(key)
         val = self.conn.smembers(ikey)
         out = {self._manage_value_out(x) for x in val}
+        found = False
         for o in out:
             if o.startswith('__') and o.endswith('__'):
                 # delete previous tokens
-                self._remove(key, o)
-        self._add(key, self.update_token)
+                if o != self.update_token:
+                    self._remove(key, o)
+                else:
+                    found = True
+        if not found:
+            self._add(key, self.update_token)
 
     def mint(self, key, slug, typ=""):
         if typ in self.configs.ok_record_types:
@@ -229,8 +234,9 @@ class IdMap(RedisCache):
         key = self._manage_key_in(key)
 
         # memory cache for frequent lookups (aat terms) to avoid the network
-        if "/aat/" in key and key in self.memory_cache:
-            return self.memory_cache[key]
+        # Causes errors with multiple processes
+        #if key.startswith("aat:") and key in self.memory_cache:
+        #    return self.memory_cache[key]
 
         t = self.conn.type(key)
         if t == 'string':
@@ -250,7 +256,8 @@ class IdMap(RedisCache):
             return None
         else:
             raise ValueError(f"Unknown key type {t}")
-        if "/aat/" in key: 
+
+        if key.startswith("aat:"): 
             self.memory_cache[key] = out
         return out
 
@@ -269,6 +276,10 @@ class IdMap(RedisCache):
             raise ValueError(f"Unknown YUID {value}")
         ikey = self._manage_key_in(key)
         ivalue = self._manage_value_in(value)
+
+        if ikey.startswith('aat:'):
+            self.memory_cache[ikey] = value
+
         if self.conn.exists(ikey):
             # Could be just setting to the same value
             old = self.conn.get(ikey)
@@ -316,6 +327,8 @@ class IdMap(RedisCache):
             value = self.get(key)
             self.conn.delete(ikey)
             self._remove(value, key)
+            if ikey.startswith('aat:') and ikey in self.memory_cache:
+                del self.memory_cache[ikey]
         else:
             raise ValueError(f"{key} is a YUID ({t}) and cannot be manually deleted")
         return None
@@ -508,6 +521,14 @@ class ReferenceMap(NetworkOperationMap):
         # convert from dict or RDV to hset
         for (k,v) in value.items():
             self._setitem(key, k, v)
+
+    # Make an iterator for keys, that match type and/or pattern
+    def iter_keys(self, **kw):
+        # match: glob style expression for keys to match
+        # scan is defined in redis, but at this scale would be terrible
+        # FIXME: match is on the internal form, but can't manage_key_in as it's a glob?
+        for key in self.conn.scan_iter(**kw):
+            yield RedisDictValue(key, self)
 
     def popitem(self):
         if len(self) ==  0:

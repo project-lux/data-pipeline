@@ -2,8 +2,10 @@ import os
 import sys
 import json
 import time
+import datetime
 from dotenv import load_dotenv
 from pipeline.config import Config
+from pipeline.process.reference_manager import ReferenceManager
 
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
@@ -16,7 +18,6 @@ cfgs.instantiate_all()
 
 
 ### HARVEST EXTERNAL NON-DUMP DATASETS
-
 if '--harvest' in sys.argv:
     if '--aat' in sys.argv:
         which = 'aat'
@@ -38,7 +39,6 @@ if '--harvest' in sys.argv:
         print(ident)
 
 ### LOAD DATABASES
-
 if '--load' in sys.argv:
     if '--ycba' in sys.argv or '--all' in sys.argv:
         cfgs.internal['ycba']['datacache'].clear()
@@ -49,15 +49,6 @@ if '--load' in sys.argv:
     if '--ypm' in sys.argv or '--all' in sys.argv:
         cfgs.internal['ypm']['datacache'].clear()
         cfgs.internal['ypm']['loader'].load()
-    if '--aspace' in sys.argv or '--all' in sys.argv:
-        cfgs.internal['aspace']['datacache'].clear()
-        cfgs.internal['aspace']['loader'].load()
-    if '--wikidata' in sys.argv or '--all' in sys.argv:
-        cfgs.external['wikidata']['datacache'].clear()
-        cfgs.external['wikidata']['loader'].load()
-    if '--viaf' in sys.argv or '--all' in sys.argv:
-        cfgs.external['viaf']['datacache'].clear()
-        cfgs.external['viaf']['loader'].load()
     if '--lcnaf' in sys.argv or '--all' in sys.argv:
         cfgs.external['lcnaf']['datacache'].clear()
         cfgs.external['lcnaf']['loader'].load()
@@ -65,10 +56,23 @@ if '--load' in sys.argv:
         cfgs.external['lcsh']['datacache'].clear()
         cfgs.external['lcsh']['loader'].load()
 
-### LOAD INDEXES
+    if '--viaf' in sys.argv or '--all' in sys.argv:
+        my_slice = int(sys.argv[1])
+        max_slice = int(sys.argv[2])
+        cfgs.external['viaf']['loader'].load(my_slice, max_slice)
+    if '--ils' in sys.argv:
+        my_slice = int(sys.argv[1])
+        max_slice = int(sys.argv[2])
+        cfgs.internal['ils']['loader'].load(my_slice, max_slice)
+    if '--wikidata' in sys.argv:
+        my_slice = int(sys.argv[1])
+        max_slice = int(sys.argv[2])
+        cfgs.external['wikidata']['loader'].load(my_slice, max_slice)
 
+### LOAD INDEXES
 if '--load-index' in sys.argv:
     if '--wikidata' in sys.argv or '--all' in sys.argv:
+        cfgs.instantiate('wikidata', 'external')
         cfgs.external['wikidata']['indexLoader'].load()
     if '--viaf' in sys.argv or '--all' in sys.argv:
         cfgs.external['viaf']['indexLoader'].load()
@@ -82,11 +86,8 @@ if '--load-index' in sys.argv:
         cfgs.external['ulan']['indexLoader'].load()
 
 ### VALIDATION
-
 if '--validate' in sys.argv:
-
     ignore_matches = []
-
     rc = cfgs.internal['ils']['recordcache']
     v = cfgs.validator
     for rec in rc.iter_records():
@@ -109,9 +110,37 @@ if '--validate' in sys.argv:
             # print(f"{rec['identifier']}: Valid")
             pass
 
+### WRITE NEW IDMAP TOKEN
+
+if '--new-token' in sys.argv:
+
+    now = datetime.datetime.now()
+    mm = f"0{now.month}" if now.month < 10 else now.month
+    dd = f"0{now.day}" if now.day < 10 else now.day
+    stok = f"__{now.year}{mm}{dd}"
+    if idmap.update_token.startswith(stok):
+        if idmap.update_token[-3].isalpha():
+            letter = chr(ord(idmap.update_token[-3])+1)
+        else:
+            letter = "a"
+        tok = f"{stok}{letter}__"
+    else:
+        tok = f"{stok}__"
+    fn = os.path.join(cfgs.data_dir, 'idmap_update_token.txt')
+    fh = open(fn, 'w')
+    fh.write(f"{tok}\n")
+    fh.close()
+    print(f"New update token: {tok}")
+
+
+### EXPORT REFERENCE LIST
+if '--write-refs' in sys.argv:
+    ref_mgr = ReferenceManager(cfgs, idmap)
+    ref_mgr.write_done_refs()
+    done_refs.clear()
+
 
 ### CLEAN IDMAP
-
 if '--clean-idmap' in sys.argv:
     killed = {None:0}
     token = idmap.update_token

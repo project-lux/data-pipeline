@@ -85,3 +85,26 @@ class UpdateManager(object):
         for (change, ident, record, changeTime) in harvester.crawl():
             self.process_change(config, change, ident, record, changeTime)
  
+    def get_record_list(self, config):
+        # build the set of records that should be in the cache
+        # from the activity streams
+
+        harvester = config['harvester']
+        harvester.last_harvest = "0001-01-01T00:00:00"
+        print(f"Gathering all from stream")
+        records = {}
+        deleted = {}
+        for (change, ident, record, changeTime) in harvester.crawl(refsonly=True):
+            if ident in deleted:
+                # already seen a delete, ignore
+                pass
+            elif ident in records:
+                if change == "delete":
+                    # This is a recreate?
+                    print(f"Saw record {ident} at {records[ident]} then got delete at {changeTime}")
+            elif change == "delete":
+                # haven't seen a ref, so most recent is delete
+                deleted[ident] = changeTime
+            else:
+                records[ident] = changeTime
+        return records, deleted

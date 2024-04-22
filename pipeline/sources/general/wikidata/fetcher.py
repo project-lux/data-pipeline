@@ -34,8 +34,11 @@ class WdFetcher(Fetcher):
         new['altLabel'] = altLbls
         new['description'] = descs
 
-        report = []
+        # Include enwiki sitelink
+        if 'sitelinks' in js and 'enwiki' in js['sitelinks']:
+            new['sitelinks'] = {'enwiki': js['sitelinks']['enwiki']}
 
+        report = []
         for (prop, vals) in js['claims'].items():
             newvals = []
             for val in vals:
@@ -79,7 +82,7 @@ class WdFetcher(Fetcher):
                 newvals.append(dvv)
             new[prop] = newvals
 
-        if all(report) == True:
+        if report and all(report) == True:
             print(f"{js['id']} has only parts with ends via P582")
 
         return new

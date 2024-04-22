@@ -117,10 +117,11 @@ class RawWdIndexLoader(WdIndexLoader, WdLoader, WdFetcher):
 			if l[:100].find(b'"type":"property",') > 0:
 				# filter properties
 				continue
+			l = l.decode('utf-8').strip()
 			# Find id and check if already exists before processing JSON
 			what = self.get_identifier_raw(l)
 			try:
-				js = json.loads(l[:-2])
+				js = json.loads(l[:-1])
 			except:
 				print(l)
 				continue
@@ -157,12 +158,12 @@ class RawWdIndexLoader(WdIndexLoader, WdLoader, WdFetcher):
 			#   index[Q567] = [Q123]
 			#   index[Q678] = [Q123]
 
-			if self.different_prop in new:
-				val = new[self.different_prop]
-				if type(val) == str:
-					val = [val]
-				for i in val:
-					pass
+			#if self.different_prop in new:
+			#	val = new[self.different_prop]
+			#	if type(val) == str:
+			#		val = [val]
+			#	for i in val:
+			#		pass
 
 			if not x % 50000:
 				t = time.time() - start

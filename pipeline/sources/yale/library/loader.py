@@ -6,6 +6,7 @@ import time
 import gzip
 import zipfile
 import json
+import sys
 
 from pipeline.process.base.loader import Loader
 
@@ -46,9 +47,14 @@ class YulLoader(Loader):
         done_x = 0
         start = time.time()
         for f in files:
-            if not f.endswith('jsonl'):
+            if not 'jsonl' in f:
                 continue
-            fh = open(os.path.join(self.in_path, f))
+
+            if f.endswith('jsonl'):
+                fh = open(os.path.join(self.in_path, f))
+            elif f.endswith('gz'):
+                fh = gzip.open(os.path.join(self.in_path, f))
+
             l = 1
             while l:
                 l = fh.readline()
@@ -62,11 +68,12 @@ class YulLoader(Loader):
                         print(f"Skipping past {done_x} {time.time() - start}")
                     continue
                 # Cache assumes JSON as input, so need to parse it
+                x += 1
                 try:
                     js = json.loads(l)
                 except:
-                    raise    
-                x += 1
+                    print(f"Failed to parse JSON in {what}")                        
+                    continue
                 try:
                     new = self.post_process_json(js)
                 except:
@@ -83,5 +90,6 @@ class YulLoader(Loader):
                     xps = x/t
                     ttls = (self.total / (maxSlice+1)) / xps
                     print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
+                    sys.stdout.flush()
             fh.close()
         self.out_cache.commit()

@@ -31,6 +31,6 @@ last_update = None
 #last_update = "2024-01-22T19:17:17"
 for src, cfg in to_do:
     if last_update:
-        cfg['harvester'].last_update = last_update
+        cfg['harvester'].last_harvest = last_update
     print(f"Harvesting {src} records")
     mgr.harvest_single(src)

@@ -156,6 +156,35 @@ class PooledCache(object):
         return res['count']
 
 
+    def metadata(self, key, field="insert_time", _key_type=None):
+        if _key_type is None:
+            _key_type = self.key
+        if _key_type == 'yuid' and len(key) != 36:
+            print(f"{self.name} has UUIDs as keys")
+            return None
+        if not field in ["insert_time", "record_time", "refresh_time", "valid", "change"]:
+            raise ValueError(f"Unknown metadata field in cache: {field}")
+        qry = f"SELECT {field} FROM {self.name} WHERE {_key_type} = %s"
+        params = (key,)
+        with self._cursor(internal=False) as cursor:
+            cursor.execute(qry, params)
+            rows = cursor.fetchone()
+        return rows
+
+    def set_metadata(self, key, field, value, _key_type=None):
+        if _key_type is None:
+            _key_type = self.key
+        if _key_type == 'yuid' and len(key) != 36:
+            print(f"{self.name} has UUIDs as keys")
+            return None
+        if not field in ["record_time", "refresh_time", "valid", "change"]:
+            raise ValueError(f"Attempt to set unsettable metadata field in cache: {field}")        
+        qry = f"UPDATE {self.name} SET {field} = %s WHERE {_key_type} = %s"
+        params = (value, key)
+        with self._cursor(internal=False) as cursor:
+            cursor.execute(qry, params)
+            self.conn.commit()
+
     def latest(self):
         qry = f"SELECT insert_time FROM {self.name} ORDER BY insert_time DESC LIMIT 1"
         with self._cursor() as cursor:
@@ -192,7 +221,6 @@ class PooledCache(object):
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry, params)
             rows = cursor.fetchone()     
-        self.conn.commit()
         if rows:
             rows['source'] = self.config['name']
         # sys.stdout.write('G');sys.stdout.flush()
@@ -213,7 +241,6 @@ class PooledCache(object):
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry, params)
             rows = cursor.fetchone()     
-        self.conn.commit()
         if rows:
             rows['source'] = self.config['name']
         return rows
@@ -389,8 +416,6 @@ class PooledCache(object):
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry, params)
             rows = cursor.fetchone()
-
-        self.conn.commit()
         # sys.stdout.write('?');sys.stdout.flush()
         return bool(rows)
 
@@ -398,9 +423,10 @@ class PooledCache(object):
         # We commit after every transaction, so no need
         pass
 
-    def start_bulk(self):
-        self.bulk_conn = poolman.get_conn(self.pool_name)        
-        self.bulk_cursor = self.bulk_conn.cursor(cursor_factory=RealDictCursor)
+    def start_bulk(self):    
+        if self.iterating_conn is None:
+            self.iterating_conn = poolman.get_conn(self.pool_name, itr=True)
+        self.bulk_cursor = self.iterating_conn.cursor(cursor_factory=RealDictCursor)
 
     def set_bulk(self, data, identifier=None, yuid=None, format=None, valid=None,
             record_time=None, refresh_time=None, change=None):
@@ -432,11 +458,9 @@ class PooledCache(object):
             raise
 
     def end_bulk(self):
-        self.bulk_conn.commit()
+        self.iterating_conn.commit()
         self.bulk_cursor.close()
         self.bulk_cursor = None
-        poolman.put_conn(self.pool_name, self.bulk_conn)
-        self.bulk_conn = None
 
     def optimize(self):
         # Call VACUUM on the table
@@ -451,6 +475,7 @@ class PooledCache(object):
             self.conn.commit()
         self.conn.set_isolation_level(old_iso)
 
+    ### Behave like a dict
 
     def __getitem__(self, what):
         return self.get(what)

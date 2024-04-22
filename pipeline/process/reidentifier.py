@@ -42,12 +42,18 @@ class Reidentifier(object):
         equivs = record.get('equivalent', [])
 
         if recid:
+            # Don't rewrite some URIs like creativecommons
             for dnri in self.do_not_reidentify:
                 if dnri in recid:
                     # Don't try to rewrite them
                     return {'id': recid} 
-            if recid in self.redirects:
-                recid = self.redirects[recid]
+            # pre-rewrite redirected uris
+            try:
+                redir = self.redirects[recid]
+            except:
+                redir = None
+            if redir:
+                recid = redir
 
             if not top or not qcls:
                 qcls = record.get('type', None)
@@ -73,7 +79,9 @@ class Reidentifier(object):
                     if myqeq is not None:
                         equiv_map[eq] = myqeq
                     else:
-                        print(f"{qeq} not in idmap, but in equivs of {recid}")
+                        # print(f"{qeq} not in idmap, but in equivs of {recid}")
+                        # ISNI, FAST, WC Entities etc
+                        pass
 
             if recid:
                 uu = self.idmap[qrecid]
@@ -85,7 +93,7 @@ class Reidentifier(object):
             if not equiv_map:
                 # Don't know anything at all, ask for a new yuid??
                 # This shouldn't happen if previous phases have worked
-                if self.debug: print(f"\n!!! reidentifier couldn't find YUID for {recid} --> {qrecid} / {equivs}")
+                print(f"\n!!! reidentifier couldn't find YUID for {recid} --> {qrecid} / {equivs}")
                 return result
             else:                
                 # We have something from the data

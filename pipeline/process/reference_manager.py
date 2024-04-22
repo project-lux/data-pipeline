@@ -29,9 +29,7 @@ class ReferenceManager(object):
             t = r['to']['value']
             getty_redirects[f] = t
         self.redirects = getty_redirects
-
         self.ref_cache = {}
-
 
     def write_metatypes(self, my_slice):
         # write out our slice of metatypes
@@ -42,6 +40,41 @@ class ReferenceManager(object):
         fh = open(fn, 'w')
         fh.write(json.dumps(self.metatypes_seen))
         fh.close()        
+
+    def write_done_refs(self):
+        # step through all entries in done_refs and write URI
+        # to a file, if distance <= MAX_DISTANCE
+        maxd = self.configs.max_distance
+        fh = open('reference_uris.txt', 'w')
+        x = 0
+        for k in self.done_refs.iter_keys():
+            x += 1
+            if not x % 100000:
+                print(x)
+            if k['dist'] <= maxd:
+                fh.write(f"{k.pkey}\n")
+        fh.close()
+
+    def iter_done_refs(self, my_slice, max_slice):
+        fh = open('reference_uris.txt', 'r')
+        if my_slice < 0 or max_slice < 0:
+            # just read the whole file            
+            line = fh.readline()
+            line.strip()
+            while line:
+                yield line
+                line = fh.readline()
+                line.strip()
+        else:
+            okay = True
+            while okay:
+                uri = [fh.readline() for x in range(max_slice)][my_slice]
+                uri = uri.strip()
+                if not uri:
+                    okay = False
+                else:
+                    yield uri
+        fh.close()
 
     def pop_ref(self):
         return self.all_refs.popitem()
@@ -59,49 +92,47 @@ class ReferenceManager(object):
             # didn't exist anyway
             pass
 
-
-    # OPTIMIZE: This seems unnecessary as type is in the ref key
-    # as ref is now a qua, not a raw URI
-
+    # type is needed for Concepts, as the qua is Type but the type is Material (etc)
     # a ref is {'dist': int, 'type': str}
     def add_ref(self, ref, refs, distance, ctype): 
 
-        if distance == 1 and ref in self.ref_cache:
+        if ref in self.ref_cache:
             return None
 
         xr = self.all_refs[ref]
-        dref = self.done_refs[ref]
         if xr is not None:
             xdist = xr['dist']
             xctype = xr['type']
-            # Test distance
-            try:
-                if xdist is None and dref is not None and dref['dist'] > distance:
-                    del self.done_refs[ref]
-                    self.all_refs[ref] = {'dist': distance, 'type': ctype}
-                elif distance < xdist:
-                    xr['dist'] = distance
-            except:
-                # Sometimes this tries to test None using >
-                # This is when some other process has handled the reference
-                # and thus fetching it from redis returns None
-                print(f" *** dref-dist {dref} > distance: {distance}")
-                return None
-            # Test concept type
+        else:
+            xdist = None
+            xctype = None            
+        dref = self.done_refs[ref]
+        if dref is not None:
+            ddist = dref['dist']
+        else:
+            ddist = None
+
+        if xr is not None:
+            # Test distance: In all, and in done, but less distance
+            if ddist is not None and ddist > distance:
+                # need to re-add it to all with new distance
+                del self.done_refs[ref]
+                self.all_refs[ref] = {'dist': distance, 'type': ctype}
+            elif xdist is not None and distance < xdist:
+                # in all, not in done, less distance: update in all
+                xr['dist'] = distance
             if not xctype and ctype:
                 xr['type'] = ctype
         elif dref is not None:
             # Test Distance
-            try:
-                if distance is not None and dref['dist'] is not None and dref['dist'] > distance:
-                    # Add it back in
-                    del self.done_refs[ref]
-                    self.all_refs[ref] = {'dist': distance, 'type': ctype}
-            except:
-                print(f" *** dref-dist {dref} > distance {distance}")
-                return None
+            if ddist is not None and ddist > distance:
+                # Add it back in
+                del self.done_refs[ref]
+                self.all_refs[ref] = {'dist': distance, 'type': ctype}
         elif not ref in refs:
-            refs[ref] = {'dist': distance, 'type': ctype}
+            val = {'dist': distance, 'type': ctype}
+            refs[ref] = val
+            self.all_refs[ref] = val 
             if distance == 1 and "vocab.getty.edu/aat" in ref:
                 self.ref_cache[ref] = distance
 
@@ -113,11 +144,19 @@ class ReferenceManager(object):
                 node['id'] = self.redirects[node['id']]
 
             val = self.configs.make_qua(node['id'], node['type'])
-            t = node.get('type', '')
-            ct = t if t in self.configs.parent_record_types else ""
-            self.add_ref(val, refs, distance, ct)
+            should_add_ref = True
+            for i in self.internal_uris:
+                if val.startswith(i):
+                    # these will get built as 0 regardless
+                    # so don't record refs to them
+                    should_add_ref = False
+                    break
+            if should_add_ref:
+                t = node.get('type', '')
+                ct = t if t in self.configs.parent_record_types else ""
+                self.add_ref(val, refs, distance, ct)
 
-            # save meta-types
+            # but still want to save meta-types
             if (node['type'] in self.configs.parent_record_types or node['type'] == 'Type') and 'classified_as' in node:
                 cxids = [x['id'] for x in node['classified_as'] if 'id' in x]
                 if not node['id'] in self.metatypes_seen:
@@ -149,29 +188,36 @@ class ReferenceManager(object):
         try:
             self.walk_for_refs(rec, refs, distance+1, top=True)
         except ValueError as e:        
-            print(f"\nERROR: Walk error in {rec['id']}: {e}")
-            # raise
+            print(f"\nERROR: Reference walk error in {rec['id']}: {e}")
+            raise
+
+        # Do we need these?
+        # We need to walk for references
+
+        # but they're already in the idmap if they're equivalents
+        # However records referenced from them might not be in the idmap
+        # equivalents of internal records will be distance 0...
+        # could detect that way?
 
         if 'equivalent' in rec:
             for eq in rec['equivalent']:
                 k = self.configs.make_qua(eq['id'], rec['type'])
-                t = rec.get('type', '')
-                ct = t if t in self.configs.parent_record_types else ""
-                self.add_ref(k, refs, distance, ct)
+                should_add_ref = True
+                for i in self.internal_uris:
+                    if k.startswith(i):
+                        # these will get built as 0 regardless
+                        # so don't record refs to them
+                        should_add_ref = False
+                        break
+                if should_add_ref:
+                    t = rec.get('type', '')
+                    ct = t if t in self.configs.parent_record_types else ""
+                    self.add_ref(k, refs, distance, ct)
 
-        topid = rec['id']
-        ks = list(refs.keys())
-        for k in ks:
-            for i in self.internal_uris:
-                if k.startswith(i) and topid.startswith(i):
-                    del refs[k]
-                    break
-
-        self.all_refs.update(refs)
         return refs
 
 
-    def manage_identifiers(self, rec, rebuild=False):
+    def manage_identifiers(self, rec):
         if not rec or not 'data' in rec or not 'id' in rec['data']:
             return
         recid = rec['data']['id']
@@ -182,75 +228,71 @@ class ReferenceManager(object):
         # This should be called after ALL reconciliation processing has happened
         # including id->id, name->id and id collection to minimize duplicate records
         qrecid = self.configs.make_qua(recid, typ)
+        qequivs.append(qrecid)
+
         equiv_map = {}
         existing = []
-        if qrecid in self.idmap:
+
+        uu = self.idmap[qrecid]
+        if uu is not None:
             # We know about this entity/record already
-            uu = self.idmap[qrecid]
-            if uu is None:
-                print(f"got None? waiting and trying again...")
-                time.sleep(1)
-                uu = self.idmap[qrecid]
-                if uu is None:
-                    print(f"WTF... Still none... treating as ... None")
-            if uu is not None:
-                equiv_map[recid] = uu
-                uuset = self.idmap[uu]
-                if not uuset:
-                    existing = []
-                else:
-                    existing = list(uuset)
+            if self.debug: print(f"Found {uu} for {qrecid}")
+            equiv_map[qrecid] = uu
+            uuset = self.idmap[uu]
+            if uuset:
+                existing = list(uuset)
+                if self.debug: print(f"Found existing: {existing}")
         else:
-            uu = None
+            if self.debug: print(f"Got None for {qrecid}, will mint or find")
+
+
+        updated_token = False
+        # if we have the current update token, then we've already been touched
+        # so rebuild from scratch is == has_update
+        if uu is not None:
+            has_update = self.idmap.has_update_token(uu)
+        else:
+            has_update = False
+        rebuild = not has_update
 
         # Ensure that previous bad reconciliations are undone
+        # But only the first time we see this uuid
         if uu and rebuild:
-            has_update = self.idmap.has_update_token(uu)
-            if not has_update:
-                self.idmap.add_update_token(uu)
-                if existing:
-                    # replace existing with equivs if no or old update token
-                    to_delete = []
-                    for x in existing.copy():
-                        if not x in qequivs:
-                            if self.debug: print(f"Removing {x} not in new equivs")
-                            existing.remove(x)
-                            if not x.startswith("__"):
-                                try:
-                                    del self.idmap[x]
-                                except:
-                                    print(f"\nWhile processing {recid} found {equivs} in record")
-                                    print(f"Tried to delete {x} for {uu}")
-                        else:
-                            if self.debug: print(f"Found {x} in existing and new")
+            if self.debug: print("No update token!")
+            self.idmap.add_update_token(uu)
+            updated_token = True
+            if existing:
+                # replace existing with equivs if no or old update token
+                to_delete = []
+                for x in existing.copy():
+                    if not x in qequivs:
+                        if self.debug: print(f"Removing {x} not in new equivs")
+                        existing.remove(x)
+                        if not x.startswith("__"):
+                            try:
+                                del self.idmap[x]
+                                if self.debug: print(f"deleted {x}")
+                            except:
+                                print(f"\nWhile processing {recid} found {equivs} in record")
+                                print(f"Tried to delete {x} for {uu}")
+                    else:
+                        if self.debug: print(f"Found {x} in existing and new")
           
         # Build map of equivalent ids given in current record
         if equivs:
             for eq in equivs.copy():
                 qeq = self.configs.make_qua(eq, typ)
-                if not qeq:
-                    print(f"Made id {qeq} from {eq},{typ}?!")
-                    continue
-                if "'" in eq or ')' in eq:
-                    print(f"\nERROR: *** Found bad character in {eq} from {recid}")
-                    self.idmap._force_delete(qeq)
-                    equivs.remove(eq)
-                    continue
                 if qeq not in existing:
                     myqeq = self.idmap[qeq]
                     if myqeq is not None:
                         equiv_map[eq] = myqeq
+                    if self.debug: print(f"qeq: {qeq} / {myqeq}")
 
         # Ensure existing from idmap are in equivalent map
         # This will only make changes on second and subsequent times
         # we encounter the YUID
         if existing:
             for xq in existing.copy():
-                if "'" in xq or ')' in xq:
-                    print(f"\nERROR: *** Found bad character in {xq} from idmap:{uu}")
-                    self.idmap._force_delete(self.configs.make_qua(xq, typ))
-                    existing.remove(xq)
-                    continue
                 if not xq.startswith('__'):
                     equiv_map[xq] = uu
 
@@ -264,6 +306,7 @@ class ReferenceManager(object):
                 raise ValueError(f"Unknown type: {typ} for generating slug")
             uu = self.idmap.mint(qrecid, slug)
             self.idmap.add_update_token(uu)
+            updated_token = True
             if self.debug: print(f"Minted {slug}/{uu} for {qrecid} ")
 
             for eq in equivs:
@@ -279,16 +322,17 @@ class ReferenceManager(object):
             uus = set(uul)
             if len(uus) == 1:
                 uu = uus.pop()
-                if not recid in equiv_map:
+                if not updated_token:
+                    self.idmap.add_update_token(uu)
+                    updated_token = True
+                if not qrecid in equiv_map:
                     # e.g. second occurence of Wiley painting
-                    if qrecid is not None:
-                        try:
-                            self.idmap[qrecid] = uu
-                        except:
-                            print(f"Failed to set {qrecid} to {uu} from {equiv_map} / {uus}")
-                            raise
-                    else:
-                        print(f"\nERROR: *** In manage_identifiers for {recid}, qrecid is None?!")
+                    try:
+                        if self.debug: print(f"Setting {qrecid} to {uu} as uus=1")
+                        self.idmap[qrecid] = uu
+                    except:
+                        print(f"Failed to set {qrecid} to {uu} from {equiv_map} / {uus}")
+                        raise
             else:
                 # Merge the yuids together
                 print(f" --- Merging {uus}")
@@ -320,6 +364,9 @@ class ReferenceManager(object):
                     # ? Just pick one at random
                     uu = uus.pop()
 
+                if not updated_token:
+                    self.idmap.add_update_token(uu)
+                    updated_token = True
                 # Delete the others and set new uu
                 for ud in uus:
                     existing_ud = self.idmap[ud]
@@ -329,6 +376,11 @@ class ReferenceManager(object):
                                 self.idmap.delete(eqd) 
                                 self.idmap[eqd] = uu
 
+        # Ensure we touch the token
+        if not updated_token and not has_update:
+            print(f"Fell through to final touch! {uu} in {qrecid}")
+            self.idmap.add_update_token(uu)
+
         # Ensure all equivs match to the yuid
         for eq in equiv_map.keys():
             if not eq.startswith("__") and not eq in existing:
@@ -336,5 +388,7 @@ class ReferenceManager(object):
                     qeq = self.configs.make_qua(eq, typ)
                 else:
                     qeq = eq
+                if self.debug: print(f"Setting {qeq} to {uu} in idmap")
                 self.idmap[qeq] = uu
-     
+            else:
+                if self.debug: print(f"Saw {eq} in existing, not setting")

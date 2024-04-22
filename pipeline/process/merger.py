@@ -878,8 +878,10 @@ class RecordMerger(object):
             self.merge_common(rec, merge, msource)
             base['sources'].append(to_merge['source'])
         else:
-            try:
-                print(f"Did not merge {to_merge['identifier']} into {base['yuid']}")
-            except:
-                print(f"Skipped merging {to_merge} into {base}")
+            # No need to debug this
+            pass
+            #try:
+            #    print(f"Did not merge {to_merge['identifier']} into {base['yuid']}")
+            #except:
+            #    print(f"Skipped merging {to_merge} into {base}")
         return base
