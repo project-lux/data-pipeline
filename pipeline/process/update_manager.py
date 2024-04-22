@@ -69,12 +69,15 @@ class UpdateManager(object):
     def harvest_single(self, name, store_only=False):
         if name in self.configs.internal:
             cfg = self.configs.internal[name]
-            self.harvest(cfg)
-            if not store_only:
-                # FIXME: rebuild
-                pass
+        elif name in self.configs.external:
+            cfg = self.configs.external[name]
         else:
             raise ValueError(f"No known source with name {name}")
+
+        self.harvest(cfg)
+        if not store_only:
+            # FIXME: rebuild
+            pass
 
     def harvest(self, config):      
         storage = config['datacache']
