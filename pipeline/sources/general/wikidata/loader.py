@@ -77,10 +77,10 @@ class WdLoader(WdFetcher, WdConfigManager, Loader):
 
             # Create intermediate files for indexing
             sames, diffs = self.process_equivs({'data':new})
-            for x,y in sames:
-                efh.write(f'{x},{y}\n')
-            for x,y in diffs:
-                dfh.write(f'{x},{y}\n')
+            for sx,sy in sames:
+                efh.write(f'{sx},{sy}\n')
+            for dx,dy in diffs:
+                dfh.write(f'{dx},{dy}\n')
 
             if not done_x % 10000:
                 t = time.time() - start
