@@ -20,7 +20,7 @@ class GettyHarvester(ASHarvester):
                 item['object']['id'] = f"{self.namespace}/{ident}"                
                 filtered_items.append(item)
         if filtered_items:
-            Harvester.process_items(self, filtered_items)
+            Harvester.process_items(self, filtered_items, refsonly=False)
                                                      
 class GettyHarvester2(ASHarvester):
 
