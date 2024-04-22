@@ -1,4 +1,5 @@
 
+import os
 import sys
 import json
 import time
@@ -17,42 +18,6 @@ class WdIndexLoader(IndexLoader, WdConfigManager):
 		self.out_path = config['inverseEquivDbPath']
 		self.index = SqliteDict(self.out_path, autocommit=False)
 
-
-		# Make sure to update the inverse in reconciler
-		# if you add something to pref_map
-		self.pref_map = {
-			'P244': 'lc',
-			'P2163': 'fast',
-			'P214': 'viaf',
-			'P1014': 'aat',
-			'P245': 'ulan',
-			'P1667': 'tgn',
-			'P8902': 'aspace',
-			'P1566': 'geonames',
-			'P6766': 'wof',
-			'P846': 'gbif',
-			'P830': 'eol',
-			'P6944': 'bionomia',
-			'P243': 'oclcnum',
-			'P305': 'lang',
-			'P4801': 'lcvoc',
-			'P1149': 'lcc',
-			'P269': 'idref',
-			'P227': 'gnd',
-			'P213': 'isni',
-			'P11858': 'nsf',
-			'P3500': 'ringgold',
-			'P6782': 'ror', # https://ror.org/00qb4ds53
-			'P3430': 'snac', # https://snaccooperative.org/ark:/99166/{ident}
-			'P496': 'orcid', # https://orcid.org/<ident>
-			'P8516': 'lcpm', # https://id.loc.gov/authorities/performanceMediums/{ident}
-			'P3763': 'mimo', # http://www.mimo-db.eu/InstrumentsKeywords/{ident}
-			'P402': 'osm', # Open Street Map relation id
-			'P349': 'ndl', # Japan
-			'P5587': 'snl' # Sweden
-		}
-		self.different_prop = "P1889"
-
 	def load(self):
 		n = 0
 		#ttl = len(self.in_cache)
@@ -60,30 +25,9 @@ class WdIndexLoader(IndexLoader, WdConfigManager):
 		start = time.time()
 		print("Starting...")
 		for rec_int in self.in_cache.iter_records():
-			rec = rec_int['data']
-			recid = rec['id']
-			for prop, pref in self.pref_map.items():
-				if prop in rec:
-					val = rec[prop]
-					if type(val) == str:
-						val = [val]
-					elif type(val) == list:
-						pass
-					else:
-						print(f"unknown identifier value type: {val}")
-						continue
-					for i in val:
-						if type(i) != str:
-							print(f"Unknown identifier item value type: {i}")
-						else:
-							self.index[f"{pref}:{i}"] = recid
-			if self.different_prop in rec:
-				val = rec[self.different_prop]
-				if type(val) == str:
-					val = [val]
-				for i in val:
-					if type(i) == str:
-						pass
+			sames, diffs = self.process_equivs(rec_int)
+			for s in sames:
+				self.index[s[0]] = s[1]
 
 			n += 1
 			if not n % 50000:
@@ -92,6 +36,39 @@ class WdIndexLoader(IndexLoader, WdConfigManager):
 				print(f"{n} of {ttl} in {int(durn)} = {n/durn}/sec -> {ttl/(n/durn)} secs")
 				sys.stdout.flush()
 		self.index.commit()
+
+
+class WdFileIndexLoader(IndexLoader, WdConfigManager):
+
+	def __init__(self, config):
+		WdConfigManager.__init__(self, config)
+		self.in_cache = config['datacache']
+		self.out_path = config['inverseEquivDbPath']
+		self.index = SqliteDict(self.out_path, autocommit=False)
+
+	def load(self):
+		n = 0
+		#ttl = len(self.in_cache)
+		ttl = 100000000
+		start = time.time()
+
+		files = [x for x in os.listdir(self.configs.temp_dir) if x.startswith('wd_equivs_')]
+		print("Starting...")
+		for fn in files:
+	        efh = open(os.path.join(self.configs.temp_dir, fn))
+			l = efh.readline()
+			while l:
+				(x,y) = l.strip().rsplit(',', 1)
+				self.index[x] = y
+				n += 1
+				if not n % 50000:
+					self.index.commit()
+					durn = time.time()-start
+					print(f"{n} of {ttl} in {int(durn)} = {n/durn}/sec -> {ttl/(n/durn)} secs")
+					sys.stdout.flush()
+			self.index.commit()
+			efh.close()
+		# Load diffs in the normal load-csv-map way
 
 
 class RawWdIndexLoader(WdIndexLoader, WdLoader, WdFetcher):

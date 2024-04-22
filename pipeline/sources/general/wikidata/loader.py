@@ -1,14 +1,16 @@
 
 from pipeline.process.base.loader import Loader
 from .fetcher import WdFetcher
-
+from .base import WdConfigManager
 import json
 import gzip
 import time
+import os
 
-class WdLoader(WdFetcher, Loader):
+class WdLoader(WdFetcher, WdConfigManager, Loader):
 
     def __init__(self, config):
+        WdConfigManager.__init__(self, config)
         WdFetcher.__init__(self, config)
         Loader.__init__(self, config)
         self.skip_lines = 0
@@ -33,13 +35,16 @@ class WdLoader(WdFetcher, Loader):
 
     def load(self, slicen=None, maxSlice=None):
         # ensure we have the dump file
-        self.fetch_dump()
+        # self.fetch_dump()
 
         fh = gzip.open(self.in_path)
         fh.readline() # chomp initial [
         x = 0 
         l = 1
         done_x = 0
+
+        efh = open(os.path.join(self.configs.temp_dir, f'wd_equivs_{slicen}.csv', 'w'))
+        dfh = open(os.path.join(self.configs.temp_dir, f'wd_diffs_{slicen}.csv', 'w'))
 
         self.out_cache.start_bulk()
         start = time.time()
@@ -48,7 +53,7 @@ class WdLoader(WdFetcher, Loader):
             if not l:
                 break
             if maxSlice is not None and x % maxSlice - slicen != 0:
-                x+= 1
+                x += 1
                 continue
 
             x += 1
@@ -69,6 +74,14 @@ class WdLoader(WdFetcher, Loader):
                 raise
                 continue
             self.out_cache.set_bulk(new, identifier=what)
+
+            # Create intermediate files for indexing
+            sames, diffs = self.process_equivs(new)
+            for x,y in sames:
+                efh.write(f'{x},{y}\n')
+            for x,y in diffs:
+                dfh.write(f'{x},{y}\n')
+
             if not done_x % 10000:
                 t = time.time() - start
                 xps = x/t
@@ -77,5 +90,7 @@ class WdLoader(WdFetcher, Loader):
                 self.out_cache.end_bulk()
                 self.out_cache.start_bulk()
         fh.close()
+        efh.close()
+        dfh.close()
         self.out_cache.end_bulk()
         self.out_cache.commit()
