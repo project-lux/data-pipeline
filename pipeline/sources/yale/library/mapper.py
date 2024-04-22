@@ -1,5 +1,6 @@
 from pipeline.process.base.mapper import Mapper
 from pipeline.process.utils.mapper_utils import validate_timespans
+from pipeline.process.utils.mapper_utils import make_datetime
 import os
 import json
 import csv
@@ -240,6 +241,7 @@ class YulMapper(Mapper):
             classes.append({"id": "http://vocab.getty.edu/aat/300404024", "type":"Type", "_label": "Collection Item"})
             data['classified_as'] = classes
 
+
         if 'defined_by' in data and data['defined_by'] == "":
             del data['defined_by']
 
@@ -253,5 +255,40 @@ class YulMapper(Mapper):
                         cxnid = c.get('id','')
                         if cxnid and cxnid.startswith('https://vocab.getty.edu'):
                             c['id'] = cxnid.replace('https://','http://')
+
+        if data['type'] == 'Period':
+            #Add classification of AAT Period
+            if 'classified_as' in data:
+                classes = data['classified_as']
+                classes.append({"id": "http://vocab.getty.edu/aat/300081446", "type":"Type", "_label": "Period"})
+            else:
+                data['classified_as'] = [{"id": "http://vocab.getty.edu/aat/300081446", "type":"Type", "_label": "Period"}]
+
+            #try to parse dates for timespan
+            if not "timespan" in data:
+                if "identified_by" in data:
+                    for i in data["identified_by"]:
+                        if "classified_as" in i:
+                            for c in i['classified_as']:
+                                if "id" in c:
+                                    if c['id'] == "http://vocab.getty.edu/aat/300404670":
+                                        cont = i.get("content","")
+                                        if cont and "," in cont:
+                                            dates = cont.rsplit(",",1)[-1].strip()
+                                            try:
+                                                b,e = make_datetime(dates)
+                                            except:
+                                                b = e = None
+                                            template = {"type":"TimeSpan","begin_of_the_begin":"","end_of_the_end":"","identified_by":[{"type":"Name","classified_as":[{"id":"http://vocab.getty.edu/aat/300404669","type":"Type","_label":"Display Title"}],"content":dates}]}
+                                            if b and e:
+                                                template["begin_of_the_begin"] = b
+                                                template["end_of_the_end"] = e
+                                            elif b:
+                                                template["begin_of_the_begin"] = b
+                                            elif e:
+                                                template["end_of_the_end"] = e
+                                            if b or e:
+                                                data['timespan'] = template
+
                             
         return rec
