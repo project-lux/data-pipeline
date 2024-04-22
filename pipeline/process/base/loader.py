@@ -81,7 +81,7 @@ class Loader(object):
                 new = self.post_process_json(js)
             except:
                 print(f"Failed to process {l}")
-                continue
+                raise
             if new is not None:
                 if not what:
                     what = self.get_identifier_json(new)
