@@ -43,8 +43,8 @@ class WdLoader(WdFetcher, WdConfigManager, Loader):
         l = 1
         done_x = 0
 
-        efh = open(os.path.join(self.configs.temp_dir, f'wd_equivs_{slicen}.csv', 'w'))
-        dfh = open(os.path.join(self.configs.temp_dir, f'wd_diffs_{slicen}.csv', 'w'))
+        efh = open(os.path.join(self.configs.temp_dir, f'wd_equivs_{slicen}.csv'), 'w')
+        dfh = open(os.path.join(self.configs.temp_dir, f'wd_diffs_{slicen}.csv'), 'w')
 
         self.out_cache.start_bulk()
         start = time.time()
