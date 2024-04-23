@@ -49,25 +49,28 @@ class WdFileIndexLoader(IndexLoader, WdConfigManager):
 	def load(self):
 		n = 0
 		#ttl = len(self.in_cache)
-		ttl = 100000000
+		ttl = 23000000
 		start = time.time()
 
 		files = [x for x in os.listdir(self.configs.temp_dir) if x.startswith('wd_equivs_')]
 		print("Starting...")
 		for fn in files:
+			print(fn)
 			efh = open(os.path.join(self.configs.temp_dir, fn))
-			l = efh.readline()
+			l = efh.readline().strip()
 			while l:
-				(x,y) = l.strip().rsplit(',', 1)
+				(x,y) = l.rsplit(',', 1)
 				self.index[x] = y
 				n += 1
+				l = efh.readline().strip()
 				if not n % 50000:
 					self.index.commit()
 					durn = time.time()-start
 					print(f"{n} of {ttl} in {int(durn)} = {n/durn}/sec -> {ttl/(n/durn)} secs")
 					sys.stdout.flush()
-			self.index.commit()
 			efh.close()
+		self.index.commit()
+
 		# Load diffs in the normal load-csv-map way
 
 
