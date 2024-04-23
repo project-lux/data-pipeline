@@ -26,7 +26,7 @@ class LCIndexLoader(LmdbIndexLoader):
         try:
             new = self.mapper.reconstitute(nodes[topid], nodes)    
         except:
-            continue          
+            return None          
         return new
 
     def extract_names(self, rec):
