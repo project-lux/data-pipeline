@@ -30,6 +30,12 @@ class LCIndexLoader(LmdbIndexLoader):
             new = self.mapper.reconstitute(nodes[topid], nodes)    
         except:
             return None          
+        if '@type' in new:
+            for bad_type in self.mapper.ignore_types:
+                if bad_type in new['@type']:
+                    # Trash it
+                    return None
+
         return {'data': new, 'identifier': ident}
 
     def extract_names(self, rec):
