@@ -52,6 +52,10 @@ class IndexLoader(object):
             try:
                 typ = res['data']['type']
             except:
+                print(rec)
+                print('-->')
+                print(res)
+
                 typ = self.mapper.guess_type(res)
 
 
