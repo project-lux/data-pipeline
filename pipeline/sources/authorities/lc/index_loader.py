@@ -3,16 +3,18 @@ from pipeline.process.base.index_loader import LmdbIndexLoader
 
 class LCIndexLoader(LmdbIndexLoader):
 
-    def acquire_record(self, rec):
-        if 'data' in rec:
-            rec = rec['data']
+    def acquire_record(self, record):
+        if 'data' in record:
+            rec = record['data']
+
         if '@id' in rec and rec['@id'].startswith('/authorities/'):
             ident = rec['@id'].rsplit('/', 1)[1]
             topid = f"{self.namespace}{ident}"
         elif '@context' in rec and type(rec['@context']) == dict:
             topid = rec['@context']['about']
+            ident = topid.rsplit('/', 1)[-1]
         else:
-            identifier = record['identifier']
+            ident = rec['identifier']
             topid = f"{self.namespace}{identifier}"
         if len(rec.keys()) == 1 and 'value' in rec:
             rec['@graph'] = rec['value']
@@ -28,7 +30,7 @@ class LCIndexLoader(LmdbIndexLoader):
             new = self.mapper.reconstitute(nodes[topid], nodes)    
         except:
             return None          
-        return new
+        return {'data': new, 'identifier': ident}
 
     def extract_names(self, rec):
         vals = []
