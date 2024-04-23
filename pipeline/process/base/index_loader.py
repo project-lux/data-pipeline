@@ -56,7 +56,7 @@ class IndexLoader(object):
                 print('-->')
                 print(res)
 
-                typ = self.mapper.guess_type(res)
+                typ = self.mapper.guess_type(res['data'])
 
 
             if index is not None:
