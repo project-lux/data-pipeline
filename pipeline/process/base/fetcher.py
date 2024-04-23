@@ -34,12 +34,13 @@ class Fetcher(object):
 
         url = self.make_fetch_uri(identifier)
         if not url:
-            # print(f"Invalid identifier for {self.name}: {identifier}")
+            print(f"Invalid identifier for {self.name}: {identifier}")
             return None
 
         if url in self.networkmap:
             resp = self.networkmap[url]
             if resp in ['0', '000'] or (len(resp) == 3 and resp.isnumeric() and int(resp) > 399):
+                print(f"Networkmap has {resp}")
                 return None
             elif len(resp) > 3:
                 # a previous redirect
@@ -74,7 +75,6 @@ class Fetcher(object):
             data = self.post_process(data, identifier)
         else:
             # URL returned fail status
-            # FIXME: log
             print(f"Got failure {resp.status_code} from {url}")
             self.networkmap[url] = resp.status_code
             return None
