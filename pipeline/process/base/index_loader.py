@@ -7,8 +7,8 @@ from pipeline.storage.idmap.lmdb import TabLmdb
 class IndexLoader(object):
     def __init__(self, config):
         self.in_cache = config['datacache']
-        self.out_path = config['reconcileDbPath']
-        self.inverse_path = config['inverseEquivDbPath']
+        self.out_path = config.get('reconcileDbPath', None)
+        self.inverse_path = config.get('inverseEquivDbPath', None)
         self.namespace = config['namespace']
         self.reconciler = config.get('reconciler', None)
         self.mapper = config.get('mapper', None)
