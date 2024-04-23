@@ -2,7 +2,7 @@
 
 from pipeline.process.utils.mapper_utils import get_year_from_timespan
 from sqlitedict import SqliteDict
-from lmdbm import Lmdb
+from pipeline.storage.idmap.lmdb import TabLmdb
 
 
 # Abstract class definition, useless without actual data
