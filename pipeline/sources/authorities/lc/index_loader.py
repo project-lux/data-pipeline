@@ -4,7 +4,8 @@ from pipeline.process.base.index_loader import LmdbIndexLoader
 class LCIndexLoader(LmdbIndexLoader):
 
     def acquire_record(self, rec):
-        rec = record['data']
+        if 'data' in rec:
+            rec = rec['data']
         if '@id' in rec and rec['@id'].startswith('/authorities/'):
             ident = rec['@id'].rsplit('/', 1)[1]
             topid = f"{self.namespace}{ident}"
