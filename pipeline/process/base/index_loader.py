@@ -75,7 +75,7 @@ class IndexLoader(object):
             eqindex.commit()
         
 
-class LmdbIndexLoader(object):
+class LmdbIndexLoader(IndexLoader):
 
     def get_storage(self):
         if self.out_path:
@@ -89,7 +89,7 @@ class LmdbIndexLoader(object):
         return (index, eqindex)
 
 
-class SqliteIndexLoader(object):
+class SqliteIndexLoader(IndexLoader):
 
     def get_storage(self):
         if out_path:
