@@ -45,11 +45,15 @@ class IndexLoader(object):
         for rec in self.in_cache.iter_records():
 
             res = self.acquire_record(rec)
+            if res is None:
+                # Mapper might kill it
+                continue
+            recid = rec['identifier']
             try:
                 typ = res['data']['type']
             except:
-                typ = self.mapper.guess_type(rec)
-            recid = rec['identifier']
+                typ = self.mapper.guess_type(res)
+
 
             if index is not None:
                 names = self.extract_names(res['data'])
