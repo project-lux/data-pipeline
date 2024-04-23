@@ -30,6 +30,7 @@ class Fetcher(object):
     def fetch(self, identifier):
         # fetch 
         if not self.enabled:
+            print(f"Called fetch for {self.name}:{identifier} but network is disabled")
             return None
 
         url = self.make_fetch_uri(identifier)

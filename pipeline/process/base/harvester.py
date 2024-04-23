@@ -229,6 +229,7 @@ class ASHarvester(Harvester):
 	# API function for Harvester
 	def crawl(self, last_harvest=None, refsonly=False):
 		Harvester.crawl(self, last_harvest)
+		
 		while self.collection_index < len(self.collections):
 			if not self.page:
 				collection = self.collections[self.collection_index]
