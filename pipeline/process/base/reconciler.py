@@ -118,7 +118,7 @@ class LmdbReconciler(Reconciler):
         fn2 = config.get("inverseEquivDbPath", "")
         try:
             if fn:
-                self.name_index = read-only-lmdb-here for fn        
+                self.name_index = TabLmdb(fn, 'r')    
             else:
                 self.name_index = None
         except:
@@ -126,7 +126,7 @@ class LmdbReconciler(Reconciler):
             self.name_index = None
         try:
             if fn2:
-                self.id_index = read-only-lmdb-here for fn2       
+                self.id_index = TabLmdb(fn2, 'r')     
             else:
                 self.id_index = None
         except:

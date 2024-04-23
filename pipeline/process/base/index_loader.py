@@ -1,7 +1,6 @@
 
 import sys
 import time
-
 from sqlitedict import SqliteDict
 from pipeline.storage.idmap.lmdb import TabLmdb
 
