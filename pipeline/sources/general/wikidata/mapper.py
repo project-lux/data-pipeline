@@ -293,20 +293,16 @@ class WdMapper(Mapper, WdConfigManager):
                 top.representation = img
 
     def process_website(self, data, top):
-        site = data.get('P856', None)
-        if not site:
-            site = data.get('P973', None)
-        # just take the first one
-        if site:
-            site = site[0]
-            #trash pdfs
-            if site.endswith(".pdf"):
-                return None
-            lo = model.LinguisticObject(label="Website Text")
-            do = vocab.WebPage(label="Home Page")            
-            do.access_point = model.DigitalObject(ident=site)
-            lo.digitally_carried_by = do
-            top.subject_of = lo
+        props = ["P856","P973"]
+        for p in props:
+            site = data.get(p, None)
+            if site and not site.endswith(".pdf"):
+                lo = model.LinguisticObject(label="Website Text")
+                do = vocab.WebPage(label="Home Page")            
+                do.access_point = model.DigitalObject(ident=site)
+                lo.digitally_carried_by = do
+                top.subject_of = lo
+                break
 
     def process_actor(self, data, top):
         # Relationship to Group: Member of P463, employer P108
