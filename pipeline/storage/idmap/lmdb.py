@@ -1,5 +1,5 @@
 import lmdb
-from lmdbm import Lmdb, remove_lmdbm
+from lmdbm import Lmdb
 import json
 
 ### Storage Layer
