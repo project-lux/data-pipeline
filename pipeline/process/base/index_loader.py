@@ -83,11 +83,11 @@ class LmdbIndexLoader(IndexLoader):
 
     def get_storage(self):
         if self.out_path:
-            index = TabLmdb.open(self.out_path, 'c')
+            index = TabLmdb.open(self.out_path, 'c', map_size=2**30)
         else:
             index = None
         if self.inverse_path:
-            eqindex = TabLmdb.open(self.inverse_path, 'c')
+            eqindex = TabLmdb.open(self.inverse_path, 'c', map_size=2**30)
         else:
             eqindex = None
         return (index, eqindex)
