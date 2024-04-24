@@ -109,8 +109,11 @@ class GettyMapper(Mapper):
                 ll = lang[:2]
             else:
                 ll = lang
-            if ll in self.process_langs:
-                st.language = self.process_langs[ll]            
+            try:
+                if ll in self.process_langs:
+                    st.language = self.process_langs[ll]            
+            except:
+                print(f"language on statement: {ll}")
         return st
 
     def fix_getty_timestamp(self, value, which=None):
