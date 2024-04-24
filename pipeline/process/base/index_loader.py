@@ -5,14 +5,16 @@ from sqlitedict import SqliteDict
 from pipeline.storage.idmap.lmdb import TabLmdb
 
 class IndexLoader(object):
+
     def __init__(self, config):
+        self.config = config
         self.in_cache = config['datacache']
+        self.namespace = config['namespace']
+        self.in_path = config.get("reconcileDumpPath", None)
         self.out_path = config.get('reconcileDbPath', None)
         self.inverse_path = config.get('inverseEquivDbPath', None)
-        self.namespace = config['namespace']
         self.reconciler = config.get('reconciler', None)
         self.mapper = config.get('mapper', None)
-        self.config = config
 
     def extract_names(self, rec):
         return self.reconciler.extract_names(rec)
@@ -83,11 +85,11 @@ class LmdbIndexLoader(IndexLoader):
 
     def get_storage(self):
         if self.out_path:
-            index = TabLmdb.open(self.out_path, 'c', map_size=2**30)
+            index = TabLmdb.open(self.out_path, 'c', map_size=2**29)
         else:
             index = None
         if self.inverse_path:
-            eqindex = TabLmdb.open(self.inverse_path, 'c', map_size=2**30)
+            eqindex = TabLmdb.open(self.inverse_path, 'c', map_size=2**29)
         else:
             eqindex = None
         return (index, eqindex)

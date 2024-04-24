@@ -1,5 +1,5 @@
 
-from pipeline.process.base.reconciler import SqliteReconciler, LmdbReconciler
+from pipeline.process.base.reconciler import LmdbReconciler
 
 class LcshReconciler(LmdbReconciler):
 
@@ -20,10 +20,10 @@ class LcshReconciler(LmdbReconciler):
         else:
             return True
 
-class LcnafReconciler(SqliteReconciler):
+class LcnafReconciler(LmdbReconciler):
         
     def should_reconcile(self, rec, reconcileType="all"):
-        if not SqliteReconciler.should_reconcile(self, rec, reconcileType):
+        if not LmdbReconciler.should_reconcile(self, rec, reconcileType):
             return False
         if 'data' in rec:
             rec = rec['data']

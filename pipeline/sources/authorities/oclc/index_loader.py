@@ -1,20 +1,11 @@
-from pipeline.process.base.index_loader import IndexLoader
+from pipeline.process.base.index_loader import LmdbIndexLoader
 import gzip
-from sqlitedict import SqliteDict
 import time
 
-class ViafIndexLoader(IndexLoader):
+class ViafIndexLoader(LmdbIndexLoader):
 
-    # Load from viaf-links.txt file
-    # Can't build records from this as we don't know whether the entity is a 
-    # Person, Place, Group, Concept or other
-
-    def __init__(self, config):
-        self.total = 127525010
-
-        self.in_path = config['reconcileDumpPath']
-        self.out_path = config['inverseEquivDbPath']
-        self.viaf_prefixes = {
+    def load(self):
+        viaf_prefixes = {
             "ISNI": "isni",
             "WKP": "wikidata",
             "NDL": "japan",
@@ -25,15 +16,9 @@ class ViafIndexLoader(IndexLoader):
             "JPG": "ulan",
             "FAST": "fast"
         }
-        if self.out_path:
-            try:
-                self.index = SqliteDict(self.out_path, autocommit=False)
-            except:
-                print(f"Couldn't built index file at {self.out_path}")
-        else:
-            print("No inverseEquiv path for VIAF")
 
-    def load(self):
+        total = 115000000 # approx as of 2024-04
+        (index, eqindex) = self.get_storage()
         fh = gzip.open(self.in_path)
         l = fh.readline()
         n = 1
@@ -53,7 +38,7 @@ class ViafIndexLoader(IndexLoader):
                         if ident[0] == "s": 
                             pfx = "LCSH"
                     p = self.viaf_prefixes[pfx]
-                    self.index[f"{p}:{ident}"] = f"{viaf}"
+                    eqindex[f"{p}:{ident}"] = f"{viaf}"
             l = fh.readline()
             n += 1
             if not n % 100000:
@@ -61,8 +46,7 @@ class ViafIndexLoader(IndexLoader):
                 durn = time.time() - start
                 nps = n / durn
                 ttld = self.total / nps
-                print(f"{n} / {self.total} in {durn} = {nps} ==> {ttld} secs")
+                print(f"{n} / {total} in {durn} = {nps} ==> {ttld} secs")
 
         fh.close()
         self.index.commit()
-
