@@ -91,7 +91,7 @@ def validate_timespans(rec):
 			if p in rec:
 				walk_for_timespan(rec[p])
 
-def get_year_from_timespan(self, event):
+def get_year_from_timespan(event):
     try:
         ts = event['timespan']['begin_of_the_begin']
         if ts.startswith("-"):
