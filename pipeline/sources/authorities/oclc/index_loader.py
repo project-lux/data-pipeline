@@ -33,17 +33,16 @@ class ViafIndexLoader(LmdbIndexLoader):
             if '|' in ident:
                 (pfx, ident) = ident.split('|')
                 ident = ident.replace(' ', '')
-                if pfx in self.viaf_prefixes:
+                if pfx in viaf_prefixes:
                     if pfx == "LC":
                         # test for sh vs n
                         if ident[0] == "s": 
                             pfx = "LCSH"
-                    p = self.viaf_prefixes[pfx]
+                    p = viaf_prefixes[pfx]
                     updates[f"{p}:{ident}"] = f"{viaf}"
             l = fh.readline()
             n += 1
             if not n % 100000:
-                self.index.commit()
                 durn = time.time() - start
                 nps = n / durn
                 ttld = self.total / nps
