@@ -91,11 +91,11 @@ class LmdbIndexLoader(IndexLoader):
         mapExp = self.config.get('mapSizeExponent', 30)
         # n = remove and recreate
         if self.out_path:
-            index = TabLmdb.open(self.out_path, 'n', map_size=2**mapExp, readahead=False, writemap=True)
+            index = TabLmdb.open(self.out_path, 'c', map_size=2**mapExp, readahead=False, writemap=True)
         else:
             index = None
         if self.inverse_path:
-            eqindex = TabLmdb.open(self.inverse_path, 'n', map_size=2**mapExp, readahead=False, writemap=True)
+            eqindex = TabLmdb.open(self.inverse_path, 'c', map_size=2**mapExp, readahead=False, writemap=True)
         else:
             eqindex = None
         return (index, eqindex)

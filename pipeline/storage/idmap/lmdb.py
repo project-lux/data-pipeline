@@ -1,4 +1,5 @@
-from lmdbm import Lmdb, remove_lmdbm, lmdb
+import lmdb
+from lmdbm import Lmdb, remove_lmdbm
 import json
 
 ### Storage Layer
@@ -19,9 +20,7 @@ class StringLmdb(Lmdb):
     @classmethod
     def open(
         cls, file: str, flag: str = "r", mode: int = 0o755, map_size: int = 2**30, 
-        autogrow: bool = True, readahead: bool = True, writemap: bool = False, 
-        meminit: bool = True
-        ) -> "Lmdb":
+        autogrow: bool = True, **kw) -> "Lmdb":
         """
         Opens the database `file`.
         `flag`: r (read only, existing), w (read and write, existing),
@@ -29,18 +28,15 @@ class StringLmdb(Lmdb):
         """
 
         if flag == "r":  # Open existing database for reading only (default)
-            env = lmdb.open(file, map_size=map_size, max_dbs=1, readonly=True, create=False, mode=mode,
-                readahead=readahead, writemap=writemap, meminit=meminit)
+            env = lmdb.open(file, map_size=map_size, max_dbs=1, readonly=True, create=False, mode=mode, **kw)
         elif flag == "w":  # Open existing database for reading and writing
-            env = lmdb.open(file, map_size=map_size, max_dbs=1, readonly=False, create=False, mode=mode,
-                readahead=readahead, writemap=writemap, meminit=meminit)
+            env = lmdb.open(file, map_size=map_size, max_dbs=1, readonly=False, create=False, mode=mode, **kw)
         elif flag == "c":  # Open database for reading and writing, creating it if it doesn't exist
-            env = lmdb.open(file, map_size=map_size, max_dbs=1, readonly=False, create=True, mode=mode,
-                readahead=readahead, writemap=writemap, meminit=meminit)
+            env = lmdb.open(file, map_size=map_size, max_dbs=1, readonly=False, create=True, mode=mode, **kw)
         elif flag == "n":  # Always create a new, empty database, open for reading and writing
-            remove_lmdbm(file)
-            env = lmdb.open(file, map_size=map_size, max_dbs=1, readonly=False, create=True, mode=mode,
-                readahead=readahead, writemap=writemap, meminit=meminit)
+            # remove_lmdbm(file)
+            raise ValueError("can't")
+            env = lmdb.open(file, map_size=map_size, max_dbs=1, readonly=False, create=True, mode=mode, **kw)
         else:
             raise ValueError("Invalid flag")
 
