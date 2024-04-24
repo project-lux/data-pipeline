@@ -45,6 +45,8 @@ class IndexLoader(object):
         ttl = self.in_cache.len_estimate()
         n = 0
         start = time.time()
+        all_names = {}
+        all_uris = {}
         for rec in self.in_cache.iter_records():
 
             res = self.acquire_record(rec)
@@ -57,30 +59,31 @@ class IndexLoader(object):
             except:
                 typ = self.mapper.guess_type(res['data'])
 
-
             if index is not None:
                 names = self.extract_names(res['data'])
                 for nm in names:
-                    index[nm.lower()] = [recid, typ]
+                    all_names[nm.lower()] = [recid, typ]
             if eqindex is not None:
                 eqs = self.extract_uris(res['data'])
                 for eq in eqs:
-                    eqindex[eq] = [recid, typ]
+                    all_uris[eq] = [recid, typ]
 
             n += 1
-            if not n % 10000:
-                if index is not None:
-                    index.commit()
-                if eqindex is not None:
-                    eqindex.commit()
+            if not n % 100000:
                 durn = time.time()-start
                 print(f"{n} of {ttl} in {int(durn)} = {n/durn}/sec -> {ttl/(n/durn)} secs")
                 sys.stdout.flush()
-        if index is not None:
-            index.commit()
-        if eqindex is not None:
-            eqindex.commit()
-        
+
+        if index is not None and all_names:
+            start = time.time()
+            index.update(all_names)
+            durn = time.time() - start
+            print(f"names insert time: {int(durn)} = {len(all_names)/durn}/sec")
+        if eqindex is not None and all_uris:
+            start = time.time()
+            eqindex.update(all_uris)
+            durn = time.time() - start
+            print(f"uris insert time: {int(durn)} = {len(all_names)/durn}/sec")
 
 class LmdbIndexLoader(IndexLoader):
 
