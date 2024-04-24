@@ -1,5 +1,5 @@
 
-from pipeline.process.base.reconciler import SqliteReconciler
+from pipeline.process.base.reconciler import LmdbReconciler
 
 class AatReconciler(LmdbReconciler):
 

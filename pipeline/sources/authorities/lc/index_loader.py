@@ -36,6 +36,9 @@ class LCIndexLoader(LmdbIndexLoader):
                     # Trash it
                     return None
 
+        # NOTE - the externallinks file is merged in loader,
+        #        so is present in the datacache already
+
         return {'data': new, 'identifier': ident}
 
     def extract_names(self, rec):
