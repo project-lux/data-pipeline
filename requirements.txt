@@ -10,6 +10,7 @@ dateparser
 shapely
 lxml
 jsonschema
+lmdbm
 sqlitedict
 numpy
 bs4
