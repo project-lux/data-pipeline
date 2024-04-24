@@ -15,7 +15,7 @@ class WdFileIndexLoader(LmdbIndexLoader):
 	def load(self):
 		n = 0
 		ttl = 23000000 # estimate as of 2024-04
-        (index, eqindex) = self.get_storage()
+		(index, eqindex) = self.get_storage()
 		start = time.time()
 
 		files = [x for x in os.listdir(self.configs.temp_dir) if x.startswith('wd_equivs_')]
