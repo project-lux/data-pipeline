@@ -23,6 +23,7 @@ class ViafIndexLoader(LmdbIndexLoader):
         l = fh.readline()
         n = 1
         start = time.time()
+        updates = {}
         while l:
             l = l.strip()
             l = l.decode('utf-8')
@@ -38,7 +39,7 @@ class ViafIndexLoader(LmdbIndexLoader):
                         if ident[0] == "s": 
                             pfx = "LCSH"
                     p = self.viaf_prefixes[pfx]
-                    eqindex[f"{p}:{ident}"] = f"{viaf}"
+                    updates[f"{p}:{ident}"] = f"{viaf}"
             l = fh.readline()
             n += 1
             if not n % 100000:
@@ -46,7 +47,11 @@ class ViafIndexLoader(LmdbIndexLoader):
                 durn = time.time() - start
                 nps = n / durn
                 ttld = self.total / nps
-                print(f"{n} / {total} in {durn} = {nps} ==> {ttld} secs")
+                print(f"Read: {n} / {total} in {durn} = {nps} ==> {ttld} secs")
 
         fh.close()
-        self.index.commit()
+        start = time.time()
+        eqindex.update(updates)
+        end = time.time()
+        durn = end-start
+        print(f"Load: {durn} = {n/durn}/sec")

@@ -50,7 +50,7 @@ class LCIndexLoader(LmdbIndexLoader):
             prefs = [prefs]
         for p in prefs:
             if type(p) != dict:
-                print(f"Got weird prefLabel {p} in {recid}")
+                print(f"Got weird prefLabel {p} in {rec.get('@id', '???')}")
                 continue
             val = p['@value']
             vals.append(val)
