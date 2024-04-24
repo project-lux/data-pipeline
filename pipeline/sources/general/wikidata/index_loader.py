@@ -30,10 +30,10 @@ class WdFileIndexLoader(LmdbIndexLoader):
 				n += 1
 				l = efh.readline().strip()
 				if not n % 50000:
-					self.index.commit()
+					eqindex.commit()
 					durn = time.time()-start
 					print(f"{n} of {ttl} in {int(durn)} = {n/durn}/sec -> {ttl/(n/durn)} secs")
 					sys.stdout.flush()
 			efh.close()
-		self.index.commit()
+		eqindex.commit()
 
