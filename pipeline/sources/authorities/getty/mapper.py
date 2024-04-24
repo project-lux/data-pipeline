@@ -65,10 +65,14 @@ class GettyMapper(Mapper):
                 ll = lang[:2]
             else:
                 ll = lang
-            if ll in self.process_langs:
-                nm.language = self.process_langs[ll]
-            else:
-                # Actually just drop it on the floor if it's a lang we don't map
+            try:
+                if ll in self.process_langs:
+                    nm.language = self.process_langs[ll]
+                else:
+                    # Actually just drop it on the floor if it's a lang we don't map
+                    return None
+            except:
+                print(ll)
                 return None
         return nm
 
