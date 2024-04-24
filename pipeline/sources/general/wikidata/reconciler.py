@@ -2,7 +2,7 @@
 from .base import WdConfigManager
 from pipeline.process.base.reconciler import LmdbReconciler
 
-class WdReconciler(SqliteReconciler, WdConfigManager):
+class WdReconciler(LmdbReconciler, WdConfigManager):
 
     def __init__(self, config):
         WdConfigManager.__init__(self, config)
@@ -45,7 +45,7 @@ class WdReconciler(SqliteReconciler, WdConfigManager):
 
 
     def should_reconcile(self, rec, reconcileType="all"):
-        if not SqliteReconciler.should_reconcile(self, rec, reconcileType):
+        if not LmdbReconciler.should_reconcile(self, rec, reconcileType):
             return False
         if 'data' in rec:
             rec = rec['data']
