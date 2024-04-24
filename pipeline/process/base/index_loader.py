@@ -8,6 +8,7 @@ class IndexLoader(object):
 
     def __init__(self, config):
         self.config = config
+        self.configs = config['all_configs']
         self.in_cache = config['datacache']
         self.namespace = config['namespace']
         self.in_path = config.get("reconcileDumpPath", None)
