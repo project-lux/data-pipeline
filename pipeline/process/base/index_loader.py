@@ -31,6 +31,10 @@ class IndexLoader(object):
     def load(self):
         (index, eqindex) = self.get_storage()
 
+        if index is None and eqindex is None:
+            print(f"{self.name} has no indexes configured")
+            return None
+
         if self.reconciler is None:
             self.reconciler = self.config['reconciler']
         if self.mapper is None:
