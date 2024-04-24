@@ -19,6 +19,7 @@ class WdFileIndexLoader(LmdbIndexLoader):
 		start = time.time()
 
 		files = [x for x in os.listdir(self.configs.temp_dir) if x.startswith('wd_equivs_')]
+		files.sort()
 		print("Starting...")
 		updates = {}
 		for fn in files:
@@ -31,7 +32,7 @@ class WdFileIndexLoader(LmdbIndexLoader):
 				updates[x] = y
 				n += 1
 				l = efh.readline().strip()
-				if not n % 50000:
+				if not n % 100000:
 					eqindex.update(updates)
 					updates = {}
 					# eqindex.commit()
