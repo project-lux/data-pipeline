@@ -15,6 +15,7 @@ class IndexLoader(object):
         self.out_path = config.get('reconcileDbPath', None)
         self.inverse_path = config.get('inverseEquivDbPath', None)
         self.reconciler = config.get('reconciler', None)
+        self.acquirer = config.get('acquirer', None)
         self.mapper = config.get('mapper', None)
 
     def extract_names(self, rec):
@@ -24,8 +25,8 @@ class IndexLoader(object):
         return self.reconciler.extract_uris(rec)
 
     def acquire_record(self, rec):
-        res = self.mapper.transform(rec, None)
-        self.mapper.post_mapping(res)
+        recid = rec['identifier']
+        res = self.acquirer.acquire(recid, store=False)
         return res
 
     def load(self):
@@ -39,6 +40,8 @@ class IndexLoader(object):
             self.reconciler = self.config['reconciler']
         if self.mapper is None:
             self.mapper = self.config['mapper']
+        if self.acquirer is None:
+            self.acquirer = self.config['acquirer']
 
         # Clear all current entries
         if index is not None:
@@ -52,10 +55,9 @@ class IndexLoader(object):
         all_names = {}
         all_uris = {}
         for rec in self.in_cache.iter_records():
-
             res = self.acquire_record(rec)
             if res is None:
-                # Mapper might kill it
+                # Mapper might kill it, might not exist, etc
                 continue
             recid = rec['identifier']
             try:
@@ -66,6 +68,7 @@ class IndexLoader(object):
             if index is not None:
                 names = self.extract_names(res['data'])
                 for nm in names:
+                    sys.stdout.write('n');sys.stdout.flush()
                     all_names[nm.lower()] = [recid, typ]
             if eqindex is not None:
                 eqs = self.extract_uris(res['data'])
