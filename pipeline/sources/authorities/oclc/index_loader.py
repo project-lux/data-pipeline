@@ -45,7 +45,7 @@ class ViafIndexLoader(LmdbIndexLoader):
             if not n % 100000:
                 durn = time.time() - start
                 nps = n / durn
-                ttld = self.total / nps
+                ttld = total / nps
                 print(f"Read: {n} / {total} in {durn} = {nps} ==> {ttld} secs")
 
         fh.close()
