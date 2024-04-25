@@ -126,10 +126,9 @@ class ASHarvester(Harvester):
 	def fetch_page(self):
 		# fetch page in self.page
 		print(f"    {self.page}")
-		if self.page_cache is not None:
-			if self.page in self.page_cache:
-				rec = self.page_cache[self.page]
-				page = rec['data']
+		if self.page_cache is not None and self.page in self.page_cache:
+			rec = self.page_cache[self.page]
+			page = rec['data']
 		else:
 			page = self.fetch_json(self.page, 'page')
 		try:
