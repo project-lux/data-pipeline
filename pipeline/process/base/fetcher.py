@@ -41,8 +41,7 @@ class Fetcher(object):
         if url in self.networkmap:
             resp = self.networkmap[url]
             if resp in ['0', '000'] or (len(resp) == 3 and resp.isnumeric() and int(resp) > 399):
-                print(f"Networkmap has {resp}")
-                return None
+                print(f"Networkmap has {resp} but requesting anyway")
             elif len(resp) > 3:
                 # a previous redirect
                 # XXX FIXME: Don't refollow? Do refollow? configurable?
