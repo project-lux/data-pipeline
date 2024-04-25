@@ -115,9 +115,7 @@ class UpdateManager(object):
                 x += 1
                 continue
             x += 1
-            (uri, dt) = l.split('\t')
-            (src, ident) = self.configs.split_uri(uri, sources=[config])
-
+            (ident, dt) = l.split('\t')
             try:
                 tm = storage.metadata(ident, 'insert_time')['insert_time']
             except TypeError:
