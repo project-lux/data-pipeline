@@ -113,7 +113,7 @@ class ASHarvester(Harvester):
 		self.collections = config['activitystreams']
 		self.collection_index = 0		
 		self.page = config.get('start_page', None)
-
+		self.page_cache = None
 
 	def fetch_collection(self, uri):
 		coll = self.fetch_json(uri, 'collection')
@@ -126,7 +126,12 @@ class ASHarvester(Harvester):
 	def fetch_page(self):
 		# fetch page in self.page
 		print(f"    {self.page}")
-		page = self.fetch_json(self.page, 'page')
+		if self.page_cache is not None:
+			if self.page in self.page_cache:
+				rec = self.page_cache[self.page]
+				page = rec['data']
+		else:
+			page = self.fetch_json(self.page, 'page')
 		try:
 			items = page['orderedItems']
 			items.reverse()
@@ -144,6 +149,8 @@ class ASHarvester(Harvester):
 			# This is normal behavior for first page
 			self.page = None
 		sys.stdout.write('P');sys.stdout.flush()
+		if self.page_cache is not None:
+			self.page_cache[self.page] = page
 		return items
 
 	def process_items(self, items, refsonly=False):
