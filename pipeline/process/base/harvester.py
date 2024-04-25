@@ -186,20 +186,20 @@ class ASHarvester(Harvester):
 			elif uri.startswith('http://') and self.namespace.startswith('https://'):
 				uri = uri.replace('http://', 'https://')
 
-			if uri in self.seen:
+			ident = uri.replace(self.namespace, "")
+			if ident in self.seen:
 				# already processed, continue
 				continue
-			self.seen[uri] = 1
+			self.seen[ident] = 1
 
 			if ident in self.deleted:
 				continue
 			if chg == 'delete':
-				self.deleted[uri] = 1
+				self.deleted[ident] = 1
 
 			if self.harvest_from and dt > self.harvest_from:
 				continue
 
-			ident = uri.replace(self.namespace, "")
 			if refsonly:
 				yield (chg, ident, {}, dt)
 				continue

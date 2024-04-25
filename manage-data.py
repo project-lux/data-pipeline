@@ -6,6 +6,7 @@ import datetime
 from dotenv import load_dotenv
 from pipeline.config import Config
 from pipeline.process.reference_manager import ReferenceManager
+from pipeline.process.update_manager import UpdateManager
 
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
@@ -16,6 +17,8 @@ done_refs = cfgs.instantiate_map('done_refs')['store']
 cfgs.cache_globals()
 cfgs.instantiate_all()
 
+update_mgr = UpdateManager(cfgs, idmap)
+ref_mgr = ReferenceManager(cfgs, idmap)
 
 ### LOAD DATABASES
 if '--load' in sys.argv:
