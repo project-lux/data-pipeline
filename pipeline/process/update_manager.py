@@ -96,6 +96,7 @@ class UpdateManager(object):
  
     def harvest_from_list(self, config, mySlice=None, maxSlice=None):
         harvester = config['harvester']
+        harvester.fetcher.enabled = True
         storage = config['datacache']
         if storage is None:
             print(f"No datacache for {config['name']}? Can't harvest")
