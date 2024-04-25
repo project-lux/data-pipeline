@@ -30,8 +30,8 @@ if not to_do:
     sys.exit()
 
 mgr = UpdateManager(cfgs, idmap)
-#last_update = None
-#harvest_from = None
+last_update = None
+harvest_from = None
 last_update = "2020-01-01T00:00:00"
 # harvest_from = "2024-01-01T00:00:00"
 
