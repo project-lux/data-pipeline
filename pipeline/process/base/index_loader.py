@@ -54,10 +54,12 @@ class IndexLoader(object):
         start = time.time()
         all_names = {}
         all_uris = {}
+        print('starting...')
         for rec in self.in_cache.iter_records():
             res = self.acquire_record(rec)
             if res is None:
                 # Mapper might kill it, might not exist, etc
+                sys.stdout.write('X');sys.stdout.flush()
                 continue
             recid = rec['identifier']
             try:

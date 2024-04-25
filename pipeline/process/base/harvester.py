@@ -13,7 +13,7 @@ class Harvester(object):
 		self.namespace = config['namespace']
 		self.fetcher = config.get('fetcher', None)
 		self.seen = {}
-		self.deleted = []
+		self.deleted = {}
 		self.config = config
 
 	def fetch_json(self, uri, typ):
@@ -37,7 +37,7 @@ class Harvester(object):
 		self.seen = {}
 		if last_harvest is not None:
 			self.last_harvest = last_harvest
-		self.deleted = []
+		self.deleted = {}
 
 
 class PmhHarvester(Harvester):
@@ -157,10 +157,6 @@ class ASHarvester(Harvester):
 				# We're done with the stream, not just this page
 				self.page = None
 				return
-			elif self.harvest_from and dt > self.harvest_from:
-				# This is useful if we have to restart from the middle for some reason
-				# but won't actually get called unless we set harvest_from in config
-				continue
 
 			try:
 				chg = it['type'].lower()
@@ -190,23 +186,27 @@ class ASHarvester(Harvester):
 			elif uri.startswith('http://') and self.namespace.startswith('https://'):
 				uri = uri.replace('http://', 'https://')
 
+			if uri in self.seen:
+				# already processed, continue
+				continue
+			self.seen[uri] = 1
+
+			if ident in self.deleted:
+				continue
+			if chg == 'delete':
+				self.deleted[uri] = 1
+
+			if self.harvest_from and dt > self.harvest_from:
+				continue
+
 			ident = uri.replace(self.namespace, "")
 			if refsonly:
 				yield (chg, ident, {}, dt)
 				continue
 
-			if uri in self.seen:
-				# already processed, continue
-				continue
-			else:
-				self.seen[uri] = 1
-
 			if chg == 'delete':
 				yield (chg, ident, {}, "")
 				sys.stdout.write('X');sys.stdout.flush()
-				continue
-			elif ident in self.deleted:
-				# don't try to do anything with items we've already deleted it
 				continue
 
 			if self.fetcher is None:
@@ -221,7 +221,7 @@ class ASHarvester(Harvester):
 					continue
 			if not itjs:
 				# Could have gotten None
-				print(f"Got {itjs} from {ident}")
+				print(f"Harvester got {itjs} from {ident}")
 				continue
 			yield (chg, ident, itjs, dt)
 			sys.stdout.write('.');sys.stdout.flush()
