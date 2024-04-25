@@ -131,6 +131,8 @@ class ASHarvester(Harvester):
 			page = rec['data']
 		else:
 			page = self.fetch_json(self.page, 'page')
+			if self.page_cache is not None and page is not None:
+				self.page_cache[self.page] = page
 		try:
 			items = page['orderedItems']
 			items.reverse()
@@ -148,8 +150,6 @@ class ASHarvester(Harvester):
 			# This is normal behavior for first page
 			self.page = None
 		sys.stdout.write('P');sys.stdout.flush()
-		if self.page_cache is not None and self.page is not None:
-			self.page_cache[self.page] = page
 		return items
 
 	def process_items(self, items, refsonly=False):
