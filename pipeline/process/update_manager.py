@@ -130,8 +130,10 @@ class UpdateManager(object):
                 if itjs is None:
                     print(f"Got None for {ident}")
             except:
+                sys.stdout.write("-");sys.stdout.flush()
                 continue
             storage[ident] = itjs
+            sys.stdout.write('.');sys.stdout.flush()
         fh.close()
 
 
