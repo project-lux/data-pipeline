@@ -124,16 +124,12 @@ class UpdateManager(object):
             if tm is not None and tm.isoformat() > dt:
                 # inserted after the change, no need to fetch
                 continue
-            if harvester.fetcher is None:
-                try:
-                    itjs = harvester.fetch_json(uri, 'item')
-                except:
-                    continue
-            else:
-                try:
-                    itjs = harvester.fetcher.fetch(ident)
-                except:
-                    continue
+            try:
+                itjs = harvester.fetcher.fetch(ident)
+                if itjs is None:
+                    print(f"Got None for {ident}")
+            except:
+                continue
             storage[ident] = itjs
         fh.close()
 
