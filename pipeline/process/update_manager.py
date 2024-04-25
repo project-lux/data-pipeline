@@ -164,13 +164,13 @@ class UpdateManager(object):
                 records[ident] = changeTime
 
         # Write URIs to all_{name}_uris.txt and deleted_{name}_uris.txt in temp dir
-        recs = list(records.keys()).sort()
+        recs = sorted(list(records.keys()))
         fh = open(os.path.join(self.configs.temp_dir, f"all_{config['name']}_uris.txt"), 'w')
         for r in recs:
             fh.write(f"{r}\t{records[r]}\n")
         fh.close()
 
-        recs = list(deleted.keys()).sort()
+        recs = sorted(list(deleted.keys()))
         fh = open(os.path.join(self.configs.temp_dir, f"deleted_{config['name']}_uris.txt"), 'w')
         for r in recs:
             fh.write(f"{r}\t{deleted[r]}\n")
