@@ -148,7 +148,7 @@ class ASHarvester(Harvester):
 			# This is normal behavior for first page
 			self.page = None
 		sys.stdout.write('P');sys.stdout.flush()
-		if self.page_cache is not None:
+		if self.page_cache is not None and self.page is not None:
 			self.page_cache[self.page] = page
 		return items
 
