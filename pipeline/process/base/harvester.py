@@ -223,7 +223,6 @@ class ASHarvester(Harvester):
 				except TypeError:
 					# NoneType is not subscriptable
 					tm = None
-				print(f"{tm} > {dt}?")
 				if tm is not None and tm.isoformat() > dt:
 					# inserted after the change, no need to fetch
 					continue
