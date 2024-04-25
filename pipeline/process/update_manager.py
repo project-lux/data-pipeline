@@ -1,3 +1,4 @@
+import os
 
 class UpdateManager(object):
 
@@ -93,13 +94,59 @@ class UpdateManager(object):
         for (change, ident, record, changeTime) in harvester.crawl():
             self.process_change(config, change, ident, record, changeTime)
  
-    def get_record_list(self, config):
+    def harvest_from_list(self, config, myslice=None, maxslice=None):
+        harvester = config['harvester']
+        storage = config['datacache']
+        if storage is None:
+            print(f"No datacache for {config['name']}? Can't harvest")
+            return
+        fn = os.path.join(configs['temp_dir'], f"all_{config['name']}_uris.txt")
+        if not os.path.exists(fn):
+            print(f"No uri/change list to harvest for {config['name']}. Run get_record_list()")
+            return
+
+        fh = open(fn, 'r')     
+        x = 0
+        l = True
+        while l:
+            l = fh.readline()
+            l = l.strip()
+            if maxSlice is not None and x % maxSlice - slicen != 0:
+                x += 1
+                continue
+            x += 1
+            (uri, dt) = l.split('\t')
+            (src, ident) = self.configs.split_uri(uri, sources=[config])
+
+            try:
+                tm = storage.metadata(ident, 'insert_time')['insert_time']
+            except TypeError:
+                # NoneType is not subscriptable
+                tm = None
+            if tm is not None and tm.isoformat() > dt:
+                # inserted after the change, no need to fetch
+                continue
+            if harvester.fetcher is None:
+                try:
+                    itjs = harvester.fetch_json(uri, 'item')
+                except:
+                    continue
+            else:
+                try:
+                    itjs = harvester.fetcher.fetch(ident)
+                except:
+                    continue
+            storage[ident] = itjs
+        fh.close()
+
+
+    def get_record_list(self, config, until="0001-01-01T00:00:00"):
         # build the set of records that should be in the cache
         # from the activity streams
 
         harvester = config['harvester']
-        harvester.last_harvest = "0001-01-01T00:00:00"
-        print(f"Gathering all from stream")
+        harvester.last_harvest = until
+        print(f"Gathering all from stream until {until}")
         records = {}
         deleted = {}
         for (change, ident, record, changeTime) in harvester.crawl(refsonly=True):
@@ -115,4 +162,23 @@ class UpdateManager(object):
                 deleted[ident] = changeTime
             else:
                 records[ident] = changeTime
+
+        # Write URIs to all_{name}_uris.txt and deleted_{name}_uris.txt in temp dir
+        recs = list(records.keys()).sort()
+        fh = open(os.path.join(configs['temp_dir'], f"all_{config['name']}_uris.txt"), 'w')
+        for r in recs:
+            fh.write(f"{r}\t{records[r]}\n")
+        fh.close()
+
+        recs = list(deleted.keys()).sort()
+        fh = open(os.path.join(configs['temp_dir'], f"deleted_{config['name']}_uris.txt"), 'w')
+        for r in recs:
+            fh.write(f"{r}\t{deleted[r]}\n")
+        fh.close()
+
         return records, deleted
+
+
+
+
+

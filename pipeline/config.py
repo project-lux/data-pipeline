@@ -191,11 +191,13 @@ class Config(object):
         else:
             return uri
 
-    def split_uri(self, uri):
+    def split_uri(self, uri, sources=[]):
         source = None
         uri = self.pre_split_fix_uri(uri)
+        if not sources:
+            sources = [*self.internal.values(), *self.external.values()]
 
-        for s in [*self.internal.values(), *self.external.values()]:
+        for s in sources:
             ms = s.get('matches', [])
             if type(ms) != list:
                 ms = [ms]
@@ -206,7 +208,11 @@ class Config(object):
             if source:
                 break
         if source:
-            identifier = uri.rsplit(m, 1)[1]
+            try:
+                identifier = uri.rsplit(m, 1)[1]
+            except:
+                print(f"Failed in split_uri() m: {m} source: {s['name']}")
+                return None
             if identifier.startswith('http://') or identifier.startswith('https://'):
                 # Urgh, fix double wrapping
                 return self.split_uri(identifier)
