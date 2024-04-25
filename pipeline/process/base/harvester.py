@@ -114,6 +114,7 @@ class ASHarvester(Harvester):
 		self.collection_index = 0		
 		self.page = config.get('start_page', None)
 		self.page_cache = None
+		self.datacache = None
 
 	def fetch_collection(self, uri):
 		coll = self.fetch_json(uri, 'collection')
@@ -215,6 +216,17 @@ class ASHarvester(Harvester):
 				sys.stdout.write('X');sys.stdout.flush()
 				continue
 
+			# only fetch if insert_time on the datacache for the record is < dt
+			if self.datacache is not None:
+				try:
+					tm = self.datacache.metadata(ident, 'insert_time')['insert_time']
+				except TypeError:
+					# NoneType is not subscriptable
+					tm = None
+				if tm is not None and tm.isoformat() > dt:
+					# inserted after the change, no need to fetch
+					continue
+
 			if self.fetcher is None:
 				try:
 					itjs = self.fetch_json(uri, 'item')
@@ -235,6 +247,7 @@ class ASHarvester(Harvester):
 	# API function for Harvester
 	def crawl(self, last_harvest=None, refsonly=False):
 		Harvester.crawl(self, last_harvest)
+		self.datacache = self.config['datacache']
 		
 		while self.collection_index < len(self.collections):
 			if not self.page:
