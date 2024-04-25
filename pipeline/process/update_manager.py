@@ -100,7 +100,7 @@ class UpdateManager(object):
         if storage is None:
             print(f"No datacache for {config['name']}? Can't harvest")
             return
-        fn = os.path.join(configs['temp_dir'], f"all_{config['name']}_uris.txt")
+        fn = os.path.join(self.configs.temp_dir, f"all_{config['name']}_uris.txt")
         if not os.path.exists(fn):
             print(f"No uri/change list to harvest for {config['name']}. Run get_record_list()")
             return
@@ -165,13 +165,13 @@ class UpdateManager(object):
 
         # Write URIs to all_{name}_uris.txt and deleted_{name}_uris.txt in temp dir
         recs = list(records.keys()).sort()
-        fh = open(os.path.join(configs['temp_dir'], f"all_{config['name']}_uris.txt"), 'w')
+        fh = open(os.path.join(self.configs.temp_dir, f"all_{config['name']}_uris.txt"), 'w')
         for r in recs:
             fh.write(f"{r}\t{records[r]}\n")
         fh.close()
 
         recs = list(deleted.keys()).sort()
-        fh = open(os.path.join(configs['temp_dir'], f"deleted_{config['name']}_uris.txt"), 'w')
+        fh = open(os.path.join(self.configs.temp_dir, f"deleted_{config['name']}_uris.txt"), 'w')
         for r in recs:
             fh.write(f"{r}\t{deleted[r]}\n")
         fh.close()
