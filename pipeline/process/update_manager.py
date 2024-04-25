@@ -94,7 +94,7 @@ class UpdateManager(object):
         for (change, ident, record, changeTime) in harvester.crawl():
             self.process_change(config, change, ident, record, changeTime)
  
-    def harvest_from_list(self, config, myslice=None, maxslice=None):
+    def harvest_from_list(self, config, mySlice=None, maxSlice=None):
         harvester = config['harvester']
         storage = config['datacache']
         if storage is None:
@@ -111,7 +111,7 @@ class UpdateManager(object):
         while l:
             l = fh.readline()
             l = l.strip()
-            if maxSlice is not None and x % maxSlice - slicen != 0:
+            if maxSlice is not None and x % maxSlice - mySlice != 0:
                 x += 1
                 continue
             x += 1
