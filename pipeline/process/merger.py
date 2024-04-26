@@ -1,5 +1,5 @@
 
-import json
+import ujson as json
 from shapely import wkt
 from shapely.geometry import shape
 from datetime import datetime, timedelta

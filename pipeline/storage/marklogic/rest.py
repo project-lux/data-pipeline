@@ -1,5 +1,5 @@
 import requests
-import json
+import ujson as json
 from requests_toolbelt.multipart import decoder
 import re
 import threading

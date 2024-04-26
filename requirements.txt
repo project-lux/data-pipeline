@@ -3,6 +3,7 @@ psycopg2-binary
 cromulent>=0.16.8
 requests
 requests_toolbelt
+ujson
 SPARQLWrapper
 dateutils
 edtf

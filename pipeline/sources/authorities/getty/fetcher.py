@@ -1,6 +1,6 @@
 from pipeline.process.base.fetcher import Fetcher
 import requests
-import json
+import ujson as json
 import os
 
 class GettyFetcher(Fetcher):

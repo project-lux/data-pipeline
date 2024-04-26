@@ -1,6 +1,6 @@
 import lmdb
 from lmdbm import Lmdb
-import json
+import ujson as json
 
 ### Storage Layer
 

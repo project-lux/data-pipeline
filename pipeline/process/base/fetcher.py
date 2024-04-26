@@ -11,6 +11,7 @@ class Fetcher(object):
         self.timeout = 5
         self.refetch = False
         self.enabled = config['all_configs'].allow_network
+        self.use_networkmap = False
 
     def post_process(self, data, identifier):
         return data
@@ -38,7 +39,7 @@ class Fetcher(object):
             print(f"Invalid identifier for {self.name}: {identifier}")
             return None
 
-        if url in self.networkmap:
+        if self.use_networkmap and url in self.networkmap:
             resp = self.networkmap[url]
             if resp in ['0', '000'] or (len(resp) == 3 and resp.isnumeric() and int(resp) > 399):
                 print(f"Networkmap has {resp} but requesting anyway")

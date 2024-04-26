@@ -2,7 +2,7 @@ from pipeline.process.base.mapper import Mapper
 from pipeline.process.utils.mapper_utils import validate_timespans
 from pipeline.process.utils.mapper_utils import make_datetime
 import os
-import json
+import ujson as json
 import csv
 
 multi_props = ['part_of', 'identified_by', 'classified_as', 'equivalent', 'member_of', 'subject_of', \

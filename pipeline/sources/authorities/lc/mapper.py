@@ -2,7 +2,7 @@
 from pipeline.process.base.mapper import Mapper
 from pipeline.process.utils.mapper_utils import make_datetime, test_birth_death
 from cromulent import model, vocab
-import json
+import ujson as json
 import sys
 
 class LcMapper(Mapper):

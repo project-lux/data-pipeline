@@ -1,9 +1,8 @@
 import os
-import json
+import ujson as json
 
 # Very simple cache API against files in a directory
 # Could be more complete for actual FS based implementation
-
 
 class FsCache(object):
     def __init__(self, config):

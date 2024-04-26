@@ -1,6 +1,6 @@
 
 import os
-import json
+import ujson as json
 
 from jsonschema import validate, Draft202012Validator
 from jsonschema.exceptions import ValidationError

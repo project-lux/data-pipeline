@@ -5,7 +5,7 @@ import copy
 import datetime
 from ctypes import c_int32
 from pipeline.process.base.mapper import Mapper
-import json
+import ujson as json
 import numpy as np
 from bs4 import BeautifulSoup
 import re

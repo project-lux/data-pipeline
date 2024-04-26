@@ -1,5 +1,5 @@
 
-import json
+import ujson as json
 import os
 
 class Reidentifier(object):

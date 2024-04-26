@@ -5,7 +5,7 @@ import shutil
 import time
 import gzip
 import zipfile
-import json
+import ujson as json
 
 class Loader(object):
 

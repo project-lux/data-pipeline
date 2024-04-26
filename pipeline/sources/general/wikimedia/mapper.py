@@ -2,7 +2,7 @@
 from pipeline.process.base.mapper import Mapper
 from cromulent import model, vocab
 from bs4 import BeautifulSoup
-import json
+import ujson as json
 
 class WmMapper(Mapper):
 

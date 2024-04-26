@@ -1,5 +1,5 @@
 import requests
-import json
+import ujson as json
 import sys
 from lxml import etree
 

@@ -1,7 +1,7 @@
 
 import os
 import time
-import json
+import ujson as json
 
 class ReferenceManager(object):
 

@@ -2,7 +2,7 @@
 from pipeline.process.base.loader import Loader
 from .fetcher import WdFetcher
 from .base import WdConfigManager
-import json
+import ujson as json
 import gzip
 import time
 import os

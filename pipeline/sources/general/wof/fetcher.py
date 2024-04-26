@@ -1,7 +1,7 @@
 from pipeline.process.base.fetcher import Fetcher
 import os, sys
 import sqlite3
-import json
+import ujson as json
 
 class WofFetcher(Fetcher):
     

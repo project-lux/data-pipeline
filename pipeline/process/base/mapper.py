@@ -1,5 +1,5 @@
 import os
-import json
+import ujson as json
 from cromulent import model, vocab
 
 
@@ -133,7 +133,7 @@ class Mapper(object):
             if 'equivalent' in data:
                 new_eqs = []
                 for eq in data['equivalent']:
-                    if 'id' in eq:
+                    if 'id' in eq:                        
                         uri = self.configs.canonicalize(eq['id'])            
                         if uri:
                             # ensure type and _label while we're at it

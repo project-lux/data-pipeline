@@ -1,7 +1,7 @@
 
 import os
 import sys
-import json
+import ujson as json
 import time
 import gzip
 from .loader import WdLoader

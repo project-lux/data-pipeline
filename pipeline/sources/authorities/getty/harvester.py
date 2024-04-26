@@ -1,5 +1,5 @@
 from pipeline.process.base.harvester import ASHarvester
-import json
+import ujson as json
 import sys
 
 class GettyHarvester(ASHarvester):
