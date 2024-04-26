@@ -546,8 +546,11 @@ class LcnafMapper(LcMapper):
                     if txt:
                         if not bpid or bpid.startswith("_:"):
                             bpid = self.build_recs_and_reconcile(txt,"place")
-                        if bpid:
-                            where = model.Place(ident=bpid, label=txt)
+                    if bpid:
+                        #bpid is full uri
+                        check = bpid.rsplit("/",1)[-1]
+                        where = self.get_reference(check)
+                        if where and where.__class__ == model.Place:
                             if not hasattr(top, 'born'):
                                 birth = model.Birth()
                                 top.born = birth
