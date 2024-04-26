@@ -59,7 +59,7 @@ class IndexLoader(object):
             res = self.acquire_record(rec)
             if res is None:
                 # Mapper might kill it, might not exist, etc
-                sys.stdout.write('X');sys.stdout.flush()
+                # sys.stdout.write('X');sys.stdout.flush()
                 continue
             recid = rec['identifier']
             try:
@@ -70,7 +70,7 @@ class IndexLoader(object):
             if index is not None:
                 names = self.extract_names(res['data'])
                 for nm in names:
-                    sys.stdout.write('n');sys.stdout.flush()
+                    # sys.stdout.write('n');sys.stdout.flush()
                     all_names[nm.lower()] = [recid, typ]
             if eqindex is not None:
                 eqs = self.extract_uris(res['data'])

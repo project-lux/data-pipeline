@@ -11,7 +11,7 @@ dateparser
 shapely
 lxml
 jsonschema
-lmdbm
+lmdbm>=0.0.6
 sqlitedict
 numpy
 bs4
