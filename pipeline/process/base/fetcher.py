@@ -1,4 +1,5 @@
 import requests
+import ujson as json
 
 class Fetcher(object):
 
@@ -12,6 +13,9 @@ class Fetcher(object):
         self.refetch = False
         self.enabled = config['all_configs'].allow_network
         self.use_networkmap = False
+        self.session = requests.Session()
+        self.session.headers.update(self.headers)
+
 
     def post_process(self, data, identifier):
         return data
@@ -66,7 +70,7 @@ class Fetcher(object):
             if 'json' in ct:
                 # good to store
                 try:
-                    data = resp.json()
+                    data = json.loads(resp.text)
                 except:
                     data = {"value": resp.text, "ct": ct, "error": "json parse failed"}
             else:

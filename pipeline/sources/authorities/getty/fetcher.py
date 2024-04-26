@@ -1,7 +1,11 @@
+
 from pipeline.process.base.fetcher import Fetcher
 import requests
 import ujson as json
 import os
+
+### 2024-04 RS: Not sure this is necessary now that Getty has made linked art the default serialization
+### for the vocabs
 
 class GettyFetcher(Fetcher):
 
@@ -57,7 +61,7 @@ class GettyFetcher(Fetcher):
                 print(e)
                 return None
             if resp.status_code == 200:
-                data = resp.json()
+                data = json.loads(resp.text)
                 if type(data) == list:
                     try:
                         newid = data[0]['http://purl.org/dc/terms/isReplacedBy'][0]['@id']

@@ -24,7 +24,7 @@ class Harvester(object):
 			print(f"Failed to get anything from {typ} at {uri}: {e}")
 			return {}
 		try:
-			what = resp.json()
+			what = json.loads(resp.text)
 		except Exception as e:
 			print(f"Failed to get JSON from {typ} at {uri}: {e}")
 			return {}
