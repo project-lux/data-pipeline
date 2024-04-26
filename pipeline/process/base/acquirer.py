@@ -117,9 +117,9 @@ class Acquirer(object):
 
         identifier = rec['identifier'] # might have mutated during fetch
         if rectype is None and 'type' in rec['data']:
-            if type(rec['data']) == list:
-                rec['data'].remove('Type') # Prefer Language/Material to Type
-                rec['data'] = rec['data'][0]
+            if type(rec['data']['type']) == list:
+                rec['data']['type'].remove('Type') # Prefer Language/Material to Type
+                rec['data']['type'] = rec['data']['type'][0] # and pick the first, right or wrong
             if rec['data']['type'] in self.configs.ok_record_types:    
                 rectype = rec['data']['type']
 
