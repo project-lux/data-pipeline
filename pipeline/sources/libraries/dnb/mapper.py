@@ -360,9 +360,9 @@ class DnbMapper(Mapper):
             lo = model.LinguisticObject(label="Website Text")
             do = vocab.WebPage(label="Home Page")            
             do.access_point = model.DigitalObject(ident=val['@id'])
-            matchnumber = val['@id'].split('/')[-1]
+            matchnumber = val['@id'].split('/')
             recnumber = rec['@id'].split('/')[-1]
-            if matchnumber == recnumber:
+            if recnumber in matchnumber:
                 continue
             lo.digitally_carried_by = do
             top.subject_of = lo
@@ -457,9 +457,9 @@ class DnbMapper(Mapper):
             if type(hp) != list:
                 hp = [hp]
             for h in hp:
-                matchnumber = h.split('/')[-1]
+                matchnumber = h.split('/')
                 recnumber = rec['@id'].split('/')[-1]
-                if matchnumber == recnumber:
+                if recnumber in matchnumber:
                     continue
                 # make homepage ref
                 lo = model.LinguisticObject(label="Website Text")
