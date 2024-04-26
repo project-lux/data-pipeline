@@ -130,6 +130,7 @@ class UpdateManager(object):
                 itjs = harvester.fetcher.fetch(ident)
                 if itjs is None:
                     print(f"Got None for {ident}")
+                    continue
             except:
                 sys.stdout.write("-");sys.stdout.flush()
                 continue
