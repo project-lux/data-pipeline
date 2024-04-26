@@ -20,8 +20,8 @@ class Reidentifier(object):
         self.use_slug = True
         self.equivalent_refs = True
 
-        gf = configs.external['aat']['fetcher']
-        self.redirects = gf.redirects
+        #gf = configs.external['aat']['fetcher']
+        self.redirects = {}
 
     def should_process_uri(self, uri):
         if uri.startswith('_') or not uri:
