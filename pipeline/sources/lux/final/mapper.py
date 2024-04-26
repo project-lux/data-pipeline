@@ -435,7 +435,7 @@ class Cleaner(Mapper):
                 if ap1 in aps:
                     to_kill.append(ws[ap1])
             elif ap.endswith('/'):
-                ap1 = ap.replace('/','')
+                ap1 = ap.rsplit('/',1)[0]
                 if ap1 in aps:
                     to_kill.append(ws[ap1])
             elif ap.startswith('https'):
