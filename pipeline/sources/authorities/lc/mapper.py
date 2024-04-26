@@ -608,8 +608,11 @@ class LcnafMapper(LcMapper):
                     if txt:
                         if not dpid or dpid.startswith("_:"):
                             dpid = self.build_recs_and_reconcile(txt,"place")
-                        if dpid:
-                            where = model.Place(ident=dpid, label=txt)
+                    if dpid:
+                        #dpid is full uri
+                        check = dpid.rsplit("/",1)[-1]
+                        where = self.get_reference(check)
+                        if where and where.__class__ == model.Place:
                             if not hasattr(top, 'died'):
                                 death = model.Death()
                                 top.died = death
