@@ -2,6 +2,12 @@
 
 ### Clear records
 
+if [ ! -n "$1" ]
+then
+  echo "Usage: `basename $0` --all|--[source]"
+  exit 0
+fi 
+
 echo "Did you update the datestamp token in run-merge, run-integrated?"
 echo "Did you check the flags for which units to run?"
 echo ""
@@ -30,7 +36,7 @@ rm metatypes-*.json
 for count in `seq 0 23`;
 do
     echo $count
-    nohup python ./run-reconcile.py $count 24 --all > ../data/logs/reconcile_$count.txt 2>&1 &
+    nohup python ./run-reconcile.py $count 24 $1 > ../data/logs/reconcile_$count.txt 2>&1 &
 done
 
 # Wait while the processes spin up and write to the log files
@@ -76,7 +82,7 @@ rm ../data/logs/flags/merge_is_done-*txt
 for count in `seq 0 23`;
 do
     echo $count
-    nohup python ./run-merge.py $count 24 --all > ../data/logs/merge_$count.txt 2>&1 &
+    nohup python ./run-merge.py $count 24 $1 > ../data/logs/merge_$count.txt 2>&1 &
 done
 
 # And wait for merge to finish
