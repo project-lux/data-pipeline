@@ -52,49 +52,51 @@ class GbifMapper(Mapper):
         if rank in self.rank_types:
             top.classified_as = model.Type(ident=self.rank_types[rank])
 
-        #check for descriptions
-        fetcher = self.configs.external['gbif']['fetcher']
-        try:
-            rec = fetcher.fetch(f"{data['key']}/descriptions")
-        except:
-            rec = None 
-        if rec is not None:
-            descs = rec['data']['results']
-            for d in descs:
-                desc = d['description']
-                #toss out useless descriptions
-                if desc.startswith("Figs"):
-                    continue
-                lo = model.LinguisticObject(content=desc)
-                top.referred_to_by = lo
-                if 'source' in d:
-                    source = d['source']
-                    aa = model.AttributeAssignment()
-                    aa.referred_to_by = model.LinguisticObject(content=source)
-                    lo.assigned_by = aa
-                dlang = d.get('language', '')
-                if len(dlang) == 3:
-                    dlang = self.lang_three_to_two.get(dlang, None)
-                lang = self.process_langs.get(dlang, None)
-                if lang is not None:
-                    lo.language = lang 
+        # Disabled until it can cache the results
+        if False:
+            #check for descriptions
+            fetcher = self.configs.external['gbif']['fetcher']
+            try:
+                rec = fetcher.fetch(f"{data['key']}/descriptions")
+            except:
+                rec = None 
+            if rec is not None:
+                descs = rec['data']['results']
+                for d in descs:
+                    desc = d['description']
+                    #toss out useless descriptions
+                    if desc.startswith("Figs"):
+                        continue
+                    lo = model.LinguisticObject(content=desc)
+                    top.referred_to_by = lo
+                    if 'source' in d:
+                        source = d['source']
+                        aa = model.AttributeAssignment()
+                        aa.referred_to_by = model.LinguisticObject(content=source)
+                        lo.assigned_by = aa
+                    dlang = d.get('language', '')
+                    if len(dlang) == 3:
+                        dlang = self.lang_three_to_two.get(dlang, None)
+                    lang = self.process_langs.get(dlang, None)
+                    if lang is not None:
+                        lo.language = lang 
 
-        #check for alt identifiers
-        try:
-            rec = fetcher.fetch(f"{data['key']}/speciesProfiles")
-        except:
-            rec = None 
-        if rec is not None:
-            altids = rec['data']['results']
-            for a in altids:
-                altid = a['sourceTaxonKey']
-                altname = vocab.AlternateName(content=altid)
-                top.identified_by = altname
-                if 'source' in a:
-                    source = a['source']
-                    aa = model.AttributeAssignment()
-                    aa.referred_to_by = model.LinguisticObject(content=source)
-                    altname.assigned_by = aa 
+            #check for alt identifiers
+            try:
+                rec = fetcher.fetch(f"{data['key']}/speciesProfiles")
+            except:
+                rec = None 
+            if rec is not None:
+                altids = rec['data']['results']
+                for a in altids:
+                    altid = a['sourceTaxonKey']
+                    altname = vocab.AlternateName(content=altid)
+                    top.identified_by = altname
+                    if 'source' in a:
+                        source = a['source']
+                        aa = model.AttributeAssignment()
+                        aa.referred_to_by = model.LinguisticObject(content=source)
+                        altname.assigned_by = aa 
 
 
         data = model.factory.toJSON(top)
