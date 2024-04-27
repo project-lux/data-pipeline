@@ -23,7 +23,7 @@ sleep 1
 echo "1"
 sleep 1
 
-python ./run-full.py --clear-all
+python ./manage-data.py --clear-all
 rm ../data/logs/*
 
 ### Reconciliation Phase

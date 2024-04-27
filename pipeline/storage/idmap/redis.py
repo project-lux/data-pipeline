@@ -329,8 +329,13 @@ class IdMap(RedisCache):
             self._remove(value, key)
             if ikey.startswith('aat:') and ikey in self.memory_cache:
                 del self.memory_cache[ikey]
-        else:
+        elif t == 'none':
+            # Key doesn't exist, already deleted / never existed
+            pass
+        elif t == 'set':
             raise ValueError(f"{key} is a YUID ({t}) and cannot be manually deleted")
+        else:
+            print(f"Got {t} as type of key in idmap?")
         return None
 
 
