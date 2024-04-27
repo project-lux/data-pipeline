@@ -121,7 +121,7 @@ class WdMapper(Mapper, WdConfigManager):
 
         prop_dist = {
             "person":["P21", "P569", "P570", "P19", "P20", "P734", "P735"],
-            "group":["P112", "P571", "P740", "P159", "P488", "P749", "P2124", "P169", "P355", "P1037"],
+            "group":["P112", "P740", "P159", "P488", "P749", "P2124", "P169", "P355", "P1037"],
             "place": ["P625", "P3896", "P2046", "P47", "P36", "P1082", "P6766", "P1566", "P1667", "P1332", "P1333", "P1334", "P1335"],
             #  "event": ["P580", "P585", "P582", "P710", "P1132", "P1542"],
             "type": ["P1014", "P1843", "P1036"],
@@ -293,20 +293,24 @@ class WdMapper(Mapper, WdConfigManager):
                 top.representation = img
 
     def process_website(self, data, top):
-        site = data.get('P856', None)
-        if not site:
-            site = data.get('P973', None)
-        if not site:
+        props = ["P856","P973"]
+        wp = False
+        for p in props:
+            s = data.get(p, None)
+            if s and not s.endswith(".pdf"):
+                wp = True
+                break
+        if wp == False:
             try:
-                site = data['sitelinks']['enwiki']['url']
+                s = data['sitelinks']['enwiki']['url']
             except:
-                site = None
-        # just take the first one
-        if site:
-            site = site[0]
+                s = None
+            if s and not s.endswith(".pdf"):
+                wp = True
+        if wp == True:
             lo = model.LinguisticObject(label="Website Text")
             do = vocab.WebPage(label="Home Page")            
-            do.access_point = model.DigitalObject(ident=site)
+            do.access_point = model.DigitalObject(ident=s)
             lo.digitally_carried_by = do
             top.subject_of = lo
 
