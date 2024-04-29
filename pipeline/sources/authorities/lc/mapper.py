@@ -548,8 +548,8 @@ class LcnafMapper(LcMapper):
                             bpid = self.build_recs_and_reconcile(txt,"place")
                     if bpid:
                         #bpid is full uri
-                        check = bpid.rsplit("/",1)[-1]
-                        where = self.get_reference(check)
+                        src, ident = config.split_uri(bpid)
+                        where = src['mapper'].get_reference(ident)
                         if where and where.__class__ == model.Place:
                             if not hasattr(top, 'born'):
                                 birth = model.Birth()
@@ -610,8 +610,8 @@ class LcnafMapper(LcMapper):
                             dpid = self.build_recs_and_reconcile(txt,"place")
                     if dpid:
                         #dpid is full uri
-                        check = dpid.rsplit("/",1)[-1]
-                        where = self.get_reference(check)
+                        src, ident = config.split_uri(dpid)
+                        where = src['mapper'].get_reference(ident)
                         if where and where.__class__ == model.Place:
                             if not hasattr(top, 'died'):
                                 death = model.Death()
