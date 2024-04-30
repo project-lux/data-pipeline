@@ -42,7 +42,7 @@ yuid = idmap[qua]
 # --- set up environment ---
 reconciler = Reconciler(cfgs, idmap, networkmap)
 
-curr = "A"
+curr = "0"
 idents = {}
 
 uris = idmap[yuid]
