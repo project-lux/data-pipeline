@@ -96,6 +96,9 @@ for yuid in yuids:
         l.sort()
         new_graph[idents[k]] = l
 
+    print("  -- Key --")
+    print(json.dumps(idents, indent=2))
+    print("")
     print(json.dumps(new_graph, indent=2, sort_keys=True))
 
  
