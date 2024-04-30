@@ -58,6 +58,9 @@ for u in uris:
     idents[base] = f"{src['name']}:{curr}"
     curr = chr(ord(curr)+1)
     rec = src['acquirer'].acquire(ident)
+    if not rec:
+        print(f"Couldn't acquire {src['name']}:{ident}")
+        continue
     if 'equivalent' in rec['data']:
         for eq in rec['data']['equivalent']:
             if 'id' in eq:
