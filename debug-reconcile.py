@@ -8,6 +8,8 @@ from pipeline.process.reconciler import Reconciler
 from pipeline.process.reference_manager import ReferenceManager
 from pipeline.storage.cache.postgres import poolman
 
+import networkx as nx
+
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
 cfgs = Config(basepath=basepath)
@@ -55,6 +57,9 @@ debug = cfgs.debug_reconciliation
 curr = "A"
 idents = {}
 
+from_p = "https://media.art.yale.edu/content/lux/agt/31202.json"
+to_p = "http://vocab.getty.edu/ulan/500490811"
+
 for yuid in yuids:
     uris = idmap[yuid]
 
@@ -85,20 +90,29 @@ for yuid in yuids:
                     except:
                         graph[base] = [eq['id']]
 
+    G = nx.DiGraph()
+    G.add_nodes_from(list(idents.values()))
+
     new_graph = {}
     for (k,v) in graph.items():
+        subj = idents[k]
         l = []
         for u in v:
             if u in idents:
-                l.append(idents[u])
+                obj = idents[u]
+                l.append(obj)
+                G.add_edge(subj, obj)
             else:
                 pass
         l.sort()
-        new_graph[idents[k]] = l
+        new_graph[subj] = l
 
     print("  -- Key --")
     print(json.dumps(idents, indent=2))
     print("")
     print(json.dumps(new_graph, indent=2, sort_keys=True))
+
+    print(list(nx.connected_components(G)))
+    print(nx.shortest_path(G, from_p, to_p))
 
  
