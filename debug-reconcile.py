@@ -96,8 +96,10 @@ for (k,v) in graph.items():
 
 
 key = []
+inv_ident = {}
 for (k,v) in idents.items():
     key.append((v, k))
+    inv_ident[k] = v
 
 key.sort()
 print("  -- Key --")
@@ -107,6 +109,6 @@ print("\nConnected Nodes:")
 for sets in list(nx.connected_components(G)):
     print(sets)
 print(f"\nPath from {from_p} to {to_p}")
-print(" --> ".join(nx.shortest_path(G, idents[from_p], idents[to_p])))
+print(" --> ".join([inv_ident[x] for x in nx.shortest_path(G, idents[from_p], idents[to_p])]))
 
  
