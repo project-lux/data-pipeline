@@ -59,6 +59,8 @@ for yuid in yuids:
     graph = {}
 
     for u in uris:
+        if u.startswith('__'):
+            continue
         (base, qua) = cfgs.split_qua(u)
         (src, ident) = cfgs.split_uri(base)
         rec = src['acquirer'].acquire(ident)
