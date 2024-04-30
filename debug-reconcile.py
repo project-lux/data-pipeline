@@ -64,8 +64,8 @@ for yuid in yuids:
         (base, qua) = cfgs.split_qua(u)
         (src, ident) = cfgs.split_uri(base)
         rec = src['acquirer'].acquire(ident)
-        if 'equivalent' in rec:
-            for eq in rec['equivalent']:
+        if 'equivalent' in rec['data']:
+            for eq in rec['data']['equivalent']:
                 if 'id' in eq:
                     try:
                         graph[base].append(eq['id'])
