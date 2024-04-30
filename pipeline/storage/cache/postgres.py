@@ -278,7 +278,7 @@ class PooledCache(object):
             for res in cursor:
                 yield res          
 
-    def iter_keys_slice(self, mySlice=0, maxSlice=10):
+    def iter_keys_slice_mem(self, mySlice=0, maxSlice=10):
         # DON'T use row_number() as it's freaking slow
         if mySlice >= maxSlice:
             raise ValueError(f"{mySlice} cannot be > {maxSlice}")
@@ -293,7 +293,7 @@ class PooledCache(object):
                 ct += 1
 
 
-    def iter_keys_slice_pg(self, mySlice=0, maxSlice=10):
+    def iter_keys_slice(self, mySlice=0, maxSlice=10):
         # use row_number() to partition the results into slices for parallel processing
         if mySlice >= maxSlice:
             raise ValueError(f"{mySlice} cannot be > {maxSlice}")
