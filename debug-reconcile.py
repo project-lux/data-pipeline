@@ -90,7 +90,7 @@ for yuid in yuids:
                     except:
                         graph[base] = [eq['id']]
 
-    G = nx.DiGraph()
+    G = nx.Graph()
     G.add_nodes_from(list(idents.values()))
 
     new_graph = {}
