@@ -85,12 +85,14 @@ debug = cfgs.debug_reconciliation
 print("Starting...")
 print(f"Update token is: {idmap.update_token}")
 
+sys.stdout.flush()
+
 if profiling:
     pr = cProfile.Profile()
     pr.enable()
 
 for name, cfg in to_do:
-    print(f" *** {name} ***")
+    print(f" *** {name} ***") ; sys.stdout.flush()
     in_db = cfg['datacache']
     mapper = cfg['mapper']
     acquirer = cfg['acquirer']
