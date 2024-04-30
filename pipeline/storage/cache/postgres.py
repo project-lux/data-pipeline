@@ -271,7 +271,7 @@ class PooledCache(object):
 
         qry = f"""SELECT t.* FROM (SELECT *, row_number() OVER (ORDER BY {self.key} ASC) 
             AS row FROM {self.name}) t WHERE t.row % {maxSlice} = {mySlice}"""
-        with self._cursor(iter=True) as cursor:
+        with self._cursor(internal=True, iter=True) as cursor:
             cursor.execute(qry)            
             for res in cursor:
                 yield res          
