@@ -113,7 +113,7 @@ for (k,v) in idents.items():
 key.sort()
 print("  -- Key --")
 for k in key:
-    print(f"  {k[0]:<16}{k[1]} ({names.get(k[1], "?")})")
+    print(f"  {k[0]:<16}{k[1]} ({names.get(k[1], '?')})")
 print("\nConnected Nodes:")
 for sets in list(nx.connected_components(G)):
     print(sets)
