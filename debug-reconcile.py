@@ -107,6 +107,6 @@ print("\nConnected Nodes:")
 for sets in list(nx.connected_components(G)):
     print(sets)
 print(f"\nPath from {from_p} to {to_p}")
-print(nx.shortest_path(G, idents[from_p], idents[to_p]))
+print(" --> ".join(nx.shortest_path(G, idents[from_p], idents[to_p])))
 
  
