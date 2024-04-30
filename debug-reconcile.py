@@ -52,6 +52,9 @@ if not yuids:
 reconciler = Reconciler(cfgs, idmap, networkmap)
 debug = cfgs.debug_reconciliation
 
+curr = "A"
+idents = {}
+
 for yuid in yuids:
     uris = idmap[yuid]
 
@@ -63,6 +66,8 @@ for yuid in yuids:
             continue
         (base, qua) = cfgs.split_qua(u)
         (src, ident) = cfgs.split_uri(base)
+        idents[base] = f"{src['name']:{curr}}"
+        curr = chr(ord(curr)+1)
         rec = src['acquirer'].acquire(ident)
         if 'equivalent' in rec['data']:
             for eq in rec['data']['equivalent']:
