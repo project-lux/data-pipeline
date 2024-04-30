@@ -44,11 +44,12 @@ reconciler = Reconciler(cfgs, idmap, networkmap)
 
 curr = "0"
 idents = {}
+# uri: [uris,that,are,connected]
+graph = {}
 
 uris = idmap[yuid]
 
-# uri: [uris,that,are,connected]
-graph = {}
+names = {}
 
 for u in uris:
     if u.startswith('__'):
@@ -61,6 +62,8 @@ for u in uris:
     if not rec:
         print(f"Couldn't acquire {src['name']}:{ident}")
         continue
+    if '_label' in rec['data']:
+        names[base] = rec['data']['_label']
     if 'equivalent' in rec['data']:
         for eq in rec['data']['equivalent']:
             if 'id' in eq:
@@ -69,6 +72,12 @@ for u in uris:
                     try:
                         (eqsrc, eqident) = cfgs.split_uri(eqid)
                         idents[eqid] = f"{src['name']}:{curr}"
+                        if not eqid in names:
+                            ref = src['mapper'].get_reference(eqident)
+                            if hasattr(ref, '_label'):
+                                names[eqid] = ref._label
+                            else:
+                                names[eqid] = "-no label-"
                         curr = chr(ord(curr)+1)
                     except:
                         idents[eqid] = eqid
@@ -104,7 +113,7 @@ for (k,v) in idents.items():
 key.sort()
 print("  -- Key --")
 for k in key:
-    print(f"  {k[0]:<16}{k[1]}")
+    print(f"  {k[0]:<16}{k[1]} ({names.get(k[1], "?")})")
 print("\nConnected Nodes:")
 for sets in list(nx.connected_components(G)):
     print(sets)
