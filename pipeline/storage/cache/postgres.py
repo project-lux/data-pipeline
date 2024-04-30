@@ -279,6 +279,21 @@ class PooledCache(object):
                 yield res          
 
     def iter_keys_slice(self, mySlice=0, maxSlice=10):
+        # DON'T use row_number() as it's freaking slow
+        if mySlice >= maxSlice:
+            raise ValueError(f"{mySlice} cannot be > {maxSlice}")
+
+        qry = f"""SELECT {self.key} FROM {self.name} ORDER BY {self.key} ASC"""
+        ct = 0
+        with self._cursor(iter=True, size=50000) as cursor:
+            cursor.execute(qry)            
+            for res in cursor:
+                if (ct % maxSlice) - mySlice == 0:
+                    yield res[self.key]
+                ct += 1
+
+
+    def iter_keys_slice_pg(self, mySlice=0, maxSlice=10):
         # use row_number() to partition the results into slices for parallel processing
         if mySlice >= maxSlice:
             raise ValueError(f"{mySlice} cannot be > {maxSlice}")
@@ -289,6 +304,7 @@ class PooledCache(object):
             cursor.execute(qry)            
             for res in cursor:
                 yield res[self.key]
+
 
     def iter_keys_since(self, timestamp=None):
         if timestamp is None:
