@@ -31,7 +31,7 @@ except:
     sys.exit()
 try:
     ref = src['mapper'].get_reference(ident)
-    base = cfgs.canonicalize(recid)
+    base = cfgs.canonicalize(from_p)
     qua = cfgs.make_qua(base, ref.type)
 except:
     print(f"Could not make typed URI for {from_p}")
