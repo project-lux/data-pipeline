@@ -35,6 +35,7 @@ try:
     qua = cfgs.make_qua(base, ref.type)
 except:
     print(f"Could not make typed URI for {from_p}")
+    raise
     sys.exit()
 yuid = idmap[qua]
 
