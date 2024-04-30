@@ -110,8 +110,7 @@ for yuid in yuids:
     print("  -- Key --")
     print(json.dumps(idents, indent=2))
     print("")
-    print(json.dumps(new_graph, indent=2, sort_keys=True))
-
+    print("Connected Nodes:")
     print(list(nx.connected_components(G)))
     print(nx.shortest_path(G, idents[from_p], idents[to_p]))
 
