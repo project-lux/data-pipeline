@@ -44,6 +44,9 @@ while '--recid' in sys.argv:
         yuid = idmap[qua]
         yuids.append(yuid)
 
+if not yuids:
+    print("No YUIDs/URIs able to be found")
+    sys.exit()
 
 # --- set up environment ---
 reconciler = Reconciler(cfgs, idmap, networkmap)
@@ -51,6 +54,22 @@ debug = cfgs.debug_reconciliation
 
 for yuid in yuids:
     uris = idmap[yuid]
-    print(uris)
+
+    # uri: [uris,that,are,connected]
+    graph = {}
+
+    for u in uris:
+        (base, qua) = cfgs.split_qua(u)
+        (src, ident) = cfgs.split_uri(base)
+        rec = src['acquirer'].acquire(ident)
+        if 'equivalent' in rec:
+            for eq in rec['equivalent']:
+                if 'id' in eq:
+                    try:
+                        graph[base].append(eq['id'])
+                    except:
+                        graph[base] = [eq['id']]
+
+    print(json.dumps(graph))
 
  
