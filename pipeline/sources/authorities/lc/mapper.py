@@ -36,6 +36,8 @@ class LcMapper(Mapper):
     def fix_identifier(self, identifier):
         if identifier == "@@LMI-SPECIAL-TERM@@":
             return None
+        elif identifier.endswith("-781"):
+            identifier = identifier.rsplit("-781",1)[0] 
         return identifier
 
     def fix_links(self, record):
