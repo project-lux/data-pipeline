@@ -6,8 +6,10 @@ import requests
 # API is https://api.gbif.org/v1/species/212
 
 class GBIFFetcher(Fetcher):
-	def __init__(self, config):
-		Fetcher.__init__(self, config)
+	# def __init__(self, config):
+	# 	Fetcher.__init__(self, config)
+
+	def fetch(self, identifier):
 
 		core = Fetcher.fetch(self, identifier) 
 		drec = Fetcher.fetch(self,f"{identifier}/descriptions")
