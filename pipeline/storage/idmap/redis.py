@@ -214,6 +214,7 @@ class IdMap(RedisCache):
 
         # Make a new id of the form: yuid:{uuid}
         uu = str(uuid.uuid4())
+        sys.stdout.write("MINT|"); sys.stdout.flush()
         if slug:
             value = f"{self.prefix_map_out['yuid']}{slug}/{uu}"
         else:
