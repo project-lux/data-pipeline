@@ -112,6 +112,7 @@ for yuid in yuids:
     for (k,v) in idents.items():
         key.append((v, k))
 
+    key.sort()
     print("  -- Key --")
     for k in key:
         print(f"  {k[0]:<16}{k[1]}")
