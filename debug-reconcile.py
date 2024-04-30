@@ -1,0 +1,56 @@
+import os
+import sys
+import json
+import time
+from dotenv import load_dotenv
+from pipeline.config import Config
+from pipeline.process.reconciler import Reconciler
+from pipeline.process.reference_manager import ReferenceManager
+from pipeline.storage.cache.postgres import poolman
+
+load_dotenv()
+basepath = os.getenv('LUX_BASEPATH', "")
+cfgs = Config(basepath=basepath)
+idmap = cfgs.instantiate_map('idmap')['store']
+networkmap = cfgs.instantiate_map('networkmap')['store']
+cfgs.cache_globals()
+cfgs.instantiate_all()
+
+# --- process command line arguments ---
+### Give a YUID and calculate how the records got there
+yuids = []
+while '--recid' in sys.argv:
+    idx = sys.argv.index('--recid')
+    recid = sys.argv[idx+1]
+    sys.argv.pop(idx)
+    sys.argv.pop(idx)
+
+    if recid.startswith(cfgs.internal_uri):
+        # we're a YUID
+        yuids.append(recid)
+    else:
+        try:
+            (src, ident) = cfgs.split_uri(recid)
+        except:
+            print(f"Unknown URI: {recid}")
+            continue
+        try:
+            ref = src['mapper'].get_reference(ident)
+            base = cfgs.canonicalize(recid)
+            qua = cfgs.make_qua(base, ref.type)
+        except:
+            print(f"Could not make typed URI for {recid}")
+            continue
+        yuid = idmap[qua]
+        yuids.append(yuid)
+
+
+# --- set up environment ---
+reconciler = Reconciler(cfgs, idmap, networkmap)
+debug = cfgs.debug_reconciliation
+
+for yuid in yuids:
+    uris = idmap[yuid]
+    print(uris)
+
+ 
