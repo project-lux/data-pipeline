@@ -99,7 +99,7 @@ key = []
 inv_ident = {}
 for (k,v) in idents.items():
     key.append((v, k))
-    inv_ident[k] = v
+    inv_ident[v] = k
 
 key.sort()
 print("  -- Key --")
