@@ -72,11 +72,29 @@ for yuid in yuids:
         if 'equivalent' in rec['data']:
             for eq in rec['data']['equivalent']:
                 if 'id' in eq:
+                    eqid = eq['id']
+                    if not eqid in idents:
+                        try:
+                            (eqsrc, eqident) = cfgs.split_uri(eqid)
+                            idents[eqid] = f"{src['name']:{curr}}"
+                            curr = chr(ord(curr)+1)
+                        except:
+                            idents[eqid] = eqid
                     try:
                         graph[base].append(eq['id'])
                     except:
                         graph[base] = [eq['id']]
 
-    print(json.dumps(graph, indent=2))
+    new_graph = {}
+    for (k,v) in graph.items():
+        l = []
+        for u in v:
+            if u in idents:
+                l.append(idents[u])
+            else:
+                pass
+        new_graph[idents[k]] = l
+
+    print(json.dumps(new_graph, indent=2))
 
  
