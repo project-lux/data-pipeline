@@ -113,6 +113,6 @@ for yuid in yuids:
     print(json.dumps(new_graph, indent=2, sort_keys=True))
 
     print(list(nx.connected_components(G)))
-    print(nx.shortest_path(G, from_p, to_p))
+    print(nx.shortest_path(G, idents[from_p], idents[to_p]))
 
  
