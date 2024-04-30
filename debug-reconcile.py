@@ -100,10 +100,10 @@ key.sort()
 print("  -- Key --")
 for k in key:
     print(f"  {k[0]:<16}{k[1]}")
-print("")
-print("Connected Nodes:")
-print(list(nx.connected_components(G)))
-print("Path from {from_p} to {to_p}")
+print("\nConnected Nodes:")
+for sets in list(nx.connected_components(G)):
+    print(sets)
+print(f"\nPath from {from_p} to {to_p}")
 print(nx.shortest_path(G, idents[from_p], idents[to_p]))
 
  
