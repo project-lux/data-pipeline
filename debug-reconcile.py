@@ -28,14 +28,14 @@ try:
     (src, ident) = cfgs.split_uri(from_p)
 except:
     print(f"Unknown URI: {from_p}")
-    continue
+    sys.exit()
 try:
     ref = src['mapper'].get_reference(ident)
     base = cfgs.canonicalize(recid)
     qua = cfgs.make_qua(base, ref.type)
 except:
     print(f"Could not make typed URI for {from_p}")
-    continue
+    sys.exit()
 yuid = idmap[qua]
 
 # --- set up environment ---
