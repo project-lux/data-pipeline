@@ -120,6 +120,11 @@ class Acquirer(object):
             if type(rec['data']['type']) == list:
                 rec['data']['type'].remove('Type') # Prefer Language/Material to Type
                 rec['data']['type'] = rec['data']['type'][0] # and pick the first, right or wrong
+            if type(rec['data']['type']) == dict:
+                print(rec['identifier'])
+                print(rec['data']['type'])
+                return None
+
             if rec['data']['type'] in self.configs.ok_record_types:    
                 rectype = rec['data']['type']
 
