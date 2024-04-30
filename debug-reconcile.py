@@ -107,8 +107,14 @@ for yuid in yuids:
         l.sort()
         new_graph[subj] = l
 
+
+    key = []
+    for (k,v) in idents.items():
+        key.append((v, k))
+
     print("  -- Key --")
-    print(json.dumps(idents, indent=2))
+    for k in key:
+        print(f"  {k[0]:<16}{k[1]}")
     print("")
     print("Connected Nodes:")
     print(list(nx.connected_components(G)))
