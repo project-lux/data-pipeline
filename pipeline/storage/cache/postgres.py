@@ -276,6 +276,7 @@ class PooledCache(object):
             for res in cursor:
                 yield res          
 
+
     def iter_keys_slice(self, mySlice=0, maxSlice=10):
         # use row_number() to partition the results into slices for parallel processing
         if mySlice >= maxSlice:
@@ -283,7 +284,7 @@ class PooledCache(object):
 
         qry = f"""SELECT {self.key} FROM (SELECT {self.key}, row_number() OVER (ORDER BY {self.key} ASC) 
             AS row FROM {self.name}) t WHERE t.row % {maxSlice} = {mySlice}"""
-        with self._cursor(iter=True) as cursor:
+        with self._cursor(internal=True, iter=True) as cursor:
             cursor.execute(qry)            
             for res in cursor:
                 yield res[self.key]
