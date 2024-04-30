@@ -17,6 +17,13 @@ class StringLmdb(Lmdb):
     def commit(self):
         pass
 
+    def __contains__(self, key):
+        try:
+            return Lmdb.__contains__(self, key)
+        except Exception as e:
+            print(f"\n*** __contains__ got {e} for {key} ***")
+            return False
+
 class TabLmdb(StringLmdb):
     # key is string, value is tab separated __strings__
     # eg URI\tURI\tURI or URI\tType
