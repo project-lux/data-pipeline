@@ -72,6 +72,6 @@ for yuid in yuids:
                     except:
                         graph[base] = [eq['id']]
 
-    print(json.dumps(graph))
+    print(json.dumps(graph, indent=2))
 
  
