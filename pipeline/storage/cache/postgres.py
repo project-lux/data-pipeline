@@ -97,7 +97,7 @@ class PooledCache(object):
         self.conn = None
         self.iterating_conn = None
            
-    def _cursor(self, internal=True, iter=False):
+    def _cursor(self, internal=True, iter=False, size=0):
         # Ensure cursor is managed server-side otherwise select * from table
         # will return EVERYTHING into python (without a manual LIMIT/OFFSET)
         # Get a connection from the pool
@@ -116,7 +116,9 @@ class PooledCache(object):
             # ensure uniqueness across multiple instances of the code
             name = f"server_cursor_{self.name}_{time.time()}".replace('.', '_')
             cursor = conn.cursor(name=name, cursor_factory=RealDictCursor)
-            cursor.itersize = self.config['cursor_size']
+            if not size:
+                size = self.config['cursor_size']
+            cursor.itersize = size
         else:
             # Need this for creating the tables/indexes
             cursor = conn.cursor(cursor_factory=RealDictCursor)
@@ -166,7 +168,7 @@ class PooledCache(object):
             raise ValueError(f"Unknown metadata field in cache: {field}")
         qry = f"SELECT {field} FROM {self.name} WHERE {_key_type} = %s"
         params = (key,)
-        with self._cursor(internal=False) as cursor:
+        with self._cursor() as cursor:
             cursor.execute(qry, params)
             rows = cursor.fetchone()
         return rows
@@ -271,11 +273,10 @@ class PooledCache(object):
 
         qry = f"""SELECT t.* FROM (SELECT *, row_number() OVER (ORDER BY {self.key} ASC) 
             AS row FROM {self.name}) t WHERE t.row % {maxSlice} = {mySlice}"""
-        with self._cursor(internal=True, iter=True) as cursor:
+        with self._cursor(iter=True) as cursor:
             cursor.execute(qry)            
             for res in cursor:
                 yield res          
-
 
     def iter_keys_slice(self, mySlice=0, maxSlice=10):
         # use row_number() to partition the results into slices for parallel processing
@@ -284,7 +285,7 @@ class PooledCache(object):
 
         qry = f"""SELECT {self.key} FROM (SELECT {self.key}, row_number() OVER (ORDER BY {self.key} ASC) 
             AS row FROM {self.name}) t WHERE t.row % {maxSlice} = {mySlice}"""
-        with self._cursor(internal=True, iter=True) as cursor:
+        with self._cursor(iter=True, size=50000) as cursor:
             cursor.execute(qry)            
             for res in cursor:
                 yield res[self.key]
@@ -296,7 +297,7 @@ class PooledCache(object):
         else:
             qry = f"SELECT {self.key} FROM {self.name} WHERE record_time >= %s ORDER BY insert_time DESC"        
             params = (timestamp,)
-        with self._cursor(iter=True) as cursor:
+        with self._cursor(iter=True, size=50000) as cursor:
             cursor.execute(qry, params)            
             for res in cursor:
                 yield res[self.key]
