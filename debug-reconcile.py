@@ -66,7 +66,7 @@ for yuid in yuids:
             continue
         (base, qua) = cfgs.split_qua(u)
         (src, ident) = cfgs.split_uri(base)
-        idents[base] = f"{src['name']:{curr}}"
+        idents[base] = f"{src['name']}:{curr}"
         curr = chr(ord(curr)+1)
         rec = src['acquirer'].acquire(ident)
         if 'equivalent' in rec['data']:
@@ -76,7 +76,7 @@ for yuid in yuids:
                     if not eqid in idents:
                         try:
                             (eqsrc, eqident) = cfgs.split_uri(eqid)
-                            idents[eqid] = f"{src['name']:{curr}}"
+                            idents[eqid] = f"{src['name']}:{curr}"
                             curr = chr(ord(curr)+1)
                         except:
                             idents[eqid] = eqid
