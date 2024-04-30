@@ -93,8 +93,9 @@ for yuid in yuids:
                 l.append(idents[u])
             else:
                 pass
+        l.sort()
         new_graph[idents[k]] = l
 
-    print(json.dumps(new_graph, indent=2))
+    print(json.dumps(new_graph, indent=2, sort_keys=True))
 
  
