@@ -3,6 +3,7 @@ psycopg2-binary
 cromulent>=0.16.8
 requests
 requests_toolbelt
+ujson
 SPARQLWrapper
 dateutils
 edtf
@@ -10,6 +11,7 @@ dateparser
 shapely
 lxml
 jsonschema
+lmdbm>=0.0.6
 sqlitedict
 numpy
 bs4

@@ -1,5 +1,5 @@
 import requests
-import json
+import ujson as json
 import sys
 from lxml import etree
 
@@ -13,18 +13,20 @@ class Harvester(object):
 		self.namespace = config['namespace']
 		self.fetcher = config.get('fetcher', None)
 		self.seen = {}
-		self.deleted = []
+		self.deleted = {}
 		self.config = config
+		self.session = requests.Session()
+		self.session.headers.update({'Accept-Encoding': 'gzip, deflate'})
 
 	def fetch_json(self, uri, typ):
 		# generically useful fallback
 		try:
-			resp = requests.get(uri)
+			resp = self.session.get(uri)
 		except Exception as e:
 			print(f"Failed to get anything from {typ} at {uri}: {e}")
 			return {}
 		try:
-			what = resp.json()
+			what = json.loads(resp.text)
 		except Exception as e:
 			print(f"Failed to get JSON from {typ} at {uri}: {e}")
 			return {}
@@ -37,7 +39,7 @@ class Harvester(object):
 		self.seen = {}
 		if last_harvest is not None:
 			self.last_harvest = last_harvest
-		self.deleted = []
+		self.deleted = {}
 
 
 class PmhHarvester(Harvester):
@@ -59,7 +61,7 @@ class PmhHarvester(Harvester):
 			return f"{self.endpoint}?verb={verb}&resumptionToken={token}"
 
 	def fetch_pmh(self, uri):
-		resp = requests.get(uri)
+		resp = self.session.get(uri)
 		dom = etree.XML(resp.text.encode("utf-8"))
 		return dom
 
@@ -113,7 +115,8 @@ class ASHarvester(Harvester):
 		self.collections = config['activitystreams']
 		self.collection_index = 0		
 		self.page = config.get('start_page', None)
-
+		self.page_cache = None
+		self.datacache = None
 
 	def fetch_collection(self, uri):
 		coll = self.fetch_json(uri, 'collection')
@@ -126,7 +129,13 @@ class ASHarvester(Harvester):
 	def fetch_page(self):
 		# fetch page in self.page
 		print(f"    {self.page}")
-		page = self.fetch_json(self.page, 'page')
+		if self.page_cache is not None and self.page in self.page_cache:
+			rec = self.page_cache[self.page]
+			page = rec['data']
+		else:
+			page = self.fetch_json(self.page, 'page')
+			if self.page_cache is not None and page is not None:
+				self.page_cache[self.page] = page
 		try:
 			items = page['orderedItems']
 			items.reverse()
@@ -157,10 +166,6 @@ class ASHarvester(Harvester):
 				# We're done with the stream, not just this page
 				self.page = None
 				return
-			elif self.harvest_from and dt > self.harvest_from:
-				# This is useful if we have to restart from the middle for some reason
-				# but won't actually get called unless we set harvest_from in config
-				continue
 
 			try:
 				chg = it['type'].lower()
@@ -191,23 +196,38 @@ class ASHarvester(Harvester):
 				uri = uri.replace('http://', 'https://')
 
 			ident = uri.replace(self.namespace, "")
+			if ident in self.seen:
+				# already processed, continue
+				continue
+			self.seen[ident] = 1
+
+			if ident in self.deleted:
+				continue
+			if chg == 'delete':
+				self.deleted[ident] = 1
+
+			if self.harvest_from and dt > self.harvest_from:
+				continue
+
 			if refsonly:
 				yield (chg, ident, {}, dt)
 				continue
-
-			if uri in self.seen:
-				# already processed, continue
-				continue
-			else:
-				self.seen[uri] = 1
 
 			if chg == 'delete':
 				yield (chg, ident, {}, "")
 				sys.stdout.write('X');sys.stdout.flush()
 				continue
-			elif ident in self.deleted:
-				# don't try to do anything with items we've already deleted it
-				continue
+
+			# only fetch if insert_time on the datacache for the record is < dt
+			if self.datacache is not None:
+				try:
+					tm = self.datacache.metadata(ident, 'insert_time')['insert_time']
+				except TypeError:
+					# NoneType is not subscriptable
+					tm = None
+				if tm is not None and tm.isoformat() > dt:
+					# inserted after the change, no need to fetch
+					continue
 
 			if self.fetcher is None:
 				try:
@@ -218,14 +238,19 @@ class ASHarvester(Harvester):
 				try:
 					itjs = self.fetcher.fetch(ident)
 				except:
-					# State updated in fetch_item already
 					continue
+			if not itjs:
+				# Could have gotten None
+				print(f"Harvester got {itjs} from {ident}")
+				continue
 			yield (chg, ident, itjs, dt)
 			sys.stdout.write('.');sys.stdout.flush()
 
 	# API function for Harvester
 	def crawl(self, last_harvest=None, refsonly=False):
 		Harvester.crawl(self, last_harvest)
+		self.datacache = self.config['datacache']
+		
 		while self.collection_index < len(self.collections):
 			if not self.page:
 				collection = self.collections[self.collection_index]

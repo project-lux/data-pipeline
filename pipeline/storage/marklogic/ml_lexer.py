@@ -1,5 +1,5 @@
 import ply.lex as lex
-import json
+import ujson as json
 import query_token_rules
 
 import numpy as np

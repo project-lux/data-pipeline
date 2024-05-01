@@ -14,6 +14,7 @@ from pstats import SortKey
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
 cfgs = Config(basepath=basepath)
+idmap = cfgs.instantiate_map('idmap')['store']
 cfgs.cache_globals()
 cfgs.instantiate_all()
 
@@ -33,6 +34,9 @@ if len(sys.argv) > 2:
 else:
     my_slice = 0
     max_slice = 1
+
+# Only reading from idmap, not writing, so can cache
+idmap.enable_memory_cache()
 
 if profiling:
     pr = cProfile.Profile()

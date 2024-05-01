@@ -3,7 +3,7 @@ import os
 import time
 import gzip
 import tarfile
-import json
+import ujson as json
 import zipfile
 
 from pipeline.process.base.loader import Loader

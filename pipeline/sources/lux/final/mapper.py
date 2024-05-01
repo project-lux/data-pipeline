@@ -3,7 +3,7 @@ from pipeline.process.reidentifier import Reidentifier
 from pipeline.process.base.mapper import Mapper
 from pipeline.process.utils.mapper_utils import test_birth_death
 from urllib.parse import quote
-import json
+import ujson as json
 import os
 
 class Cleaner(Mapper):

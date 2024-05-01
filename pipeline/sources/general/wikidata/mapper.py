@@ -295,22 +295,32 @@ class WdMapper(Mapper, WdConfigManager):
     def process_website(self, data, top):
         props = ["P856","P973"]
         wp = False
+        options = []
         for p in props:
             s = data.get(p, None)
-            if s and not s.endswith(".pdf"):
-                wp = True
-                break
-        if wp == False:
-            try:
-                s = data['sitelinks']['enwiki']['url']
-            except:
-                s = None
-            if s and not s.endswith(".pdf"):
-                wp = True
-        if wp == True:
+            if s:
+                if type(s) != list:
+                    s = [s]
+                for v in s:
+                    if not v.endswith('.pdf'):
+                        options.append(v)
+
+        if 'sitelinks' in data and 'enwiki' in data['sitelinks']:
+            lnk = data['sitelinks']['enwiki']
+            if 'url' in lnk:
+                options.append(lnk['url'])
+            elif 'title' in lnk:
+                # construct it
+                title = lnk['title'].strip().replace(' ', '_')
+                url = f"https://en.wikipedia.org/wiki/{title}"
+                options.append(url)
+                
+        if options:
+            # already stripped pdfs, just take first for now
+            url = options[0]
             lo = model.LinguisticObject(label="Website Text")
             do = vocab.WebPage(label="Home Page")            
-            do.access_point = model.DigitalObject(ident=s)
+            do.access_point = model.DigitalObject(ident=url)
             lo.digitally_carried_by = do
             top.subject_of = lo
 

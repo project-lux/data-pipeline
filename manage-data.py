@@ -6,6 +6,7 @@ import datetime
 from dotenv import load_dotenv
 from pipeline.config import Config
 from pipeline.process.reference_manager import ReferenceManager
+from pipeline.process.update_manager import UpdateManager
 
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
@@ -16,27 +17,31 @@ done_refs = cfgs.instantiate_map('done_refs')['store']
 cfgs.cache_globals()
 cfgs.instantiate_all()
 
+update_mgr = UpdateManager(cfgs, idmap)
+ref_mgr = ReferenceManager(cfgs, idmap)
 
-### HARVEST EXTERNAL NON-DUMP DATASETS
-if '--harvest' in sys.argv:
-    if '--aat' in sys.argv:
-        which = 'aat'
-    elif '--ulan' in sys.argv:
-        which = 'ulan'
-    else:
-        print("Need to know which database to harvest, --aat or --ulan")
-        sys.exit(0)
-    fh = open(os.path.join(cfgs.data_dir, f'all_{which}s.csv'))
-    uris = fh.readlines()
-    fh.close()
-    uris = uris[1:] # chomp header
-    acq = cfgs.external[which]['acquirer']
-    acq.debug = True
-    acq.fetcher.enabled = True
-    for uri in uris:
-        ident = uri.split('/')[-1][:-1] # chomp off \n
-        acq.acquire(ident, dataonly=True)
-        print(ident)
+
+if '--idmap-test' in sys.argv:
+    datacache = cfgs.internal['ils']['datacache']
+    ttl = datacache.len_estimate() # give or take
+    x = 0
+    old = []
+    print("Starting...")
+    start = time.time()
+    for key in idmap.iter_keys(match="https://linked-art.library.yale.edu/*", count=20000):
+        (uri, q) = cfgs.split_qua(key)
+        ident = uri.rsplit('/',1)[-1]
+        if not ident in datacache:
+            old.append(key)
+        x += 1
+        if not x % 50000:
+            durn = int(time.time()-start)
+            print(f"{x}/{ttl} = {x/durn}/sec = {ttl/(x/durn)}")
+            print(f"    Found old: {len(old)} = {int(len(old)/x*100)}% = {int(len(old)/x*ttl)} to go")
+    fh = open('old_ils_idmap.txt', 'w')
+    for o in old:
+        fh.write(f"{o}\n")
+    fh.close()            
 
 ### LOAD DATABASES
 if '--load' in sys.argv:
@@ -72,7 +77,7 @@ if '--load' in sys.argv:
 ### LOAD INDEXES
 if '--load-index' in sys.argv:
     if '--wikidata' in sys.argv or '--all' in sys.argv:
-        cfgs.instantiate('wikidata', 'external')
+        # cfgs.instantiate('wikidata', 'external')
         cfgs.external['wikidata']['indexLoader'].load()
     if '--viaf' in sys.argv or '--all' in sys.argv:
         cfgs.external['viaf']['indexLoader'].load()

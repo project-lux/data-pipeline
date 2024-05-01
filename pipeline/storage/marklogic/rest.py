@@ -1,5 +1,5 @@
 import requests
-import json
+import ujson as json
 from requests_toolbelt.multipart import decoder
 import re
 import threading
@@ -99,6 +99,7 @@ class MarkLogicStore(object):
 
         self.error_re = re.compile("<message>(.+)</message>")
 
+
     def endpoint(self, which, params):
         if not which.endswith('.mjs'):
             which = f"{which}.mjs"
@@ -107,7 +108,7 @@ class MarkLogicStore(object):
             params['q'] = json.dumps(params['q']) 
         resp = requests.post(url, auth=self.auth, headers=self.headers, verify=self.verify_ssl, data=params)
         try:
-            js = resp.json()
+            js = json.loads(resp.test)
             return js
         except:
             raise ValueError(self.error_re.search(resp.text).group())
@@ -119,7 +120,7 @@ class MarkLogicStore(object):
         resp = requests.get(self.sparql, params={'query':qry, 'database':self.database}, 
                 auth=self.auth, headers=self.headers, timeout=self.timeout_long, verify=self.verify_ssl)
         try:
-            js = resp.json()
+            js = json.loads(resp.text)
         except:
             raise ValueError(self.error_re.search(resp.text).group())
 
@@ -144,7 +145,7 @@ class MarkLogicStore(object):
         params = {'q': qry, 'database': self.database, 'pageLength':25, 'view':'results'}
         resp = requests.get(self.search, params=params, auth=self.auth, headers=self.headers, \
             timeout=self.timeout_short, verify=self.verify_ssl)
-        js = resp.json()
+        js = json.text(resp.text)
         ids = [x['uri'] for x in js['results']]
         return ids
 
@@ -163,7 +164,7 @@ class MarkLogicStore(object):
                     resp_js['vals'].append(p.text)
             return resp_js
         elif 'application/json' in resp.headers['Content-Type']:
-            return resp.json()
+            return json.loads(resp.text)
         else:
             return resp.text
 
@@ -175,7 +176,7 @@ class MarkLogicStore(object):
         resp = requests.get(self.rest, params=params, auth=self.auth, headers=self.headers, \
             timeout=self.timeout_short, verify=self.verify_ssl)
         try:
-            js = resp.json()
+            js = json.loads(resp.text)
         except:
             print(resp.text)
             return None

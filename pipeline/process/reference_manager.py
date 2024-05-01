@@ -1,7 +1,7 @@
 
 import os
 import time
-import json
+import ujson as json
 
 class ReferenceManager(object):
 
@@ -52,7 +52,7 @@ class ReferenceManager(object):
             if not x % 100000:
                 print(x)
             if k['dist'] <= maxd:
-                fh.write(f"{k.pkey}\n")
+                fh.write(f"{k['dist']}|{k.pkey}\n")
         fh.close()
 
     def iter_done_refs(self, my_slice, max_slice):
@@ -61,10 +61,13 @@ class ReferenceManager(object):
             # just read the whole file            
             line = fh.readline()
             line.strip()
+            line = line.split('|')
             while line:
                 yield line
                 line = fh.readline()
                 line.strip()
+                if line:
+                    line = line.split('|')
         else:
             okay = True
             while okay:
@@ -73,6 +76,7 @@ class ReferenceManager(object):
                 if not uri:
                     okay = False
                 else:
+                    uri = uri.split('|')
                     yield uri
         fh.close()
 

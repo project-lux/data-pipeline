@@ -1,6 +1,6 @@
 from pipeline.process.base.mapper import Mapper
 from pipeline.process.utils.mapper_utils import validate_timespans
-import json
+import ujson as json
 from shapely.geometry import shape
 
 class YcbaMapper(Mapper):
