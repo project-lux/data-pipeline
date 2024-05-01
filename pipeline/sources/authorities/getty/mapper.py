@@ -61,6 +61,12 @@ class GettyMapper(Mapper):
         nm = nmcls(content=js['content'])
         if 'language' in js:
             lang = js['language'][0]['_label']
+            if type(lang) == list:
+                # gah
+                for l in lang:
+                    if len(l) < 4: # en or eng
+                        lang = l
+                        break
             if len(lang) > 2:
                 ll = lang[:2]
             else:
@@ -105,6 +111,10 @@ class GettyMapper(Mapper):
             st = vocab.Note(content=js['content'])
         if 'language' in js:
             lang = js['language'][0]['_label']
+            if type(lang) == list:
+                for l in lang:
+                    if len(l) < 4:
+                        lang = l
             if len(lang) > 2:
                 ll = lang[:2]
             else:

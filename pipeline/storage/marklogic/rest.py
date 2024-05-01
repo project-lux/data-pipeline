@@ -99,6 +99,7 @@ class MarkLogicStore(object):
 
         self.error_re = re.compile("<message>(.+)</message>")
 
+
     def endpoint(self, which, params):
         if not which.endswith('.mjs'):
             which = f"{which}.mjs"

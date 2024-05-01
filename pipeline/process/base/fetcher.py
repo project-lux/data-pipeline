@@ -6,7 +6,7 @@ class Fetcher(object):
     def __init__(self, config):
         self.name = config['name']
         self.fetch_uri = config['fetch']
-        self.headers = config.get('fetch_headers', {})
+        self.headers = config.get('fetch_headers', {'Accept-Encoding': 'gzip,deflate'})
         self.allow_redirects = True
         self.networkmap = {}
         self.timeout = 5
@@ -55,12 +55,9 @@ class Fetcher(object):
                 url = self.make_fetch_uri(resp)
 
         try:
-            # print(f"Fetching {url}")
-            resp = requests.get(url, headers=self.headers, 
-                allow_redirects=self.allow_redirects, timeout=self.timeout)
+            resp = self.session.get(url, allow_redirects=self.allow_redirects, timeout=self.timeout)
         except:
             # Failed to open network, resolve DNS, or similar
-            # FIXME: log
             print(f"Failed to get response from {url}")
             self.networkmap[url] = 0
             return None

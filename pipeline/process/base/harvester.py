@@ -15,11 +15,13 @@ class Harvester(object):
 		self.seen = {}
 		self.deleted = {}
 		self.config = config
+		self.session = requests.Session()
+		self.session.headers.update({'Accept-Encoding': 'gzip, deflate'})
 
 	def fetch_json(self, uri, typ):
 		# generically useful fallback
 		try:
-			resp = requests.get(uri)
+			resp = self.session.get(uri)
 		except Exception as e:
 			print(f"Failed to get anything from {typ} at {uri}: {e}")
 			return {}
@@ -59,7 +61,7 @@ class PmhHarvester(Harvester):
 			return f"{self.endpoint}?verb={verb}&resumptionToken={token}"
 
 	def fetch_pmh(self, uri):
-		resp = requests.get(uri)
+		resp = self.session.get(uri)
 		dom = etree.XML(resp.text.encode("utf-8"))
 		return dom
 

@@ -16,16 +16,6 @@ class Loader(object):
         self.out_cache = config['datacache']
         self.total = config.get('totalRecords', -1)
 
-    def fetch_dump(self):
-        if not os.path.exists(self.in_path):
-            if self.in_url:
-                print(f"Fetching dump from {self.in_url}")
-                # suck it down?
-                with requests.get(self.in_url, stream=True) as r:
-                    with open(self.in_path, 'wb') as f:
-                        # stream 1mb chunks raw to maintain gzip 
-                        shutil.copyfileobj(r.raw, f, 1024*1024)  
-
     def get_identifier_raw(self, line):
         # Find identifier from raw line
         return None
@@ -43,7 +33,6 @@ class Loader(object):
         # default is to assume gzipped JSONL
         # without headers/footers or other wrapping
         # Dump in raw without parsing
-        self.fetch_dump()
 
         if self.in_path.endswith('.gz'):
             fh = gzip.open(self.in_path)

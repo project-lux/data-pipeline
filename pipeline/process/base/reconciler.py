@@ -118,19 +118,17 @@ class LmdbReconciler(Reconciler):
         fn2 = config.get("inverseEquivDbPath", "")
         try:
             if fn:
-                self.name_index = TabLmdb.open(fn, 'r')    
+                self.name_index = TabLmdb.open(fn, 'r', readahead=False, writemap=True)    
             else:
                 self.name_index = None
         except:
-            # Can't get a lock, set to None
             self.name_index = None
         try:
             if fn2:
-                self.id_index = TabLmdb.open(fn2, 'r')     
+                self.id_index = TabLmdb.open(fn2, 'r', readahead=False, writemap=True)     
             else:
                 self.id_index = None
         except:
-            # Can't get a lock, set to None
             self.id_index = None
 
     def get_keys_like(self, which, key):

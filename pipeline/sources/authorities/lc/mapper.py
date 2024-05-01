@@ -546,8 +546,11 @@ class LcnafMapper(LcMapper):
                     if txt:
                         if not bpid or bpid.startswith("_:"):
                             bpid = self.build_recs_and_reconcile(txt,"place")
-                        if bpid:
-                            where = model.Place(ident=bpid, label=txt)
+                    if bpid:
+                        #bpid is full uri
+                        src, ident = self.config['all_configs'].split_uri(bpid)
+                        where = src['mapper'].get_reference(ident)
+                        if where and where.__class__ == model.Place:
                             if not hasattr(top, 'born'):
                                 birth = model.Birth()
                                 top.born = birth
@@ -605,8 +608,11 @@ class LcnafMapper(LcMapper):
                     if txt:
                         if not dpid or dpid.startswith("_:"):
                             dpid = self.build_recs_and_reconcile(txt,"place")
-                        if dpid:
-                            where = model.Place(ident=dpid, label=txt)
+                    if dpid:
+                        #dpid is full uri
+                        src, ident = self.config['all_configs'].split_uri(dpid)
+                        where = src['mapper'].get_reference(ident)
+                        if where and where.__class__ == model.Place:
                             if not hasattr(top, 'died'):
                                 death = model.Death()
                                 top.died = death

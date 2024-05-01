@@ -20,6 +20,29 @@ cfgs.instantiate_all()
 update_mgr = UpdateManager(cfgs, idmap)
 ref_mgr = ReferenceManager(cfgs, idmap)
 
+
+if '--idmap-test' in sys.argv:
+    datacache = cfgs.internal['ils']['datacache']
+    ttl = datacache.len_estimate() # give or take
+    x = 0
+    old = []
+    print("Starting...")
+    start = time.time()
+    for key in idmap.iter_keys(match="https://linked-art.library.yale.edu/*", count=20000):
+        (uri, q) = cfgs.split_qua(key)
+        ident = uri.rsplit('/',1)[-1]
+        if not ident in datacache:
+            old.append(key)
+        x += 1
+        if not x % 50000:
+            durn = int(time.time()-start)
+            print(f"{x}/{ttl} = {x/durn}/sec = {ttl/(x/durn)}")
+            print(f"    Found old: {len(old)} = {int(len(old)/x*100)}% = {int(len(old)/x*ttl)} to go")
+    fh = open('old_ils_idmap.txt', 'w')
+    for o in old:
+        fh.write(f"{o}\n")
+    fh.close()            
+
 ### LOAD DATABASES
 if '--load' in sys.argv:
     if '--ycba' in sys.argv or '--all' in sys.argv:
