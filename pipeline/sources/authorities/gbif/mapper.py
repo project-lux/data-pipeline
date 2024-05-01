@@ -52,21 +52,11 @@ class GbifMapper(Mapper):
         if rank in self.rank_types:
             top.classified_as = model.Type(ident=self.rank_types[rank])
 
-        #check for descriptions
-        fetcher = self.configs.external['gbif']['fetcher']
-        try:
-            rec = fetcher.fetch(f"{data['key']}/descriptions")
-        except:
-            rec = None 
-        if rec is not None:
-            descs = rec['data']['results']
-            for d in descs:
+        if "description" in data and data['description']:
+            for d in data['description']:
                 desc = d['description']
-                #toss out useless descriptions
-                if desc.startswith("Figs"):
-                    continue
                 lo = model.LinguisticObject(content=desc)
-                top.referred_to_by = lo
+                #front end doesn't render AAs here--do something else with this info?
                 if 'source' in d:
                     source = d['source']
                     aa = model.AttributeAssignment()
@@ -77,24 +67,19 @@ class GbifMapper(Mapper):
                     dlang = self.lang_three_to_two.get(dlang, None)
                 lang = self.process_langs.get(dlang, None)
                 if lang is not None:
-                    lo.language = lang 
+                    lo.language = lang
+                top.referred_to_by = lo 
 
-        #check for alt identifiers
-        try:
-            rec = fetcher.fetch(f"{data['key']}/speciesProfiles")
-        except:
-            rec = None 
-        if rec is not None:
-            altids = rec['data']['results']
-            for a in altids:
+        if "altids" in data and data['altids']:
+            for a in data['altids']:
                 altid = a['sourceTaxonKey']
                 altname = vocab.AlternateName(content=altid)
-                top.identified_by = altname
                 if 'source' in a:
                     source = a['source']
                     aa = model.AttributeAssignment()
                     aa.referred_to_by = model.LinguisticObject(content=source)
-                    altname.assigned_by = aa 
+                    altname.assigned_by = aa
+                top.identified_by = altname 
 
 
         data = model.factory.toJSON(top)
