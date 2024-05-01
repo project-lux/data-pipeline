@@ -142,20 +142,15 @@ class MlMapper(Mapper):
         pfx = "other"
         cxns = [x['id'] for x in data.get('classified_as', []) if 'id' in x]
 
-        if data['type'] in ['VisualItem']:
-            # we only have collectionWork visual items as separate records
-            # (I hope) FIXME: remove this when _units_ are adding CollectionItem in
-            # classified_as
+        if data['type'] in ['VisualItem', 'LinguisticObject']:
             facets['uiType'] = 'CollectionWork'
             pfx = "work"
-        elif (self.globals['collectionItem'] in cxns or self.globals['archives'] in cxns) and \
-                data['type'] in ['HumanMadeObject', 'DigitalObject', 'Set', 'LinguisticObject']:
-            if data['type'] in ['HumanMadeObject', 'DigitalObject']:
-                facets['uiType'] = "CollectionItem"
-                pfx = "item"
-            elif data['type'] in ['Set', 'LinguisticObject']:
-                facets['uiType'] = "CollectionWork"
-                pfx = "work"
+        elif data['type'] in ['HumanMadeObject', 'DigitalObject']:
+            facets['uiType'] = "CollectionItem"
+            pfx = "item"
+        elif (self.globals['archives'] in cxns) and data['type'] == 'Set':
+            facets['uiType'] = "CollectionWork"
+            pfx = "work"
         elif data['type'] in ['Person', 'Group']:
             facets['uiType'] = "Agent"
             pfx = "agent"
