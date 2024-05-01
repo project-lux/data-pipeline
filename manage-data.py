@@ -26,18 +26,17 @@ if '--idmap-test' in sys.argv:
     ttl = datacache.len_estimate() # give or take
     x = 0
     old = []
+    print("Starting...")
     start = time.time()
     for key in idmap.iter_keys(match="https://linked-art.library.yale.edu/*", count=20000):
         (uri, q) = cfgs.split_qua(key)
         ident = uri.rsplit('/',1)[-1]
         if not ident in datacache:
-            old.append(ident)
+            old.append(uri)
         x += 1
-        if not x % 100000:
+        if not x % 50000:
             durn = int(time.time()-start)
             print(f"{x}/{ttl} = {x/durn}/sec = {ttl/(x/durn)}")
-
-
 
 
 ### LOAD DATABASES
