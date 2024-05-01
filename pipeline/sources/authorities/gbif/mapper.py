@@ -20,7 +20,13 @@ class GbifMapper(Mapper):
             "species": "http://www.wikidata.org/entity/Q7432",
             "subspecies": "http://www.wikidata.org/entity/Q68947"
         }
-
+        self.altid_types = {
+            "World Register of Marine Species":"http://www.wikidata.org/entity/Q604063",
+            "The Paleobiology Database":"http://www.wikidata.org/entity/Q17073815",
+            "Catalogue of Life Checklist":"http://www.wikidata.org/entity/Q38840",
+            "The Interim Register of Marine and Nonmarine Genera":"http://www.wikidata.org/entity/Q51885189",
+            "Zoological names. A list of phyla, classes, and orders, prepared for section F, American Association for the Advancement of Science":"http://www.wikidata.org/entity/Q109580022"
+        }
 
     def transform(self, record, rectype=None,reference=False):
         # All should be Type
@@ -52,52 +58,39 @@ class GbifMapper(Mapper):
         if rank in self.rank_types:
             top.classified_as = model.Type(ident=self.rank_types[rank])
 
-        # Disabled until it can cache the results
-        if False:
-            #check for descriptions
-            fetcher = self.configs.external['gbif']['fetcher']
-            try:
-                rec = fetcher.fetch(f"{data['key']}/descriptions")
-            except:
-                rec = None 
-            if rec is not None:
-                descs = rec['data']['results']
-                for d in descs:
-                    desc = d['description']
-                    #toss out useless descriptions
-                    if desc.startswith("Figs"):
-                        continue
-                    lo = model.LinguisticObject(content=desc)
-                    top.referred_to_by = lo
-                    if 'source' in d:
-                        source = d['source']
+        if "description" in data and data['description']:
+            for d in data['description']:
+                desc = d['description']
+                lo = model.LinguisticObject(content=desc)
+                #front end doesn't render AAs here--do something else with this info?
+                if 'source' in d:
+                    source = d['source']
+                    aa = model.AttributeAssignment()
+                    aa.referred_to_by = model.LinguisticObject(content=source)
+                    lo.assigned_by = aa
+                dlang = d.get('language', '')
+                if len(dlang) == 3:
+                    dlang = self.lang_three_to_two.get(dlang, None)
+                lang = self.process_langs.get(dlang, None)
+                if lang is not None:
+                    lo.language = lang
+                top.referred_to_by = lo
+
+        if "altids" in data and data['altids']:
+            for a in data['altids']:
+                altid = a['sourceTaxonKey']
+                altname = vocab.AlternateName(content=altid)
+                #same as descriptions: AAs not handled here. 
+                #would be better to add classifications, but...not all in wikidata     
+                if 'source' in a:
+                    source = a['source']
+                    if source in self.altid_types:
+                        altname.classified_as = model.Type(ident=self.altid_types[source])
+                    else:
                         aa = model.AttributeAssignment()
                         aa.referred_to_by = model.LinguisticObject(content=source)
-                        lo.assigned_by = aa
-                    dlang = d.get('language', '')
-                    if len(dlang) == 3:
-                        dlang = self.lang_three_to_two.get(dlang, None)
-                    lang = self.process_langs.get(dlang, None)
-                    if lang is not None:
-                        lo.language = lang 
-
-            #check for alt identifiers
-            try:
-                rec = fetcher.fetch(f"{data['key']}/speciesProfiles")
-            except:
-                rec = None 
-            if rec is not None:
-                altids = rec['data']['results']
-                for a in altids:
-                    altid = a['sourceTaxonKey']
-                    altname = vocab.AlternateName(content=altid)
-                    top.identified_by = altname
-                    if 'source' in a:
-                        source = a['source']
-                        aa = model.AttributeAssignment()
-                        aa.referred_to_by = model.LinguisticObject(content=source)
-                        altname.assigned_by = aa 
-
+                        altname.assigned_by = aa
+                top.identified_by = altname
 
         data = model.factory.toJSON(top)
         return {'data': data, 'identifier': record['identifier'], 'source': 'gbif'}
