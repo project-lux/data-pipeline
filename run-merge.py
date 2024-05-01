@@ -31,7 +31,6 @@ if not token.startswith('__') or not token.endswith('__'):
     sys.exit(0)
 else:
     idmap.update_token = token
-    #idmap.update_token = f"__{int(time.time())}__"
 
 if '--profile' in sys.argv:
     sys.argv.remove('--profile')
@@ -43,9 +42,6 @@ if '--norefs' in sys.argv:
     DO_REFERENCES = False
 else:
     DO_REFERENCES = True
-
-
-
 
 NAME = None
 
@@ -96,6 +92,9 @@ final = cfgs.results['merged']['mapper']
 # OTOH, if merged starts off empty, it must have been this build
 merged_is_empty = merged_cache.len_estimate() < 10
 start_time = datetime.datetime.now()
+
+# merge only reads, so enable AAT memory cache
+idmap.enable_memory_cache()
 
 # -------------------------------------------------
 if profiling:

@@ -79,8 +79,14 @@ else:
 reconciler = Reconciler(cfgs, idmap, networkmap)
 ref_mgr = ReferenceManager(cfgs, idmap)
 debug = cfgs.debug_reconciliation
-
 # ref_mgr.debug = True
+
+if my_slice > -1:
+    # Running in parallel, will cause cross-process errors
+    idmap.disable_memory_cache()
+else:
+    # Running single, memory cache will remain accurate
+    idmap.enable_memory_cache()
 
 print("Starting...")
 print(f"Update token is: {idmap.update_token}")

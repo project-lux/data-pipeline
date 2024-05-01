@@ -34,6 +34,9 @@ else:
     my_slice = 0
     max_slice = 1
 
+# Only reading from idmap, not writing, so can cache
+idmap.enable_memory_cache()
+
 if profiling:
     pr = cProfile.Profile()
     pr.enable()
