@@ -32,11 +32,12 @@ if '--idmap-test' in sys.argv:
         (uri, q) = cfgs.split_qua(key)
         ident = uri.rsplit('/',1)[-1]
         if not ident in datacache:
-            old.append(uri)
+            old.append(key)
         x += 1
         if not x % 50000:
             durn = int(time.time()-start)
             print(f"{x}/{ttl} = {x/durn}/sec = {ttl/(x/durn)}")
+            print(f"Found old: {len(old)} = {int(len(old)/x*100)}% = {int(len(old)/x*ttl)} to go")
 
 
 ### LOAD DATABASES
