@@ -20,6 +20,3 @@ class YpmHarvester(ASHarvester):
 			return {}
 		return what
 
-	def crawl(self, last_harvest=None, refsonly=False):
-		self.fetcher = None
-		super().crawl(last_harvest, refsonly)
