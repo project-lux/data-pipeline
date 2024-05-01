@@ -131,6 +131,7 @@ class IdMap(RedisCache):
         self.prefix_map_in = {}
         for (k,v) in self.prefix_map_out.items():
             self.prefix_map_in[v] = k
+        self.memory_cache_enabled = False
         self.memory_cache = {}
         self.clean_on_remove = False
 
@@ -204,6 +205,11 @@ class IdMap(RedisCache):
         if not found:
             self._add(key, self.update_token)
 
+    def enable_memory_cache(self):
+        self.memory_cache_enabled = True
+    def disable_memory_cache(self):
+        self.memory_cache_enabled = False
+
     def mint(self, key, slug, typ=""):
         if typ in self.configs.ok_record_types:
             key = self.configs.make_qua(key, typ)
@@ -214,6 +220,7 @@ class IdMap(RedisCache):
 
         # Make a new id of the form: yuid:{uuid}
         uu = str(uuid.uuid4())
+        sys.stdout.write("MINT|"); sys.stdout.flush()
         if slug:
             value = f"{self.prefix_map_out['yuid']}{slug}/{uu}"
         else:
@@ -234,9 +241,9 @@ class IdMap(RedisCache):
         key = self._manage_key_in(key)
 
         # memory cache for frequent lookups (aat terms) to avoid the network
-        # Causes errors with multiple processes
-        #if key.startswith("aat:") and key in self.memory_cache:
-        #    return self.memory_cache[key]
+        # Causes errors with multiple processes for writing
+        if self.memory_cache_enabled and key.startswith("aat:") and key in self.memory_cache:
+            return self.memory_cache[key]
 
         t = self.conn.type(key)
         if t == 'string':
@@ -257,7 +264,7 @@ class IdMap(RedisCache):
         else:
             raise ValueError(f"Unknown key type {t}")
 
-        if key.startswith("aat:"): 
+        if self.memory_cache_enabled and key.startswith("aat:"): 
             self.memory_cache[key] = out
         return out
 
@@ -277,7 +284,7 @@ class IdMap(RedisCache):
         ikey = self._manage_key_in(key)
         ivalue = self._manage_value_in(value)
 
-        if ikey.startswith('aat:'):
+        if self.memory_cache_enabled and ikey.startswith('aat:'):
             self.memory_cache[ikey] = value
 
         if self.conn.exists(ikey):
@@ -327,10 +334,15 @@ class IdMap(RedisCache):
             value = self.get(key)
             self.conn.delete(ikey)
             self._remove(value, key)
-            if ikey.startswith('aat:') and ikey in self.memory_cache:
+            if self.memory_cache_enabled and ikey.startswith('aat:') and ikey in self.memory_cache:
                 del self.memory_cache[ikey]
-        else:
+        elif t == 'none':
+            # Key doesn't exist, already deleted / never existed
+            pass
+        elif t == 'set':
             raise ValueError(f"{key} is a YUID ({t}) and cannot be manually deleted")
+        else:
+            print(f"Got {t} as type of key in idmap?")
         return None
 
 

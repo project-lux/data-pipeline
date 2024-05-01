@@ -38,7 +38,6 @@ class WdFetcher(Fetcher):
         if 'sitelinks' in js and 'enwiki' in js['sitelinks']:
             new['sitelinks'] = {'enwiki': js['sitelinks']['enwiki']}
 
-        report = []
         for (prop, vals) in js['claims'].items():
             newvals = []
             for val in vals:
@@ -50,11 +49,9 @@ class WdFetcher(Fetcher):
                     # deprecated reason, but not deprecated rank
                     continue
                 if prop in ['P131','P17']:
+                    # Don't include historical part_ofs
                     if 'qualifiers' in val and 'P582' in val['qualifiers']:
-                        report.append(True)
                         continue
-                    else:
-                        report.append(False)
 
                 dv = val['mainsnak']['datavalue']
                 dvt = dv['type']
@@ -81,8 +78,5 @@ class WdFetcher(Fetcher):
                     continue
                 newvals.append(dvv)
             new[prop] = newvals
-
-        if report and all(report) == True:
-            print(f"{js['id']} has only parts with ends via P582")
 
         return new

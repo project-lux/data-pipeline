@@ -1,9 +1,9 @@
-from pipeline.process.base.reconciler import SqliteReconciler
+from pipeline.process.base.reconciler import LmdbReconciler
 
-class ViafReconciler(SqliteReconciler):
+class ViafReconciler(LmdbReconciler):
 
     def __init__(self, config):
-        SqliteReconciler.__init__(self, config)
+        LmdbReconciler.__init__(self, config)
 
         self.viaf_prefixes = {
             "ISNI": "isni",
@@ -27,11 +27,9 @@ class ViafReconciler(SqliteReconciler):
             "http://www.wikidata.org/entity/": "wikidata"
         }
 
-        self.overrides = {}
-
 
     def should_reconcile(self, rec, reconcileType="all"):
-        if not SqliteReconciler.should_reconcile(self, rec, reconcileType):
+        if not LmdbReconciler.should_reconcile(self, rec, reconcileType):
             return False
         if 'data' in rec:
             rec = rec['data']
@@ -56,12 +54,10 @@ class ViafReconciler(SqliteReconciler):
                     # Should have been normalized by the time we get it here
                     if eq.startswith(ns):
                         key = eq.replace(ns, f"{prefix}:")
-                        if key in self.overrides:
-                            ids[key] = self.overrides[key]
-                        elif key in self.id_index:
+                        if key in self.id_index:
                             ids[key] = self.id_index[key]
                             # print(f"Found: {eq} --> {self.index[key]}")
-                        elif "viaf/" in eq:
+                        elif "/viaf/" in eq:
                             # record assigned one already
                             truth = eq.rsplit('/',1)[1]
                         break # found the match, so break inner, and go to next eq
@@ -88,10 +84,10 @@ class ViafReconciler(SqliteReconciler):
 
                 if truth and truth in ivtd:
                     # Just believe it
-                    print(f"VIAF value in record {truth} and in reconciler; not overriding, FIXME: add to log for manual check")
+                    print(f"VIAF value in record {truth} and in reconciler; not overriding")
                     return None
                 elif truth:
-                    print(f"VIAF value in record {truth} but NOT found from reconciliation! FIXME: add to log for manual check")
+                    print(f"VIAF value in record {truth} but NOT found from reconciliation!")
                     return None
                 elif len(ids) > 2:
                     # Need at least three opinions for any sort of decision
@@ -106,8 +102,5 @@ class ViafReconciler(SqliteReconciler):
                     if self.debug: print(f"viaf id counts: {counts}")
                     if counts[0][1] >= (2*counts[1][1]):
                         return f"{self.namespace}{counts[0][0]}"                  
-
-                # Can't make a decision
-                # raise ValueError(ivtd)
                 return None
         return None

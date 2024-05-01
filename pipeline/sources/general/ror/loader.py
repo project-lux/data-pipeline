@@ -1,6 +1,6 @@
 
 from pipeline.process.base.loader import Loader
-import json
+import ujson as json
 import os
 import time
 

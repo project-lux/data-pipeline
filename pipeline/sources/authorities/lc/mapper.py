@@ -2,7 +2,7 @@
 from pipeline.process.base.mapper import Mapper
 from pipeline.process.utils.mapper_utils import make_datetime, test_birth_death
 from cromulent import model, vocab
-import json
+import ujson as json
 import sys
 
 class LcMapper(Mapper):
@@ -36,6 +36,8 @@ class LcMapper(Mapper):
     def fix_identifier(self, identifier):
         if identifier == "@@LMI-SPECIAL-TERM@@":
             return None
+        elif identifier.endswith("-781"):
+            return identifier[:-4]
         return identifier
 
     def fix_links(self, record):
@@ -546,8 +548,11 @@ class LcnafMapper(LcMapper):
                     if txt:
                         if not bpid or bpid.startswith("_:"):
                             bpid = self.build_recs_and_reconcile(txt,"place")
-                        if bpid:
-                            where = model.Place(ident=bpid, label=txt)
+                    if bpid:
+                        #bpid is full uri
+                        src, ident = self.config['all_configs'].split_uri(bpid)
+                        where = src['mapper'].get_reference(ident)
+                        if where and where.__class__ == model.Place:
                             if not hasattr(top, 'born'):
                                 birth = model.Birth()
                                 top.born = birth
@@ -605,8 +610,11 @@ class LcnafMapper(LcMapper):
                     if txt:
                         if not dpid or dpid.startswith("_:"):
                             dpid = self.build_recs_and_reconcile(txt,"place")
-                        if dpid:
-                            where = model.Place(ident=dpid, label=txt)
+                    if dpid:
+                        #dpid is full uri
+                        src, ident = self.config['all_configs'].split_uri(dpid)
+                        where = src['mapper'].get_reference(ident)
+                        if where and where.__class__ == model.Place:
                             if not hasattr(top, 'died'):
                                 death = model.Death()
                                 top.died = death

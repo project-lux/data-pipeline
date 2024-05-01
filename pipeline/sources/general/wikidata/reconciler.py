@@ -1,12 +1,12 @@
 
 from .base import WdConfigManager
-from pipeline.process.base.reconciler import SqliteReconciler
+from pipeline.process.base.reconciler import LmdbReconciler
 
-class WdReconciler(SqliteReconciler, WdConfigManager):
+class WdReconciler(LmdbReconciler, WdConfigManager):
 
     def __init__(self, config):
         WdConfigManager.__init__(self, config)
-        SqliteReconciler.__init__(self, config)
+        LmdbReconciler.__init__(self, config)
         self.ext_hash = {
             "http://id.worldcat.org/fast/": "fast",
             "http://vocab.getty.edu/aat/": "aat",
@@ -45,7 +45,7 @@ class WdReconciler(SqliteReconciler, WdConfigManager):
 
 
     def should_reconcile(self, rec, reconcileType="all"):
-        if not SqliteReconciler.should_reconcile(self, rec, reconcileType):
+        if not LmdbReconciler.should_reconcile(self, rec, reconcileType):
             return False
         if 'data' in rec:
             rec = rec['data']

@@ -6,7 +6,7 @@
 import os
 import sys
 import uuid
-import json
+import ujson as json
 
 class FsMap(object):
 

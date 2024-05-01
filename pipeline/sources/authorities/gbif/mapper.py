@@ -92,6 +92,5 @@ class GbifMapper(Mapper):
                         altname.assigned_by = aa
                 top.identified_by = altname
 
-
         data = model.factory.toJSON(top)
         return {'data': data, 'identifier': record['identifier'], 'source': 'gbif'}

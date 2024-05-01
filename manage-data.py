@@ -6,6 +6,7 @@ import datetime
 from dotenv import load_dotenv
 from pipeline.config import Config
 from pipeline.process.reference_manager import ReferenceManager
+from pipeline.process.update_manager import UpdateManager
 
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
@@ -16,27 +17,57 @@ done_refs = cfgs.instantiate_map('done_refs')['store']
 cfgs.cache_globals()
 cfgs.instantiate_all()
 
+update_mgr = UpdateManager(cfgs, idmap)
+ref_mgr = ReferenceManager(cfgs, idmap)
 
-### HARVEST EXTERNAL NON-DUMP DATASETS
-if '--harvest' in sys.argv:
-    if '--aat' in sys.argv:
-        which = 'aat'
-    elif '--ulan' in sys.argv:
-        which = 'ulan'
-    else:
-        print("Need to know which database to harvest, --aat or --ulan")
-        sys.exit(0)
-    fh = open(os.path.join(cfgs.data_dir, f'all_{which}s.csv'))
-    uris = fh.readlines()
+
+if '--idmap-test' in sys.argv:
+    datacache = cfgs.internal['ils']['datacache']
+    ttl = datacache.len_estimate() # give or take
+    x = 0
+    old = []
+    print("Starting...")
+    start = time.time()
+    for key in idmap.iter_keys(match="https://linked-art.library.yale.edu/*", count=20000):
+        (uri, q) = cfgs.split_qua(key)
+        ident = uri.rsplit('/',1)[-1]
+        if not ident in datacache:
+            old.append(key)
+        x += 1
+        if not x % 50000:
+            durn = int(time.time()-start)
+            print(f"{x}/{ttl} = {x/durn}/sec = {ttl/(x/durn)}")
+            print(f"    Found old: {len(old)} = {int(len(old)/x*100)}% = {int(len(old)/x*ttl)} to go")
+    fh = open('old_ils_idmap.txt', 'w')
+    for o in old:
+        fh.write(f"{o}\n")
+    fh.close()            
+
+if '--clean-ils-idmap' in sys.argv:
+    keep = ['03e31766-14b5-4e4b-a79a-595a7283c444', '7afbe7b3-fd94-464c-b598-ae56904307b0', '8197d709-73ce-4074-bf3a-aa5daf4c07c7', 'adfd0ca5-84ed-4fa7-b564-3728cb89eabb']
+    fh = open('old_ils_idmap.sort.txt')
+    for l in fh.readlines():
+        l = l.strip()
+        cont = False
+        for k in keep:
+            if k in l:
+                cont=True
+                break
+        if cont:
+            continue
+        try:
+            yuid = idmap[l]
+        except:
+            continue
+        if yuid is not None:
+            res = idmap[yuid]
+            del idmap[l]
+            if len(res) == 2:
+                res.remove(l)
+                tok = res.pop()
+                if tok.startswith("__"):
+                    idmap._remove(yuid, tok)
     fh.close()
-    uris = uris[1:] # chomp header
-    acq = cfgs.external[which]['acquirer']
-    acq.debug = True
-    acq.fetcher.enabled = True
-    for uri in uris:
-        ident = uri.split('/')[-1][:-1] # chomp off \n
-        acq.acquire(ident, dataonly=True)
-        print(ident)
 
 ### LOAD DATABASES
 if '--load' in sys.argv:
@@ -72,7 +103,7 @@ if '--load' in sys.argv:
 ### LOAD INDEXES
 if '--load-index' in sys.argv:
     if '--wikidata' in sys.argv or '--all' in sys.argv:
-        cfgs.instantiate('wikidata', 'external')
+        # cfgs.instantiate('wikidata', 'external')
         cfgs.external['wikidata']['indexLoader'].load()
     if '--viaf' in sys.argv or '--all' in sys.argv:
         cfgs.external['viaf']['indexLoader'].load()

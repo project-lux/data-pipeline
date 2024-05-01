@@ -91,6 +91,20 @@ def validate_timespans(rec):
 			if p in rec:
 				walk_for_timespan(rec[p])
 
+def get_year_from_timespan(event):
+    try:
+        ts = event['timespan']['begin_of_the_begin']
+        if ts.startswith("-"):
+            dt = ts.split("T")[0].split("-")[1]
+            if startswith("0"):
+                dt = "-" + dt[1:]
+            else:
+                dt = "-" + dt
+        else:
+            dt = ts.split("T")[0].split("-")[0]
+    except:
+        dt = None
+    return dt 
 
 def test_birth_death(person):
 	if type(person) == dict:

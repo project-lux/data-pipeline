@@ -1,7 +1,7 @@
 import os
 import shutil
 import time
-import json
+import ujson as json
 import pathlib
 import tarfile
 

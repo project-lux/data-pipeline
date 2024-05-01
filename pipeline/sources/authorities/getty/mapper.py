@@ -61,14 +61,24 @@ class GettyMapper(Mapper):
         nm = nmcls(content=js['content'])
         if 'language' in js:
             lang = js['language'][0]['_label']
+            if type(lang) == list:
+                # gah
+                for l in lang:
+                    if len(l) < 4: # en or eng
+                        lang = l
+                        break
             if len(lang) > 2:
                 ll = lang[:2]
             else:
                 ll = lang
-            if ll in self.process_langs:
-                nm.language = self.process_langs[ll]
-            else:
-                # Actually just drop it on the floor if it's a lang we don't map
+            try:
+                if ll in self.process_langs:
+                    nm.language = self.process_langs[ll]
+                else:
+                    # Actually just drop it on the floor if it's a lang we don't map
+                    return None
+            except:
+                print(ll)
                 return None
         return nm
 
@@ -101,12 +111,19 @@ class GettyMapper(Mapper):
             st = vocab.Note(content=js['content'])
         if 'language' in js:
             lang = js['language'][0]['_label']
+            if type(lang) == list:
+                for l in lang:
+                    if len(l) < 4:
+                        lang = l
             if len(lang) > 2:
                 ll = lang[:2]
             else:
                 ll = lang
-            if ll in self.process_langs:
-                st.language = self.process_langs[ll]            
+            try:
+                if ll in self.process_langs:
+                    st.language = self.process_langs[ll]            
+            except:
+                print(f"language on statement: {ll}")
         return st
 
     def fix_getty_timestamp(self, value, which=None):

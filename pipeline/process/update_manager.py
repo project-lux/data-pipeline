@@ -1,3 +1,5 @@
+import os
+import sys
 
 class UpdateManager(object):
 
@@ -52,8 +54,13 @@ class UpdateManager(object):
         else:
             # upsert
             if record is not None and (overwrite or not ident in storage):
-                storage.set(record['data'], identifier=ident, record_time=changeTime, change=change)
-                self.changed.append((record, ident, config))
+                try:
+                    storage.set(record['data'], identifier=ident, record_time=changeTime, change=change)
+                    self.changed.append((record, ident, config))
+                except:
+                    print(f"Failed to process {ident}")
+                    print(f"Got: {record['data']}")
+                    
 
     def harvest_all(self, store_only=False):
         self.changed = []
@@ -69,12 +76,15 @@ class UpdateManager(object):
     def harvest_single(self, name, store_only=False):
         if name in self.configs.internal:
             cfg = self.configs.internal[name]
-            self.harvest(cfg)
-            if not store_only:
-                # FIXME: rebuild
-                pass
+        elif name in self.configs.external:
+            cfg = self.configs.external[name]
         else:
             raise ValueError(f"No known source with name {name}")
+
+        self.harvest(cfg)
+        if not store_only:
+            # FIXME: rebuild
+            pass
 
     def harvest(self, config):      
         storage = config['datacache']
@@ -85,13 +95,57 @@ class UpdateManager(object):
         for (change, ident, record, changeTime) in harvester.crawl():
             self.process_change(config, change, ident, record, changeTime)
  
-    def get_record_list(self, config):
+    def harvest_from_list(self, config, mySlice=None, maxSlice=None):
+        harvester = config['harvester']
+        harvester.fetcher.enabled = True
+        storage = config['datacache']
+        if storage is None:
+            print(f"No datacache for {config['name']}? Can't harvest")
+            return
+        fn = os.path.join(self.configs.temp_dir, f"all_{config['name']}_uris.txt")
+        if not os.path.exists(fn):
+            print(f"No uri/change list to harvest for {config['name']}. Run get_record_list()")
+            return
+
+        fh = open(fn, 'r')     
+        x = 0
+        l = True
+        while l:
+            l = fh.readline()
+            l = l.strip()
+            if maxSlice is not None and x % maxSlice - mySlice != 0:
+                x += 1
+                continue
+            x += 1
+            (ident, dt) = l.split('\t')
+            try:
+                tm = storage.metadata(ident, 'insert_time')['insert_time']
+            except TypeError:
+                # NoneType is not subscriptable
+                tm = None
+            if tm is not None and tm.isoformat() > dt:
+                # inserted after the change, no need to fetch
+                continue
+            try:
+                itjs = harvester.fetcher.fetch(ident)
+                if itjs is None:
+                    print(f"Got None for {ident}")
+                    continue
+            except:
+                sys.stdout.write("-");sys.stdout.flush()
+                continue
+            storage[ident] = itjs
+            sys.stdout.write('.');sys.stdout.flush()
+        fh.close()
+
+
+    def get_record_list(self, config, until="0001-01-01T00:00:00"):
         # build the set of records that should be in the cache
         # from the activity streams
 
         harvester = config['harvester']
-        harvester.last_harvest = "0001-01-01T00:00:00"
-        print(f"Gathering all from stream")
+        harvester.last_harvest = until
+        print(f"Gathering all from stream until {until}")
         records = {}
         deleted = {}
         for (change, ident, record, changeTime) in harvester.crawl(refsonly=True):
@@ -107,4 +161,23 @@ class UpdateManager(object):
                 deleted[ident] = changeTime
             else:
                 records[ident] = changeTime
+
+        # Write URIs to all_{name}_uris.txt and deleted_{name}_uris.txt in temp dir
+        recs = sorted(list(records.keys()))
+        fh = open(os.path.join(self.configs.temp_dir, f"all_{config['name']}_uris.txt"), 'w')
+        for r in recs:
+            fh.write(f"{r}\t{records[r]}\n")
+        fh.close()
+
+        recs = sorted(list(deleted.keys()))
+        fh = open(os.path.join(self.configs.temp_dir, f"deleted_{config['name']}_uris.txt"), 'w')
+        for r in recs:
+            fh.write(f"{r}\t{deleted[r]}\n")
+        fh.close()
+
         return records, deleted
+
+
+
+
+

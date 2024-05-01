@@ -1,6 +1,6 @@
 
 import redis
-import json
+import ujson as json
 
 class RedisDataCache(object):
 

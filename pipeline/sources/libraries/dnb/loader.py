@@ -1,6 +1,6 @@
 
 import os
-import json
+import ujson as json
 import gzip
 import time
 from pipeline.process.base.loader import Loader

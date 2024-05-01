@@ -11,7 +11,7 @@ class ViafFetcher(Fetcher):
         url = self.make_fetch_uri(identifier)
         try:
             print(f"Fetching {url}")
-            resp = requests.get(url, headers=self.headers, allow_redirects=False)
+            resp = self.session.get(url, allow_redirects=False)
         except:
             # Failed to open network, resolve DNS, or similar
             # FIXME: log
