@@ -14,6 +14,7 @@ from pstats import SortKey
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
 cfgs = Config(basepath=basepath)
+idmap = cfgs.instantiate_map('idmap')['store']
 cfgs.cache_globals()
 cfgs.instantiate_all()
 

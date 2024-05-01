@@ -37,8 +37,11 @@ if '--idmap-test' in sys.argv:
         if not x % 50000:
             durn = int(time.time()-start)
             print(f"{x}/{ttl} = {x/durn}/sec = {ttl/(x/durn)}")
-            print(f"Found old: {len(old)} = {int(len(old)/x*100)}% = {int(len(old)/x*ttl)} to go")
-
+            print(f"    Found old: {len(old)} = {int(len(old)/x*100)}% = {int(len(old)/x*ttl)} to go")
+    fh = open('old_ils_idmap.txt', 'w')
+    for o in old:
+        fh.write(f"{o}\n")
+    fh.close()            
 
 ### LOAD DATABASES
 if '--load' in sys.argv:
