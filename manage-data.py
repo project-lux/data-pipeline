@@ -22,7 +22,8 @@ ref_mgr = ReferenceManager(cfgs, idmap)
 
 
 if '--idmap-test' in sys.argv:
-    ttl = cfgs.internal['ils']['datacache'].len_estimate() # give or take
+    datacache = cfgs.internal['ils']['datacache']
+    ttl = datacache.len_estimate() # give or take
     x = 0
     old = []
     start = time.time()
