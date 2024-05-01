@@ -43,6 +43,32 @@ if '--idmap-test' in sys.argv:
         fh.write(f"{o}\n")
     fh.close()            
 
+if '--clean-ils-idmap' in sys.argv:
+    keep = ['03e31766-14b5-4e4b-a79a-595a7283c444', '7afbe7b3-fd94-464c-b598-ae56904307b0', '8197d709-73ce-4074-bf3a-aa5daf4c07c7', 'adfd0ca5-84ed-4fa7-b564-3728cb89eabb']
+    fh = open('old_ils_idmap.sort.txt')
+    for l in fh.readlines():
+        l = l.strip()
+        cont = False
+        for k in keep:
+            if k in l:
+                cont=True
+                break
+        if cont:
+            continue
+        try:
+            yuid = idmap[l]
+        except:
+            continue
+        if yuid is not None:
+            res = idmap[yuid]
+            del idmap[l]
+            if len(res) == 2:
+                res.remove(l)
+                tok = res.pop()
+                if tok.startswith("__"):
+                    idmap._remove(yuid, tok)
+    fh.close()
+
 ### LOAD DATABASES
 if '--load' in sys.argv:
     if '--ycba' in sys.argv or '--all' in sys.argv:
