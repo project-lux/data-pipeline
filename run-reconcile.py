@@ -81,6 +81,8 @@ ref_mgr = ReferenceManager(cfgs, idmap)
 debug = cfgs.debug_reconciliation
 # ref_mgr.debug = True
 
+cfgs.external['gbif']['fetcher'].enabled = True
+
 if my_slice > -1:
     # Running in parallel, will cause cross-process errors
     idmap.disable_memory_cache()

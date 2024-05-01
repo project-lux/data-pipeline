@@ -53,7 +53,6 @@ for src, cfg in to_do:
         if harvest_from:
             cfg['harvester'].harvest_from = harvest_from
 
-        cfg['harvester'].fetcher = None
         cfg['harvester'].page_cache = cfgs.external['activitystreams']['datacache']
         print(f"Harvesting {src} records")
         mgr.harvest_single(src)
