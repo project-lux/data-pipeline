@@ -20,7 +20,13 @@ class GbifMapper(Mapper):
             "species": "http://www.wikidata.org/entity/Q7432",
             "subspecies": "http://www.wikidata.org/entity/Q68947"
         }
-
+        self.altid_types = {
+            "World Register of Marine Species":"http://www.wikidata.org/entity/Q604063",
+            "The Paleobiology Database":"http://www.wikidata.org/entity/Q17073815",
+            "Catalogue of Life Checklist":"http://www.wikidata.org/entity/Q38840",
+            "The Interim Register of Marine and Nonmarine Genera":"http://www.wikidata.org/entity/Q51885189",
+            "Zoological names. A list of phyla, classes, and orders, prepared for section F, American Association for the Advancement of Science":"http://www.wikidata.org/entity/Q109580022"
+        }
 
     def transform(self, record, rectype=None,reference=False):
         # All should be Type
@@ -74,11 +80,16 @@ class GbifMapper(Mapper):
             for a in data['altids']:
                 altid = a['sourceTaxonKey']
                 altname = vocab.AlternateName(content=altid)
+                #same as descriptions: AAs not handled here. 
+                #would be better to add classifications, but...not all in wikidata     
                 if 'source' in a:
                     source = a['source']
-                    aa = model.AttributeAssignment()
-                    aa.referred_to_by = model.LinguisticObject(content=source)
-                    altname.assigned_by = aa
+                    if source in self.altid_types:
+                        altname.classified_as = model.Type(ident=self.altid_types[source])
+                    else:
+                        aa = model.AttributeAssignment()
+                        aa.referred_to_by = model.LinguisticObject(content=source)
+                        altname.assigned_by = aa
                 top.identified_by = altname 
 
 

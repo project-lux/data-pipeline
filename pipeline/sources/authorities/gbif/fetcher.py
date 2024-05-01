@@ -15,19 +15,22 @@ class GBIFFetcher(Fetcher):
 		drec = super().fetch(f"{identifier}/descriptions")
 		srec = super().fetch(f"{identifier}/speciesProfiles")
 
-		coredata = core['data']
 		if drec:
-			desc = {"description":[]}
-			for d in drec['data']['results']:
-				if d['description'].startswith("Figs"):
-					continue
-				desc['description'].append(d)
-			coredata.update(desc)
+			if rec['data']['results']:
+				desc = {"description":[]}
+				for d in drec['data']['results']:
+					if d['description'].startswith("Figs"):
+						continue
+					desc['description'].append(d)
+
+				core['data'].update(desc)
 
 		if srec:
-			altids = {"altids":[]}
-			for a in srec['data']['results']:
-				altids['altids'].append(a)
-			coredata.update(altids)
+			if srec['data']['results']:
+				altids = {"altids":[]}
+				for a in srec['data']['results']:
+					altids['altids'].append(a)
+				
+				core['data'].update(altids)
 
 		return core
