@@ -45,6 +45,8 @@ else:
     DO_REFERENCES = True
 
 
+
+
 NAME = None
 
 max_slice = -1
@@ -52,6 +54,8 @@ my_slice = -1
 recids = []
 if '--all' in sys.argv:
     to_do = list(cfgs.internal.items())      
+elif '--onlyrefs' in sys.argv:
+    to_do = []
 else:
     to_do = []
     for src, scfg in cfgs.internal.items():
@@ -189,7 +193,7 @@ if profiling:
 
 if DO_REFERENCES:
     item = 1
-    for ext_uri in ref_mgr.iter_done_refs(my_slice, max_slice):
+    for (dist, ext_uri) in ref_mgr.iter_done_refs(my_slice, max_slice):
         uri = idmap[ext_uri]
         if not uri:
             print(f" *** No YUID for reference {ext_uri} from done_refs")

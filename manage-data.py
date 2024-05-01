@@ -20,6 +20,15 @@ cfgs.instantiate_all()
 update_mgr = UpdateManager(cfgs, idmap)
 ref_mgr = ReferenceManager(cfgs, idmap)
 
+
+if '--idmap-test' in sys.argv:
+    cfg = cfgs.internal['ils']
+    for k in cfg['datacache'].iter_keys():
+        uri = f"{cfg['namespace']}{k}"
+        
+
+
+
 ### LOAD DATABASES
 if '--load' in sys.argv:
     if '--ycba' in sys.argv or '--all' in sys.argv:
