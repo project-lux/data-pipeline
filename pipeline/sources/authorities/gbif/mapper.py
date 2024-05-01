@@ -74,7 +74,7 @@ class GbifMapper(Mapper):
                 lang = self.process_langs.get(dlang, None)
                 if lang is not None:
                     lo.language = lang
-                top.referred_to_by = lo 
+                top.referred_to_by = lo
 
         if "altids" in data and data['altids']:
             for a in data['altids']:
@@ -90,7 +90,7 @@ class GbifMapper(Mapper):
                         aa = model.AttributeAssignment()
                         aa.referred_to_by = model.LinguisticObject(content=source)
                         altname.assigned_by = aa
-                top.identified_by = altname 
+                top.identified_by = altname
 
 
         data = model.factory.toJSON(top)

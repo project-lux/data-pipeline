@@ -11,7 +11,7 @@ class GBIFFetcher(Fetcher):
 
 	def fetch(self, identifier):
 		#need to provide more error handling?
-		core = super().fetch(identifier) 
+		core = super().fetch(identifier)
 		drec = super().fetch(f"{identifier}/descriptions")
 		srec = super().fetch(f"{identifier}/speciesProfiles")
 
