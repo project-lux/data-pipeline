@@ -21,7 +21,7 @@ update_mgr = UpdateManager(cfgs, idmap)
 ref_mgr = ReferenceManager(cfgs, idmap)
 
 
-if '--idmap-test' in sys.argv:
+if '--test-ils-idmap' in sys.argv:
     datacache = cfgs.internal['ils']['datacache']
     ttl = datacache.len_estimate() # give or take
     x = 0
