@@ -22,10 +22,20 @@ ref_mgr = ReferenceManager(cfgs, idmap)
 
 
 if '--idmap-test' in sys.argv:
-    cfg = cfgs.internal['ils']
-    for k in cfg['datacache'].iter_keys():
-        uri = f"{cfg['namespace']}{k}"
-        
+    ttl = cfgs.internal['ils']['datacache'].len_estimate() # give or take
+    x = 0
+    old = []
+    start = time.time()
+    for key in idmap.iter_keys(match="https://linked-art.library.yale.edu/*", count=20000):
+        (uri, q) = cfgs.split_qua(key)
+        ident = uri.rsplit('/',1)[-1]
+        if not ident in datacache:
+            old.append(ident)
+        x += 1
+        if not x % 100000:
+            durn = int(time.time()-start)
+            print(f"{x}/{ttl} = {x/durn}/sec = {ttl/(x/durn)}")
+
 
 
 
