@@ -36,7 +36,7 @@ class GettyMapper(Mapper):
 
         self.gender_flag = "http://vocab.getty.edu/aat/300055147"
         self.nationality_flag = "http://vocab.getty.edu/aat/300379842"
-        self.occupation_flag = "http://vocab.getty.edu/aat/300435108"
+        self.occupation_flag = "http://vocab.getty.edu/aat/300263369"
         self.active_flag = "http://vocab.getty.edu/aat/300393177"
 
         self.aat_language_ids = [x.id for x in self.process_langs.values()]
