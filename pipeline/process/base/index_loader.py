@@ -71,11 +71,13 @@ class IndexLoader(object):
                 names = self.extract_names(res['data'])
                 for nm in names:
                     # sys.stdout.write('n');sys.stdout.flush()
-                    all_names[nm.lower()] = [recid, typ]
+                    if nm:
+                        all_names[nm.lower()] = [recid, typ]
             if eqindex is not None:
                 eqs = self.extract_uris(res['data'])
                 for eq in eqs:
-                    all_uris[eq] = [recid, typ]
+                    if eq:
+                        all_uris[eq] = [recid, typ]
 
             n += 1
             if not n % 100000:
