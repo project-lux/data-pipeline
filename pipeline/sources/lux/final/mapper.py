@@ -415,8 +415,8 @@ class Cleaner(Mapper):
                             self.metatype_yuid_cache[md] = mdy
                         if not mdy in curr:
                             # Find the AAT equivalent
-                            data['classified_as'].append({'id': mdy,'type':'Type', '_label': "Metatype", 
-                                'equivalent': [{'id': md, 'type':'Type', 'Metatype'}]})
+                            data['classified_as'].append({'id': mdy,'type':'Type', '_label': "Metatype", \ 
+                                'equivalent': [{'id': md, 'type':'Type', '_label': 'Metatype'}]})
 
     def dedupe_webpages(self, data):
         webs = data['subject_of']
