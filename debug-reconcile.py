@@ -37,6 +37,7 @@ except:
     print(f"Could not make typed URI for {from_p}")
     raise
     sys.exit()
+
 yuid = idmap[qua]
 
 # --- set up environment ---
@@ -46,8 +47,12 @@ curr = "0"
 idents = {}
 # uri: [uris,that,are,connected]
 graph = {}
-
-uris = idmap[yuid]
+try:
+    uris = idmap[yuid]
+except:
+    print(f"Did not find {qua} in the idmap")
+    raise
+    sys.exit()
 
 names = {}
 
@@ -102,6 +107,7 @@ for (k,v) in graph.items():
             pass
     l.sort()
     new_graph[subj] = l
+    #{'lcsh:2': ['dnb:A', 'http://id.worldcat.org/fast/1008230', 'wikidata::'], 'lcsh:5': ['dnb:0', 'dnb:1', 'dnb:D', 'http://id.worldcat.org/fast/1056963'], 'ils:7': ['lcsh:5'], 'wikidata:8': ['aat:E'], 'wikidata::': ['aat:B', 'dnb:>', 'lcsh:2'], 'dnb:>': ['wikidata::'], 'ils:?': ['lcsh:5'], 'dnb:A': ['wikidata:8'], 'ils:G': ['lcsh:2']}
 
 
 key = []
