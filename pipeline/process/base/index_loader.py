@@ -67,17 +67,18 @@ class IndexLoader(object):
             except:
                 typ = self.mapper.guess_type(res['data'])
 
-            if index is not None:
-                names = self.extract_names(res['data'])
-                for nm in names:
-                    # sys.stdout.write('n');sys.stdout.flush()
-                    if nm:
-                        all_names[nm.lower()] = [recid, typ]
-            if eqindex is not None:
-                eqs = self.extract_uris(res['data'])
-                for eq in eqs:
-                    if eq:
-                        all_uris[eq] = [recid, typ]
+            if recid and typ:
+                if index is not None:
+                    names = self.extract_names(res['data'])
+                    for nm in names:
+                        # sys.stdout.write('n');sys.stdout.flush()
+                        if nm:
+                            all_names[nm.lower()] = [recid, typ]
+                if eqindex is not None:
+                    eqs = self.extract_uris(res['data'])
+                    for eq in eqs:
+                        if eq:
+                            all_uris[eq] = [recid, typ]
 
             n += 1
             if not n % 100000:
