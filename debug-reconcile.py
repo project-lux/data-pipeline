@@ -51,7 +51,6 @@ try:
     uris = idmap[yuid]
 except:
     print(f"Did not find {qua} in the idmap")
-    raise
     sys.exit()
 
 names = {}
