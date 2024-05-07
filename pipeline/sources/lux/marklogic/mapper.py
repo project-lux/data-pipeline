@@ -220,10 +220,12 @@ class MlMapper(Mapper):
                 ppred = f"placeOf{predClass}"
                 tpred = f"techniqueOf{predClass}"
                 cpred = f"causeOf{predClass}"
+                ipred = f"agentInfluenced{predClass}"
                 agents = []
                 places = []
                 techs = []
                 causes = []
+                influences = []
 
                 if type(node) == dict:
                     node = [node]
@@ -237,6 +239,8 @@ class MlMapper(Mapper):
                         techs.extend([x['id'] for x in n['technique'] if 'id' in x])
                     if 'caused_by' in n:
                         causes.extend([x['id'] for x in n['caused_by'] if 'id' in x])
+                    if 'influenced_by' in n:
+                        influences.extend([x['id'] for x in n['influenced_by'] if 'id' in x])
                     if 'part' in n:
                         for p in n['part']:
                             if 'carried_out_by' in p:
@@ -245,6 +249,8 @@ class MlMapper(Mapper):
                                 places.extend([x['id'] for x in p['took_place_at'] if 'id' in x])
                             if 'technique' in p:
                                 techs.extend([x['id'] for x in p['technique'] if 'id' in x])
+                            if 'influenced_by' in p:
+                                influences.extend([x['id'] for x in p['influenced_by'] if 'id' in x])
                             if 'attributed_by' in p:
                                 for aa in p['attributed_by']:
                                     if 'assigned' in aa:
@@ -278,6 +284,9 @@ class MlMapper(Mapper):
                     ml['triples'].append({'triple': t})
                 for c in causes:
                     t = {"subject": me, "predicate": f"{luxns}{cpred}", "object": c}
+                    ml['triples'].append({'triple': t})
+                for i in influences:
+                    t = {"subject": me, "predicate": f"{luxns}{ipred}", "object": i}
                     ml['triples'].append({'triple': t})
 
         # extracted data for indexes/facets
@@ -425,6 +434,10 @@ class MlMapper(Mapper):
                                 typ = 'concept'
                             elif typ in ['Person', 'Group']:
                                 typ = 'agent'
+                            elif typ in ['LinguisticObject', 'VisualItem']:
+                                typ = 'work'
+                            elif typ in ['DigitalObject', 'HumanMadeObject']:
+                                typ = 'object'
                             typ = typ.lower()
                             t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{typ}", "object": a['id']}
                             ml['triples'].append({'triple': t})                              
@@ -456,6 +469,10 @@ class MlMapper(Mapper):
                                 typ = 'concept'
                             elif typ in ['Person', 'Group']:
                                 typ = 'agent'
+                            elif typ in ['LinguisticObject', 'VisualItem']:
+                                typ = 'work'
+                            elif typ in ['DigitalObject', 'HumanMadeObject']:
+                                typ = 'object'
                             typ = typ.lower()
                             t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{typ}", "object": a['id']}
                             ml['triples'].append({'triple': t}) 
@@ -476,6 +493,10 @@ class MlMapper(Mapper):
                                 typ = 'concept'
                             elif typ in ['Person', 'Group']:
                                 typ = 'agent'
+                            elif typ in ['LinguisticObject', 'VisualItem']:
+                                typ = 'work'
+                            elif typ in ['DigitalObject', 'HumanMadeObject']:
+                                typ = 'object'
                             typ = typ.lower()
                             t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{typ}", "object": r['id']}
                             ml['triples'].append({'triple': t}) 

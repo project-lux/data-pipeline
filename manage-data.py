@@ -231,7 +231,7 @@ if '--clear' in sys.argv:
         c = cfgs.results[src][ctype]
         c.clear()
 
-if '--vacuum' in sys.argv:
+if '--vacuum' in sys.argv or '--optimize' in sys.argv:
     for c in cfgs.internal.values():
         for t in ['datacache', 'recordcache', 'recordcache2']:
             if t in c and c[t] is not None:

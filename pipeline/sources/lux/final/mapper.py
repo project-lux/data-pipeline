@@ -125,8 +125,11 @@ class Cleaner(Mapper):
     def process_names(self, data):
         primary = self.globals['primaryName'] #300404670
         sortName = self.globals['sortName'] # 300404672 
-        primaryType = {'id':primary, 'type':'Type', '_label':'Primary Name'}
-        sortType = {'id':sortName, 'type':'Type', '_label':'Sort Name'}
+        primaryType = {'id':primary, 'type':'Type', '_label':'Primary Name', 'equivalent':[
+                {'id':'http://vocab.getty.edu/aat/300404670', 'type':'Type', '_label': 'Primary Name'}]}
+        sortType = {'id':sortName, 'type':'Type', '_label':'Sort Name', 'equivalent': [
+                {'id':'http://vocab.getty.edu/aat/300451544', 'type':'Type', '_label': 'Sort Title'}]}
+
         alternateName = self.globals['alternateName'] # 300264273 
         alternateTitle = self.globals['alternateTitle'] # 300417227
         translatedTitle = self.globals['translatedTitle'] # 300417194
@@ -411,7 +414,9 @@ class Cleaner(Mapper):
                             mdy = self.idmap[md]
                             self.metatype_yuid_cache[md] = mdy
                         if not mdy in curr:
-                            data['classified_as'].append({'id': mdy,'type':'Type'})
+                            # Find the AAT equivalent
+                            data['classified_as'].append({'id': mdy,'type':'Type', '_label': "Metatype", 
+                                'equivalent': [{'id': md, 'type':'Type', 'Metatype'}]})
 
     def dedupe_webpages(self, data):
         webs = data['subject_of']

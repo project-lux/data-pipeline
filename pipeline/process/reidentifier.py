@@ -19,6 +19,10 @@ class Reidentifier(object):
         self.ignore_props = ['access_point', 'conforms_to']
         self.use_slug = True
         self.equivalent_refs = True
+        if hasattr(configs, 'preserve_equivalents'):
+            self.preserve_equivalents = configs.preserve_equivalents
+        else:
+            self.preserve_equivalents = []
 
         #gf = configs.external['aat']['fetcher']
         self.redirects = {}
@@ -130,7 +134,7 @@ class Reidentifier(object):
                                 result['equivalent'] = [{'id': eq, 'type': record['type'], '_label':lbl}]
                 else:
                     result['equivalent'] = record.get('equivalent', [])
-            elif recid and "/aat/" in recid:
+            elif recid and ("/aat/" in recid or recid in self.preserve_equivalents):
                 # we're embedded reference, if external, put into equivalent
                 # for now only process aat
                 result['equivalent'] = [{"id":recid, "type": record['type'], "_label": record.get("_label", "External Reference")}]

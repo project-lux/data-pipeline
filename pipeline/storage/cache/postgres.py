@@ -16,8 +16,6 @@ import sys
 # pg_dump -U USER -F c --clean --no-owner -t aat_data_cache record_cache > aat_data_cache.pgdump
 # pg_restore -a -U pipeline -W --host HOST -d DATABASE wof_data_cache.pgdump 
 
-
-
 # We actually only need two connections per process -- one to stay open for iteration, and one to read/write.
 # This means we can't iterate two different tables at the same time, but that's fine.
 
@@ -278,6 +276,18 @@ class PooledCache(object):
             for res in cursor:
                 yield res          
 
+    def iter_keys_slice(self, mySlice=0, maxSlice=10):
+        # use row_number() to partition the results into slices for parallel processing
+        if mySlice >= maxSlice:
+            raise ValueError(f"{mySlice} cannot be > {maxSlice}")
+
+        qry = f"""SELECT {self.key} FROM (SELECT {self.key}, row_number() OVER (ORDER BY {self.key} ASC) 
+            AS row FROM {self.name}) t WHERE t.row % {maxSlice} = {mySlice}"""
+        with self._cursor(iter=True, size=50000) as cursor:
+            cursor.execute(qry)            
+            for res in cursor:
+                yield res[self.key]
+
     def iter_keys_slice_mem(self, mySlice=0, maxSlice=10):
         # DON'T use row_number() as it's freaking slow
         if mySlice >= maxSlice:
@@ -291,20 +301,6 @@ class PooledCache(object):
                 if (ct % maxSlice) - mySlice == 0:
                     yield res[self.key]
                 ct += 1
-
-
-    def iter_keys_slice(self, mySlice=0, maxSlice=10):
-        # use row_number() to partition the results into slices for parallel processing
-        if mySlice >= maxSlice:
-            raise ValueError(f"{mySlice} cannot be > {maxSlice}")
-
-        qry = f"""SELECT {self.key} FROM (SELECT {self.key}, row_number() OVER (ORDER BY {self.key} ASC) 
-            AS row FROM {self.name}) t WHERE t.row % {maxSlice} = {mySlice}"""
-        with self._cursor(iter=True, size=50000) as cursor:
-            cursor.execute(qry)            
-            for res in cursor:
-                yield res[self.key]
-
 
     def iter_keys_since(self, timestamp=None):
         if timestamp is None:
@@ -446,11 +442,8 @@ class PooledCache(object):
             self.iterating_conn = poolman.get_conn(self.pool_name, itr=True)
         self.bulk_cursor = self.iterating_conn.cursor(cursor_factory=RealDictCursor)
 
-    def set_bulk(self, data, identifier=None, yuid=None, format=None, valid=None,
-            record_time=None, refresh_time=None, change=None):
-
+    def set_bulk(self, data, identifier=None, yuid=None, format=None, valid=None, record_time=None, refresh_time=None, change=None):
         data = Json(data)
-
         insert_time = datetime.datetime.now()
         if record_time is None:
             record_time = insert_time
@@ -494,7 +487,6 @@ class PooledCache(object):
         self.conn.set_isolation_level(old_iso)
 
     ### Behave like a dict
-
     def __getitem__(self, what):
         return self.get(what)
 
