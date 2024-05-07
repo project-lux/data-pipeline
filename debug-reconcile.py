@@ -73,7 +73,7 @@ for u in uris:
                         (eqsrc, eqident) = cfgs.split_uri(eqid)
                         idents[eqid] = f"{src['name']}:{curr}"
                         if not eqid in names:
-                            ref = src['mapper'].get_reference(eqident)
+                            ref = eqsrc['mapper'].get_reference(eqident)
                             if hasattr(ref, '_label'):
                                 names[eqid] = ref._label
                             else:
