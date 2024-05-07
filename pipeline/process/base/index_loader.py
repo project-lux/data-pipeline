@@ -86,7 +86,16 @@ class IndexLoader(object):
                 print(f"{n} of {ttl} in {int(durn)} = {n/durn}/sec -> {ttl/(n/durn)} secs")
                 sys.stdout.flush()
                 if index is not None:
-                    index.update(all_names)
+                    try:
+                        index.update(all_names)
+                    except:
+                        for k,v in all_names.items():
+                            try:
+                                index[k] = v
+                            except:
+                                print(k)
+                                print(v)
+                                raise
                 if eqindex is not None:
                     eqindex.update(all_uris)
                 all_names = {}
