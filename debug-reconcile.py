@@ -90,6 +90,8 @@ for u in uris:
                 except:
                     graph[base] = [eq['id']]
 
+print(f"Graph dict is {graph}")
+
 G = nx.Graph()
 G.add_nodes_from(list(idents.values()))
 
@@ -106,7 +108,6 @@ for (k,v) in graph.items():
             pass
     l.sort()
     new_graph[subj] = l
-    #{'lcsh:2': ['dnb:A', 'http://id.worldcat.org/fast/1008230', 'wikidata::'], 'lcsh:5': ['dnb:0', 'dnb:1', 'dnb:D', 'http://id.worldcat.org/fast/1056963'], 'ils:7': ['lcsh:5'], 'wikidata:8': ['aat:E'], 'wikidata::': ['aat:B', 'dnb:>', 'lcsh:2'], 'dnb:>': ['wikidata::'], 'ils:?': ['lcsh:5'], 'dnb:A': ['wikidata:8'], 'ils:G': ['lcsh:2']}
 
 
 key = []
