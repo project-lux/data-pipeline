@@ -612,6 +612,16 @@ class MlMapper(Mapper):
                                             and not ap.startswith('https://archives.yale.edu/'):
                                             facets['isOnline'] = 1
 
+        # Add PD flag for works
+        if pfx == 'work':
+            facets['isPublicDomain'] = 0
+            if 'subject_to' in data:
+                for r in data['subject_to']:
+                    if 'classified_as' in r:
+                        for c in r['classified_as']:
+                            if 'id' in c and 'creativecommons.org/publicdomain' in c['id']:
+                                facets['isPublicDomain'] = 1
+
         ml['indexedProperties'] = facets
 
         if data['type'] == 'Place' and 'defined_by' in data:
