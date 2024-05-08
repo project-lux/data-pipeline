@@ -377,13 +377,14 @@ class Config(object):
             else:
                 cfg['reconciler'] = None
 
+            idx = cfg.get('indexLoaderClass', None)
+            if idx:
+                idxcls = importObject(idx)
+                cfg['indexLoader'] = idxcls(cfg)
+            else:
+                cfg['indexLoader'] = None
+
             if cfg['type'] == 'external':
-                idx = cfg.get('indexLoaderClass', None)
-                if idx:
-                    idxcls = importObject(idx)
-                    cfg['indexLoader'] = idxcls(cfg)
-                else:
-                    cfg['indexLoader'] = None
 
                 hclsName = cfg.get('harvesterClass', None)
                 if hclsName:
