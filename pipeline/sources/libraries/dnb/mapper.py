@@ -368,9 +368,13 @@ class DnbMapper(Mapper):
             top.subject_of = lo
 
         for val in rec.get(pname, []):
-            top.identified_by = vocab.PrimaryName(content=val['@value'])
+             primary = vocab.PrimaryName(content=val['@value'])
+             primary.language = self.process_langs['de']
+             top.identified_by = primary
         for val in rec.get(aname, []):
-            top.identified_by = vocab.AlternateName(content=val['@value'])
+            altname = vocab.AlternateName(content=val['@value'])
+            altname.language = self.process_langs['de']
+            top.identified_by = altname
 
         for val in rec.get(desc, []):
             description = vocab.Description(content=val['@value'])
