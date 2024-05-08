@@ -93,6 +93,7 @@ class IndexLoader(object):
                             try:
                                 index[k] = v
                             except:
+                                print(recid)
                                 print(k)
                                 print(v)
                                 raise
