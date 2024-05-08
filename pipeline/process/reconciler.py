@@ -129,7 +129,7 @@ class Reconciler(object):
                         if not nid in ids:
                             if self.debug: print(f" --- reconciler {r} / {reconcileType} found {nid} for {record['data']['id']}")
                             # Test distinct to avoid adding bad
-                            diffs = self.global_reconciler(nid, 'diffs')
+                            diffs = self.global_reconciler.reconcile(nid, 'diffs')
                             okay_to_add = True
                             for d in diffs:
                                 if d in ids:
