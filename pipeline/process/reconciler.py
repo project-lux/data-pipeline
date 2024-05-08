@@ -123,7 +123,7 @@ class Reconciler(object):
                     print(r)
                     raise
                 if newids:
-                    if type(newids) != list:
+                    if not type(newids) in [list, set]:
                         newids = [newids]
                     for nid in newids:
                         if not nid in ids:
