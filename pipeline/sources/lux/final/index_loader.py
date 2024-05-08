@@ -31,6 +31,24 @@ class GlobalIndexLoader(LmdbIndexLoader):
         else:
             print(f"Unknown index to clear {which}; should be equivs or diffs")
 
+
+    def set(self, idx, key, vals):
+        if type(vals) != list:
+            raise ValueError(f"Called set with string {key}:{vals}, did you mean add()?")
+        idx[key] = vals
+
+    def add(self, idx, key, val):
+        # Add val to the list or create
+        try:
+            vals = idx[key]
+            if type(vals) == str:
+                vals = [vals]
+        except:
+            vals = []
+        vals.append(val)
+        idx[key] = vals
+
+
     def load(self, filename, which="equivs"):
         (diffindex, eqindex) = self.get_storage()
 
@@ -73,8 +91,14 @@ class GlobalIndexLoader(LmdbIndexLoader):
                     print(f"Got None for {b}")
                 else:
                     # NOTE: This doesn't have class
-                    updates[a] = b
-                    updates[b] = a
+                    try:
+                        updates[a].append(b)
+                    except:
+                        updates[a] = [b]
+                    try:
+                        updates[b].append(a)
+                    except:
+                        updates[b] = [a]
 
         if updates:
             if which == "equivs":
