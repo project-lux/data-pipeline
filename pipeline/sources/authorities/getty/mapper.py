@@ -38,6 +38,7 @@ class GettyMapper(Mapper):
         self.nationality_flag = "http://vocab.getty.edu/aat/300379842"
         self.occupation_flag = "http://vocab.getty.edu/aat/300263369"
         self.active_flag = "http://vocab.getty.edu/aat/300393177"
+        self.role_flag = "http://vocab.getty.edu/aat/300435108"
 
         self.aat_language_ids = [x.id for x in self.process_langs.values()]
 
@@ -404,6 +405,8 @@ class UlanMapper(GettyMapper):
                             top.classified_as = vocab.Gender(ident=cxid, label=cxlbl)
                             break
                         elif cx2id == self.occupation_flag:
+                            top.classified_as = vocab.Occupation(ident=cxid, label=cxlbl)
+                        elif cx2id == self.role_flag:
                             top.classified_as = vocab.Occupation(ident=cxid, label=cxlbl)
                         else:
                             print(f"Unknown meta-class: {cx2id} in {myid}")
