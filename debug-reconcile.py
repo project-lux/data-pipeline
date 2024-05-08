@@ -114,9 +114,11 @@ key.sort()
 print("  -- Key --")
 for k in key:
     print(f"  {k[0]:<16}{k[1]} ({names.get(k[1], '?')})")
+
 print("\nConnected Nodes:")
 for sets in list(nx.connected_components(G)):
     print(sets)
+
 print(f"\nPath from {from_p} to {to_p}")
 print(" --> ".join([inv_ident[x] for x in nx.shortest_path(G, idents[from_p], idents[to_p])]))
 

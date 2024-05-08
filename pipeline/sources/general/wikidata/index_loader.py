@@ -43,4 +43,3 @@ class WdFileIndexLoader(LmdbIndexLoader):
 
 		eqindex.update(updates)
 		# eqindex.commit()
-

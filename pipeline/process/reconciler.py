@@ -21,7 +21,7 @@ class Reconciler(object):
         try:
             self.min_equivs = config.reconcile_min_equivs
         except:
-            self.min_equivs = 3
+            self.min_equivs = 2
         try:
             self.filter_internal = config.reconcile_filter_internal_equivs
         except:
@@ -105,9 +105,12 @@ class Reconciler(object):
                         # Can we do any better?
                         ids.remove(d)
 
+
+        reconcilers = self.reconcilers
+        # FIXME: Order reconcilers based on source of record if reconcileType == names
         while new_equivs:
             new_equivs = False
-            for r in self.reconcilers:
+            for r in reconcilers:
                 try:
                     # Might return a single entry (reconciled to single source)
                     # or a list (if the reconciler knows multiple sources,

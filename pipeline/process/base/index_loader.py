@@ -72,8 +72,11 @@ class IndexLoader(object):
                     names = self.extract_names(res['data'])
                     for nm in names:
                         # sys.stdout.write('n');sys.stdout.flush()
-                        if nm and len(nm) < 500:
-                            all_names[nm.lower()] = [recid, typ]
+                        if nm:
+                            if len(nm) < 500:
+                                all_names[nm.lower()] = [recid, typ]
+                            else:
+                                print(f"Dropping name as too long ({len(nm)}>500):\n\t{nm}")
                 if eqindex is not None:
                     eqs = self.extract_uris(res['data'])
                     for eq in eqs:
