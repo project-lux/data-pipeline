@@ -59,17 +59,22 @@ class GlobalIndexLoader(LmdbIndexLoader):
                     # Don't do this! 
                     raise ValueError(f"File {csvfn} has LUX URI: {a}")
                 else:                
-                    a = self.configs.canonicalize(a)
+                    a2 = self.configs.canonicalize(a)
 
                 if b.startswith('https://lux.collections.yale.edu/data/'):
                     # Don't do this! 
                     raise ValueError(f"File {csvfn} has LUX URI: {b}")
                 else:                
-                    b = self.configs.canonicalize(b)
+                    b2 = self.configs.canonicalize(b)
 
-                # NOTE: This doesn't have class
-                updates[a] = b
-                updates[b] = a
+                if a2 is None:
+                    print(f"Got None for {a}")
+                elif b2 is None:
+                    print(f"Got None for {b}")
+                else:
+                    # NOTE: This doesn't have class
+                    updates[a] = b
+                    updates[b] = a
 
         if updates:
             if which == "equivs":
