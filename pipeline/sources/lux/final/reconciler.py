@@ -10,9 +10,12 @@ class GlobalReconciler(LmdbReconciler):
 
         self.diff_index = None
         fn2 = config.get("differentDbPath", "")
-        if fn2:
-            self.diff_index = TabLmdb.open(fn2, 'r', readahead=False, writemap=True)
-        else:
+        try:
+            if fn2:
+                self.diff_index = TabLmdb.open(fn2, 'r', readahead=False, writemap=True)
+            else:
+                print(f"No differentDbPath in merged for global differents index?")
+        except:
             print(f"No differentDbPath in merged for global differents index?")
 
     def reconcile(self, record, reconcileType="uri"):
