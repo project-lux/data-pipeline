@@ -45,4 +45,4 @@ class GlobalReconciler(LmdbReconciler):
                 continue
             if s:
                 vals.append(s)
-        return vals
+        return set(vals)
