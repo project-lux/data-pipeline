@@ -36,7 +36,7 @@ class GlobalReconciler(LmdbReconciler):
                 return []
 
         # Only have a map of uris, no types
-        vals = []
+        vals = set([])
         idx = self.id_index if reconcileType == "uri" else self.diff_index
         for eq in ids:
             try:
@@ -44,5 +44,5 @@ class GlobalReconciler(LmdbReconciler):
             except:
                 continue
             if s:
-                vals.append(s)
-        return set(vals)
+                vals.update(s)
+        return vals
