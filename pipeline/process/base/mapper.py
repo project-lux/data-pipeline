@@ -69,7 +69,7 @@ class Mapper(object):
         self.namespace = config['namespace']
         self.name = config['name']
         self.globals = self.configs.globals
-        self.global_reconciler = self.configs.results['merged']['reconciler']
+        self.global_reconciler = self.configs.results['merged'].get('reconciler', None)
         self.debug = False
         self.acquirer = None
 
@@ -178,6 +178,8 @@ class Mapper(object):
         return record
 
     def trash_different_from(self, record):
+        if self.global_reconciler is None:
+            self.global_reconciler = self.configs.results['merged']['reconciler']
         try:
             recid = record['data']['id']
         except:

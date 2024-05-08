@@ -17,7 +17,7 @@ class Collector(object):
             self.idmap = idmap
         self.networkmap = config.instantiate_map('networkmap')['store']        
         self.debug = config.debug_reconciliation
-        self.global_reconciler = config.results['merged']['reconciler']
+        self.global_reconciler = config.results['merged'].get('reconciler', None)
 
     def test_dates(self, botbr, botbx):
         if not botbr or not botbx:
@@ -100,7 +100,10 @@ class Collector(object):
         return okay
 
     def collect(self, record):
-        if 'data' in record:                
+        if self.global_reconciler is None:
+            self.global_reconciler = self.configs.results['merged']['reconciler']
+
+        if 'data' in record:
             rec = record['data']
         else:
             rec = record

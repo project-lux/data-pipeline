@@ -17,7 +17,7 @@ class Reconciler(object):
             if rlr:
                 self.reconcilers.append(rlr)
 
-        self.global_reconciler = config.results['merged']['reconciler']
+        self.global_reconciler = config.results['merged'].get('reconciler', None)
         self.collector = Collector(config, idmap, networkmap)
         try:
             self.min_equivs = config.reconcile_min_equivs
@@ -29,6 +29,8 @@ class Reconciler(object):
             self.filter_internal = False
 
     def reconcile(self, record):
+        if self.global_reconciler is None:
+            self.global_reconciler = self.configs.results['merged']['reconciler']
 
         # We only process these types...
         if not record['data']['type'] in self.reconcileTypes:
