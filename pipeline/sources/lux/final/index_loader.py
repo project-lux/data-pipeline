@@ -10,7 +10,7 @@ class GlobalIndexLoader(LmdbIndexLoader):
         mapExp = self.config.get('mapSizeExponent', 30)
         # n = remove and recreate
 
-        diff_path = config.get('differentDbPath', None)
+        diff_path = self.config.get('differentDbPath', None)
 
         if diff_path:
             index = TabLmdb.open(diff_path, 'c', map_size=2**mapExp, readahead=False, writemap=True)
