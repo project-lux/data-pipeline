@@ -8,14 +8,13 @@ class GlobalIndexLoader(LmdbIndexLoader):
 
     def get_storage(self):
         mapExp = self.config.get('mapSizeExponent', 30)
-        # n = remove and recreate
 
         diff_path = self.config.get('differentDbPath', None)
-
         if diff_path:
             index = TabLmdb.open(diff_path, 'c', map_size=2**mapExp, readahead=False, writemap=True)
         else:
             index = None
+
         if self.inverse_path:
             eqindex = TabLmdb.open(self.inverse_path, 'c', map_size=2**mapExp, readahead=False, writemap=True)
         else:

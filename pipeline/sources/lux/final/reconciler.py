@@ -21,8 +21,9 @@ class GlobalReconciler(LmdbReconciler):
     def reconcile(self, record, reconcileType="uri"):
 
         if not reconcileType in ["uri", "diffs"]:
-            print(f"Called global reconciler with {reconcileType}; should be uri or diffs")
-            raise ValueError(reconcileType)
+            # we'll get called with name from call_reconcilers
+            # and harder to prevent than just return []
+            return []
 
         if type(record) == str:
             ids = [record]
