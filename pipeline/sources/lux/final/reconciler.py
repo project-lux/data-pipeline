@@ -1,5 +1,5 @@
 
-from pipeline.process.base.reconciler import LmdbReconciler
+from pipeline.process.base.reconciler import LmdbReconciler, TabLmdb
 
 class GlobalReconciler(LmdbReconciler):
 

@@ -2,7 +2,7 @@
 import os
 import sys
 import csv
-from pipeline.process.base.index_loader import LmdbIndexLoader
+from pipeline.process.base.index_loader import LmdbIndexLoader, TabLmdb
 
 class GlobalIndexLoader(LmdbIndexLoader):
 
