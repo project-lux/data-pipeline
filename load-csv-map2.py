@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 from pipeline.config import Config
 
 # Load from CSV to LMDB via index_loader in merged config
-
 # Usage load-csv-map.py --same|--different <path/to/file.csv>
 # or: load-csv-map.py --all [--clear]
 

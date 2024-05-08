@@ -15,15 +15,27 @@ class GlobalReconciler(LmdbReconciler):
         else:
             print(f"No differentDbPath in merged for global differents index?")
 
-    def reconcile(self, record, reconcileType="all"):
+    def reconcile(self, record, reconcileType="uri"):
+
+        if not reconcileType in ["uri", "diffs"]:
+            print(f"Called global reconciler with {reconcileType}; should be uri or diffs")
+            raise ValueError(reconcileType)
+
         ids = [x['id'] for x in record['data'].get('equivalent', [])]
         if 'id' in record['data']:
             ids.append(record['data']['id'])
         else:
             print(f"No id in {record}")
+            return []
+
+        # Only have a map of uris, no types
+        vals = []
+        idx = self.id_index if reconcileType == "uri" else self.diff_index
         for eq in ids:
-            sames = self.id_index[eq]
-            if sames:
-                print(f"\nFOUND {eq} SAMES:{sames}\n")
-                return list(sames)
-        return None
+            try:
+                s = idx[eq]
+            except:
+                continue
+            if s:
+                vals.append(s)
+        return vals
