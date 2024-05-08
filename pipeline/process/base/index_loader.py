@@ -72,7 +72,7 @@ class IndexLoader(object):
                     names = self.extract_names(res['data'])
                     for nm in names:
                         # sys.stdout.write('n');sys.stdout.flush()
-                        if nm:
+                        if nm and len(nm) < 500:
                             all_names[nm.lower()] = [recid, typ]
                 if eqindex is not None:
                     eqs = self.extract_uris(res['data'])
@@ -85,22 +85,6 @@ class IndexLoader(object):
                 durn = time.time()-start
                 print(f"{n} of {ttl} in {int(durn)} = {n/durn}/sec -> {ttl/(n/durn)} secs")
                 sys.stdout.flush()
-                if index is not None:
-                    try:
-                        index.update(all_names)
-                    except:
-                        for k,v in all_names.items():
-                            try:
-                                index[k] = v
-                            except:
-                                print(recid)
-                                print(k)
-                                print(v)
-                                raise
-                if eqindex is not None:
-                    eqindex.update(all_uris)
-                all_names = {}
-                all_uris = {}
 
         if index is not None and all_names:
             start = time.time()

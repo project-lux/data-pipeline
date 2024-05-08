@@ -7,7 +7,10 @@ import ujson as json
 class StringLmdb(Lmdb):
     # key is string, value is string
     def _pre_key(self, value):
-        return value.encode('utf-8')
+        val = value.encode('utf-8')
+        if len(val) > 500:
+            raise ValueError("LMDB cannot have keys longer than 500 characters")
+        return val
     def _post_key(self, value):
         return value.decode('utf-8')
     def _pre_value(self, value):
