@@ -48,7 +48,7 @@ class GlobalIndexLoader(LmdbIndexLoader):
         n = 0
         updates = {}
         with open(filename) as csvfh:
-            rdr = csv.reader(csvfh, delimiter=delim)
+            rdr = csv.reader(csvfh, delimiter=",")
             x = 0
             for row in rdr:
                 if not row[0].startswith('http') or not row[1].startswith('http'):
