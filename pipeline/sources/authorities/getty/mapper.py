@@ -406,7 +406,7 @@ class UlanMapper(GettyMapper):
                         elif cx2id == self.occupation_flag:
                             top.classified_as = vocab.Occupation(ident=cxid, label=cxlbl)
                         else:
-                            print(f"Unknown meta-class: {cx2id}")
+                            print(f"Unknown meta-class: {cx2id} in {myid}")
 
         if topcls in [model.Person, model.Group]:
             if 'born' in rec:
