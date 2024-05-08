@@ -17,7 +17,7 @@ class Collector(object):
             self.idmap = idmap
         self.networkmap = config.instantiate_map('networkmap')['store']        
         self.debug = config.debug_reconciliation
-        self.distinct = config.instantiate_map('distinct')['store']
+        self.global_reconciler = config.results['merged']['reconciler']
 
     def test_dates(self, botbr, botbx):
         if not botbr or not botbx:
@@ -208,7 +208,7 @@ class Collector(object):
                         currids = equiv_recs.keys()
                         if self.debug: print(f"     testing {eqid} from {xrec['id']}")
 
-                        diffs = self.distinct[eqid]
+                        diffs = self.global_reconciler.reconcile(eqid, 'diffs')
                         if diffs is None:
                             diffs = set([])
                         if diffs.intersection(set(currids)):

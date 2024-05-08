@@ -21,12 +21,15 @@ class GlobalReconciler(LmdbReconciler):
             print(f"Called global reconciler with {reconcileType}; should be uri or diffs")
             raise ValueError(reconcileType)
 
-        ids = [x['id'] for x in record['data'].get('equivalent', [])]
-        if 'id' in record['data']:
-            ids.append(record['data']['id'])
+        if type(record) == str:
+            ids = [record]
         else:
-            print(f"No id in {record}")
-            return []
+            ids = [x['id'] for x in record['data'].get('equivalent', [])]
+            if 'id' in record['data']:
+                ids.append(record['data']['id'])
+            else:
+                print(f"No id in {record}")
+                return []
 
         # Only have a map of uris, no types
         vals = []

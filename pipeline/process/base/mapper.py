@@ -69,11 +69,9 @@ class Mapper(object):
         self.namespace = config['namespace']
         self.name = config['name']
         self.globals = self.configs.globals
-        self.distinct = self.configs.instantiate_map('distinct')['store']
+        self.global_reconciler = self.configs.results['merged']['reconciler']
         self.debug = False
         self.acquirer = None
-
-
 
     def returns_multiple(self, record=None):
         return False
@@ -184,9 +182,10 @@ class Mapper(object):
             recid = record['data']['id']
         except:
             return record
-        if 'equivalent' in record['data'] and recid in self.distinct:
+        if 'equivalent' in record['data']:
             hsh = {e['id']:e for e in record['data']['equivalent']}
-            for d in self.distinct[recid]:
+            diffs = self.global_reconciler.reconcile(recid, 'diffs')
+            for d in diffs:
                 if d in hsh:
                     print(f"Removed a different from: {d} from {recid}")
                     record['data']['equivalent'].remove(hsh[d])

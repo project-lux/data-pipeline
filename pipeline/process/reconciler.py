@@ -16,7 +16,8 @@ class Reconciler(object):
             rlr = src.get('reconciler', None)
             if rlr:
                 self.reconcilers.append(rlr)
-        self.distinct = config.instantiate_map('distinct')['store']
+
+        self.global_reconciler = config.results['merged']['reconciler']
         self.collector = Collector(config, idmap, networkmap)
         try:
             self.min_equivs = config.reconcile_min_equivs
@@ -96,7 +97,7 @@ class Reconciler(object):
 
         # sameAs is just a reconciler
         for eq in ids:
-            diffs = self.distinct[eq]
+            diffs = self.global_reconciler.reconcile(eq, 'diffs')
             if diffs:
                 for d in diffs:
                     if d in ids:
@@ -126,7 +127,7 @@ class Reconciler(object):
                         if not nid in ids:
                             if self.debug: print(f" --- reconciler {r} / {reconcileType} found {nid} for {record['data']['id']}")
                             # Test distinct to avoid adding bad
-                            diffs = self.distinct[nid]
+                            diffs = self.global_reconciler(nid, 'diffs')
                             okay_to_add = True
                             for d in diffs:
                                 if d in ids:
