@@ -23,7 +23,7 @@ class GlobalReconciler(LmdbReconciler):
         if not reconcileType in ["uri", "diffs"]:
             # we'll get called with name from call_reconcilers
             # and harder to prevent than just return []
-            return []
+            return None
 
         if type(record) == str:
             ids = [record]
