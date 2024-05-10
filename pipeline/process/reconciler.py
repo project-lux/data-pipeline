@@ -22,7 +22,7 @@ class Reconciler(object):
         try:
             self.min_equivs = config.reconcile_min_equivs
         except:
-            self.min_equivs = 2
+            self.min_equivs = 3
         try:
             self.filter_internal = config.reconcile_filter_internal_equivs
         except:
