@@ -8,6 +8,7 @@ class GettyMapper(Mapper):
 
     def __init__(self, config):
         self.name = config['name']
+        self.config = config
         Mapper.__init__(self, config)
         # None = drop / no mapping
         self.name_classifications = {
