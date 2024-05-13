@@ -44,5 +44,8 @@ class GlobalReconciler(LmdbReconciler):
             except:
                 continue
             if s:
-                vals.update(s)
+                if type(s) in [set, list]:
+                    vals.update(s)
+                elif type(s) == str:
+                    vals.add(s)
         return vals
