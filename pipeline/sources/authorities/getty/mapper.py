@@ -530,6 +530,8 @@ class TgnMapper(GettyMapper):
                 lbl = br.get("_label", "")
                 if type(lbl) == dict:
                     lbl = lbl['@value']
+                print(br)
+                print(self.config)
                 src, ident = self.config['all_configs'].split_uri(br)
                 where = src['mapper'].get_reference(ident)
                 if where and hasattr(where,'classified_as'):
