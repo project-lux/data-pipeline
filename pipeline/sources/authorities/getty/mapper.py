@@ -483,13 +483,14 @@ class TgnMapper(GettyMapper):
             'http://vocab.getty.edu/aat/300000776', 'http://vocab.getty.edu/aat/300008389',
             'http://vocab.getty.edu/aat/300000745', 'http://vocab.getty.edu/aat/300008694',
             'http://vocab.getty.edu/aat/300008375', 'http://vocab.getty.edu/aat/300008057',
-            'http://vocab.getty.edu/aat/300008791', 'http://vocab.getty.edu/aat/300387218'
+            'http://vocab.getty.edu/aat/300008791', 'http://vocab.getty.edu/aat/300387218',
+            'http://vocab.getty.edu/aat/300387356'
         ]
 
     def guess_type(self, data):
         return model.Place
 
-    def transform(self, record, rectype, reference=False):
+    def transform(self, record, rectype, reference=False):        
         rec = record['data']
         myid = rec['id'].rsplit('/',1)[1]
         # get the numeric and reapply to the namespace :(
@@ -528,6 +529,13 @@ class TgnMapper(GettyMapper):
                 lbl = br.get("_label", "")
                 if type(lbl) == dict:
                     lbl = lbl['@value']
+                src, ident = self.config['all_configs'].split_uri(br)
+                where = src['mapper'].get_reference(ident)
+                if where and hasattr(where,'classified_as'):
+                    cxns = where['classified_as']
+                    for c in cxns:
+                        if c['id'] and c['id'] == "http://vocab.getty.edu/aat/300387356":
+                            continue
                 top.part_of = model.Place(ident=br['id'], label=lbl)
 
         data = model.factory.toJSON(top)
