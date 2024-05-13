@@ -532,8 +532,8 @@ class TgnMapper(GettyMapper):
                     lbl = lbl['@value']
                 src, ident = self.config['all_configs'].split_uri(br['id'])
                 where = src['mapper'].get_reference(ident)
-                print(where)
                 if where and hasattr(where,'classified_as'):
+                    print("triggered 536")
                     cxns = where['classified_as']
                     for c in cxns:
                         if c['id'] and c['id'] == "http://vocab.getty.edu/aat/300387356":
