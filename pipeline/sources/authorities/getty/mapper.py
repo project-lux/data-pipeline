@@ -9,7 +9,6 @@ class GettyMapper(Mapper):
     def __init__(self, config):
         Mapper.__init__(self, config)
         self.name = config['name']
-        self.config = config
         # None = drop / no mapping
         self.name_classifications = {
             'http://vocab.getty.edu/term/type/Descriptor': vocab.PrimaryName,
@@ -484,8 +483,7 @@ class TgnMapper(GettyMapper):
             'http://vocab.getty.edu/aat/300000776', 'http://vocab.getty.edu/aat/300008389',
             'http://vocab.getty.edu/aat/300000745', 'http://vocab.getty.edu/aat/300008694',
             'http://vocab.getty.edu/aat/300008375', 'http://vocab.getty.edu/aat/300008057',
-            'http://vocab.getty.edu/aat/300008791', 'http://vocab.getty.edu/aat/300387218',
-            'http://vocab.getty.edu/aat/300387356'
+            'http://vocab.getty.edu/aat/300008791', 'http://vocab.getty.edu/aat/300387218'
         ]
 
     def guess_type(self, data):
@@ -530,15 +528,10 @@ class TgnMapper(GettyMapper):
                 lbl = br.get("_label", "")
                 if type(lbl) == dict:
                     lbl = lbl['@value']
-                src, ident = self.config['all_configs'].split_uri(br['id'])
-                where = src['mapper'].get_reference(ident)
-                if where and hasattr(where,'classified_as'):
-                    print("triggered 536")
-                    cxns = where['classified_as']
-                    for c in cxns:
-                        if c['id'] and c['id'] == "http://vocab.getty.edu/aat/300387356":
-                            continue
-                top.part_of = model.Place(ident=br['id'], label=lbl)
+                if "classified_as" in br:
+                    for c in br['classified_as']:
+                        if 'id' in c and c['id'] == "http://vocab.getty.edu/aat/300449152":
+                            top.part_of = model.Place(ident=br['id'], label=lbl)
 
         data = model.factory.toJSON(top)
         return {'identifier': record['identifier'], 'data': data, 'source':'tgn'}
