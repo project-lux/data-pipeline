@@ -7,9 +7,9 @@ class GettyMapper(Mapper):
     # Core functions
 
     def __init__(self, config):
+        Mapper.__init__(self, config)
         self.name = config['name']
         self.config = config
-        Mapper.__init__(self, config)
         # None = drop / no mapping
         self.name_classifications = {
             'http://vocab.getty.edu/term/type/Descriptor': vocab.PrimaryName,
