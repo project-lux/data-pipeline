@@ -420,11 +420,9 @@ class Cleaner(Mapper):
 
     def dedupe_webpages(self, data):
         webs = data['subject_of']
-        #access points list
         aps = []
-        #access point key, web as value
         ws = {}
-        to_kill = []
+        okay = []
         #get all the aps and the web blocks, stuff in appropriate arrays
         for web in webs:
             if 'digitally_carried_by' in web:
@@ -433,31 +431,36 @@ class Cleaner(Mapper):
                         ap = points['access_point'][0]['id']
                         aps.append(ap)
                         ws[ap] = web
-        #iterate through aps and test for same, if same add associated web blocks to kill
-        for ap in aps:
-            if ap.endswith('/') and ap.startswith('https'):
-                ap1 = ap.replace('https','http')[0:-1]
-                if ap1 in aps:
-                    to_kill.append(ws[ap1])
-            elif ap.endswith('/'):
-                ap1 = ap.rsplit('/',1)[0]
-                if ap1 in aps:
-                    to_kill.append(ws[ap1])
-            elif ap.startswith('https'):
-                ap1 = ap.replace('http','https')
-                if ap1 in aps:
-                    to_kill.append(ws[ap1])
-            elif 'www' in ap:
-                ap1 = ap.replace('www.','')
-                if ap1 in aps:
-                    to_kill.append(ws[ap1])
-        #iterate through kill 
-        for kill in to_kill:
-            try:
-                data['subject_of'].remove(kill)
-            except:
-                # already removed?
-                pass
+
+        del data['subject_of']                
+
+        for a in aps:
+            http = a.replace("http://","https://",1)
+            https = a.replace("https://","http://",1)
+            opts = [a, http, https]
+            for o in opts[:]:
+                opts.append(o.replace("//www.","//",1))
+            for o in opts[:]:
+                if o[-1] == "/":
+                    opts.append(o[:-1])
+                else:
+                    opts.append(f"{o}/")
+            found = False
+            for o in opts:
+                if o and o in okay:
+                    found = True
+                    break
+            if not found:
+                okay.append(a)
+
+        subj = []
+
+        #should always have at least one okay
+        for k in okay:
+            block = ws[k]
+            subj.append(block)
+
+        data['subject_of'] = subj
 
     def transform(self, rec, rectype=None, reference=False):
         data = rec['data']
