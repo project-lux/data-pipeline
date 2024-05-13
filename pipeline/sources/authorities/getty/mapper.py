@@ -525,11 +525,6 @@ class TgnMapper(GettyMapper):
                 brdrs2 = [brdrs2]       
             brdrs.extend(brdrs2)        
             for br in brdrs:
-                if type(br) == str:
-                    br = {'id': br, '_label': ""}
-                lbl = br.get("_label", "")
-                if type(lbl) == dict:
-                    lbl = lbl['@value']
                 brid = br.rsplit('/',1)[1]
                 where = self.name['mapper'].get_reference(brid)
                 if where and hasattr(where,'classified_as'):
@@ -537,6 +532,11 @@ class TgnMapper(GettyMapper):
                     for c in cxns:
                         if c['id'] and c['id'] == "http://vocab.getty.edu/aat/300387356":
                             continue
+                if type(br) == str:
+                    br = {'id': br, '_label': ""}
+                lbl = br.get("_label", "")
+                if type(lbl) == dict:
+                    lbl = lbl['@value']
                 top.part_of = model.Place(ident=br['id'], label=lbl)
 
         data = model.factory.toJSON(top)
