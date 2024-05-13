@@ -524,7 +524,6 @@ class TgnMapper(GettyMapper):
             if type(brdrs2) != list:
                 brdrs2 = [brdrs2]       
             brdrs.extend(brdrs2)
-            print(brdrs)       
             for br in brdrs:
                 if type(br) == str:
                     br = {'id': br, '_label': ""}
@@ -533,6 +532,7 @@ class TgnMapper(GettyMapper):
                     lbl = lbl['@value']
                 src, ident = self.config['all_configs'].split_uri(br['id'])
                 where = src['mapper'].get_reference(ident)
+                print(where)
                 if where and hasattr(where,'classified_as'):
                     cxns = where['classified_as']
                     for c in cxns:
