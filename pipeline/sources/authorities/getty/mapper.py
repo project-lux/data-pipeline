@@ -523,8 +523,10 @@ class TgnMapper(GettyMapper):
             brdrs2 = rec.get('broader', [])
             if type(brdrs2) != list:
                 brdrs2 = [brdrs2]       
-            brdrs.extend(brdrs2)        
+            brdrs.extend(brdrs2)
+            print(brdrs)       
             for br in brdrs:
+                print(br)
                 brid = br.rsplit('/',1)[1]
                 where = self.name['mapper'].get_reference(brid)
                 if where and hasattr(where,'classified_as'):
