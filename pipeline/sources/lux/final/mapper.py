@@ -445,17 +445,24 @@ class Cleaner(Mapper):
                     opts.append(o[:-1])
                 else:
                     opts.append(f"{o}/")
+
             found = False
             for o in opts:
                 if o and o in okay:
                     found = True
                     break
             if not found:
-                okay.append(a)
+                https_found = False
+                for o in opts:
+                    if o and o.startswith("https://"):
+                        okay.append(o)
+                        https_found = True
+                        break
+                if not https_found:
+                    okay.append(a)
 
         subj = []
-
-        #should always have at least one okay
+        #okay should never be empty
         for k in okay:
             block = ws[k]
             subj.append(block)
