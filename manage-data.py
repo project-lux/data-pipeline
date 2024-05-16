@@ -34,10 +34,11 @@ if '--nt' in sys.argv:
     fh = open(f'/data-io2-2/output/lux/lux_{my_slice}.nt', 'w')
 
     if my_slice == -1:
-        itr = rc.iter_records()
+        itr = rc.iter_keys()
     else:
-        itr = rc.iter_records_slice(my_slice, max_slice)
-    for rec in itr:
+        itr = rc.iter_keys_slice(my_slice, max_slice)
+    for recid in itr:
+        rec = rc[recid]
         sys.stdout.write('.');sys.stdout.flush()
         res = mpr.transform(rec)    
         for r in res:
