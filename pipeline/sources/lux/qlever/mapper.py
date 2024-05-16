@@ -129,7 +129,8 @@ class QleverMapper(Mapper):
             "end_of_the_end": f"{crmns}P82b_end_of_the_end",
             "end_of_the_begin": f"{crmns}P81a_end_of_the_begin",
             "assigned_property": f"{crmns}P177_assigned_property_of_type",
-            "value": f"{crmns}P90_has_value"
+            "value": f"{crmns}P90_has_value",
+            "subject_to": f"{crmns}PXX_subject_to"
         }
 
 
@@ -162,7 +163,7 @@ class QleverMapper(Mapper):
             if not type(v) in [list, dict]:
                 # process a value
                 t['value'] = v
-                if k == "content":
+                if k in ["content", "format", "defined_by"]:
                     t['datatype'] = ""
                 elif k == "value":
                     t['datatype'] = self.number_type
