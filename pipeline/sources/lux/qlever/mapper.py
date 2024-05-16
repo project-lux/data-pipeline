@@ -130,7 +130,8 @@ class QleverMapper(Mapper):
             "end_of_the_begin": f"{crmns}P81a_end_of_the_begin",
             "assigned_property": f"{crmns}P177_assigned_property_of_type",
             "value": f"{crmns}P90_has_value",
-            "subject_to": f"{crmns}PXX_subject_to"
+            "subject_to": f"{crmns}PXX_subject_to",
+            "occurs_during": f"{crmns}P10_during"
         }
 
 
