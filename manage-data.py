@@ -32,7 +32,7 @@ if '--nt' in sys.argv:
     from pipeline.sources.lux.qlever.mapper import QleverMapper
     mpr = QleverMapper(cfgs.results['marklogic'])
     rc = cfgs.results['merged']['recordcache']
-    with gzip.open(f'/data-io2-2/output/lux/lux_{my_slice}.nt.gz', 'w'):
+    with gzip.open(f'/data-io2-2/output/lux/lux_{my_slice}.nt.gz', 'w') as fh:
         if my_slice == -1:
             itr = rc.iter_keys()
         else:
