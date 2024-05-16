@@ -278,7 +278,7 @@ class QleverMapper(Mapper):
                 ppred = f"placeOf{predClass}"
                 tpred = f"techniqueOf{predClass}"
                 cpred = f"causeOf{predClass}"
-                ipred = f"agentInfluenced{predClass}"
+                ipred = f"influenced{predClass}"
                 agents = []
                 places = []
                 techs = []

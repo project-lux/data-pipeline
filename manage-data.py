@@ -20,6 +20,18 @@ cfgs.instantiate_all()
 update_mgr = UpdateManager(cfgs, idmap)
 ref_mgr = ReferenceManager(cfgs, idmap)
 
+if '--nt' in sys.argv:
+    from pipeline.sources.lux.qlever.mapper import QleverMapper
+    mpr = QleverMapper(cfgs.results['marklogic'])
+    rc = cfgs.results['merged']['recordcache']
+    fh = open('/data-io2-2/output/lux/lux.nt', 'w')
+    for rec in rc.iter_records():
+        sys.stdout.write('.');sys.stdout.flush()
+        res = mpr.transform(rec)    
+        for r in res:
+            fh.write(f"{r}\n")
+        fh.flush()
+    fh.close() #hahaha
 
 if '--test-ils-idmap' in sys.argv:
     datacache = cfgs.internal['ils']['datacache']
