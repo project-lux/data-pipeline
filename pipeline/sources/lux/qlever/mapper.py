@@ -165,7 +165,7 @@ class QleverMapper(Mapper):
                 if k == "content":
                     t['datatype'] = ""
                 elif k == "value":
-                    t['datetype'] = self.number_type
+                    t['datatype'] = self.number_type
                 elif k in ['begin_of_the_begin', 'end_of_the_end', 'begin_of_the_end', 'end_of_the_begin']:
                     t['datatype'] = self.date_type
                 elif k == "type":
