@@ -143,7 +143,7 @@ class QleverMapper(Mapper):
             me = node['id']
 
         for (k,v) in node.items():
-            if k in ['id', '_label']:
+            if k in ['id', '_label', '@context']:
                 continue
             pred = self.prop_map.get(k, None)
             if pred is None:
@@ -168,6 +168,10 @@ class QleverMapper(Mapper):
                     t['datetype'] = self.number_type
                 elif k in ['begin_of_the_begin', 'end_of_the_end', 'begin_of_the_end', 'end_of_the_begin']:
                     t['datatype'] = self.date_type
+                elif k == "type":
+                    t['object'] = self.type_map[v]
+                    conf['triples'].append(self.triple_pattern.format(**t))
+                    continue
                 elif k == 'access_point':
                     # magic @vocab props
                     t['object'] = v
@@ -198,7 +202,7 @@ class QleverMapper(Mapper):
                 t['object'] = obj
                 conf['triples'].append(self.triple_pattern.format(**t))
 
-            return me
+        return me
 
 
     def do_bs_html(self, part):
