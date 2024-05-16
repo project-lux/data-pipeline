@@ -47,7 +47,7 @@ if '--nt' in sys.argv:
                 fh.write(f"{r}\n")
             x += 1
             if not x % 100000:
-                print(f"{x} {time.time()-start})
+                print(f"{x} {time.time()-start}")
 
 
 if '--test-ils-idmap' in sys.argv:
