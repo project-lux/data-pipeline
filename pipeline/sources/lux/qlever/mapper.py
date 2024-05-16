@@ -131,7 +131,8 @@ class QleverMapper(Mapper):
             "assigned_property": f"{crmns}P177_assigned_property_of_type",
             "value": f"{crmns}P90_has_value",
             "subject_to": f"{crmns}PXX_subject_to",
-            "occurs_during": f"{crmns}P10_during"
+            "occurs_during": f"{crmns}P10_during",
+            "used_object_of_type": f"{crmns}P125_used_object_of_type"
         }
 
 

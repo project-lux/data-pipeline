@@ -3,6 +3,7 @@ import sys
 import json
 import time
 import datetime
+import gzip
 from dotenv import load_dotenv
 from pipeline.config import Config
 from pipeline.process.reference_manager import ReferenceManager
@@ -31,20 +32,23 @@ if '--nt' in sys.argv:
     from pipeline.sources.lux.qlever.mapper import QleverMapper
     mpr = QleverMapper(cfgs.results['marklogic'])
     rc = cfgs.results['merged']['recordcache']
-    fh = open(f'/data-io2-2/output/lux/lux_{my_slice}.nt', 'w')
+    with gzip.open(f'/data-io2-2/output/lux/lux_{my_slice}.nt.gz', 'w'):
+        if my_slice == -1:
+            itr = rc.iter_keys()
+        else:
+            itr = rc.iter_keys_slice(my_slice, max_slice)
 
-    if my_slice == -1:
-        itr = rc.iter_keys()
-    else:
-        itr = rc.iter_keys_slice(my_slice, max_slice)
-    for recid in itr:
-        rec = rc[recid]
-        sys.stdout.write('.');sys.stdout.flush()
-        res = mpr.transform(rec)    
-        for r in res:
-            fh.write(f"{r}\n")
-        fh.flush()
-    fh.close()
+        x = 0
+        start = time.time()
+        for recid in itr:
+            rec = rc[recid]
+            res = mpr.transform(rec)    
+            for r in res:
+                fh.write(f"{r}\n")
+            x += 1
+            if not x % 100000:
+                print(f"{x} {time.time()-start})
+
 
 if '--test-ils-idmap' in sys.argv:
     datacache = cfgs.internal['ils']['datacache']
