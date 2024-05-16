@@ -251,7 +251,7 @@ class QleverMapper(Mapper):
 
 
         triples = []
-
+        luxns = "https://lux.collections.yale.edu/ns/"
         conf = {'triples': triples, 'base': me, 'bid': 0}
         self.walk_for_triples(data, conf)
 
