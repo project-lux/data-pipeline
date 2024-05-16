@@ -143,6 +143,10 @@ class QleverMapper(Mapper):
             conf['bid'] += 1
         else:
             me = node['id']
+            if me != conf['base'] and me.startswith(self.datans):
+                # Triples will come from its own record
+                # Including metatypes
+                return me
 
         for (k,v) in node.items():
             if k in ['id', '_label', '@context']:
