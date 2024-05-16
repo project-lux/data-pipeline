@@ -21,17 +21,29 @@ update_mgr = UpdateManager(cfgs, idmap)
 ref_mgr = ReferenceManager(cfgs, idmap)
 
 if '--nt' in sys.argv:
+    # parallelize
+    if len(sys.argv) > 2 and sys.argv[1].isnumeric() and sys.argv[2].isnumeric():
+        my_slice = int(sys.argv[1])
+        max_slice = int(sys.argv[2])
+    else:
+        my_slice = max_slice = -1
+
     from pipeline.sources.lux.qlever.mapper import QleverMapper
     mpr = QleverMapper(cfgs.results['marklogic'])
     rc = cfgs.results['merged']['recordcache']
-    fh = open('/data-io2-2/output/lux/lux.nt', 'w')
-    for rec in rc.iter_records():
+    fh = open(f'/data-io2-2/output/lux/lux_{my_slice}.nt', 'w')
+
+    if my_slice == -1:
+        itr = rc.iter_records()
+    else:
+        itr = rc.iter_records_slice(my_slice, max_slice)
+    for rec in itr:
         sys.stdout.write('.');sys.stdout.flush()
         res = mpr.transform(rec)    
         for r in res:
             fh.write(f"{r}\n")
         fh.flush()
-    fh.close() #hahaha
+    fh.close()
 
 if '--test-ils-idmap' in sys.argv:
     datacache = cfgs.internal['ils']['datacache']
