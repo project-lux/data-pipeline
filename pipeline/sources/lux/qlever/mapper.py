@@ -45,6 +45,7 @@ class QleverMapper(Mapper):
             "Language": f"{crmns}E56_Language", 
             "Unit": f"{crmns}E58_Measurement_Unit", 
             "MeasurementUnit": f"{crmns}E58_Measurement_Unit", 
+            "Currency": f"{crmns}E98_Currency",
             "Event": f"{crmns}E5_Event", 
             "Activity": f"{crmns}E7_Activity", 
             "Period": f"{crmns}E4_Period", 
