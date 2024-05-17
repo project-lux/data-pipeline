@@ -184,7 +184,7 @@ class QleverMapper(Mapper):
             if not type(v) in [list, dict]:
                 # process a value
                 if k in ["content", "format", "defined_by"]:
-                    value = v.replace('"', '\\"')
+                    value = v.replace('"', ' ')
                     value = value.replace('\t', ' ')
                     value = value.replace('\n', ' ')
                     # This shouldn't be necessary?
