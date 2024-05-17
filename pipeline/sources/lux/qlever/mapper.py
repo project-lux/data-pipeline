@@ -149,7 +149,7 @@ class QleverMapper(Mapper):
                 # Triples will come from its own record
                 # Including metatypes
                 return me
-
+        luxns = "https://lux.collections.yale.edu/ns/"
         for (k,v) in node.items():
             if k in ['id', '_label', '@context']:
                 continue
