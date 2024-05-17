@@ -185,8 +185,9 @@ class QleverMapper(Mapper):
                 # process a value
                 if k in ["content", "format", "defined_by"]:
                     value = v.replace('"', '\\"')
-                    value = value.replace('\t', '\\t')
-                    value = value.replace('\n', '\\n')
+                    value = value.replace('\t', ' ')
+                    value = value.replace('\n', ' ')
+                    # This shouldn't be necessary?
                     value = value.encode('unicode-escape').decode('utf-8')
                     t['datatype'] = ""
                     t['value'] = value
