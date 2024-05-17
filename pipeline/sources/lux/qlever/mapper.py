@@ -150,8 +150,14 @@ class QleverMapper(Mapper):
                 # Including metatypes
                 return me
             else:
-                me = me.replace(' ', '%20')
-
+                if not me.startswith(self.datans):
+                    # sanitize external links
+                    me = me.replace(' ', '%20')
+                    me = me.replace('"', '')
+                    me = me.replace(">", '')
+                    me = me.replace('<', '')
+                    me = me.replace('[', '')
+                    me = me.replace(']', '')
 
         luxns = "https://lux.collections.yale.edu/ns/"
         for (k,v) in node.items():
