@@ -169,13 +169,18 @@ class QleverMapper(Mapper):
 
             if not type(v) in [list, dict]:
                 # process a value
-                t['value'] = v
                 if k in ["content", "format", "defined_by"]:
+                    value = v.replace('"', '\\"')
+                    value = value.replace('\t', '\\t')
+                    value = value.replace('\n', '\\n')
                     t['datatype'] = ""
+                    t['value'] = value
                 elif k == "value":
                     t['datatype'] = f"^^{self.number_type}"
+                    t['value'] = v
                 elif k in ['begin_of_the_begin', 'end_of_the_end', 'begin_of_the_end', 'end_of_the_begin']:
                     t['datatype'] = f"^^{self.date_type}"
+                    t['value'] = v
                 elif k == "type":
                     t['object'] = self.type_map[v]
                     conf['triples'].append(self.triple_pattern.format(**t))
