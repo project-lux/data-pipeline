@@ -181,14 +181,14 @@ class QleverMapper(Mapper):
                 # process a value
                 if k in ["content", "format", "defined_by"]:
                     #value = v.replace('"', ' ')
-                    value = value.replace('\t', '\\t')
+                    value = v.replace('\t', '\\t')
                     value = value.replace('\n', '\\n')
                     value = value.replace('\r', '\\r')
                     # This shouldn't be necessary?
                     #value = value.encode('unicode-escape').decode('utf-8')
                     t['datatype'] = ""
                     try:
-                        value = Literal(v).n3()
+                        value = Literal(value).n3()
                         t['value'] = value
                     except Exception as e:
                         print(f"Failed to process literal {v} in {me}")
