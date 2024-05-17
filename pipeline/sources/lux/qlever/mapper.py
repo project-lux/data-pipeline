@@ -22,7 +22,7 @@ class QleverMapper(Mapper):
         rdfns = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
         scins = "http://www.ics.forth.gr/isl/CRMsci/"
         digns = "http://www.ics.forth.gr/isl/CRMdig/"
-        dcns = "http://purl.org/dc/elements/1.1/ "
+        dcns = "http://purl.org/dc/elements/1.1/"
         dctns = "http://purl.org/dc/terms/"
         self.datans = "https://lux.collections.yale.edu/data/"
 
