@@ -156,11 +156,11 @@ class QleverMapper(Mapper):
             pred = self.prop_map.get(k, None)
             if pred is None:
                 if k in ['part', 'part_of']:
-                    # calculate
-                    pred = "temp:{k}"
+                    # FIXME: calculate
+                    pred = f"{luxns}{k}"
                 elif k == 'member_of':
-                    # set vs group
-                    pred = "temp:{k}"
+                    # FIXME: set vs group
+                    pred = f"{luxns}{k}"
                 else:
                     print(f"Failed to process property: {k} in {me}")
                     continue
