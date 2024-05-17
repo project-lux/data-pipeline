@@ -162,7 +162,7 @@ class QleverMapper(Mapper):
                     # set vs group
                     pred = "temp:{k}"
                 else:
-                    print(f"Failed to process property: {k}")
+                    print(f"Failed to process property: {k} in {me}")
                     continue
 
             t = {"subject": me, 'predicate': pred}
@@ -173,9 +173,9 @@ class QleverMapper(Mapper):
                 if k in ["content", "format", "defined_by"]:
                     t['datatype'] = ""
                 elif k == "value":
-                    t['datatype'] = self.number_type
+                    t['datatype'] = f"^^{self.number_type}"
                 elif k in ['begin_of_the_begin', 'end_of_the_end', 'begin_of_the_end', 'end_of_the_begin']:
-                    t['datatype'] = self.date_type
+                    t['datatype'] = f"^^{self.date_type}"
                 elif k == "type":
                     t['object'] = self.type_map[v]
                     conf['triples'].append(self.triple_pattern.format(**t))
