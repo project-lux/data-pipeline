@@ -117,6 +117,7 @@ class ASHarvester(Harvester):
 		self.page = config.get('start_page', None)
 		self.page_cache = None
 		self.datacache = None
+		self.cache_okay = False
 
 	def fetch_collection(self, uri):
 		coll = self.fetch_json(uri, 'collection')
@@ -129,13 +130,22 @@ class ASHarvester(Harvester):
 	def fetch_page(self):
 		# fetch page in self.page
 		print(f"    {self.page}")
-		if self.page_cache is not None and self.page in self.page_cache:
+		if self.cache_okay and self.page_cache is not None and self.page in self.page_cache:
 			rec = self.page_cache[self.page]
 			page = rec['data']
 		else:
 			page = self.fetch_json(self.page, 'page')
 			if self.page_cache is not None and page is not None:
-				self.page_cache[self.page] = page
+				# Test if we have it and it's the same
+				if self.page in self.page_cache:
+					rec = self.page_cache[self.page]
+					cpage = rec['data']
+					if 'orderedItems' in page and 'orderedItems' in cpage and page['orderedItems'][0]['endTime'] == cpage['orderedItems'][0]['endTime']:
+						self.cache_okay = True
+					else:
+						self.page_cache[self.page] = page
+				else:
+					self.page_cache[self.page] = page
 		try:
 			items = page['orderedItems']
 			items.reverse()
