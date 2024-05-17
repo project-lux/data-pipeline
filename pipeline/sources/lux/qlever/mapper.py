@@ -195,6 +195,7 @@ class QleverMapper(Mapper):
                         continue
                 elif k == "value":
                     # t['datatype'] = self.number_type
+                    t['datatype'] = ""
                     t['value'] = str(v)
                 elif k in ['begin_of_the_begin', 'end_of_the_end', 'begin_of_the_end', 'end_of_the_begin']:
                     t['datatype'] = self.date_type
