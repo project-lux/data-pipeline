@@ -21,7 +21,7 @@ class QleverMapper(Mapper):
         self.datans = "https://lux.collections.yale.edu/data/"
 
         self.triple_pattern = "<{subject}> <{predicate}> <{object}> ."
-        self.literal_pattern = "<{subject}> <{predicate}> \"{value}\"{datatype} ."
+        self.literal_pattern = "<{subject}> <{predicate}> {value}{datatype} ."
         self.number_type = "^^<http://www.w3.org/2001/XMLSchema#decimal>"
         self.date_type = "^^<http://www.w3.org/2001/XMLSchema#dateTime>"
 
@@ -194,11 +194,11 @@ class QleverMapper(Mapper):
                         print(e)
                         continue
                 elif k == "value":
-                    t['datatype'] = self.number_type
-                    t['value'] = v
+                    # t['datatype'] = self.number_type
+                    t['value'] = str(v)
                 elif k in ['begin_of_the_begin', 'end_of_the_end', 'begin_of_the_end', 'end_of_the_begin']:
                     t['datatype'] = self.date_type
-                    t['value'] = v
+                    t['value'] = f"\"{v}\""
                 elif k == "type":
                     t['object'] = self.type_map[v]
                     conf['triples'].append(self.triple_pattern.format(**t))
