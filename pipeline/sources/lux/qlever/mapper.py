@@ -153,11 +153,15 @@ class QleverMapper(Mapper):
                 if not me.startswith(self.datans):
                     # sanitize external links
                     me = me.replace(' ', '%20')
+                    me = me.replace('\n', '')
+                    me = me.replace('\t', '')
+                    me = me.replace('\r', '')
                     me = me.replace('"', '')
                     me = me.replace(">", '')
                     me = me.replace('<', '')
                     me = me.replace('[', '')
                     me = me.replace(']', '')
+                    me = me.replace('\\', '')
 
         luxns = "https://lux.collections.yale.edu/ns/"
         for (k,v) in node.items():
