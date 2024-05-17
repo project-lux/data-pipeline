@@ -1,14 +1,8 @@
 import os
 import sys
-import uuid
-import copy
-import datetime
-from ctypes import c_int32
+from rdflib import URIRef, Literal
 from pipeline.process.base.mapper import Mapper
-import ujson as json
-import numpy as np
 from bs4 import BeautifulSoup
-import re
 
 class QleverMapper(Mapper):
 
@@ -28,8 +22,8 @@ class QleverMapper(Mapper):
 
         self.triple_pattern = "<{subject}> <{predicate}> <{object}> ."
         self.literal_pattern = "<{subject}> <{predicate}> \"{value}\"{datatype} ."
-        self.number_type = "<http://www.w3.org/2001/XMLSchema#double>"
-        self.date_type = "<http://www.w3.org/2001/XMLSchema#dateTime>"
+        self.number_type = "^^<http://www.w3.org/2001/XMLSchema#decimal>"
+        self.date_type = "^^<http://www.w3.org/2001/XMLSchema#dateTime>"
 
         self.type_map = {
             "HumanMadeObject": f"{crmns}E22_Human-Made_Object",
@@ -157,11 +151,13 @@ class QleverMapper(Mapper):
                     me = me.replace('\t', '')
                     me = me.replace('\r', '')
                     me = me.replace('"', '')
-                    me = me.replace(">", '')
-                    me = me.replace('<', '')
-                    me = me.replace('[', '')
-                    me = me.replace(']', '')
-                    me = me.replace('\\', '')
+
+        try:
+            uri_me = URIRef(me).n3()
+        except Exception as e:
+            print(f"Failed to build URI from {me}")
+            print(e)
+            return None
 
         luxns = "https://lux.collections.yale.edu/ns/"
         for (k,v) in node.items():
@@ -184,18 +180,24 @@ class QleverMapper(Mapper):
             if not type(v) in [list, dict]:
                 # process a value
                 if k in ["content", "format", "defined_by"]:
-                    value = v.replace('"', ' ')
-                    value = value.replace('\t', ' ')
-                    value = value.replace('\n', ' ')
+                    #value = v.replace('"', ' ')
+                    #value = value.replace('\t', ' ')
+                    #value = value.replace('\n', ' ')
                     # This shouldn't be necessary?
-                    value = value.encode('unicode-escape').decode('utf-8')
+                    #value = value.encode('unicode-escape').decode('utf-8')
                     t['datatype'] = ""
-                    t['value'] = value
+                    try:
+                        value = Literal(v).n3()
+                        t['value'] = value
+                    except Exception as e:
+                        print(f"Failed to process literal {v} in {me}")
+                        print(e)
+                        continue
                 elif k == "value":
-                    t['datatype'] = f"^^{self.number_type}"
+                    t['datatype'] = self.number_type
                     t['value'] = v
                 elif k in ['begin_of_the_begin', 'end_of_the_end', 'begin_of_the_end', 'end_of_the_begin']:
-                    t['datatype'] = f"^^{self.date_type}"
+                    t['datatype'] = self.date_type
                     t['value'] = v
                 elif k == "type":
                     t['object'] = self.type_map[v]
@@ -222,14 +224,16 @@ class QleverMapper(Mapper):
                 for vi in v:
                     if type(vi) == dict:
                         obj = self.walk_for_triples(vi, conf)
-                        t['object'] = obj
-                        conf['triples'].append(self.triple_pattern.format(**t))
+                        if obj is not None:
+                            t['object'] = obj
+                            conf['triples'].append(self.triple_pattern.format(**t))
                     else:
                         print(f"found non dict in a list :( {node}")
             elif type(v) == dict:
                 obj = self.walk_for_triples(v, conf)
-                t['object'] = obj
-                conf['triples'].append(self.triple_pattern.format(**t))
+                if obj is not None:
+                    t['object'] = obj
+                    conf['triples'].append(self.triple_pattern.format(**t))
 
         return me
 
