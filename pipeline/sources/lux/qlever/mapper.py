@@ -109,7 +109,7 @@ class QleverMapper(Mapper):
             "shows": f"{self.crmns}P65_shows_visual_item",
             "produced_by": f"{self.crmns}P108i_was_produced_by",
             "destroyed_by": f"{self.crmns}P13i_was_destroyed_by",
-            "encountered_by": f"{scins}O19i_was_object_encountered_at",
+            "encountered_by": f"{self.scins}O19i_was_object_encountered_at",
             "defined_by": f"{self.crmns}P168_place_is_defined_by",
             "members_exemplified_by": f"{self.lans}members_exemplified_by",
             "content": f"{self.crmns}P190_has_symbolic_content",
