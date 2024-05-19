@@ -204,7 +204,7 @@ class QleverMapper(Mapper):
                         print(f"Saw {node} with {k} but no type?")
                         pred = f"{luxns}{k}"
                 elif k == 'member_of':
-                    if type(v) == list and type(v[0]) == dict and 'type' in v[0]:
+                    if v and type(v) == list and type(v[0]) == dict and 'type' in v[0]:
                         objtype = v[0]['type']
                         if objtype == "Set":
                             pred = f"{self.lans}member_of"
@@ -343,7 +343,7 @@ class QleverMapper(Mapper):
             value = ' '.join(conf['recordText'])
             try:
                 nvalue = Literal(value).n3()
-                t = {'subject': me, 'predicate': f"{luxns}recordText", 'value': nvalue}
+                t = {'subject': me, 'predicate': f"{self.luxns}recordText", 'value': nvalue}
                 triples.append(self.literal_pattern.format(**t))
             except:
                 print(f"Failed to build full record text for {me}")
