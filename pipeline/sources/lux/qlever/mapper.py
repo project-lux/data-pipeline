@@ -345,8 +345,9 @@ class QleverMapper(Mapper):
                 nvalue = Literal(value).n3()
                 t = {'subject': me, 'predicate': f"{self.luxns}recordText", 'value': nvalue}
                 triples.append(self.literal_pattern.format(**t))
-            except:
-                print(f"Failed to build full record text for {me}")
+            except Exception as e:
+                print(f"Failed to build full record text for {me}: {e}")
+                raise
 
         shortcuts = {
             'produced_by': "Production",
