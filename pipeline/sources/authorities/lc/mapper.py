@@ -677,7 +677,10 @@ class LcnafMapper(LcMapper):
                             if al.startswith("("):
                                 al = al.split(' ')[-1]
                             oid = self.build_recs_and_reconcile(al, "concept")
-                        if oid:
+                        if oid and "names" in oid:
+                            #actually member_of
+                            top.member_of = model.Group(ident=oid,label=al)
+                        elif oid:
                             cxn = model.Type(ident=oid, label=al)
                             cxn.classified_as = model.Type(ident="http://vocab.getty.edu/aat/300435108", label="Occupation")
                             top.classified_as = cxn
