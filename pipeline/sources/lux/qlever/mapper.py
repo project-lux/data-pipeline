@@ -4,6 +4,34 @@ from rdflib import URIRef, Literal
 from pipeline.process.base.mapper import Mapper
 from bs4 import BeautifulSoup
 
+examples = """
+PREFIX lux: <https://lux.collections.yale.edu/ns/>
+SELECT DISTINCT ?what WHERE {
+   ?what lux:recordText ?ftxt .
+   ?t ql:contains-word "guide* routing" .
+   ?t ql:contains-entity ?ftxt .
+   FILTER (contains(?ftxt, "guidebook routing")) # as a phrase
+  } LIMIT 100
+
+
+PREFIX crm: <http://www.cidoc-crm.org/cidoc-crm/>
+PREFIX lux: <https://lux.collections.yale.edu/ns/>
+PREFIX la: <https://linked.art/ns/terms/>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT DISTINCT ?what ?ql_matchingword_t_nann WHERE {
+  ?what a crm:E21_Person ; 
+      crm:P2_has_type ?type ;
+      crm:P98i_was_born ?birth .
+  ?birth crm:P4_has_time-span ?ts .
+  ?ts crm:P82a_begin_of_the_begin ?tsb .
+  FILTER (?tsb < "1900-01-01T00:00:00Z"^^xsd:dateTime)
+  ?type crm:P1_is_identified_by ?name .
+  ?name crm:P190_has_symbolic_content ?txt .
+  ?t ql:contains-word "Nann*" ; ql:contains-entity ?txt .
+  } LIMIT 1000
+"""
+
 class QleverMapper(Mapper):
 
     def __init__(self, config):
@@ -24,6 +52,13 @@ class QleverMapper(Mapper):
         self.literal_pattern = "<{subject}> <{predicate}> {value}{datatype} ."
         self.number_type = "^^<http://www.w3.org/2001/XMLSchema#decimal>"
         self.date_type = "^^<http://www.w3.org/2001/XMLSchema#dateTime>"
+
+        self.globals = self.configs.globals
+        self.ignore_props_for_refs = ['identified_by', 'referred_to_by', 'equivalent',  \
+            'subject_of', 'attributed_by', 'contact_point', 'defined_by', \
+            'shown_by', 'carried_by', 'digitally_carried_by', 'digitally_shown_by', \
+            'approximated_by', 'dimension', 'access_point',\
+            'digitally_carries', 'subject_to', 'assigned_by', 'exemplary_member_of']
 
         self.type_map = {
             "HumanMadeObject": f"{self.crmns}E22_Human-Made_Object",
@@ -130,8 +165,10 @@ class QleverMapper(Mapper):
         }
 
 
+    # This needs to calculate lux:any based on ignoring some props
+    # per marklogic mapper
 
-    def walk_for_triples(self, node, conf):
+    def walk_for_triples(self, node, conf, ignore=False):
 
         if not 'id' in node:
             me = f"{conf['base']}_{conf['bid']}"
@@ -139,8 +176,9 @@ class QleverMapper(Mapper):
         else:
             me = node['id']
             if me != conf['base'] and me.startswith(self.datans):
-                # Triples will come from its own record
-                # Including metatypes
+                # Triples will come from its own record, including metatypes
+                if not ignore:
+                    conf['refs'][me] = 1
                 return me
             else:
                 if not me.startswith(self.datans):
@@ -223,6 +261,9 @@ class QleverMapper(Mapper):
                     continue
 
             t = {"subject": me, 'predicate': pred}
+            ignore_now = ignore
+            if not ignore:
+                ignore = k in self.ignore_props
 
             if not type(v) in [list, dict]:
                 # process a value
@@ -271,17 +312,18 @@ class QleverMapper(Mapper):
             elif type(v) == list:
                 for vi in v:
                     if type(vi) == dict:
-                        obj = self.walk_for_triples(vi, conf)
+                        obj = self.walk_for_triples(vi, conf, ignore)
                         if obj is not None:
                             t['object'] = obj
                             conf['triples'].append(self.triple_pattern.format(**t))
                     else:
                         print(f"found non dict in a list :( {node}")
             elif type(v) == dict:
-                obj = self.walk_for_triples(v, conf)
+                obj = self.walk_for_triples(v, conf, ignore)
                 if obj is not None:
                     t['object'] = obj
                     conf['triples'].append(self.triple_pattern.format(**t))
+            ignore = ignore_now
 
         return me
 
@@ -296,6 +338,28 @@ class QleverMapper(Mapper):
                 pass
             else:
                 part['content'] = clncont
+
+    def get_prefix(self, which):
+        if which in ['VisualItem', 'LinguisticObject']:
+            pfx = "work"
+        elif which in ['HumanMadeObject', 'DigitalObject']:
+            pfx = "item"
+        elif which in ['Person', 'Group']:
+            pfx = "agent"
+        elif which == 'Place':
+            pfx = "place"
+        elif which in ['Type', 'Language', 'Material', 'Currency', 'MeasurementUnit', 'Set']:
+            # Set here is Collection / Holdings. UI decision to put in with concepts
+            pfx = "concept"
+        elif which in ['Activity', 'Event', 'Period']:
+            pfx = "event"
+        else:
+            # Things that don't fall into the above categories
+            # Probably due to bugs
+            print(f"Failed to find a prefix for {which}")
+            pfx = "other"        
+        return pfx
+
 
     def transform(self, record, rectype=None, reference=False):
 
@@ -314,30 +378,20 @@ class QleverMapper(Mapper):
 
         # Where do we generally live
         cxns = [x['id'] for x in data.get('classified_as', []) if 'id' in x]
-        if data['type'] in ['VisualItem', 'LinguisticObject']:
+        if (self.globals['archives'] in cxns) and data['type'] == 'Set':
             pfx = "work"
-        elif data['type'] in ['HumanMadeObject', 'DigitalObject']:
-            pfx = "item"
-        elif (self.globals['archives'] in cxns) and data['type'] == 'Set':
-            pfx = "work"
-        elif data['type'] in ['Person', 'Group']:
-            pfx = "agent"
-        elif data['type'] == 'Place':
-            pfx = "place"
-        elif data['type'] in ['Type', 'Language', 'Material', 'Currency', 'MeasurementUnit', 'Set']:
-            # Set here is Collection / Holdings. UI decision to put in with concepts
-            pfx = "concept"
-        elif data['type'] in ['Activity', 'Event', 'Period']:
-            pfx = "event"
         else:
-            # Things that don't fall into the above categories
-            # Probably due to bugs
-            print(f"Failed to find a prefix for {data['type']}")
-
+            pfx = self.get_prefix(data['type'])
 
         triples = []
-        conf = {'triples': triples, 'base': me, 'bid': 0, 'recordText': []}
+        conf = {'triples': triples, 'base': me, 'bid': 0, 'recordText': [], 'refs': {}}
         self.walk_for_triples(data, conf)
+
+        if cxns:
+            cxPred = f"{self.luxns}{pfx}ClassifiedAs"
+            for c in cxns:
+                t = {'subject': me, 'predicate': cxPred, 'object': c}
+                triples.append(self.literal_pattern.format(**t))
 
         if conf['recordText']:
             value = ' '.join(conf['recordText'])
@@ -435,5 +489,152 @@ class QleverMapper(Mapper):
                 for i in influences:
                     t = {"subject": me, "predicate": f"{self.luxns}{ipred}", "object": i}
                     triples.append(self.triple_pattern.format(**t))
+
+        # Pre-construct other useful triples    
+
+        # Make primary name its own triple
+        if 'identified_by' in data:
+            for nm in data['identified_by']:
+                nmcxns = [y['id'] for y in nm.get('classified_as', [])]
+                if 'type' in nm and nm['type'] == 'Name' and self.globals[''] in nmcxns and 'context' in nm:
+                    t = {'subject': me, 'predicate': f"{self.luxns}primaryName", 'value': nm['content'], 'datatype':''}
+                    triples.append(self.literal_pattern.format(**t))
+
+        # {pfx}Any
+        for ref in conf['refs'].keys():
+            t = {"subject": me, "predicate": f"{self.luxns}{pfx}Any", "object": ref}
+            triples.append(self.triple_pattern.format(**t))
+
+        if pfx == "agent":
+            natls = [x['id'] for x in data.get('classified_as', []) if self.globals['nationality'] in 
+                [y['id'] for y in x.get('classified_as', [])] and 'id' in x]
+            for f in natls:
+                t = {"subject": me, "predicate": f"{luxns}agentNationality", "object": f}
+                triples.append(self.triple_pattern.format(**t))
+
+            occs = [x['id'] for x in data.get('classified_as', []) if self.globals['occupation'] in 
+                [y['id'] for y in x.get('classified_as', [])] and 'id' in x]
+            for f in occs:
+                t = {"subject": me, "predicate": f"{luxns}agentOccupation", "object": f}
+                triples.append(self.triple_pattern.format(**t))
+        elif data['type'] in ['LinguisticObject', 'Set', 'VisualItem']:
+            if 'about' in data:
+                for a in data['about']:
+                    if 'id' in a:
+                        t = {"subject": me, "predicate": f"{luxns}about_or_depicts", "object": a['id']}
+                        triples.append(self.triple_pattern.format(**t))       
+                        # add target specific triples
+                        if 'type' in a:
+                            typ = self.get_prefix(a['type'])
+                            t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{typ}", "object": a['id']}
+                            triples.append(self.triple_pattern.format(**t))                                  
+        elif pfx == "event":
+            # Add triples for carried_out_by, took_place_at of record, vs production etc
+            if 'carried_out_by' in data:
+                ags = [x['id'] for x in data.get('carried_out_by', []) if 'id' in x]
+                aPred = f"{luxns}{pfx}CarriedOutBy"
+                for a in ags:
+                    t = {"subject": me, "predicate": aPred, "object": a}
+                    triples.append(self.triple_pattern.format(**t))                     
+            if 'took_place_at' in data:
+                places = [x['id'] for x in data.get('took_place_at', []) if 'id' in x]
+                pPred = f"{luxns}{pfx}TookPlaceAt"
+                for p in places:
+                    t = {"subject": me, "predicate": pPred, "object": p}
+                    triples.append(self.triple_pattern.format(**t))                 
+            if 'used_specific_object' in data:
+                for uso in data['used_specific_object']:
+                    if 'id' in uso:
+                        t = {"subject": me, "predicate": f"{crmns}P16_used_specific_object", "object": uso['id']}
+                        triples.append(self.triple_pattern.format(**t))  
+
+        elif pfx == "concept":
+            if 'created_by' in data and 'influenced_by' in data['created_by']:
+                for inf in data['created_by']['influenced_by']:
+                    if 'id' in inf and 'type' in inf:
+                        typ = self.get_prefix(inf['type'])
+                        t = {"subject":me,"predicate":f"{luxns}influenced_by_{typ}","object":inf['id']}
+                        triples.append(self.triple_pattern.format(**t)) 
+
+
+        if data['type'] == 'Person':
+            facets['personId'] = data['id']
+            # Do person indexes here
+            genders = [x['id'] for x in data.get('classified_as', []) if self.globals['gender'] in 
+                [y['id'] for y in x.get('classified_as', [])] and 'id' in x]            
+            for f in genders:
+                t = {"subject": me, "predicate": f"{luxns}agentGender", "object": f}
+                triples.append(self.triple_pattern.format(**t))
+
+            if 'born' in data and 'timespan' in data['born']:
+                bd = data['born']['timespan'].get('begin_of_the_begin', "")
+                if bd:
+                    t = {"subject": me, "predicate": f"{luxns}agentBeginDate", "value": f"\"{bd}\"", "datatype": self.date_type}
+                    triples.append(self.literal_pattern.format(**t))
+            if 'died' in data and 'timespan' in data['died']:
+                dd = data['died']['timespan'].get('end_of_the_end', "")
+                if dd:
+                    t = {"subject": me, "predicate": f"{luxns}agentEndDate", "value": f"\"{dd}\"", "datatype": self.date_type}
+                    triples.append(self.literal_pattern.format(**t))
+
+        elif data['type'] == 'Group':
+            facets['groupId'] = data['id']
+            if 'formed_by' in data and 'timespan' in data['formed_by']:
+                bd = data['formed_by']['timespan'].get('begin_of_the_begin', "")
+                if bd:
+                    t = {"subject": me, "predicate": f"{luxns}agentBeginDate", "value": f"\"{bd}\"", "datatype": self.date_type}
+                    triples.append(self.literal_pattern.format(**t))
+            if 'dissolved_by' in data and 'timespan' in data['dissolved_by']:
+                dd = data['dissolved_by']['timespan'].get('end_of_the_end', "")
+                if dd:
+                    t = {"subject": me, "predicate": f"{luxns}agentEndDate", "value": f"\"{dd}\"", "datatype": self.date_type}
+                    triples.append(self.literal_pattern.format(**t))
+
+        elif data['type'] == 'Set':
+            if 'used_for' in data:
+                for uf in data['used_for']:
+                    if 'classified_as' in uf and 'carried_out_by' in uf:
+                        for c in uf['classified_as']:
+                            if 'id' in c and c['id'] == self.globals['curation']:
+                                for who in uf['carried_out_by']:
+                                    if 'id' in who:
+                                        t = {"subject": me, "predicate": f"{luxns}agentOfCuration", "object": who['id']}
+                                        triples.append(self.triple_pattern.format(**t))
+
+        elif data['type'] == 'HumanMadeObject':
+            if 'carries' in data:
+                for c in data['carries']:
+                    if 'id' in c:
+                        t = {"subject": me, "predicate": f"{luxns}carries_or_shows", "object": c['id']}
+                        triples.append(self.triple_pattern.format(**t))
+            if 'shows' in data:
+                for s in data['shows']:
+                    if 'id' in s:
+                        t = {"subject": me, "predicate": f"{luxns}carries_or_shows", "object": s['id']}
+                        triples.append(self.triple_pattern.format(**t))
+
+        elif data['type'] == 'DigitalObject':
+            if 'digitally_carries' in data:
+                for c in data['digitally_carries']:
+                    if 'id' in c:
+                        t = {"subject": me, "predicate": f"{luxns}carries_or_shows", "object": c['id']}
+                        triples.append(self.triple_pattern.format(**t))
+            if 'digitally_shows' in data:
+                for s in data['digitally_shows']:
+                    if 'id' in s:
+                        t = {"subject": me, "predicate": f"{luxns}carries_or_shows", "object": s['id']}
+                        triples.append(self.triple_pattern.format(**t))            
+
+        elif data['type'] == 'VisualItem': 
+            if 'represents' in data:
+                for r in data['represents']:
+                    if 'id' in r:
+                        t = {"subject": me, "predicate": f"{luxns}about_or_depicts", "object": r['id']}
+                        triples.append(self.triple_pattern.format(**t))    
+
+                        if 'type' in r:
+                            typ = self.get_prefix(r['type'])
+                            t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{typ}", "object": r['id']}
+                            triples.append(self.triple_pattern.format(**t))   
 
         return triples

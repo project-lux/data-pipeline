@@ -1,10 +1,10 @@
 import ply.lex as lex
 import ujson as json
-import query_token_rules
+from .query_token_rules import *
 
 import numpy as np
-from cts import Prefixer
-from cts import fieldRangeQuery, fieldWordQuery, andQuery, orQuery, andNotQuery, \
+from .cts import Prefixer
+from .cts import fieldRangeQuery, fieldWordQuery, andQuery, orQuery, andNotQuery, \
     notQuery, tripleRangeQuery, kwTripleRangeQuery, documentQuery, triples, sem_iri
 
 prefs = Prefixer()

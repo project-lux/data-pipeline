@@ -48,6 +48,7 @@ if '--nt' in sys.argv:
             x += 1
             if not x % 100000:
                 print(f"{x} {time.time()-start}")
+                sys.stdout.flush()
 
 
 if '--test-ils-idmap' in sys.argv:
