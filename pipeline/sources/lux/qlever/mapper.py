@@ -558,7 +558,6 @@ class QleverMapper(Mapper):
 
 
         if data['type'] == 'Person':
-            facets['personId'] = data['id']
             # Do person indexes here
             genders = [x['id'] for x in data.get('classified_as', []) if self.globals['gender'] in 
                 [y['id'] for y in x.get('classified_as', [])] and 'id' in x]            
@@ -578,7 +577,6 @@ class QleverMapper(Mapper):
                     triples.append(self.literal_pattern.format(**t))
 
         elif data['type'] == 'Group':
-            facets['groupId'] = data['id']
             if 'formed_by' in data and 'timespan' in data['formed_by']:
                 bd = data['formed_by']['timespan'].get('begin_of_the_begin', "")
                 if bd:
