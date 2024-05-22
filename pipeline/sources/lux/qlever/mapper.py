@@ -496,7 +496,7 @@ class QleverMapper(Mapper):
         if 'identified_by' in data:
             for nm in data['identified_by']:
                 nmcxns = [y['id'] for y in nm.get('classified_as', [])]
-                if 'type' in nm and nm['type'] == 'Name' and self.globals[''] in nmcxns and 'context' in nm:
+                if 'type' in nm and nm['type'] == 'Name' and self.globals['primaryName'] in nmcxns and 'context' in nm:
                     t = {'subject': me, 'predicate': f"{self.luxns}primaryName", 'value': nm['content'], 'datatype':''}
                     triples.append(self.literal_pattern.format(**t))
 
