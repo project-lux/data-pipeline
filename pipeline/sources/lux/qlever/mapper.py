@@ -391,7 +391,7 @@ class QleverMapper(Mapper):
             cxPred = f"{self.luxns}{pfx}ClassifiedAs"
             for c in cxns:
                 t = {'subject': me, 'predicate': cxPred, 'object': c}
-                triples.append(self.literal_pattern.format(**t))
+                triples.append(self.triple_pattern.format(**t))
 
         if conf['recordText']:
             value = ' '.join(conf['recordText'])
