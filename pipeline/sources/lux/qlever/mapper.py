@@ -165,8 +165,6 @@ class QleverMapper(Mapper):
         }
 
 
-    # This needs to calculate lux:any based on ignoring some props
-    # per marklogic mapper
 
     def walk_for_triples(self, node, conf, ignore=False):
 
@@ -198,7 +196,6 @@ class QleverMapper(Mapper):
             print(e)
             return None
 
-        luxns = "https://lux.collections.yale.edu/ns/"
         for (k,v) in node.items():
             if k in ['id', '_label', '@context']:
                 continue
@@ -237,10 +234,10 @@ class QleverMapper(Mapper):
                                 pred = f"{self.skosns}narrower"
                         else:
                             print(f"Saw {mytype} as class for node with {k} property")
-                            pred = f"{luxns}{k}"
+                            pred = f"{self.luxns}{k}"
                     else:
                         print(f"Saw {node} with {k} but no type?")
-                        pred = f"{luxns}{k}"
+                        pred = f"{self.luxns}{k}"
                 elif k == 'member_of':
                     if v and type(v) == list and type(v[0]) == dict and 'type' in v[0]:
                         objtype = v[0]['type']
@@ -509,36 +506,36 @@ class QleverMapper(Mapper):
             natls = [x['id'] for x in data.get('classified_as', []) if self.globals['nationality'] in 
                 [y['id'] for y in x.get('classified_as', [])] and 'id' in x]
             for f in natls:
-                t = {"subject": me, "predicate": f"{luxns}agentNationality", "object": f}
+                t = {"subject": me, "predicate": f"{self.luxns}agentNationality", "object": f}
                 triples.append(self.triple_pattern.format(**t))
 
             occs = [x['id'] for x in data.get('classified_as', []) if self.globals['occupation'] in 
                 [y['id'] for y in x.get('classified_as', [])] and 'id' in x]
             for f in occs:
-                t = {"subject": me, "predicate": f"{luxns}agentOccupation", "object": f}
+                t = {"subject": me, "predicate": f"{self.luxns}agentOccupation", "object": f}
                 triples.append(self.triple_pattern.format(**t))
         elif data['type'] in ['LinguisticObject', 'Set', 'VisualItem']:
             if 'about' in data:
                 for a in data['about']:
                     if 'id' in a:
-                        t = {"subject": me, "predicate": f"{luxns}about_or_depicts", "object": a['id']}
+                        t = {"subject": me, "predicate": f"{self.luxns}about_or_depicts", "object": a['id']}
                         triples.append(self.triple_pattern.format(**t))       
                         # add target specific triples
                         if 'type' in a:
                             typ = self.get_prefix(a['type'])
-                            t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{typ}", "object": a['id']}
+                            t = {"subject": me, "predicate": f"{self.luxns}about_or_depicts_{typ}", "object": a['id']}
                             triples.append(self.triple_pattern.format(**t))                                  
         elif pfx == "event":
             # Add triples for carried_out_by, took_place_at of record, vs production etc
             if 'carried_out_by' in data:
                 ags = [x['id'] for x in data.get('carried_out_by', []) if 'id' in x]
-                aPred = f"{luxns}{pfx}CarriedOutBy"
+                aPred = f"{self.luxns}{pfx}CarriedOutBy"
                 for a in ags:
                     t = {"subject": me, "predicate": aPred, "object": a}
                     triples.append(self.triple_pattern.format(**t))                     
             if 'took_place_at' in data:
                 places = [x['id'] for x in data.get('took_place_at', []) if 'id' in x]
-                pPred = f"{luxns}{pfx}TookPlaceAt"
+                pPred = f"{self.luxns}{pfx}TookPlaceAt"
                 for p in places:
                     t = {"subject": me, "predicate": pPred, "object": p}
                     triples.append(self.triple_pattern.format(**t))                 
@@ -553,7 +550,7 @@ class QleverMapper(Mapper):
                 for inf in data['created_by']['influenced_by']:
                     if 'id' in inf and 'type' in inf:
                         typ = self.get_prefix(inf['type'])
-                        t = {"subject":me,"predicate":f"{luxns}influenced_by_{typ}","object":inf['id']}
+                        t = {"subject":me,"predicate":f"{self.luxns}influenced_by_{typ}","object":inf['id']}
                         triples.append(self.triple_pattern.format(**t)) 
 
 
@@ -562,30 +559,30 @@ class QleverMapper(Mapper):
             genders = [x['id'] for x in data.get('classified_as', []) if self.globals['gender'] in 
                 [y['id'] for y in x.get('classified_as', [])] and 'id' in x]            
             for f in genders:
-                t = {"subject": me, "predicate": f"{luxns}agentGender", "object": f}
+                t = {"subject": me, "predicate": f"{self.luxns}agentGender", "object": f}
                 triples.append(self.triple_pattern.format(**t))
 
             if 'born' in data and 'timespan' in data['born']:
                 bd = data['born']['timespan'].get('begin_of_the_begin', "")
                 if bd:
-                    t = {"subject": me, "predicate": f"{luxns}agentBeginDate", "value": f"\"{bd}\"", "datatype": self.date_type}
+                    t = {"subject": me, "predicate": f"{self.luxns}agentBeginDate", "value": f"\"{bd}\"", "datatype": self.date_type}
                     triples.append(self.literal_pattern.format(**t))
             if 'died' in data and 'timespan' in data['died']:
                 dd = data['died']['timespan'].get('end_of_the_end', "")
                 if dd:
-                    t = {"subject": me, "predicate": f"{luxns}agentEndDate", "value": f"\"{dd}\"", "datatype": self.date_type}
+                    t = {"subject": me, "predicate": f"{self.luxns}agentEndDate", "value": f"\"{dd}\"", "datatype": self.date_type}
                     triples.append(self.literal_pattern.format(**t))
 
         elif data['type'] == 'Group':
             if 'formed_by' in data and 'timespan' in data['formed_by']:
                 bd = data['formed_by']['timespan'].get('begin_of_the_begin', "")
                 if bd:
-                    t = {"subject": me, "predicate": f"{luxns}agentBeginDate", "value": f"\"{bd}\"", "datatype": self.date_type}
+                    t = {"subject": me, "predicate": f"{self.luxns}agentBeginDate", "value": f"\"{bd}\"", "datatype": self.date_type}
                     triples.append(self.literal_pattern.format(**t))
             if 'dissolved_by' in data and 'timespan' in data['dissolved_by']:
                 dd = data['dissolved_by']['timespan'].get('end_of_the_end', "")
                 if dd:
-                    t = {"subject": me, "predicate": f"{luxns}agentEndDate", "value": f"\"{dd}\"", "datatype": self.date_type}
+                    t = {"subject": me, "predicate": f"{self.luxns}agentEndDate", "value": f"\"{dd}\"", "datatype": self.date_type}
                     triples.append(self.literal_pattern.format(**t))
 
         elif data['type'] == 'Set':
@@ -596,43 +593,43 @@ class QleverMapper(Mapper):
                             if 'id' in c and c['id'] == self.globals['curation']:
                                 for who in uf['carried_out_by']:
                                     if 'id' in who:
-                                        t = {"subject": me, "predicate": f"{luxns}agentOfCuration", "object": who['id']}
+                                        t = {"subject": me, "predicate": f"{self.luxns}agentOfCuration", "object": who['id']}
                                         triples.append(self.triple_pattern.format(**t))
 
         elif data['type'] == 'HumanMadeObject':
             if 'carries' in data:
                 for c in data['carries']:
                     if 'id' in c:
-                        t = {"subject": me, "predicate": f"{luxns}carries_or_shows", "object": c['id']}
+                        t = {"subject": me, "predicate": f"{self.luxns}carries_or_shows", "object": c['id']}
                         triples.append(self.triple_pattern.format(**t))
             if 'shows' in data:
                 for s in data['shows']:
                     if 'id' in s:
-                        t = {"subject": me, "predicate": f"{luxns}carries_or_shows", "object": s['id']}
+                        t = {"subject": me, "predicate": f"{self.luxns}carries_or_shows", "object": s['id']}
                         triples.append(self.triple_pattern.format(**t))
 
         elif data['type'] == 'DigitalObject':
             if 'digitally_carries' in data:
                 for c in data['digitally_carries']:
                     if 'id' in c:
-                        t = {"subject": me, "predicate": f"{luxns}carries_or_shows", "object": c['id']}
+                        t = {"subject": me, "predicate": f"{self.luxns}carries_or_shows", "object": c['id']}
                         triples.append(self.triple_pattern.format(**t))
             if 'digitally_shows' in data:
                 for s in data['digitally_shows']:
                     if 'id' in s:
-                        t = {"subject": me, "predicate": f"{luxns}carries_or_shows", "object": s['id']}
+                        t = {"subject": me, "predicate": f"{self.luxns}carries_or_shows", "object": s['id']}
                         triples.append(self.triple_pattern.format(**t))            
 
         elif data['type'] == 'VisualItem': 
             if 'represents' in data:
                 for r in data['represents']:
                     if 'id' in r:
-                        t = {"subject": me, "predicate": f"{luxns}about_or_depicts", "object": r['id']}
+                        t = {"subject": me, "predicate": f"{self.luxns}about_or_depicts", "object": r['id']}
                         triples.append(self.triple_pattern.format(**t))    
 
                         if 'type' in r:
                             typ = self.get_prefix(r['type'])
-                            t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{typ}", "object": r['id']}
+                            t = {"subject": me, "predicate": f"{self.luxns}about_or_depicts_{typ}", "object": r['id']}
                             triples.append(self.triple_pattern.format(**t))   
 
         return triples
