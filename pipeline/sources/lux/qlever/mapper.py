@@ -539,11 +539,6 @@ class QleverMapper(Mapper):
                 for p in places:
                     t = {"subject": me, "predicate": pPred, "object": p}
                     triples.append(self.triple_pattern.format(**t))                 
-            if 'used_specific_object' in data:
-                for uso in data['used_specific_object']:
-                    if 'id' in uso:
-                        t = {"subject": me, "predicate": f"{crmns}P16_used_specific_object", "object": uso['id']}
-                        triples.append(self.triple_pattern.format(**t))  
 
         elif pfx == "concept":
             if 'created_by' in data and 'influenced_by' in data['created_by']:
