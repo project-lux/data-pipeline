@@ -263,7 +263,7 @@ class QleverMapper(Mapper):
             t = {"subject": me, 'predicate': pred}
             ignore_now = ignore
             if not ignore:
-                ignore = k in self.ignore_props
+                ignore = k in self.ignore_props_for_refs
 
             if not type(v) in [list, dict]:
                 # process a value
