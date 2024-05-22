@@ -893,7 +893,8 @@ class WdMapper(Mapper, WdConfigManager):
             for s in subj:
                 ref = self.get_reference(s)
                 if ref:
-                    top.about = ref
+                    refcls = ref.__class__
+                    top.about = refcls(ident=self.expand_uri(s))
         mvmt = data.get("P135", None)
         if mvmt:
             for m in mvmt:
