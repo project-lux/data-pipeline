@@ -494,7 +494,18 @@ class QleverMapper(Mapper):
             for nm in data['identified_by']:
                 nmcxns = [y['id'] for y in nm.get('classified_as', []) if 'id' in y]
                 if 'type' in nm and nm['type'] == 'Name' and self.globals['primaryName'] in nmcxns and 'content' in nm:
-                    t = {'subject': me, 'predicate': f"{self.luxns}primaryName", 'value': nm['content'], 'datatype':''}
+                    t = {'subject': me, 'predicate': f"{self.luxns}primaryName", 'value': '', 'datatype':''}
+                    v = nm['content']
+                    value = v.replace('\t', '\\t')
+                    value = value.replace('\n', '\\n')
+                    value = value.replace('\r', '\\r')
+                    try:
+                        nvalue = Literal(value).n3()
+                        t['value'] = nvalue
+                    except Exception as e:
+                        print(f"Failed to process literal {v} in {data['identifier']}")
+                        print(e)
+                        continue
                     triples.append(self.literal_pattern.format(**t))
 
         # {pfx}Any
