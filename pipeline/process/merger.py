@@ -632,6 +632,14 @@ class RecordMerger(object):
 
         primaryName = self.globals['primaryName']
         alternateName = self.globals['alternateName']
+        sortName = self.globals['sortName']
+
+        primaryType = {'id':primaryName, 'type':'Type', '_label':'Primary Name', 'equivalent':[
+                {'id':'http://vocab.getty.edu/aat/300404670', 'type':'Type', '_label': 'Merge: Primary Name'}]}
+        sortType = {'id':sortName, 'type':'Type', '_label':'Sort Name', 'equivalent': [
+                {'id':'http://vocab.getty.edu/aat/300451544', 'type':'Type', '_label': 'Merge: Sort Name'}]}
+        alternateType = {'id':alternateName, 'type':'Type', '_label':'Sort Name', 'equivalent': [
+                {'id':'http://vocab.getty.edu/aat/300264273', 'type':'Type', '_label': 'Merge: Alternate Name'}]}
 
         if 'identified_by' in merge and not 'identified_by' in skip:
             # FIXME: check part: merge may have the same name split up into parts
@@ -685,7 +693,7 @@ class RecordMerger(object):
                                 if not has_primary and not alternateName in mcxns:
                                     if not 'classified_as' in main:
                                         main['classified_as'] = []
-                                    main['classified_as'].append({'id': primaryName, 'type':'Type', '_label':'Merge: Primary Name'})
+                                    main['classified_as'].append(primaryType)
                                     has_primary = True
                                 else:
                                     # do nothing
@@ -694,7 +702,7 @@ class RecordMerger(object):
                                 if not primaryName in mcxns and not alternateName in mcxns:
                                     if not 'classified_as' in main:
                                         main['classified_as'] = []
-                                    main['classified_as'].append({'id': alternateName, 'type':'Type', '_label':'Merge: Alternate Name'})
+                                    main['classified_as'].append(alternateType)
                             elif not ic in mcxns:
                                 if not 'classified_as' in main:
                                     main['classified_as'] = []
