@@ -31,7 +31,7 @@ try:
                             for ap in do['access_point']:
                                 if 'id' in ap and 'wikipedia.org' in ap['id']:
                                     candidates.append(data)
-                                    print(f"Added: {data.get('_label', 'unknown person')}")
+                                    print(f"Added: {data.get('_label', 'unknown person')} to {len(candidates)}")
                                     if len(candidates) > 12000:
                                         raise ValueError()
 except ValueError as e:
@@ -55,6 +55,7 @@ try:
                         print(f"invalid wd ref {q}")
                     else:
                         if 'sitelinks' in wdrec['data']:
+                            print(f"Added: {data.get('_label', 'unknown object')} to {len(ocandidates)}")
                             ocandidates.append(data)
                             if len(ocandidates) > 1000:
                                 raise ValueError()

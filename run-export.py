@@ -42,6 +42,9 @@ if profiling:
     pr = cProfile.Profile()
     pr.enable()
 
+if not os.path.exists(cfgs.exports_dir):
+    os.mkdir(cfgs.exports_dir)
+
 fn = os.path.join(cfgs.exports_dir, f'export_full_{my_slice}.jsonl')
 outh = open(fn, 'w')
 x = 0
