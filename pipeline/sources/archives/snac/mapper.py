@@ -1,6 +1,9 @@
 from pipeline.process.base.mapper import Mapper
 from pipeline.process.utils.mapper_utils import make_datetime
 from cromulent import model, vocab
+import lxml.etree as ET
+import re 
+import requests
 
 # keys:
 # dataType= Constellation
@@ -16,26 +19,15 @@ from cromulent import model, vocab
 # conventionDeclarations: ??
 # languagesUsed: across rec, not specific to each entry?
 # nameEntries: primary and alternates
-# occupations: occupation/roles. string from their vocab list but no uris given anywhere.
+# occupations: occupation/roles. string from their vocab list but no uris given anywhere/ids don't resolve to anything
 # biogHists: long text bio
-# relations: a lot of related people/groups, only thing poss useful is:
-rel = rec['relations']
-for r in rel:
-    if r['type']['term'] == "mayBeSameAs":
-        ARKsameAs = r['targetArkID']
+# relations: a lot of related people/groups, only thing poss useful is maybeSameAs
 # sameAsRelations
-same = rec['sameAsRelations']
-for s in same:
-    uri = s['uri']
-#https://viaf.org/viaf/56862633
-#https://www.worldcat.org/identities/lccn-n50011728
-#https://id.loc.gov/authorities/n50011728
-#https://www.wikidata.org/entity/Q369263
-
 # resourceRelations: probably not useful right now
-# places: carried_out professional locations. repetitive and messy. only use ones with uris?
-# subjects: skip
-# nationalities: string only
+# places: carried_out professional locations. repetitive and messy. 
+    #theoretically these have geonames which should be requestable EXCEPT none of the ids from Trumbull's rec returned anything valid
+# subjects: same prob as occupations.
+# nationalities: same prob as occupations.
 # id: constellation id
 # version: skip
 # dates: birth and death dates
@@ -60,19 +52,11 @@ class SNACMapper(Mapper):
     def transform(self, record, rectype=""):
         (top, topcls) = self.do_setup(record, rectype)    
         self.handle_common(record, top)
-
-        if not rectype:
-            rectype = topcls.__name__
-        #handle classes
-        fn = getattr(self, f"handle_{rectype.lower()}")
-        if fn:
-            fn(record, top, topcls)
         
         data = model.factory.toJSON(top)
         return {'data': data, 'identifier': record['identifier'], 'source': 'snac'}
 
     def handle_common(self, rec, top):
-        #names
         lang = self.lang
         names = rec.get("nameEntries",[])
         nmslist = []
@@ -107,13 +91,37 @@ class SNACMapper(Mapper):
                 an.language = lang
                 top.identified_by = an
 
+        biog = rec.get("biogHists",[])
+        if biog:
+            for b in bio:
+                text = b.get("text","")
+                if text and text.startswith("<biogHist>"):
+                    root = ET.fromstring(text)
+                    text = ''.join(root.itertext())
+                    text = re.sub(r'\s+', ' ', text.strip())
+                bstat = vocab.BiographyStatement(content=text)
+                lngblk = b.get("language",{})
+                if lngblk:
+                    term = lngblk.get("term","")
+                    if len(term) == 3:
+                        blang = self.lang_three_to_two.get(blang, None)
+                    lang = self.process_langs.get(blang, None)
+                    bstat.language = lang
+                top.referred_to_by = bstat
+        rel = rec.get('relations',[])
+        for r in rel:
+            if r['type']['term'] == "mayBeSameAs":
+                if top.__class__ == model.Person:
+                    top.equivalent = model.Person(ident=r['targetArkID'])
+                elif top.__class__ == model.Group:
+                    top.equivalent = model.Group(ident=r['targetArkID'])
 
-        desc = rec.get('description','')
-        if desc:
-            top.referred_to_by = vocab.Description(content=desc)
-        short_desc = rec.get('short_description','')
-        if short_desc:
-            top.referred_to_by = vocab.Description(content=short_desc)
+        same = rec.get('sameAsRelations',[])
+        for s in same:
+            if top.__class__ == model.Person:
+                top.equivalent = model.Person(ident=s['uri'])
+            elif top.__class__ == model.Group:
+                top.equivalent = model.Group(ident=s['uri'])
 
     def handle_timespan(self, event, date1, date2=None, date3=None):
         pass
