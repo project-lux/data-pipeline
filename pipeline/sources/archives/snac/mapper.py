@@ -166,6 +166,8 @@ class SNACMapper(Mapper):
                         self.make_timespan(formedDate, top, event="Formation")
                     elif fromTerm == "Active":
                         activeStart = d.get("fromDate", "")
+                    else:
+                        activeStart = None
                 if toTerm:
                     if toTerm == "Death":
                         dod = d.get("toDate", "")
@@ -174,7 +176,9 @@ class SNACMapper(Mapper):
                         dissolvedDate = d.get("toDate", "")
                         self.make_timespan(dissolvedDate, top, event="Dissolution")
                     elif toTerm == "Active": 
-                        activeEnd = d.get("toDate", "")   
+                        activeEnd = d.get("toDate", "")
+                    else:
+                        activeEnd = None   
                 
                 if activeStart and activeEnd:
                     aDates = f"{activeStart} - {activeEnd}"
