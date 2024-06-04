@@ -186,6 +186,7 @@ class SNACMapper(Mapper):
 
         dates = rec.get("dates",[])
         datelist = []
+        dob = dod = formedDate = dissolvedDate = activeStart = activeEnd = None
         if dates:
             dates = dates[0]
             if type(dates) == dict:
@@ -213,14 +214,14 @@ class SNACMapper(Mapper):
                 #uhhh
                 pass
 
-        if dob:
-            self.make_timespan(dob, top, event="Birth")
-        if dod:
-            self.make_timespan(dod, top, event="Death")
-        if formedDate:
-            self.make_timespan(formedDate, top, event="Formation")
-        if dissolvedDate:
-            self.make_timespan(dissolvedDate, top, event="Dissolution")
-        if activeStart and activeEnd:
-            aDates = f"{activeStart} - {activeEnd}"
-            self.make_timespan(aDates, top, event="Activity")
+            if dob:
+                self.make_timespan(dob, top, event="Birth")
+            if dod:
+                self.make_timespan(dod, top, event="Death")
+            if formedDate:
+                self.make_timespan(formedDate, top, event="Formation")
+            if dissolvedDate:
+                self.make_timespan(dissolvedDate, top, event="Dissolution")
+            if activeStart and activeEnd:
+                aDates = f"{activeStart} - {activeEnd}"
+                self.make_timespan(aDates, top, event="Activity")
