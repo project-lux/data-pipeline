@@ -33,7 +33,7 @@ import re
 
 class SNACMapper(Mapper):
     def __init__(self, config):
-        #super().__init__(config)        
+        super().__init__(config)        
         self.lang = self.process_langs.get("en","")
     
     def do_setup(self, rec, rectype=""):
