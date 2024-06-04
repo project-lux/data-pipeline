@@ -33,7 +33,7 @@ import re
 
 class SNACMapper(Mapper):
     def __init__(self, config):
-        super().__init__(config)        
+        #super().__init__(config)        
         self.lang = self.process_langs.get("en","")
     
     def do_setup(self, rec, rectype=""):
@@ -57,8 +57,7 @@ class SNACMapper(Mapper):
     def make_timespan(self, date, top, event=""):
         try:
             b,e = make_datetime(date)
-        except Exception as exc:
-            print(f"Error: {exc}")
+        except:
             b = None
         if b:
             self.create_event(event, b, e, date, top)
