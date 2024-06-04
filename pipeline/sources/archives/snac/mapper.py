@@ -159,22 +159,22 @@ class SNACMapper(Mapper):
                     toTerm = toType.get("term","")
                 if fromTerm:
                     if fromTerm == "Birth":
-                        dob = dates.get("fromDate", "")
+                        dob = d.get("fromDate", "")
                         self.make_timespan(dob, top, event="Birth")
                     elif fromTerm == "Establishment":
-                        formedDate = dates.get("fromDate", "")
+                        formedDate = d.get("fromDate", "")
                         self.make_timespan(formedDate, top, event="Formation")
                     elif fromTerm == "Active":
-                        activeStart = dates.get("fromDate", "")
+                        activeStart = d.get("fromDate", "")
                 if toTerm:
                     if toTerm == "Death":
-                        dod = dates.get("toDate", "")
+                        dod = d.get("toDate", "")
                         self.make_timespan(dod, top, event="Death")
                     elif toTerm == "Disestablishment":
-                        dissolvedDate = dates.get("toDate", "")
+                        dissolvedDate = d.get("toDate", "")
                         self.make_timespan(dissolvedDate, top, event="Dissolution")
                     elif toTerm == "Active": 
-                        activeEnd = dates.get("toDate", "")   
+                        activeEnd = d.get("toDate", "")   
                 
                 if activeStart and activeEnd:
                     aDates = f"{activeStart} - {activeEnd}"
