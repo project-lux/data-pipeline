@@ -7,6 +7,7 @@ from pipeline.config import Config
 from pipeline.process.reconciler import Reconciler
 from pipeline.process.reference_manager import ReferenceManager
 from pipeline.storage.cache.postgres import poolman
+import matplotlib.pyplot as plt
 
 import networkx as nx
 
@@ -123,7 +124,15 @@ for k in key:
 print("\nConnected Nodes:")
 for sets in list(nx.connected_components(G)):
     print(sets)
-print(f"\nPath from {from_p} to {to_p}")
+print(f"\nShortest path from {from_p} to {to_p}")
 print(" --> ".join([inv_ident[x] for x in nx.shortest_path(G, idents[from_p], idents[to_p])]))
+print("\nLongest Path:")
+longest_path = nx.dag_longest_path(G)
+print(" --> ".join([inv_ident[x] for x in longest_path]))
 
+plt.figure(figsize=(10, 6))
+pos = nx.spring_layout(G)
+nx.draw_networkx(G, pos, with_labels=True, node_size=500, node_color='lightblue', edge_color='gray')
+plt.title("Graph Visualization")
+plt.show()
  
