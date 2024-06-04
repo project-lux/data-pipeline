@@ -149,6 +149,7 @@ class SNACMapper(Mapper):
                 top.equivalent = model.Group(ident=s['uri'])
 
         dates = rec.get("dates",[])
+        activeStart = activeEnd = None
         if dates:
             for d in dates:
                 fromType = d.get("fromType",{})
@@ -177,8 +178,6 @@ class SNACMapper(Mapper):
                         self.make_timespan(dissolvedDate, top, event="Dissolution")
                     elif toTerm == "Active": 
                         activeEnd = d.get("toDate", "")
-                    else:
-                        activeEnd = None   
                 
                 if activeStart and activeEnd:
                     aDates = f"{activeStart} - {activeEnd}"
