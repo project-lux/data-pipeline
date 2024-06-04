@@ -54,31 +54,31 @@ class SNACMapper(Mapper):
         data = model.factory.toJSON(top)
         return {'data': data, 'identifier': record['identifier'], 'source': 'snac'}
 
-    def make_timespan(self, date, top, event=""):
-        try:
-            b,e = make_datetime(date)
-        except:
-            b = None
-        if b:
-            self.create_event(event, b, e, date, top)
+    # def make_timespan(self, date, top, event=""):
+    #     try:
+    #         b,e = make_datetime(date)
+    #     except:
+    #         b = None
+    #     if b:
+    #         self.create_event(event, b, e, date, top)
 
-    def create_event(self, event, b, e, date, top):
-        event_dict = {
-            "Birth": model.Birth(),
-            "Death": model.Death(),
-            "Formation": model.Formation(),
-            "Dissolution": model.Dissolution(),
-            "Activity": vocab.Active()
-        }
+    # def create_event(self, event, b, e, date, top):
+    #     event_dict = {
+    #         "Birth": model.Birth(),
+    #         "Death": model.Death(),
+    #         "Formation": model.Formation(),
+    #         "Dissolution": model.Dissolution(),
+    #         "Activity": vocab.Active()
+    #     }
 
-        if event in event_dict:
-            event_obj = event_dict[event]
-            ts = model.TimeSpan()
-            ts.begin_of_the_begin = b
-            ts.end_of_the_end = e
-            ts.identified_by = vocab.DisplayName(content=date)
-            event_obj.timespan = ts
-            setattr(top, event.lower(), event_obj)
+    #     if event in event_dict:
+    #         event_obj = event_dict[event]
+    #         ts = model.TimeSpan()
+    #         ts.begin_of_the_begin = b
+    #         ts.end_of_the_end = e
+    #         ts.identified_by = vocab.DisplayName(content=date)
+    #         event_obj.timespan = ts
+    #         setattr(top, event.lower(), event_obj)
 
     def handle_common(self, rec, top):
         lang = self.lang
@@ -151,20 +151,20 @@ class SNACMapper(Mapper):
         dates = rec.get("dates",[])
         if dates:
             dates = dates[0]
-            if isinstance(dates, dict):
-                event_mapping = {
-                    "Birth": dates.get("fromDate", ""),
-                    "Active": dates.get("fromDate", ""),
-                    "Establishment": dates.get("fromDate", ""),
-                    "Death": dates.get("toDate", ""),
-                    "Disestablishment": dates.get("toDate", ""),
-                    }
+            # if isinstance(dates, dict):
+            #     event_mapping = {
+            #         "Birth": dates.get("fromDate", ""),
+            #         "Active": dates.get("fromDate", ""),
+            #         "Establishment": dates.get("fromDate", ""),
+            #         "Death": dates.get("toDate", ""),
+            #         "Disestablishment": dates.get("toDate", ""),
+            #         }
 
-                for event, date in event_mapping.items():
-                    if date:
-                        self.make_timespan(date, top, event=event)
+            #     for event, date in event_mapping.items():
+            #         if date:
+            #             self.make_timespan(date, top, event=event)
 
-                activeEnd = dates.get("toDate", "")
-                if activeEnd:
-                    aDates = f"{event_mapping['Active']} - {activeEnd}"
-                        self.make_timespan(aDates, top, event="Activity")
+            #     activeEnd = dates.get("toDate", "")
+            #     if activeEnd:
+            #         aDates = f"{event_mapping['Active']} - {activeEnd}"
+            #             self.make_timespan(aDates, top, event="Activity")
