@@ -150,21 +150,36 @@ class SNACMapper(Mapper):
 
         dates = rec.get("dates",[])
         if dates:
-            dates = dates[0]
-            if isinstance(dates, dict):
-                event_mapping = {
-                    "Birth": dates.get("fromDate", ""),
-                    "Active": dates.get("fromDate", ""),
-                    "Establishment": dates.get("fromDate", ""),
-                    "Death": dates.get("toDate", ""),
-                    "Disestablishment": dates.get("toDate", ""),
-                    }
-
-                for event, date in event_mapping.items():
-                    if date:
-                        self.make_timespan(date, top, event=event)
-
-            #     activeEnd = dates.get("toDate", "")
-            #     if activeEnd:
-            #         aDates = f"{event_mapping['Active']} - {activeEnd}"
-            #             self.make_timespan(aDates, top, event="Activity")
+            for d in dates:
+                fromType = d.get("fromType",{})
+                toType = d.get("toType",{})
+                if fromType:
+                    fromTerm = fromType.get("term","")
+                if toType:
+                    toTerm = toType.get("term","")
+                if fromTerm:
+                    if fromTerm == "Birth":
+                        dob = dates.get("fromDate", "")
+                        self.make_timespan(dob, top, event="Birth")
+                    elif fromTerm == "Establishment":
+                        formedDate = dates.get("fromDate", "")
+                        self.make_timespan(formedDate, top, event="Formation")
+                    elif fromTerm == "Active":
+                        activeStart = dates.get("fromDate", "")
+                if toTerm:
+                    if toTerm == "Death":
+                        dod = dates.get("toDate", "")
+                        self.make_timespan(dod, top, event="Death")
+                    elif toTerm == "Disestablishment":
+                        dissolvedDate = dates.get("toDate", "")
+                        self.make_timespan(dissolvedDate, top, event="Dissolution")
+                    elif toTerm == "Active": 
+                        activeEnd = dates.get("toDate", "")   
+                
+                if activeStart and activeEnd:
+                    aDates = f"{activeStart} - {activeEnd}"
+                    self.make_timespan(aDates, top, event="Activity")
+                elif activeStart:
+                    self.make_timespan(activeStart, top, event="Activity")
+                elif activeEnd:
+                    self.make_timespan(activeEnd, top, event="Activity")
