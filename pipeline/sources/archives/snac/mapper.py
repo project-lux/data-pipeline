@@ -56,6 +56,66 @@ class SNACMapper(Mapper):
         data = model.factory.toJSON(top)
         return {'data': data, 'identifier': record['identifier'], 'source': 'snac'}
 
+    def make_timespan(self, date, top, event=""):
+        try:
+            b,e = make_datetime(date)
+        except:
+            b = None
+        if b:
+            if event == "Birth":
+                birth = model.Birth()
+                ts = model.TimeSpan()
+                ts.begin_of_the_begin = b
+                ts.end_of_the_end = e
+                ts.identified_by = vocab.DisplayName(content=date)
+                birth.timespan = ts
+                top.born = birth
+
+            elif event == "Death":
+                death = model.Death()
+                ts = model.TimeSpan()
+                ts.begin_of_the_begin = b
+                ts.end_of_the_end = e
+                ts.identified_by = vocab.DisplayName(content=date)
+                death.timespan = ts
+                top.died = death
+
+            elif event == "Formation":
+                formation = model.Formation()
+                ts = model.TimeSpan()
+                ts.begin_of_the_begin = b
+                ts.end_of_the_end = e
+                ts.identified_by = vocab.DisplayName(content=date)
+                formation.timespan = ts
+                top.formed_by = formation
+
+            elif event == "Dissolution":
+                dissolution = model.Dissolution()
+                ts = model.TimeSpan()
+                ts.begin_of_the_begin = b
+                ts.end_of_the_end = e
+                ts.identified_by = vocab.DisplayName(content=date)
+                dissolution.timespan = ts
+                top.dissolved_by = dissolution
+
+            elif event == "Activity":
+                bs,es = date.split('-')
+                try:
+                    b,be = make_datetime(bs)
+                except:
+                    b = None
+                try:
+                    e,ee = make_datetime(es)
+                except:
+                    e = None
+                if b and e:
+                    active = vocab.Active()
+                    ts = model.TimeSpan()
+                    ts.begin_of_the_begin = b
+                    ts.end_of_the_end = e
+                    active.timespan = ts
+                    top.carried_out = active
+
     def handle_common(self, rec, top):
         lang = self.lang
         names = rec.get("nameEntries",[])
@@ -108,6 +168,7 @@ class SNACMapper(Mapper):
                     lang = self.process_langs.get(blang, None)
                     bstat.language = lang
                 top.referred_to_by = bstat
+
         rel = rec.get('relations',[])
         for r in rel:
             if r['type']['term'] == "mayBeSameAs":
@@ -123,7 +184,43 @@ class SNACMapper(Mapper):
             elif top.__class__ == model.Group:
                 top.equivalent = model.Group(ident=s['uri'])
 
-    def handle_timespan(self, event, date1, date2=None, date3=None):
-        pass
+        dates = rec.get("dates",[])
+        datelist = []
+        if dates:
+            dates = dates[0]
+            if type(dates) == dict:
+                fromType = dates.get("fromType",{})
+                if fromType:
+                    term = fromType.get("term","")
+                    if term:
+                        if term == "Birth":
+                            dob = dates.get("fromDate","")
+                        elif term == "Active":
+                            activeStart = dates.get("fromDate","")
+                        elif term == "Establishment":
+                            formedDate = dates.get("fromDate","")
+                toType = dates.get("toType",{})
+                if toType:
+                    term = toType.get("term","")
+                    if term:
+                        if term == "Death":
+                            dod = dates.get("toDate","")
+                        elif term == "Active":
+                            activeEnd = dates.get("toDate","")
+                        elif term == "Disestablishment":
+                            dissolvedDate = dates.get("toDate","")
+            else:
+                #uhhh
+                pass
 
-    
+        if dob:
+            self.make_timespan(dob, top, event="Birth")
+        if dod:
+            self.make_timespan(dod, top, event="Death")
+        if formedDate:
+            self.make_timespan(formedDate, top, event="Formation")
+        if dissolvedDate:
+            self.make_timespan(dissolvedDate, top, event="Dissolution")
+        if activeStart and activeEnd:
+            aDates = f"{activeStart} - {activeEnd}"
+            self.make_timespan(aDates, top, event="Activity")
