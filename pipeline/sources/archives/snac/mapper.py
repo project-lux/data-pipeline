@@ -46,7 +46,7 @@ class SNACMapper(Mapper):
             else:
                 topcls = model.Person
 
-        top = topcls(ident=rec['ark'])
+        top = topcls(ident=rec['data']['ark'])
         return(top, topcls)
 
     def transform(self, record, rectype=""):
