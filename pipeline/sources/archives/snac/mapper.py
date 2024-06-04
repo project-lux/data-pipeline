@@ -128,8 +128,8 @@ class SNACMapper(Mapper):
                 if lngblk:
                     term = lngblk.get("term","")
                     if len(term) == 3:
-                        blang = self.lang_three_to_two.get(blang, None)
-                    lang = self.process_langs.get(blang, None)
+                        term = self.lang_three_to_two.get(term, None)
+                    lang = self.process_langs.get(term, None)
                     bstat.language = lang
                 top.referred_to_by = bstat
 
