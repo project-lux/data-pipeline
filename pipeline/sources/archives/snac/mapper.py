@@ -151,14 +151,14 @@ class SNACMapper(Mapper):
         dates = rec.get("dates",[])
         if dates:
             dates = dates[0]
-            # if isinstance(dates, dict):
-            #     event_mapping = {
-            #         "Birth": dates.get("fromDate", ""),
-            #         "Active": dates.get("fromDate", ""),
-            #         "Establishment": dates.get("fromDate", ""),
-            #         "Death": dates.get("toDate", ""),
-            #         "Disestablishment": dates.get("toDate", ""),
-            #         }
+            if isinstance(dates, dict):
+                event_mapping = {
+                    "Birth": dates.get("fromDate", ""),
+                    "Active": dates.get("fromDate", ""),
+                    "Establishment": dates.get("fromDate", ""),
+                    "Death": dates.get("toDate", ""),
+                    "Disestablishment": dates.get("toDate", ""),
+                    }
 
             #     for event, date in event_mapping.items():
             #         if date:
