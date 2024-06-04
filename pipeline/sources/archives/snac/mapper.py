@@ -3,7 +3,6 @@ from pipeline.process.utils.mapper_utils import make_datetime
 from cromulent import model, vocab
 import lxml.etree as ET
 import re 
-import requests
 
 # keys:
 # dataType= Constellation
@@ -34,10 +33,9 @@ import requests
 
 class SNACMapper(Mapper):
     def __init__(self, config):
-        Mapper.__init__(self, config)
+        super().__init__(config)        
         self.lang = self.process_langs.get("en","")
     
-
     def do_setup(self, rec, rectype=""):
         if rectype == "":
             rectyp = rec['data']['entityType']['term']
@@ -59,62 +57,29 @@ class SNACMapper(Mapper):
     def make_timespan(self, date, top, event=""):
         try:
             b,e = make_datetime(date)
-        except:
+        except Exception as exc:
+            print(f"Error: {exc}")
             b = None
         if b:
-            if event == "Birth":
-                birth = model.Birth()
-                ts = model.TimeSpan()
-                ts.begin_of_the_begin = b
-                ts.end_of_the_end = e
-                ts.identified_by = vocab.DisplayName(content=date)
-                birth.timespan = ts
-                top.born = birth
+            self.create_event(event, b, e, date, top)
 
-            elif event == "Death":
-                death = model.Death()
-                ts = model.TimeSpan()
-                ts.begin_of_the_begin = b
-                ts.end_of_the_end = e
-                ts.identified_by = vocab.DisplayName(content=date)
-                death.timespan = ts
-                top.died = death
+    def create_event(self, event, b, e, date, top):
+        event_dict = {
+            "Birth": model.Birth(),
+            "Death": model.Death(),
+            "Formation": model.Formation(),
+            "Dissolution": model.Dissolution(),
+            "Activity": vocab.Active()
+        }
 
-            elif event == "Formation":
-                formation = model.Formation()
-                ts = model.TimeSpan()
-                ts.begin_of_the_begin = b
-                ts.end_of_the_end = e
-                ts.identified_by = vocab.DisplayName(content=date)
-                formation.timespan = ts
-                top.formed_by = formation
-
-            elif event == "Dissolution":
-                dissolution = model.Dissolution()
-                ts = model.TimeSpan()
-                ts.begin_of_the_begin = b
-                ts.end_of_the_end = e
-                ts.identified_by = vocab.DisplayName(content=date)
-                dissolution.timespan = ts
-                top.dissolved_by = dissolution
-
-            elif event == "Activity":
-                bs,es = date.split('-')
-                try:
-                    b,be = make_datetime(bs)
-                except:
-                    b = None
-                try:
-                    e,ee = make_datetime(es)
-                except:
-                    e = None
-                if b and e:
-                    active = vocab.Active()
-                    ts = model.TimeSpan()
-                    ts.begin_of_the_begin = b
-                    ts.end_of_the_end = e
-                    active.timespan = ts
-                    top.carried_out = active
+        if event in event_dict:
+            event_obj = event_dict[event]
+            ts = model.TimeSpan()
+            ts.begin_of_the_begin = b
+            ts.end_of_the_end = e
+            ts.identified_by = vocab.DisplayName(content=date)
+            event_obj.timespan = ts
+            setattr(top, event.lower(), event_obj)
 
     def handle_common(self, rec, top):
         lang = self.lang
@@ -153,7 +118,7 @@ class SNACMapper(Mapper):
 
         biog = rec.get("biogHists",[])
         if biog:
-            for b in bio:
+            for b in biog:
                 text = b.get("text","")
                 if text and text.startswith("<biogHist>"):
                     root = ET.fromstring(text)
@@ -185,43 +150,22 @@ class SNACMapper(Mapper):
                 top.equivalent = model.Group(ident=s['uri'])
 
         dates = rec.get("dates",[])
-        datelist = []
-        dob = dod = formedDate = dissolvedDate = activeStart = activeEnd = None
         if dates:
             dates = dates[0]
-            if type(dates) == dict:
-                fromType = dates.get("fromType",{})
-                if fromType:
-                    term = fromType.get("term","")
-                    if term:
-                        if term == "Birth":
-                            dob = dates.get("fromDate","")
-                        elif term == "Active":
-                            activeStart = dates.get("fromDate","")
-                        elif term == "Establishment":
-                            formedDate = dates.get("fromDate","")
-                toType = dates.get("toType",{})
-                if toType:
-                    term = toType.get("term","")
-                    if term:
-                        if term == "Death":
-                            dod = dates.get("toDate","")
-                        elif term == "Active":
-                            activeEnd = dates.get("toDate","")
-                        elif term == "Disestablishment":
-                            dissolvedDate = dates.get("toDate","")
-            else:
-                #uhhh
-                pass
+            if isinstance(dates, dict):
+                event_mapping = {
+                    "Birth": dates.get("fromDate", ""),
+                    "Active": dates.get("fromDate", ""),
+                    "Establishment": dates.get("fromDate", ""),
+                    "Death": dates.get("toDate", ""),
+                    "Disestablishment": dates.get("toDate", ""),
+                    }
 
-            if dob:
-                self.make_timespan(dob, top, event="Birth")
-            if dod:
-                self.make_timespan(dod, top, event="Death")
-            if formedDate:
-                self.make_timespan(formedDate, top, event="Formation")
-            if dissolvedDate:
-                self.make_timespan(dissolvedDate, top, event="Dissolution")
-            if activeStart and activeEnd:
-                aDates = f"{activeStart} - {activeEnd}"
-                self.make_timespan(aDates, top, event="Activity")
+                for event, date in event_mapping.items():
+                    if date:
+                        self.make_timespan(date, top, event=event)
+
+                activeEnd = dates.get("toDate", "")
+                if activeEnd:
+                    aDates = f"{event_mapping['Active']} - {activeEnd}"
+                        self.make_timespan(aDates, top, event="Activity")
