@@ -51,7 +51,7 @@ class SNACMapper(Mapper):
 
     def transform(self, record, rectype=""):
         (top, topcls) = self.do_setup(record, rectype)    
-        self.handle_common(record, top)
+        self.handle_common(record['data'], top)
         
         data = model.factory.toJSON(top)
         return {'data': data, 'identifier': record['identifier'], 'source': 'snac'}
