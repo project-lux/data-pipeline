@@ -160,9 +160,9 @@ class SNACMapper(Mapper):
                     "Disestablishment": dates.get("toDate", ""),
                     }
 
-            #     for event, date in event_mapping.items():
-            #         if date:
-            #             self.make_timespan(date, top, event=event)
+                for event, date in event_mapping.items():
+                    if date:
+                        self.make_timespan(date, top, event=event)
 
             #     activeEnd = dates.get("toDate", "")
             #     if activeEnd:
