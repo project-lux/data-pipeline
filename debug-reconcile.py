@@ -133,8 +133,17 @@ print(" --> ".join([inv_ident[x] for x in longest_path]))
 
 
 plt.figure(figsize=(12, 12))
-pos = nx.spring_layout(G)
-nx.draw(G, pos=pos, with_labels=True, node_color='skyblue', node_size=500, font_size=16, edge_color='white')
+node_color_values = ['skyblue' for _ in G.nodes()]  
+node_labels = {node: node for node in G.nodes()} 
+edge_color_values = ['white' for _ in G.edges()] 
+
+nodes = nx.draw_networkx_nodes(G, pos, node_color=node_color_values, node_size=500)
+edges = nx.draw_networkx_edges(G, pos, edge_color=edge_color_values)
+nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=16)
+
+# Add a legend
+plt.legend([nodes, edges], ['Nodes', 'Edges'])
+
+# Save the plot to a file
 plt.savefig("graph.png")
-plt.show()
  
