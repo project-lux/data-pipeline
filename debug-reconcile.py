@@ -132,8 +132,9 @@ for node in G.nodes:
 print(" --> ".join([inv_ident[x] for x in longest_path]))
 
 
+plt.figure(figsize=(12, 12))
 pos = nx.spring_layout(G)
-nx.draw(G, pos=pos, with_labels=True, node_color='skyblue', node_size=500, edge_color='white')
+nx.draw(G, pos=pos, with_labels=True, node_color='skyblue', node_size=500, font_size=16, edge_color='white')
 plt.savefig("graph.png")
 plt.show()
  
