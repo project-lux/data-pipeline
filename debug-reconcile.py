@@ -7,7 +7,7 @@ from pipeline.config import Config
 from pipeline.process.reconciler import Reconciler
 from pipeline.process.reference_manager import ReferenceManager
 from pipeline.storage.cache.postgres import poolman
-
+import matplotlib.pyplot as plt
 import networkx as nx
 
 load_dotenv()
@@ -130,9 +130,6 @@ for node in G.nodes:
             longest_path = path
 print(" --> ".join([inv_ident[x] for x in longest_path]))
 
-try:
-    cycle = nx.find_cycle(G, orientation='original')
-    print("Cycle found:", cycle)
-except nx.NetworkXNoCycle:
-    print("No cycle found.")
+nx.draw(G, with_labels=True, node_color='skyblue', node_size=1500, edge_color='white')
+plt.show()
  
