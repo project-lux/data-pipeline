@@ -196,13 +196,10 @@ class YulMapper(Mapper):
                         data['subject_of'].append({'type': 'LinguisticObject', 
                             '_label': 'Representation/Reference', 'digitally_carried_by': [a]})
 
-        # Trash subject heading derived part_ofs
+        # Trash all part_ofs for SBX testing June 5 2024
         if data['type'] == 'Place' and 'part_of' in data:
-            try: 
-                if not data['part_of'][0]['id'] in self.okay_place_parts:
-                    del data['part_of']
-            except:
-                pass
+            del data['part_of']
+
 
         # Swap MarcGT to AAT equivalents
         if 'classified_as' in data:
