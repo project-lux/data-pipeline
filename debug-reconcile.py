@@ -90,6 +90,7 @@ for u in uris:
                     graph[base] = [eq['id']]
 
     rec2 = reconciler.reconcile(rec)
+    print(f"rec2 is {rec2}")
     if '_label' in rec2['data']:
         names[base] = rec2['data']['_label']
     if 'equivalent' in rec2['data']:
@@ -139,9 +140,9 @@ for (k,v) in idents.items():
     inv_ident[v] = k
 
 key.sort()
-print("  -- Key --")
-for k in key:
-    print(f"  {k[0]:<16}{k[1]} ({names.get(k[1], '?')})")
+#print("  -- Key --")
+#for k in key:
+#    print(f"  {k[0]:<16}{k[1]} ({names.get(k[1], '?')})")
 
 print("\nConnected Nodes:")
 for sets in list(nx.connected_components(G)):
@@ -159,17 +160,17 @@ print(" --> ".join([inv_ident[x] for x in nx.shortest_path(G, idents[from_p], id
 # print(" --> ".join([inv_ident[x] for x in longest_path]))
 
 
-plt.figure(figsize=(12, 12))
-node_color_values = ['skyblue' for _ in G.nodes()]  
-node_labels = {node: node for node in G.nodes()} 
-edge_color_values = ['black' for _ in G.edges()] 
-pos = nx.spring_layout(G, k=1)
+# plt.figure(figsize=(12, 12))
+# node_color_values = ['skyblue' for _ in G.nodes()]  
+# node_labels = {node: node for node in G.nodes()} 
+# edge_color_values = ['black' for _ in G.edges()] 
+# pos = nx.spring_layout(G, k=1)
 
-nodes = nx.draw_networkx_nodes(G, pos, node_color=node_color_values, node_size=150)
-edges = nx.draw_networkx_edges(G, pos, edge_color=edge_color_values)
-nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=14)
+# nodes = nx.draw_networkx_nodes(G, pos, node_color=node_color_values, node_size=150)
+# edges = nx.draw_networkx_edges(G, pos, edge_color=edge_color_values)
+# nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=14)
 
-#plt.legend([nodes, edges], ['Nodes', 'Edges'])
+# #plt.legend([nodes, edges], ['Nodes', 'Edges'])
 
-plt.savefig("graph.png")
+# plt.savefig("graph.png")
 #plt.show(block=True) 
