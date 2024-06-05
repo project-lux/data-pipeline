@@ -42,6 +42,8 @@ yuid = idmap[qua]
 
 # --- set up environment ---
 reconciler = Reconciler(cfgs, idmap, networkmap)
+cfgs.external['gbif']['fetcher'].enabled = True
+
 
 curr = "0"
 idents = {}
@@ -87,6 +89,30 @@ for u in uris:
                 except:
                     graph[base] = [eq['id']]
 
+    rec2 = reconciler.reconcile(rec)
+    if '_label' in rec2['data']:
+        names[base] = rec2['data']['_label']
+    if 'equivalent' in rec2['data']:
+        for eq in rec2['data']['equivalent']:
+            if 'id' in eq:
+                eqid = eq['id']
+                if not eqid in idents:
+                    try:
+                        (eqsrc, eqident) = cfgs.split_uri(eqid)
+                        idents[eqid] = f"{src['name']}:{curr}"
+                        if not eqid in names:
+                            ref = src['mapper'].get_reference(eqident)
+                            if hasattr(ref, '_label'):
+                                names[eqid] = ref._label
+                            else:
+                                names[eqid] = "-no label-"
+                        curr = chr(ord(curr)+1)
+                    except:
+                        idents[eqid] = eqid
+                try:
+                    graph[base].append(eq['id'])
+                except:
+                    graph[base] = [eq['id']]
 
 G = nx.Graph()
 G.add_nodes_from(list(idents.values()))
@@ -143,7 +169,7 @@ nodes = nx.draw_networkx_nodes(G, pos, node_color=node_color_values, node_size=1
 edges = nx.draw_networkx_edges(G, pos, edge_color=edge_color_values)
 nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=14)
 
-plt.legend([nodes, edges], ['Nodes', 'Edges'])
+#plt.legend([nodes, edges], ['Nodes', 'Edges'])
 
 plt.savefig("graph.png")
 #plt.show(block=True) 
