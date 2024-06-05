@@ -123,7 +123,10 @@ print(f"\nPath from {from_p} to {to_p}")
 print(" --> ".join([inv_ident[x] for x in nx.shortest_path(G, idents[from_p], idents[to_p])]))
 
 print("\nLongest Path:")
-G = nx.DiGraph(G)
-longest_path = nx.dag_longest_path(G)
+longest_path = []
+for node in G.nodes:
+    for path in nx.all_simple_paths(G, source=node, target=idents[to_p]):
+        if len(path) > len(longest_path):
+            longest_path = path
 print(" --> ".join([inv_ident[x] for x in longest_path]))
  
