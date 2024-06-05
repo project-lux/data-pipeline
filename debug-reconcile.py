@@ -7,8 +7,7 @@ from pipeline.config import Config
 from pipeline.process.reconciler import Reconciler
 from pipeline.process.reference_manager import ReferenceManager
 from pipeline.storage.cache.postgres import poolman
-import matplotlib
-matplotlib.use('TkAgg')
+
 import matplotlib.pyplot as plt
 import networkx as nx
 
