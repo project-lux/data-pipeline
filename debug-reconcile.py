@@ -87,6 +87,7 @@ for u in uris:
                 except:
                     graph[base] = [eq['id']]
 
+
 G = nx.Graph()
 G.add_nodes_from(list(idents.values()))
 
@@ -140,11 +141,9 @@ pos = nx.spring_layout(G, k=1)
 
 nodes = nx.draw_networkx_nodes(G, pos, node_color=node_color_values, node_size=150)
 edges = nx.draw_networkx_edges(G, pos, edge_color=edge_color_values)
-nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=12)
+nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=14)
 
-# Add a legend
 plt.legend([nodes, edges], ['Nodes', 'Edges'])
 
-# Save the plot to a file
-plt.savefig("graph.png")
- 
+#plt.savefig("graph.png")
+plt.show(block=True) 
