@@ -132,7 +132,7 @@ for node in G.nodes:
 print(" --> ".join([inv_ident[x] for x in longest_path]))
 
 
-pos = nx.circular_layout(G)
+pos = nx.spring_layout(G)
 nx.draw(G, pos=pos, with_labels=True, node_color='skyblue', node_size=500, edge_color='white')
 plt.savefig("graph.png")
 plt.show()
