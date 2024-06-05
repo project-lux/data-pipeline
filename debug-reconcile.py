@@ -119,7 +119,7 @@ print("\nConnected Nodes:")
 for sets in list(nx.connected_components(G)):
     print(sets)
 
-print(f"\nPath from {from_p} to {to_p}")
+print(f"\nShortest path from {from_p} to {to_p}")
 print(" --> ".join([inv_ident[x] for x in nx.shortest_path(G, idents[from_p], idents[to_p])]))
 
 print("\nLongest Path:")
@@ -129,4 +129,10 @@ for node in G.nodes:
         if len(path) > len(longest_path):
             longest_path = path
 print(" --> ".join([inv_ident[x] for x in longest_path]))
+
+try:
+    cycle = nx.find_cycle(G, orientation='original')
+    print("Cycle found:", cycle)
+except nx.NetworkXNoCycle:
+    print("No cycle found.")
  
