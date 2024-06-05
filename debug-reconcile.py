@@ -145,5 +145,5 @@ nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=14)
 
 plt.legend([nodes, edges], ['Nodes', 'Edges'])
 
-#plt.savefig("graph.png")
-plt.show(block=True) 
+plt.savefig("graph.png")
+#plt.show(block=True) 
