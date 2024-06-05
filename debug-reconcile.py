@@ -7,6 +7,8 @@ from pipeline.config import Config
 from pipeline.process.reconciler import Reconciler
 from pipeline.process.reference_manager import ReferenceManager
 from pipeline.storage.cache.postgres import poolman
+import matplotlib
+matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import networkx as nx
 
@@ -131,5 +133,6 @@ for node in G.nodes:
 print(" --> ".join([inv_ident[x] for x in longest_path]))
 
 nx.draw(G, with_labels=True, node_color='skyblue', node_size=1500, edge_color='white')
+plt.savefig("graph.png")
 plt.show()
  
