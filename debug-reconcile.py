@@ -131,7 +131,14 @@ for node in G.nodes:
             longest_path = path
 print(" --> ".join([inv_ident[x] for x in longest_path]))
 
-nx.draw(G, with_labels=True, node_color='skyblue', node_size=1500, edge_color='white')
+# Draw the graph
+nx.draw(G, with_labels=True, node_color='skyblue', node_size=500, edge_color='white')
+
+# Add edge labels
+edge_labels = nx.get_edge_attributes(G, 'weight')  # replace 'weight' with the name of the attribute
+nx.draw_networkx_edge_labels(G, pos=nx.spring_layout(G), edge_labels=edge_labels)
+
+# Show the plot
 plt.savefig("graph.png")
 plt.show()
  
