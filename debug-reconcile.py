@@ -136,11 +136,11 @@ plt.figure(figsize=(12, 12))
 node_color_values = ['skyblue' for _ in G.nodes()]  
 node_labels = {node: node for node in G.nodes()} 
 edge_color_values = ['black' for _ in G.edges()] 
-pos = nx.spring_layout(G)
+pos = nx.spring_layout(G, k=0.15)
 
 nodes = nx.draw_networkx_nodes(G, pos, node_color=node_color_values, node_size=150)
-edges = nx.draw_networkx_edges(G, pos, edge_color=edge_color_values, node_size=150)
-nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=16)
+edges = nx.draw_networkx_edges(G, pos, edge_color=edge_color_values)
+nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=12)
 
 # Add a legend
 plt.legend([nodes, edges], ['Nodes', 'Edges'])
