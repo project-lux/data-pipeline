@@ -90,7 +90,6 @@ for u in uris:
                     graph[base] = [eq['id']]
 
     rec2 = reconciler.reconcile(rec)
-    print(f"rec2 is {rec2}")
     if '_label' in rec2['data']:
         names[base] = rec2['data']['_label']
     if 'equivalent' in rec2['data']:
