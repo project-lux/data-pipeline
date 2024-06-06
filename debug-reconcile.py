@@ -63,62 +63,64 @@ for u in uris:
     (src, ident) = cfgs.split_uri(base)
     #print(f"src and ident are {src}/{ident}\n----------")
     idents[base] = f"{src['name']}:{curr}"
-    print(f"idents is {idents}\n----------")
-    curr = chr(ord(curr)+1)
-    rec = src['acquirer'].acquire(ident)
-    if not rec:
-        #print(f"Couldn't acquire {src['name']}:{ident}")
-        continue
-    if '_label' in rec['data']:
-        names[base] = rec['data']['_label']
-    if 'equivalent' in rec['data']:
-        for eq in rec['data']['equivalent']:
-            if 'id' in eq:
-                eqid = eq['id']
-                if not eqid in idents:
-                    try:
-                        (eqsrc, eqident) = cfgs.split_uri(eqid)
-                        idents[eqid] = f"{src['name']}:{curr}"
-                        if not eqid in names:
-                            ref = src['mapper'].get_reference(eqident)
-                            if hasattr(ref, '_label'):
-                                names[eqid] = ref._label
-                            else:
-                                names[eqid] = "-no label-"
-                        curr = chr(ord(curr)+1)
-                    except:
-                        idents[eqid] = eqid
-                try:
-                    graph[base].append(eq['id'])
-                except:
-                    graph[base] = [eq['id']]
+    print(f"idents is:")
+    for k, v in idents.items():
+        print(f"{key}:{value}\n-------------")
+    # curr = chr(ord(curr)+1)
+    # rec = src['acquirer'].acquire(ident)
+    # if not rec:
+    #     #print(f"Couldn't acquire {src['name']}:{ident}")
+    #     continue
+    # if '_label' in rec['data']:
+    #     names[base] = rec['data']['_label']
+    # if 'equivalent' in rec['data']:
+    #     for eq in rec['data']['equivalent']:
+    #         if 'id' in eq:
+    #             eqid = eq['id']
+    #             if not eqid in idents:
+    #                 try:
+    #                     (eqsrc, eqident) = cfgs.split_uri(eqid)
+    #                     idents[eqid] = f"{src['name']}:{curr}"
+    #                     if not eqid in names:
+    #                         ref = src['mapper'].get_reference(eqident)
+    #                         if hasattr(ref, '_label'):
+    #                             names[eqid] = ref._label
+    #                         else:
+    #                             names[eqid] = "-no label-"
+    #                     curr = chr(ord(curr)+1)
+    #                 except:
+    #                     idents[eqid] = eqid
+    #             try:
+    #                 graph[base].append(eq['id'])
+    #             except:
+    #                 graph[base] = [eq['id']]
     #rec2 = reconciler.reconcile(rec)
 
-G = nx.Graph()
-G.add_nodes_from(list(idents.values()))
+# G = nx.Graph()
+# G.add_nodes_from(list(idents.values()))
 
-new_graph = {}
-for (k,v) in graph.items():
-    subj = idents[k]
-    l = []
-    for u in v:
-        if u in idents:
-            obj = idents[u]
-            l.append(obj)
-            G.add_edge(subj, obj)
-        else:
-            pass
-    l.sort()
-    new_graph[subj] = l
+# new_graph = {}
+# for (k,v) in graph.items():
+#     subj = idents[k]
+#     l = []
+#     for u in v:
+#         if u in idents:
+#             obj = idents[u]
+#             l.append(obj)
+#             G.add_edge(subj, obj)
+#         else:
+#             pass
+#     l.sort()
+#     new_graph[subj] = l
 
 
-key = []
-inv_ident = {}
-for (k,v) in idents.items():
-    key.append((v, k))
-    inv_ident[v] = k
+# key = []
+# inv_ident = {}
+# for (k,v) in idents.items():
+#     key.append((v, k))
+#     inv_ident[v] = k
 
-key.sort()
+# key.sort()
 # print("  -- Key --")
 # for k in key:
 #    print(f"  {k[0]:<16}{k[1]} ({names.get(k[1], '?')})")
