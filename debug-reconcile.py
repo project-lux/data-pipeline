@@ -107,43 +107,43 @@ for u in uris:
                 except:
                     graph[base] = [eq['id']]
     #rec2 = reconciler.reconcile(rec)
-for k, v in idents.items():
-    print(f"{k}:{v}\n-------------")
-# G = nx.Graph()
-# G.add_nodes_from(list(idents.values()))
+# for k, v in idents.items():
+#     print(f"{k}:{v}\n-------------")
+G = nx.Graph()
+G.add_nodes_from(list(idents.values()))
 
-# new_graph = {}
-# for (k,v) in graph.items():
-#     subj = idents[k]
-#     l = []
-#     for u in v:
-#         if u in idents:
-#             obj = idents[u]
-#             l.append(obj)
-#             G.add_edge(subj, obj)
-#         else:
-#             pass
-#     l.sort()
-#     new_graph[subj] = l
+new_graph = {}
+for (k,v) in graph.items():
+    subj = idents[k]
+    l = []
+    for u in v:
+        if u in idents:
+            obj = idents[u]
+            l.append(obj)
+            G.add_edge(subj, obj)
+        else:
+            pass
+    l.sort()
+    new_graph[subj] = l
 
 
-# key = []
-# inv_ident = {}
-# for (k,v) in idents.items():
-#     key.append((v, k))
-#     inv_ident[v] = k
+key = []
+inv_ident = {}
+for (k,v) in idents.items():
+    key.append((v, k))
+    inv_ident[v] = k
 
-# key.sort()
-# print("  -- Key --")
-# for k in key:
-#    print(f"  {k[0]:<16}{k[1]} ({names.get(k[1], '?')})")
+key.sort()
+print("  -- Key --")
+for k in key:
+   print(f"  {k[0]:<16}{k[1]} ({names.get(k[1], '?')})")
 
-# print("\nConnected Nodes:")
-# for sets in list(nx.connected_components(G)):
-#     print(sets)
+print("\nConnected Nodes:")
+for sets in list(nx.connected_components(G)):
+    print(sets)
 
-# print(f"\nShortest path from {from_p} to {to_p}")
-# print(" --> ".join([inv_ident[x] for x in nx.shortest_path(G, idents[from_p], idents[to_p])]))
+print(f"\nShortest path from {from_p} to {to_p}")
+print(" --> ".join([inv_ident[x] for x in nx.shortest_path(G, idents[from_p], idents[to_p])]))
 
 # print("\nLongest Path:")
 # longest_path = []
