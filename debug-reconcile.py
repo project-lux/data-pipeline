@@ -38,8 +38,9 @@ except:
     print(f"Could not make typed URI for {from_p}")
     raise
     sys.exit()
-yuid = idmap[qua]
 
+yuid = idmap[qua]
+print(f"yuid is {yuid}")
 # --- set up environment ---
 reconciler = Reconciler(cfgs, idmap, networkmap)
 cfgs.external['gbif']['fetcher'].enabled = True
@@ -51,7 +52,7 @@ idents = {}
 graph = {}
 
 uris = idmap[yuid]
-print(f"uris are {uris}")
+# print(f"uris are {uris}")
 
 names = {}
 
