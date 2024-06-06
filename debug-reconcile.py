@@ -142,8 +142,6 @@ inv_ident = {}
 for (k,v) in idents.items():
     key.append((v, k))
     inv_ident[v] = k
-# for k, v in inv_ident.items():
-#     print(f"{k}:{v}\n-------------")
 
 key.sort()
 print("  -- Key --")
@@ -157,26 +155,26 @@ for sets in list(nx.connected_components(G)):
 print(f"\nShortest path from {from_p} to {to_p}")
 print(" --> ".join([inv_ident[x] for x in nx.shortest_path(G, idents[from_p], idents[to_p])]))
 
-# print("\nLongest Path:")
-# longest_path = []
-# for node in G.nodes:
-#     for path in nx.all_simple_paths(G, source=node, target=idents[to_p]):
-#         if len(path) > len(longest_path):
-#             longest_path = path
-# print(" --> ".join([inv_ident[x] for x in longest_path]))
+print("\nLongest Path:")
+longest_path = []
+for node in G.nodes:
+    for path in nx.all_simple_paths(G, source=node, target=idents[to_p]):
+        if len(path) > len(longest_path):
+            longest_path = path
+print(" --> ".join([inv_ident[x] for x in longest_path]))
 
 
-# plt.figure(figsize=(12, 12))
-# node_color_values = ['skyblue' for _ in G.nodes()]  
-# node_labels = {node: node for node in G.nodes()} 
-# edge_color_values = ['black' for _ in G.edges()] 
-# pos = nx.spring_layout(G, k=1)
+plt.figure(figsize=(12, 12))
+node_color_values = ['skyblue' for _ in G.nodes()]  
+node_labels = {node: node for node in G.nodes()} 
+edge_color_values = ['black' for _ in G.edges()] 
+pos = nx.spring_layout(G, k=1)
 
-# nodes = nx.draw_networkx_nodes(G, pos, node_color=node_color_values, node_size=150)
-# edges = nx.draw_networkx_edges(G, pos, edge_color=edge_color_values)
-# nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=14)
+nodes = nx.draw_networkx_nodes(G, pos, node_color=node_color_values, node_size=150)
+edges = nx.draw_networkx_edges(G, pos, edge_color=edge_color_values)
+nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=14)
 
-# #plt.legend([nodes, edges], ['Nodes', 'Edges'])
+#plt.legend([nodes, edges], ['Nodes', 'Edges'])
 
-# plt.savefig("graph.png")
-# plt.show(block=True) 
+plt.savefig("graph.png")
+plt.show(block=True) 
