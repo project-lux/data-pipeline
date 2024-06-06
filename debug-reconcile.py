@@ -64,12 +64,13 @@ for u in uris:
     #print(f"src and ident are {src}/{ident}\n----------")
     idents[base] = f"{src['name']}:{curr}"
     curr = chr(ord(curr)+1)
-    # rec = src['acquirer'].acquire(ident)
-    # if not rec:
-    #     #print(f"Couldn't acquire {src['name']}:{ident}")
-    #     continue
-    # if '_label' in rec['data']:
-    #     names[base] = rec['data']['_label']
+    rec = src['acquirer'].acquire(ident)
+    if not rec:
+        print(f"Couldn't acquire {src['name']}:{ident}")
+        continue
+    #working right until this point
+    if '_label' in rec['data']:
+        names[base] = rec['data']['_label']
     # if 'equivalent' in rec['data']:
     #     for eq in rec['data']['equivalent']:
     #         if 'id' in eq:
@@ -92,7 +93,7 @@ for u in uris:
     #             except:
     #                 graph[base] = [eq['id']]
     #rec2 = reconciler.reconcile(rec)
-for k, v in idents.items():
+for k, v in names.items():
     print(f"{k}:{v}\n-------------")
 # G = nx.Graph()
 # G.add_nodes_from(list(idents.values()))
