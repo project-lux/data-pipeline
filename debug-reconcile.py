@@ -65,7 +65,7 @@ for u in uris:
     idents[base] = f"{src['name']}:{curr}"
     print(f"idents is:")
     for k, v in idents.items():
-        print(f"{key}:{value}\n-------------")
+        print(f"{k}:{v}\n-------------")
     # curr = chr(ord(curr)+1)
     # rec = src['acquirer'].acquire(ident)
     # if not rec:
