@@ -25,30 +25,31 @@ cfgs.instantiate_all()
 from_p = sys.argv[1]
 to_p = sys.argv[2]
 
-print(f"from p is {from_p}")
-print(f"to p is {to_p}")
+# print(f"from p is {from_p}")
+# print(f"to p is {to_p}")
 
 try:
     (src, ident) = cfgs.split_uri(from_p)
-    print(f"line 33 src is {src}")
-    print(f"line 33 ident is {ident}")
+    # print(f"line 33 src is {src}")
+    # print(f"line 33 ident is {ident}")
 except:
-    print(f"Unknown URI: {from_p}")
+    # print(f"Unknown URI: {from_p}")
     sys.exit()
 try:
     ref = src['mapper'].get_reference(ident)
-    print(f"ref is {ref}")
+    #get reference returns the wrong type, so it grabs the wrong yuid
+    #print(f"ref is {ref}")
     base = cfgs.canonicalize(from_p)
-    print(f"base is {base}")
+    #print(f"base is {base}")
     qua = cfgs.make_qua(base, ref.type)
-    print(f"qua is {qua}")
+    #print(f"qua is {qua}")
 except:
     print(f"Could not make typed URI for {from_p}")
     raise
     sys.exit()
 
 yuid = idmap[qua]
-print(f"yuid is {yuid}")
+#print(f"yuid is {yuid}")
 # --- set up environment ---
 reconciler = Reconciler(cfgs, idmap, networkmap)
 cfgs.external['gbif']['fetcher'].enabled = True
@@ -80,12 +81,12 @@ for u in uris:
         continue
     if '_label' in rec['data']:
         names[base] = rec['data']['_label']
-    #working right until this point
     if 'equivalent' in rec['data']:
         for eq in rec['data']['equivalent']:
             if 'id' in eq:
                 eqid = eq['id']
                 #why does it do this block at all? it already has everything that makes up the record
+                #well actually it doesn't, because it has the wrong yuid. does that matter?
                 if not eqid in idents:
                     # print(f"eqid {eqid} not in idents from uri {u}")
                     try:
@@ -105,8 +106,8 @@ for u in uris:
                 except:
                     graph[base] = [eq['id']]
     #rec2 = reconciler.reconcile(rec)
-# for k, v in names.items():
-#     print(f"{k}:{v}\n-------------")
+for k, v in idents.items():
+    print(f"{k}:{v}\n-------------")
 # G = nx.Graph()
 # G.add_nodes_from(list(idents.values()))
 
