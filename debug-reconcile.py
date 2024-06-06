@@ -51,6 +51,7 @@ idents = {}
 graph = {}
 
 uris = idmap[yuid]
+print(f"uris are {uris}")
 
 names = {}
 
@@ -77,7 +78,7 @@ for u in uris:
                 eqid = eq['id']
                 #why does it do this block at all? it already has everything that makes up the record
                 if not eqid in idents:
-                    print(f"eqid {eqid} not in idents from uri {u}")
+                    # print(f"eqid {eqid} not in idents from uri {u}")
                     try:
                         (eqsrc, eqident) = cfgs.split_uri(eqid)
                         idents[eqid] = f"{src['name']}:{curr}"
