@@ -28,7 +28,6 @@ class GlobalReconciler(LmdbReconciler):
         if type(record) == str:
             ids = [record]
         else:
-            print(f"trying to gets ids from: {record['data']['equivalent']}")
             ids = [x['id'] for x in record['data'].get('equivalent', [])]
             if 'id' in record['data']:
                 ids.append(record['data']['id'])
