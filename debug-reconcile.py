@@ -25,15 +25,23 @@ cfgs.instantiate_all()
 from_p = sys.argv[1]
 to_p = sys.argv[2]
 
+print(f"from p is {from_p}")
+print(f"to p is {to_p}")
+
 try:
     (src, ident) = cfgs.split_uri(from_p)
+    print(f"line 33 src is {src}")
+    print(f"line 33 ident is {ident}")
 except:
     print(f"Unknown URI: {from_p}")
     sys.exit()
 try:
     ref = src['mapper'].get_reference(ident)
+    print(f"ref is {ref}")
     base = cfgs.canonicalize(from_p)
+    print(f"base is {base}")
     qua = cfgs.make_qua(base, ref.type)
+    print(f"qua is {qua}")
 except:
     print(f"Could not make typed URI for {from_p}")
     raise
