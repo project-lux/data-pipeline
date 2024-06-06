@@ -63,9 +63,6 @@ for u in uris:
     (src, ident) = cfgs.split_uri(base)
     #print(f"src and ident are {src}/{ident}\n----------")
     idents[base] = f"{src['name']}:{curr}"
-    print(f"idents is:")
-    for k, v in idents.items():
-        print(f"{k}:{v}\n-------------")
     # curr = chr(ord(curr)+1)
     # rec = src['acquirer'].acquire(ident)
     # if not rec:
@@ -95,7 +92,8 @@ for u in uris:
     #             except:
     #                 graph[base] = [eq['id']]
     #rec2 = reconciler.reconcile(rec)
-
+for k, v in idents.items():
+    print(f"{k}:{v}\n-------------")
 # G = nx.Graph()
 # G.add_nodes_from(list(idents.values()))
 
