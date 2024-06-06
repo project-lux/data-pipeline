@@ -59,8 +59,9 @@ for u in uris:
     if u.startswith('__'):
         continue
     (base, qua) = cfgs.split_qua(u)
-    print(f"base and qua are {base}/{qua}\n----------")
+    #print(f"base and qua are {base}/{qua}\n----------")
     (src, ident) = cfgs.split_uri(base)
+    print(f"src and ident are {src}/{ident}\n----------")
     idents[base] = f"{src['name']}:{curr}"
     curr = chr(ord(curr)+1)
     rec = src['acquirer'].acquire(ident)
