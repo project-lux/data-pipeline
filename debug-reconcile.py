@@ -89,16 +89,17 @@ for u in uris:
                 #well actually it doesn't, because it has the wrong yuid. does that matter?
                 if not eqid in idents:
                     # print(f"eqid {eqid} not in idents from uri {u}")
-                    try:
+                    try:                        
+                        curr = chr(ord(curr)+1)
                         (eqsrc, eqident) = cfgs.split_uri(eqid)
-                        idents[eqid] = f"{src['name']}:{curr}"
+                        #definitely it needs to be eqsrc below
+                        idents[eqid] = f"{eqsrc['name']}:{curr}"
                         if not eqid in names:
                             ref = src['mapper'].get_reference(eqident)
                             if hasattr(ref, '_label'):
                                 names[eqid] = ref._label
                             else:
                                 names[eqid] = "-no label-"
-                        curr = chr(ord(curr)+1)
                     except:
                         idents[eqid] = eqid
                 try:
