@@ -54,7 +54,7 @@ uris = idmap[yuid]
 
 names = {}
 
-def append_to_graph(cfgs, src, base, curr, idents, names, rec):
+def append_to_graph(cfgs, src, base, curr, idents, rec):
     if '_label' in rec['data']:
         names[base] = rec['data']['_label']
     if 'equivalent' in rec['data']:
