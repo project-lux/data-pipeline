@@ -107,8 +107,8 @@ for u in uris:
                 except:
                     graph[base] = [eq['id']]
     #rec2 = reconciler.reconcile(rec)
-# for k, v in idents.items():
-#     print(f"{k}:{v}\n-------------")
+for k, v in idents.items():
+    print(f"{k}:{v}\n-------------")
 G = nx.Graph()
 G.add_nodes_from(list(idents.values()))
 
@@ -132,8 +132,8 @@ inv_ident = {}
 for (k,v) in idents.items():
     key.append((v, k))
     inv_ident[v] = k
-for k, v in inv_ident.items():
-    print(f"{k}:{v}\n-------------")
+# for k, v in inv_ident.items():
+#     print(f"{k}:{v}\n-------------")
 
 # key.sort()
 # print("  -- Key --")
@@ -145,7 +145,7 @@ for k, v in inv_ident.items():
 #     print(sets)
 
 # print(f"\nShortest path from {from_p} to {to_p}")
-# print(" --> ".join([inv_ident[x] for x in nx.shortest_path(G, idents[from_p], idents[to_p])]))
+# print(" --> ".join([inv_ident[http://www.wikidata.org/entity/Q3709888x] for x in nx.shortest_path(G, idents[from_p], idents[to_p])]))
 
 # print("\nLongest Path:")
 # longest_path = []
