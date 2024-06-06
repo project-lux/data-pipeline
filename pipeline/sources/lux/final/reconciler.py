@@ -35,8 +35,7 @@ class GlobalReconciler(LmdbReconciler):
                 else:
                     print(f"No id in {record}")
                     return []
-            except Exception as {e}:
-                print(e)
+            except:
                 pass
 
         # Only have a map of uris, no types
