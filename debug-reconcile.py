@@ -132,18 +132,19 @@ inv_ident = {}
 for (k,v) in idents.items():
     key.append((v, k))
     inv_ident[v] = k
+print(f"inv index is {inv index}")
 
-key.sort()
-print("  -- Key --")
-for k in key:
-   print(f"  {k[0]:<16}{k[1]} ({names.get(k[1], '?')})")
+# key.sort()
+# print("  -- Key --")
+# for k in key:
+#    print(f"  {k[0]:<16}{k[1]} ({names.get(k[1], '?')})")
 
-print("\nConnected Nodes:")
-for sets in list(nx.connected_components(G)):
-    print(sets)
+# print("\nConnected Nodes:")
+# for sets in list(nx.connected_components(G)):
+#     print(sets)
 
-print(f"\nShortest path from {from_p} to {to_p}")
-print(" --> ".join([inv_ident[x] for x in nx.shortest_path(G, idents[from_p], idents[to_p])]))
+# print(f"\nShortest path from {from_p} to {to_p}")
+# print(" --> ".join([inv_ident[x] for x in nx.shortest_path(G, idents[from_p], idents[to_p])]))
 
 # print("\nLongest Path:")
 # longest_path = []
