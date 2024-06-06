@@ -28,12 +28,15 @@ class GlobalReconciler(LmdbReconciler):
         if type(record) == str:
             ids = [record]
         else:
-            ids = [x['id'] for x in record['data'].get('equivalent', [])]
-            if 'id' in record['data']:
-                ids.append(record['data']['id'])
-            else:
-                print(f"No id in {record}")
-                return []
+            try:
+                ids = [x['id'] for x in record['data'].get('equivalent', [])]
+                if 'id' in record['data']:
+                    ids.append(record['data']['id'])
+                else:
+                    print(f"No id in {record}")
+                    return []
+            except:
+                continue
 
         # Only have a map of uris, no types
         vals = set([])

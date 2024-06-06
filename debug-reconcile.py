@@ -25,31 +25,23 @@ cfgs.instantiate_all()
 from_p = sys.argv[1]
 to_p = sys.argv[2]
 
-# print(f"from p is {from_p}")
-# print(f"to p is {to_p}")
 
 try:
     (src, ident) = cfgs.split_uri(from_p)
-    # print(f"line 33 src is {src}")
-    # print(f"line 33 ident is {ident}")
 except:
-    # print(f"Unknown URI: {from_p}")
+    print(f"Unknown URI: {from_p}")
     sys.exit()
 try:
     ref = src['mapper'].get_reference(ident)
     #get reference returns the wrong type, so it grabs the wrong yuid
-    #print(f"ref is {ref}")
     base = cfgs.canonicalize(from_p)
-    #print(f"base is {base}")
     qua = cfgs.make_qua(base, ref.type)
-    #print(f"qua is {qua}")
 except:
     print(f"Could not make typed URI for {from_p}")
     raise
     sys.exit()
 
 yuid = idmap[qua]
-#print(f"yuid is {yuid}")
 # --- set up environment ---
 reconciler = Reconciler(cfgs, idmap, networkmap)
 cfgs.external['gbif']['fetcher'].enabled = True
@@ -61,7 +53,6 @@ idents = {}
 graph = {}
 
 uris = idmap[yuid]
-# print(f"uris are {uris}")
 
 names = {}
 
@@ -70,13 +61,9 @@ for u in uris:
     if u.startswith('__'):
         continue
     (base, qua) = cfgs.split_qua(u)
-    #print(f"base and qua are {base}/{qua}\n----------")
     (src, ident) = cfgs.split_uri(base)
-    #print(f"src and ident are {src}/{ident}\n----------")
     idents[base] = f"{src['name']}:{curr}"
     curr = chr(ord(curr)+1)
-    #it's failing because it doesn't have the right yuid--
-    #print(f"acquiring {ident}")
     rec = src['acquirer'].acquire(ident)
     if not rec:
         print(f"Couldn't acquire {src['name']}:{ident}")
@@ -88,9 +75,8 @@ for u in uris:
             if 'id' in eq:
                 eqid = eq['id']
                 #why does it do this block at all? it already has everything that makes up the record
-                #well actually it doesn't, because it has the wrong yuid. does that matter?
+                #well actually it doesn't, because it has the wrong yuid. if it did, would it need this block?
                 if not eqid in idents:
-                    # print(f"eqid {eqid} not in idents from uri {u}")
                     try:                        
                         curr = chr(ord(curr)+1)
                         (eqsrc, eqident) = cfgs.split_uri(eqid)
@@ -132,8 +118,7 @@ for u in uris:
                     graph[base].append(eq['id'])
                 except:
                     graph[base] = [eq['id']]
-# for k, v in idents.items():
-#     print(f"{k}:{v}\n-------------")
+
 G = nx.Graph()
 G.add_nodes_from(list(idents.values()))
 
