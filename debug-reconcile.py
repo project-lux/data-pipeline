@@ -75,63 +75,64 @@ for u in uris:
     #print(f"src and ident are {src}/{ident}\n----------")
     idents[base] = f"{src['name']}:{curr}"
     curr = chr(ord(curr)+1)
+    print(f"acquiring {ident}")
     rec = src['acquirer'].acquire(ident)
     if not rec:
         print(f"Couldn't acquire {src['name']}:{ident}")
         continue
-    if '_label' in rec['data']:
-        names[base] = rec['data']['_label']
-    if 'equivalent' in rec['data']:
-        for eq in rec['data']['equivalent']:
-            if 'id' in eq:
-                eqid = eq['id']
-                #why does it do this block at all? it already has everything that makes up the record
-                #well actually it doesn't, because it has the wrong yuid. does that matter?
-                if not eqid in idents:
-                    # print(f"eqid {eqid} not in idents from uri {u}")
-                    try:                        
-                        curr = chr(ord(curr)+1)
-                        (eqsrc, eqident) = cfgs.split_uri(eqid)
-                        #definitely it needs to be eqsrc below
-                        idents[eqid] = f"{eqsrc['name']}:{curr}"
-                        if not eqid in names:
-                            ref = src['mapper'].get_reference(eqident)
-                            if hasattr(ref, '_label'):
-                                names[eqid] = ref._label
-                            else:
-                                names[eqid] = "-no label-"
-                    except:
-                        idents[eqid] = eqid
-                try:
-                    graph[base].append(eq['id'])
-                except:
-                    graph[base] = [eq['id']]
+    # if '_label' in rec['data']:
+    #     names[base] = rec['data']['_label']
+    # if 'equivalent' in rec['data']:
+    #     for eq in rec['data']['equivalent']:
+    #         if 'id' in eq:
+    #             eqid = eq['id']
+    #             #why does it do this block at all? it already has everything that makes up the record
+    #             #well actually it doesn't, because it has the wrong yuid. does that matter?
+    #             if not eqid in idents:
+    #                 # print(f"eqid {eqid} not in idents from uri {u}")
+    #                 try:                        
+    #                     curr = chr(ord(curr)+1)
+    #                     (eqsrc, eqident) = cfgs.split_uri(eqid)
+    #                     #definitely it needs to be eqsrc below
+    #                     idents[eqid] = f"{eqsrc['name']}:{curr}"
+    #                     if not eqid in names:
+    #                         ref = src['mapper'].get_reference(eqident)
+    #                         if hasattr(ref, '_label'):
+    #                             names[eqid] = ref._label
+    #                         else:
+    #                             names[eqid] = "-no label-"
+    #                 except:
+    #                     idents[eqid] = eqid
+    #             try:
+    #                 graph[base].append(eq['id'])
+    #             except:
+    #                 graph[base] = [eq['id']]
     #rec2 = reconciler.reconcile(rec)
-for k, v in idents.items():
-    print(f"{k}:{v}\n-------------")
-G = nx.Graph()
-G.add_nodes_from(list(idents.values()))
+# for k, v in idents.items():
+#     print(f"{k}:{v}\n-------------")
+# G = nx.Graph()
+# G.add_nodes_from(list(idents.values()))
 
-new_graph = {}
-for (k,v) in graph.items():
-    subj = idents[k]
-    l = []
-    for u in v:
-        if u in idents:
-            obj = idents[u]
-            l.append(obj)
-            G.add_edge(subj, obj)
-        else:
-            pass
-    l.sort()
-    new_graph[subj] = l
+# new_graph = {}
+# for (k,v) in graph.items():
+#     subj = idents[k]
+#     l = []
+#     for u in v:
+#         if u in idents:
+#             obj = idents[u]
+#             l.append(obj)
+#             G.add_edge(subj, obj)
+#         else:
+#             pass
+#     l.sort()
+#     new_graph[subj] = l
 
 
-key = []
-inv_ident = {}
-for (k,v) in idents.items():
-    key.append((v, k))
-    inv_ident[v] = k
+# key = []
+# inv_ident = {}
+# for (k,v) in idents.items():
+#     key.append((v, k))
+#     inv_ident[v] = k
 # for k, v in inv_ident.items():
 #     print(f"{k}:{v}\n-------------")
 
