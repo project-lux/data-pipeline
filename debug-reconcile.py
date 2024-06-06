@@ -54,7 +54,7 @@ uris = idmap[yuid]
 
 names = {}
 
-def append_to_graph(cfgs, src, base, curr, idents, rec):
+def append_to_graph(cfgs, src, base, idents, rec):
     if '_label' in rec['data']:
         names[base] = rec['data']['_label']
     if 'equivalent' in rec['data']:
@@ -90,9 +90,9 @@ for u in uris:
     if not rec:
         print(f"Couldn't acquire {src['name']}:{ident}")
         continue
-    append_to_graph(cfgs, src, base, curr, idents, rec)
+    append_to_graph(cfgs, src, base, idents, rec)
     rec2 = reconciler.reconcile(rec)
-    append_to_graph(cfgs, src, base, curr, idents, rec2)
+    append_to_graph(cfgs, src, base, idents, rec2)
 
 G = nx.Graph()
 G.add_nodes_from(list(idents.values()))
