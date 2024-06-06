@@ -68,33 +68,35 @@ for u in uris:
     if not rec:
         print(f"Couldn't acquire {src['name']}:{ident}")
         continue
-    #working right until this point
     if '_label' in rec['data']:
         names[base] = rec['data']['_label']
-    # if 'equivalent' in rec['data']:
-    #     for eq in rec['data']['equivalent']:
-    #         if 'id' in eq:
-    #             eqid = eq['id']
-    #             if not eqid in idents:
-    #                 try:
-    #                     (eqsrc, eqident) = cfgs.split_uri(eqid)
-    #                     idents[eqid] = f"{src['name']}:{curr}"
-    #                     if not eqid in names:
-    #                         ref = src['mapper'].get_reference(eqident)
-    #                         if hasattr(ref, '_label'):
-    #                             names[eqid] = ref._label
-    #                         else:
-    #                             names[eqid] = "-no label-"
-    #                     curr = chr(ord(curr)+1)
-    #                 except:
-    #                     idents[eqid] = eqid
-    #             try:
-    #                 graph[base].append(eq['id'])
-    #             except:
-    #                 graph[base] = [eq['id']]
+    #working right until this point
+    if 'equivalent' in rec['data']:
+        for eq in rec['data']['equivalent']:
+            if 'id' in eq:
+                eqid = eq['id']
+                #why does it do this block at all? it already has everything that makes up the record
+                if not eqid in idents:
+                    print(f"eqid {eqid} not in idents from uri {u}")
+                    try:
+                        (eqsrc, eqident) = cfgs.split_uri(eqid)
+                        idents[eqid] = f"{src['name']}:{curr}"
+                        if not eqid in names:
+                            ref = src['mapper'].get_reference(eqident)
+                            if hasattr(ref, '_label'):
+                                names[eqid] = ref._label
+                            else:
+                                names[eqid] = "-no label-"
+                        curr = chr(ord(curr)+1)
+                    except:
+                        idents[eqid] = eqid
+                try:
+                    graph[base].append(eq['id'])
+                except:
+                    graph[base] = [eq['id']]
     #rec2 = reconciler.reconcile(rec)
-for k, v in names.items():
-    print(f"{k}:{v}\n-------------")
+# for k, v in names.items():
+#     print(f"{k}:{v}\n-------------")
 # G = nx.Graph()
 # G.add_nodes_from(list(idents.values()))
 
