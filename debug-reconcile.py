@@ -61,8 +61,9 @@ for u in uris:
     (base, qua) = cfgs.split_qua(u)
     #print(f"base and qua are {base}/{qua}\n----------")
     (src, ident) = cfgs.split_uri(base)
-    print(f"src and ident are {src}/{ident}\n----------")
+    #print(f"src and ident are {src}/{ident}\n----------")
     idents[base] = f"{src['name']}:{curr}"
+    print(f"idents is {idents}\n----------")
     curr = chr(ord(curr)+1)
     rec = src['acquirer'].acquire(ident)
     if not rec:
