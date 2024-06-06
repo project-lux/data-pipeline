@@ -132,7 +132,7 @@ inv_ident = {}
 for (k,v) in idents.items():
     key.append((v, k))
     inv_ident[v] = k
-print(f"inv index is {inv index}")
+print(f"inv index is {inv_index}")
 
 # key.sort()
 # print("  -- Key --")
