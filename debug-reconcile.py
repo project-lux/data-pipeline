@@ -59,12 +59,13 @@ for u in uris:
     if u.startswith('__'):
         continue
     (base, qua) = cfgs.split_qua(u)
+    print(f"base and qua are {base}/{qua}\n----------")
     (src, ident) = cfgs.split_uri(base)
     idents[base] = f"{src['name']}:{curr}"
     curr = chr(ord(curr)+1)
     rec = src['acquirer'].acquire(ident)
     if not rec:
-        print(f"Couldn't acquire {src['name']}:{ident}")
+        #print(f"Couldn't acquire {src['name']}:{ident}")
         continue
     if '_label' in rec['data']:
         names[base] = rec['data']['_label']
@@ -116,37 +117,37 @@ for (k,v) in idents.items():
     inv_ident[v] = k
 
 key.sort()
-print("  -- Key --")
-for k in key:
-   print(f"  {k[0]:<16}{k[1]} ({names.get(k[1], '?')})")
+# print("  -- Key --")
+# for k in key:
+#    print(f"  {k[0]:<16}{k[1]} ({names.get(k[1], '?')})")
 
-print("\nConnected Nodes:")
-for sets in list(nx.connected_components(G)):
-    print(sets)
+# print("\nConnected Nodes:")
+# for sets in list(nx.connected_components(G)):
+#     print(sets)
 
-print(f"\nShortest path from {from_p} to {to_p}")
-print(" --> ".join([inv_ident[x] for x in nx.shortest_path(G, idents[from_p], idents[to_p])]))
+# print(f"\nShortest path from {from_p} to {to_p}")
+# print(" --> ".join([inv_ident[x] for x in nx.shortest_path(G, idents[from_p], idents[to_p])]))
 
-print("\nLongest Path:")
-longest_path = []
-for node in G.nodes:
-    for path in nx.all_simple_paths(G, source=node, target=idents[to_p]):
-        if len(path) > len(longest_path):
-            longest_path = path
-print(" --> ".join([inv_ident[x] for x in longest_path]))
+# print("\nLongest Path:")
+# longest_path = []
+# for node in G.nodes:
+#     for path in nx.all_simple_paths(G, source=node, target=idents[to_p]):
+#         if len(path) > len(longest_path):
+#             longest_path = path
+# print(" --> ".join([inv_ident[x] for x in longest_path]))
 
 
-plt.figure(figsize=(12, 12))
-node_color_values = ['skyblue' for _ in G.nodes()]  
-node_labels = {node: node for node in G.nodes()} 
-edge_color_values = ['black' for _ in G.edges()] 
-pos = nx.spring_layout(G, k=1)
+# plt.figure(figsize=(12, 12))
+# node_color_values = ['skyblue' for _ in G.nodes()]  
+# node_labels = {node: node for node in G.nodes()} 
+# edge_color_values = ['black' for _ in G.edges()] 
+# pos = nx.spring_layout(G, k=1)
 
-nodes = nx.draw_networkx_nodes(G, pos, node_color=node_color_values, node_size=150)
-edges = nx.draw_networkx_edges(G, pos, edge_color=edge_color_values)
-nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=14)
+# nodes = nx.draw_networkx_nodes(G, pos, node_color=node_color_values, node_size=150)
+# edges = nx.draw_networkx_edges(G, pos, edge_color=edge_color_values)
+# nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=14)
 
-#plt.legend([nodes, edges], ['Nodes', 'Edges'])
+# #plt.legend([nodes, edges], ['Nodes', 'Edges'])
 
-plt.savefig("graph.png")
-plt.show(block=True) 
+# plt.savefig("graph.png")
+# plt.show(block=True) 
