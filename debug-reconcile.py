@@ -170,7 +170,7 @@ for sets in list(nx.connected_components(G)):
     print(sets)
 
 print(f"\nShortest path from {from_p} to {to_p}")
-print(" --> ".join([inv_ident[http://www.wikidata.org/entity/Q3709888x] for x in nx.shortest_path(G, idents[from_p], idents[to_p])]))
+print(" --> ".join([inv_ident[x] for x in nx.shortest_path(G, idents[from_p], idents[to_p])]))
 
 # print("\nLongest Path:")
 # longest_path = []
