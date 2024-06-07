@@ -11,12 +11,10 @@ class Reconciler(object):
         for src in config.external.values():
             rlr = src.get('reconciler', None)
             if rlr:
-                print(f"adding {rlr} to reconcilers")
                 self.reconcilers.append(rlr)
         for src in config.results.values():
             rlr = src.get('reconciler', None)
             if rlr:
-                print(f"adding {rlr} to reconcilers")
                 self.reconcilers.append(rlr)
 
         self.global_reconciler = config.results['merged'].get('reconciler', None)
@@ -121,7 +119,6 @@ class Reconciler(object):
                     # or a list (if the reconciler knows multiple sources,
                     #   or if there's more than one actual match to add from a single source)
                     newids = r.reconcile(record, reconcileType=reconcileType)
-                    print(f"newids are {newids}")
                 except:
                     print(r)
                     raise
