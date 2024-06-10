@@ -81,12 +81,13 @@ class FastLoader(ViafLoader):
                 facet.close()
             except:
                 pass
+            tree = etree.parse(l)
+            root = tree.getroot()
+            nss = root.nsmap            
 
-            ns = {'mx': 'http://www.loc.gov/MARC21/slim'}
-            tree = etree.fromstring(l)
-            records = tree.xpath('//mx:record', namespaces=ns)
+            records = tree.xpath('//mx:record', namespaces=nss)
             for record in records:
-                identfield = record.xpath('//mx:controlfield[@tag="001"]', namespaces=ns)
+                identfield = record.xpath('//mx:controlfield[@tag="001"]', namespaces=nss)
                 if controlfield:
                     ident = controlfield[0].text
                     ident = ident.split("fst")[-1]
