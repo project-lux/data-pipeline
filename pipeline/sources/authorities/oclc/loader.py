@@ -54,3 +54,6 @@ class ViafLoader(Loader):
         fh.close()
         self.out_cache.commit()
 
+class FastLoader(ViafLoader):
+    pass
+
