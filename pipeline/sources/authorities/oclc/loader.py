@@ -91,17 +91,17 @@ class FastLoader(ViafLoader):
                     if ident.startswith("0"):
                         ident = ident.lstrip('0')
 
-            x += 1
-            done_x += 1
-            new = {"xml": record}
-            self.out_cache[ident] = new
+        #     x += 1
+        #     done_x += 1
+        #     new = {"xml": record}
+        #     self.out_cache[ident] = new
 
-            if not done_x % 10000:
-                t = time.time() - start
-                xps = x/t
-                ttls = self.total / xps
-                print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-        fh.close()
-        self.out_cache.commit()
+        #     if not done_x % 10000:
+        #         t = time.time() - start
+        #         xps = x/t
+        #         ttls = self.total / xps
+        #         print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
+        # fh.close()
+        # self.out_cache.commit()
 
 
