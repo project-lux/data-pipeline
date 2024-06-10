@@ -85,11 +85,12 @@ class FastLoader(ViafLoader):
 
             l = l.decode('utf-8')
             records = l.split("</mx:record>")
-            for i, record in enumerate(records):
-                if '<mx:record' in record:
-                    record = record.split("<mx:record")[1]
-                    print(record)
-                    break
+            print(records)
+            # for i, record in enumerate(records):
+            #     if '<mx:record' in record:
+            #         record = record.split("<mx:record")[1]
+            #         print(record)
+            #         break
 
             x += 1
             done_x += 1
