@@ -84,7 +84,11 @@ class FastLoader(ViafLoader):
             nss = {'mx': 'http://www.loc.gov/MARC21/slim'} 
             records = tree.xpath('//mx:record', namespaces=nss)
             for record in records:
-                identfield = record.xpath('//mx:controlfield[@tag="001"]', namespaces=nss)
+                try:
+                    identfield = record.xpath('//mx:controlfield[@tag="001"]', namespaces=nss)
+                except:
+                    #no id??
+                    continue
                 if identfield:
                     ident = identfield[0].text
                     ident = ident.split("fst")[-1]
