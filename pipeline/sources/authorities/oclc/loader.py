@@ -69,7 +69,6 @@ class FastLoader(ViafLoader):
         x = 0
         done_x = 0
 
-        #self.total = len(members)
 
         for f in members:
             if not f.endswith(".marcxml"):
