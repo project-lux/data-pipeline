@@ -395,6 +395,22 @@ class Cleaner(Mapper):
         if replacement:
             data[prop] = replacement
 
+    def ensure_timespans(self, et):
+        #ensure if begin_of_begin then end_of_end and vice versa
+        if 'timespan' in et:
+            if 'begin_of_the_begin' in et['timespan'] and 'end_of_the_end' not in et['timespan']:
+                et['timespan']['end_of_the_end'] = "9999-12-31T23:59:59"
+            elif 'end_of_the_end' in et['timespan'] and not 'begin_of_the_begin' in et['timespan']:
+                et['timespan']['begin_of_the_begin'] = "-9999-01-01T00:00:00"
+        
+        elif 'part' in et:
+            for part in et['part']:
+                if 'timespan' in part:
+                    if 'begin_of_the_begin' in part['timespan'] and 'end_of_the_end' not in part['timespan']:
+                        part['timespan']['end_of_the_end'] = "9999-12-31T23:59:59"
+                    elif 'end_of_the_end' in part['timespan'] and not 'begin_of_the_begin' in part['timespan']:
+                        part['timespan']['begin_of_the_begin'] = "-9999-01-01T00:00:00"
+
 
     def check_for_metatypes(self, data):
         if 'equivalent' in data:
@@ -473,15 +489,18 @@ class Cleaner(Mapper):
         data = rec['data']
 
         ### Deduplicate properties
-        self.dedupe_properties(data, 'classified_as')
-        self.dedupe_properties(data, 'represents')
-        self.dedupe_properties(data, 'part_of')
-        self.dedupe_properties(data, 'made_of')
-        self.dedupe_properties(data, 'member_of')
+        propList = ['classified_as, represents, part_of, made_of, member_of']
+        for p in propList:
+            self.dedupe_properties(data, p)
 
         if data['type'] in ['Person','Group','Place']:
             if 'subject_of' in data:
                 self.dedupe_webpages(data)
+
+        eventTypes = ['produced_by','used_for','created_by','born','died','formed_by','dissolved_by']
+        for et in eventTypes:
+            if et in data:
+                self.ensure_timespans(data, et)
 
         ### Check names are sane
         okay = self.process_names(data)
