@@ -1,5 +1,6 @@
 from pipeline.process.base.loader import Loader
 import gzip
+import zipfile
 from lxml import etree
 import time
 import re
@@ -55,5 +56,40 @@ class ViafLoader(Loader):
         self.out_cache.commit()
 
 class FastLoader(ViafLoader):
-    pass
+    
+    def __init__(self, config):
+        super().__init__(config)
+
+    def load(self, slicen=None, maxSlice=None):
+
+        fh = zipfile.ZipFile(self.in_path)
+
+        xstart = time.time()
+        x = 0
+        done_x = 0
+        l = 1
+
+        start = time.time()
+        while l:
+            l = fh.readline()
+            if not l:
+                break
+            if maxSlice is not None and x % maxSlice - slicen != 0:
+                x+= 1
+                continue
+
+            l = l.decode('utf-8')
+            what, xml = l.split('\t')
+            x += 1
+            done_x += 1
+            new = {"xml": xml}
+            self.out_cache[what] = new
+
+            if not done_x % 10000:
+                t = time.time() - start
+                xps = x/t
+                ttls = self.total / xps
+                print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
+        fh.close()
+        self.out_cache.commit()
 
