@@ -69,11 +69,13 @@ class FastLoader(ViafLoader):
         x = 0
         done_x = 0
 
-        self.total = len(members)
+        #self.total = len(members)
 
-        for ti in members:
-            facet = fh.open(ti)
-            ident = ti
+        for f in members:
+            if not f.endswith(".marcxml"):
+                pass
+            facet = fh.open(f)
+            #ident = f
 
             l = facet.read()
             try:
@@ -82,7 +84,13 @@ class FastLoader(ViafLoader):
                 pass
 
             l = l.decode('utf-8')
-            what, xml = l.split('\t')
+            records = l.split("</mx:record>")
+            for i, record in enumerate(records):
+                if '<mx:record' in record:
+                    record = record.split("<mx:record")[1]
+                    print(record)
+                    break
+
             x += 1
             done_x += 1
             new = {"xml": xml}
