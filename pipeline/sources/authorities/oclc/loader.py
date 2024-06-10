@@ -56,27 +56,30 @@ class ViafLoader(Loader):
         self.out_cache.commit()
 
 class FastLoader(ViafLoader):
-    
+
     def __init__(self, config):
         super().__init__(config)
 
     def load(self, slicen=None, maxSlice=None):
 
+        start = time.time()
         fh = zipfile.ZipFile(self.in_path)
+        members = fh.namelist()
 
-        xstart = time.time()
         x = 0
         done_x = 0
-        l = 1
 
-        start = time.time()
-        while l:
-            l = fh.readline()
-            if not l:
-                break
-            if maxSlice is not None and x % maxSlice - slicen != 0:
-                x+= 1
-                continue
+        self.total = len(members)
+
+        for ti in members:
+            facet = fh.open(ti)
+            ident = ti
+
+            l = bio.read()
+            try:
+                bio.close()
+            except:
+                pass
 
             l = l.decode('utf-8')
             what, xml = l.split('\t')
@@ -92,4 +95,5 @@ class FastLoader(ViafLoader):
                 print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
         fh.close()
         self.out_cache.commit()
+
 
