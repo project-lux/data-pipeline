@@ -75,9 +75,9 @@ class FastLoader(ViafLoader):
             facet = fh.open(ti)
             ident = ti
 
-            l = bio.read()
+            l = facet.read()
             try:
-                bio.close()
+                facet.close()
             except:
                 pass
 
