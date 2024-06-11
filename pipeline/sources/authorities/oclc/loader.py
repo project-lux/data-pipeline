@@ -60,7 +60,7 @@ class FastLoader(ViafLoader):
     def __init__(self, config):
         super().__init__(config)
 
-    def load(self, slicen=None, maxSlice=None):
+    def load(self):
 
         start = time.time()
         fh = zipfile.ZipFile(self.in_path)

@@ -99,10 +99,6 @@ if '--load' in sys.argv:
         my_slice = int(sys.argv[1])
         max_slice = int(sys.argv[2])
         cfgs.external['wikidata']['loader'].load(my_slice, max_slice)
-    if '--fast' in sys.argv:
-        my_slice = int(sys.argv[1])
-        max_slice = int(sys.argv[2])
-        cfgs.external['fast']['loader'].load(my_slice, max_slice)
 
 ### LOAD INDEXES
 if '--load-index' in sys.argv:
