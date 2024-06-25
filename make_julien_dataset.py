@@ -22,7 +22,10 @@ def _walk_rec(node, links):
             if node['id'] in cache:
                 cached = cache[node['id']]
             else:
-                qid = cfgs.make_qua(node['id'], node['type'])
+                try:
+                    qid = cfgs.make_qua(node['id'], node['type'])
+                except:
+                    qid = None
                 if qid:
                     cached = idmap[idmap[qid]]
                 else:
@@ -37,7 +40,7 @@ def _walk_rec(node, links):
     for (k,v) in node.items():
         if not type(v) in [list, dict]:
             continue
-        elif k in ['access_point', 'equivalent']:
+        elif k in ['access_point', 'equivalent', 'conforms_to']:
             continue
         elif type(v) == list:
             for vi in v:
