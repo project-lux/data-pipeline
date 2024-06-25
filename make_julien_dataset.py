@@ -27,14 +27,19 @@ def _walk_rec(node, links):
                 except:
                     qid = None
                 if qid:
-                    cached = idmap[idmap[qid]]
+                    try:
+                        cached = idmap[idmap[qid]]
+                    except:
+                        cached = []
                 else:
                     cached = []
                 cache[node['id']] = cached
             for c in cached:
                 if 'vocab.getty.edu' in c:
                     # found one
-                    links[c] = 2
+                    c = c.split("##qua", 1)[0]
+                    if not c in links:
+                        links[c] = 2
                     break
 
     for (k,v) in node.items():
