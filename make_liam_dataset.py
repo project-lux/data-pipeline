@@ -14,12 +14,11 @@ idmap = cfgs.instantiate_map('idmap')['store']
 cfgs.cache_globals()
 cfgs.instantiate_all()
 
-# Find people in merged who have wikipedia links
-
 merged = cfgs.results['merged']['recordcache']
+wd = cfgs.external['wikidata']['datacache']
 
+# Find people in merged who have wikipedia links
 candidates = []
-
 try:
     for rec in merged.iter_records_type('Person'):
         data = rec['data']
@@ -36,13 +35,11 @@ try:
                                         raise ValueError()
 except ValueError as e:
     pass
-
 candidates.sort(key=lambda x: len(x.keys()), reverse=True)
 
-ocandidates = []
 
 # Find objects with wikidata, then look in WD to see if there's wikipedia
-wd = cfgs.external['wikidata']['datacache']
+ocandidates = []
 try:
     for rec in merged.iter_records_type('HumanMadeObject'):
         data = rec['data']
