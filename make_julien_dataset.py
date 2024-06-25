@@ -63,6 +63,7 @@ ttl = 151528 + 404099
 for src in ['ycba', 'yuag']:
     store = cfgs.internal[src]['recordcache']
     for rec in store.iter_records():
+        x += 1
         (direct, indirect) = get_getty_links(rec)
         for r in direct:
             if r in results:
