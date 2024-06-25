@@ -8,6 +8,7 @@ from pipeline.process.reconciler import Reconciler
 from pipeline.process.reference_manager import ReferenceManager
 from pipeline.storage.cache.postgres import poolman
 
+import matplotlib.pyplot as plt
 import networkx as nx
 
 load_dotenv()
@@ -24,6 +25,7 @@ cfgs.instantiate_all()
 from_p = sys.argv[1]
 to_p = sys.argv[2]
 
+
 try:
     (src, ident) = cfgs.split_uri(from_p)
 except:
@@ -31,16 +33,19 @@ except:
     sys.exit()
 try:
     ref = src['mapper'].get_reference(ident)
+    #get reference returns the wrong type, so it grabs the wrong yuid
     base = cfgs.canonicalize(from_p)
     qua = cfgs.make_qua(base, ref.type)
 except:
     print(f"Could not make typed URI for {from_p}")
     raise
     sys.exit()
-yuid = idmap[qua]
 
+yuid = idmap[qua]
 # --- set up environment ---
 reconciler = Reconciler(cfgs, idmap, networkmap)
+cfgs.external['gbif']['fetcher'].enabled = True
+
 
 curr = "0"
 idents = {}
@@ -50,6 +55,7 @@ graph = {}
 uris = idmap[yuid]
 
 names = {}
+
 
 for u in uris:
     if u.startswith('__'):
@@ -68,17 +74,44 @@ for u in uris:
         for eq in rec['data']['equivalent']:
             if 'id' in eq:
                 eqid = eq['id']
+                #why does it do this block at all? it already has everything that makes up the record
+                #well actually it doesn't, because it has the wrong yuid. if it did, would it need this block?
                 if not eqid in idents:
-                    try:
+                    try:                        
+                        curr = chr(ord(curr)+1)
                         (eqsrc, eqident) = cfgs.split_uri(eqid)
-                        idents[eqid] = f"{src['name']}:{curr}"
+                        #definitely it needs to be eqsrc below
+                        idents[eqid] = f"{eqsrc['name']}:{curr}"
                         if not eqid in names:
                             ref = src['mapper'].get_reference(eqident)
                             if hasattr(ref, '_label'):
                                 names[eqid] = ref._label
                             else:
                                 names[eqid] = "-no label-"
+                    except:
+                        idents[eqid] = eqid
+                try:
+                    graph[base].append(eq['id'])
+                except:
+                    graph[base] = [eq['id']]
+    rec2 = reconciler.reconcile(rec)
+    if '_label' in rec2['data']:
+        names[base] = rec2['data']['_label']
+    if 'equivalent' in rec2['data']:
+        for eq in rec2['data']['equivalent']:
+            if 'id' in eq:
+                eqid = eq['id']
+                if not eqid in idents:
+                    try:                        
                         curr = chr(ord(curr)+1)
+                        (eqsrc, eqident) = cfgs.split_uri(eqid)
+                        idents[eqid] = f"{eqsrc['name']}:{curr}"
+                        if not eqid in names:
+                            ref = src['mapper'].get_reference(eqident)
+                            if hasattr(ref, '_label'):
+                                names[eqid] = ref._label
+                            else:
+                                names[eqid] = "-no label-"
                     except:
                         idents[eqid] = eqid
                 try:
@@ -113,13 +146,38 @@ for (k,v) in idents.items():
 key.sort()
 print("  -- Key --")
 for k in key:
-    print(f"  {k[0]:<16}{k[1]} ({names.get(k[1], '?')})")
+   print(f"  {k[0]:<16}{k[1]} ({names.get(k[1], '?')})")
 
 print("\nConnected Nodes:")
 for sets in list(nx.connected_components(G)):
     print(sets)
 
-print(f"\nPath from {from_p} to {to_p}")
+print(f"\nShortest path from {from_p} to {to_p}")
 print(" --> ".join([inv_ident[x] for x in nx.shortest_path(G, idents[from_p], idents[to_p])]))
 
- 
+
+#this code worked until I introduced reconcile, now it takes WAY too long to compile. 
+#we can't use the DAG function because we have cycles in our graph
+# print("\nLongest Path:")
+# longest_path = []
+# for node in G.nodes:
+#     for path in nx.all_simple_paths(G, source=node, target=idents[to_p]):
+#         if len(path) > len(longest_path):
+#             longest_path = path
+# print(" --> ".join([inv_ident[x] for x in longest_path]))
+
+
+plt.figure(figsize=(12, 12))
+node_color_values = ['skyblue' for _ in G.nodes()]  
+node_labels = {node: node for node in G.nodes()} 
+edge_color_values = ['black' for _ in G.edges()] 
+pos = nx.spring_layout(G, k=1)
+
+nodes = nx.draw_networkx_nodes(G, pos, node_color=node_color_values, node_size=150)
+edges = nx.draw_networkx_edges(G, pos, edge_color=edge_color_values)
+nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=14)
+
+#plt.legend([nodes, edges], ['Nodes', 'Edges'])
+
+plt.savefig("graph.png")
+plt.show(block=True) 
