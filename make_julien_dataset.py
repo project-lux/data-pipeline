@@ -22,7 +22,7 @@ def _walk_rec(node, links):
             if node['id'] in cache:
                 cached = cache[node['id']]
             else:
-                qid = cfgs.make_qua(node)
+                qid = cfgs.make_qua(node['id'], node['type'])
                 if qid:
                     cached = idmap[idmap[qid]]
                 else:
