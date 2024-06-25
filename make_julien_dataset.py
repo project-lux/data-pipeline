@@ -57,10 +57,12 @@ results = {}
 
 for src in ['ycba', 'yuag']:
     store = cfgs.internal[src]['recordcache']
-    for rec in src.iter_records():
+    for rec in store.iter_records():
         refs = get_getty_links(rec)
         for r in refs:
             if r in results:
                 results[r][src] = rec['identifier']
             else:
                 results[r] = {src: rec['identifier']}
+        sys.stdout.write('.');sys.stdout.flush()
+
