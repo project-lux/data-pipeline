@@ -11,6 +11,7 @@ class IpchLoader(Loader):
         self.in_path = config['dumpFilePath']
         self.out_cache = config['datacache']
         self.total = config.get('totalRecords', -1)
+        self.namespace = config['namespace']
 
     def get_identifier_raw(self, line):
         # Find identifier from raw line
