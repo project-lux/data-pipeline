@@ -22,7 +22,11 @@ def _walk_rec(node, links):
             if node['id'] in cache:
                 cached = cache[node['id']]
             else:
-                cached = idmap[idmap[node['id']]]
+                qid = cfgs.make_qua(node)
+                if qid:
+                    cached = idmap[idmap[qid]]
+                else:
+                    cached = []
                 cache[node['id']] = cached
             for c in cached:
                 if 'vocab.getty.edu' in c:
