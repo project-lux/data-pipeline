@@ -160,7 +160,7 @@ class WdMapper(Mapper, WdConfigManager):
             typ = opts[0][0]
             return class_dist[typ]
         else:
-            return None
+            return class_dist['type']
 
 
     def process_only_label(self, data, top):
