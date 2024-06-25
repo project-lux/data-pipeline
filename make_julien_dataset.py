@@ -89,3 +89,32 @@ for src in ['ycba', 'yuag']:
 
         if not x % 10000:
             print(f"{x} / {ttl}")
+
+items = list(results.items())
+outlines = []
+for i in items:
+  l = []
+  l.append(i[0])
+  val = i[1]
+  if 'ycba' in val:
+    l.append(val['ycba'])
+  else:
+    l.append("")
+  if 'ycba_i' in val:
+    l.append(val['ycba_i'])
+  else:
+    l.append("")
+  if 'yuag' in val:
+    l.append(val['yuag'])
+  else:
+    l.append("")
+  if 'yuag_i' in val:
+    l.append(val['yuag_i'])
+  else:
+    l.append("")
+  outlines.append(','.join(l))
+
+outh = open('julien.csv', 'w')
+for o in outlines:
+    outh.write(f"{o}\n")
+outh.close()
