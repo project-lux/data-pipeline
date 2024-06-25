@@ -40,6 +40,8 @@ class IpchLoader(Loader):
                 continue   
             x += 1
             what = self.get_identifier_json(js)
+            if what in self.out_cache:
+                print(f"Duplicate record: {what}")
             self.out_cache[what] = js
         fh.close()
         self.out_cache.commit()
