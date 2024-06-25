@@ -3,6 +3,7 @@ import sys
 import json
 import time
 import datetime
+import gzip
 from dotenv import load_dotenv
 from pipeline.config import Config
 from pipeline.process.reference_manager import ReferenceManager
@@ -19,6 +20,35 @@ cfgs.instantiate_all()
 
 update_mgr = UpdateManager(cfgs, idmap)
 ref_mgr = ReferenceManager(cfgs, idmap)
+
+if '--nt' in sys.argv:
+    # parallelize
+    if len(sys.argv) > 2 and sys.argv[1].isnumeric() and sys.argv[2].isnumeric():
+        my_slice = int(sys.argv[1])
+        max_slice = int(sys.argv[2])
+    else:
+        my_slice = max_slice = -1
+
+    from pipeline.sources.lux.qlever.mapper import QleverMapper
+    mpr = QleverMapper(cfgs.results['marklogic'])
+    rc = cfgs.results['merged']['recordcache']
+    with gzip.open(f'/data-io2-2/output/lux/lux_{my_slice}.nt.gz', 'wt', 1) as fh:
+        if my_slice == -1:
+            itr = rc.iter_keys()
+        else:
+            itr = rc.iter_keys_slice(my_slice, max_slice)
+
+        x = 0
+        start = time.time()
+        for recid in itr:
+            rec = rc[recid]
+            res = mpr.transform(rec)    
+            for r in res:
+                fh.write(f"{r}\n")
+            x += 1
+            if not x % 100000:
+                print(f"{x} {time.time()-start}")
+                sys.stdout.flush()
 
 
 if '--test-ils-idmap' in sys.argv:

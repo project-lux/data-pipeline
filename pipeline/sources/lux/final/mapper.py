@@ -126,9 +126,9 @@ class Cleaner(Mapper):
         primary = self.globals['primaryName'] #300404670
         sortName = self.globals['sortName'] # 300404672 
         primaryType = {'id':primary, 'type':'Type', '_label':'Primary Name', 'equivalent':[
-                {'id':'http://vocab.getty.edu/aat/300404670', 'type':'Type', '_label': 'Primary Name'}]}
+                {'id':'http://vocab.getty.edu/aat/300404670', 'type':'Type', '_label': 'Final: Primary Name'}]}
         sortType = {'id':sortName, 'type':'Type', '_label':'Sort Name', 'equivalent': [
-                {'id':'http://vocab.getty.edu/aat/300451544', 'type':'Type', '_label': 'Sort Title'}]}
+                {'id':'http://vocab.getty.edu/aat/300451544', 'type':'Type', '_label': 'Final: Sort Title'}]}
 
         alternateName = self.globals['alternateName'] # 300264273 
         alternateTitle = self.globals['alternateTitle'] # 300417227
@@ -334,8 +334,6 @@ class Cleaner(Mapper):
                     target = {}
                 if 'classified_as' in target:
                     target['classified_as'].append(sortType)
-
-
 
         if (not 'identified_by' in data or not data['identified_by']) and '_label' in data and \
             data['_label']:
