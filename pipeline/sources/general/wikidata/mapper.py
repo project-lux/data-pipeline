@@ -158,8 +158,6 @@ class WdMapper(Mapper, WdConfigManager):
         if opts:
             opts.sort(key=lambda x: x[1], reverse=True)
             typ = opts[0][0]
-            if "P571" in data and typ == "place" and len(opts) > 1:
-                typ = opts[1][0]
             return class_dist[typ]
         else:
             return None
