@@ -22,10 +22,7 @@ def _walk_rec(node, links):
             if node['id'] in cache:
                 cached = cache[node['id']]
             else:
-                try:
-                    cached = idmap[idmap[node['id']]]
-                except:
-                    cached = []
+                cached = idmap[idmap[node['id']]]
                 cache[node['id']] = cached
             for c in cached:
                 if 'vocab.getty.edu' in c:
