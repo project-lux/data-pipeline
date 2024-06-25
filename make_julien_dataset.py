@@ -37,14 +37,16 @@ def _walk_rec(node, links):
     for (k,v) in node.items():
         if not type(v) in [list, dict]:
             continue
-        if type(v) == list:
+        elif k in ['access_point', 'equivalent']:
+            continue
+        elif type(v) == list:
             for vi in v:
                 if type(vi) == dict:
-                    self._walk_rec(vi, links)
+                    _walk_rec(vi, links)
                 else:
                     print(f"found non dict in a list :( {node}")
         elif type(v) == dict:
-            self._walk_rec(v, links)
+            _walk_rec(v, links)
 
 
 def get_getty_links(rec):
