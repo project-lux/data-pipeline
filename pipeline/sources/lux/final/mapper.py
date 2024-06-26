@@ -482,7 +482,7 @@ class Cleaner(Mapper):
                 block = ws[k]
                 subj.append(block)
             except:
-                print(f"Could not find {k} in {block} for {data['id']}")
+                print(f"Could not find {k} in {ws} for {data['id']}")
         if subj:
             data['subject_of'] = subj
 
