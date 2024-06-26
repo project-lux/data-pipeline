@@ -501,7 +501,7 @@ class Cleaner(Mapper):
         eventTypes = ['produced_by','used_for','created_by','born','died','formed_by','dissolved_by']
         for et in eventTypes:
             if et in data:
-                self.ensure_timespans(data, et)
+                self.ensure_timespans(data['et'])
 
         ### Check names are sane
         okay = self.process_names(data)
