@@ -478,10 +478,13 @@ class Cleaner(Mapper):
         subj = []
         #okay should never be empty
         for k in okay:
-            block = ws[k]
-            subj.append(block)
-
-        data['subject_of'] = subj
+            try:
+                block = ws[k]
+                subj.append(block)
+            except:
+                print(f"Could not find {k} in {block} for {data['id']}")
+        if subj:
+            data['subject_of'] = subj
 
     def transform(self, rec, rectype=None, reference=False):
         data = rec['data']
