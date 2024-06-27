@@ -26,9 +26,7 @@ class PoolManager(object):
         self.pool = None
 
     def make_pool(self, name, host=None, port=None, user=None, password=None, dbname=None):   
-        print(" pool requested")
         if self.conn is None:
-            print("  ... making new connection")
             if host:
                 # TCP/IP
                 self.conn = psycopg2.connect(host=host, port=port, user=user, password=password, dbname=dbname)
@@ -38,11 +36,8 @@ class PoolManager(object):
                 self.conn = psycopg2.connect(user=user, dbname=dbname)
                 self.iterating_conn = psycopg2.connect(user=user, dbname=dbname)
             self.pool = name
-            print(" ... made")
-        print(" pool returned")
 
     def get_conn(self, name, itr=False):
-        print("  pool was asked for conn")
         if itr == False:
             return self.conn
         else:
@@ -72,7 +67,6 @@ class PooledCache(object):
         self.conn = None
         self.iterating_conn = None
 
-        print(f"INIT: {self.name}")
         if config['host']:
             # TCP/IP
             pname = f"{config['host']}:{config['port']}/{config['dbname']}"
@@ -86,21 +80,15 @@ class PooledCache(object):
             poolman.make_pool(pname, user=self.config['user'], dbname=self.config['dbname'])
 
 
-        print("  about to test exists")
         # Test that our table exists
-        qry = 'SELECT 1 FROM pg_tables WHERE tablename = %s'
+        qry = "SELECT 1 FROM pg_tables WHERE tablename = %s"
         with self._cursor(internal=False) as cursor:    
-            print(" ... execute select 1")
             cursor.execute(qry, (self.name,))
             res = cursor.fetchone()
-            print(f" ... returned: {res}")
             if res is None:
                 # No such table, build it.
                 print(f"Making cache table {self.name}")
-                self.conn.rollback()
                 self._make_table()
-        print("  tested")
-
 
     def shutdown(self):
         # Close our connections
@@ -117,14 +105,10 @@ class PooledCache(object):
             self.iterating_conn = poolman.get_conn(self.pool_name, itr=True)
         elif iter is False and not self.conn:
             self.conn = poolman.get_conn(self.pool_name, itr=False)
-
         if iter:
             conn = self.iterating_conn
         else:
             conn = self.conn
-
-        print(" about to make cursor")
-
         if internal:
             # ensure uniqueness across multiple instances of the code
             name = f"server_cursor_{self.name}_{time.time()}".replace('.', '_')
@@ -135,8 +119,6 @@ class PooledCache(object):
         else:
             # Need this for creating the tables/indexes
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-        print(" Made cursor") 
         return cursor
 
     # --- pgcache ---
