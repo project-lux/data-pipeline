@@ -90,7 +90,9 @@ class PooledCache(object):
         qry = f'SELECT 1 FROM {self.name} LIMIT 1'
         with self._cursor(internal=False) as cursor:    
             try:
+                print(" ... execute select 1")
                 cursor.execute(qry)
+                print(" ... returned")
             except psycopg2.errors.UndefinedTable:
                 # No such table, build it.
                 print(f"Making cache table {self.name}")
