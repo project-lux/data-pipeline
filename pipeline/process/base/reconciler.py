@@ -160,11 +160,19 @@ class LmdbReconciler(Reconciler):
                         k = self.name_index[val]
                         typ = None
                     if typ is not None and my_type == typ:
+                        if self.debug:
+                            try:
+                                self.debug_graph[e].append((f"{self.namespace}{uri}", 'nm'))
+                            except:
+                                self.debug_graph[e] = [(f"{self.namespace}{uri}", 'nm')]
                         try:
                             matches[k].append(val)
                         except:
                             matches[k] = [val]
                         break
+
+
+
 
         if reconcileType in ['all', 'uri']:
             for e in self.extract_uris(rec):

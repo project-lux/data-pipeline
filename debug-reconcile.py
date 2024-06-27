@@ -102,6 +102,7 @@ while inputs:
     for e in eqs:
         for i in inputs[:]:
             if e == i[2]:
+                print(f"removing {e}")
                 inputs.remove(i) 
                 break
 
