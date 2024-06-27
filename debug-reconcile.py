@@ -116,7 +116,7 @@ while inputs:
 curr_id = "0"
 idents = {}
 edge_labels = {}
-
+extra_nss = {'http://id.worldcat.org/fast/':'fast'}
 G = nx.Graph()
 
 for (k,v) in reconciler.debug_graph.items():
@@ -131,8 +131,16 @@ for (k,v) in reconciler.debug_graph.items():
         try:
             vil = idents[vi[0]]
         except:
-            (src,ident) = cfgs.split_uri(vi[0])
-            vil = f"{src['name']}:{curr_id}"
+            try:
+                (src,ident) = cfgs.split_uri(vi[0])
+                vil = f"{src['name']}:{curr_id}"
+            except:
+                # Could be fast or could be junk
+                (ns,idt) = vi[0].rsplit('/', 1)
+                if ns in extra_nss:
+                    vil = f"{extra_nss[ns]}:{curr_id}"
+                else:
+                    vil =f"???:{curr_id}"
             idents[vi[0]] = vil
             curr_id = chr(ord(curr_id)+1)        
         G.add_edge(kl, vil)
