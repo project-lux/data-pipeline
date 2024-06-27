@@ -72,7 +72,7 @@ class WdReconciler(LmdbReconciler, WdConfigManager):
                         key = eq.replace(ns, f"{prefix}:")
                         if key in self.id_index:
                             ids[key] = self.id_index[key]
-                            # print(f"Found: {eq} --> {self.id_index[key]}")
+                            print(f"  ---- WD Found: {eq} --> {self.id_index[key]}")
                         elif "wikidata.org/" in eq:
                             # record assigned one already
                             truth = eq.rsplit('/',1)[1]
