@@ -195,16 +195,17 @@ class LcMapper(Mapper):
         ex = new.get('madsrdf:hasExactExternalAuthority', [])
         if type(ex) != list:
             ex = [ex]
-        later = new.get('madsrdf:hasLaterEstablishedForm', [])
-        if later:
-            if type(later) != list:
-                later = [later]
-            ex.extend(later)
-        earlier = new.get('madsrdf:hasEarlierEstablishedForm', [])
-        if earlier:
-            if type(earlier) != list:
-                earlier = [earlier]
-            ex.extend(earlier) 
+        if top.__class__ != model.Group:
+            later = new.get('madsrdf:hasLaterEstablishedForm', [])
+            if later:
+                if type(later) != list:
+                    later = [later]
+                ex.extend(later)
+            earlier = new.get('madsrdf:hasEarlierEstablishedForm', [])
+            if earlier:
+                if type(earlier) != list:
+                    earlier = [earlier]
+                ex.extend(earlier) 
 
         # skos:closeMatch -- Only as a last resort
         close = new.get('madsrdf:hasCloseExternalAuthority', [])
