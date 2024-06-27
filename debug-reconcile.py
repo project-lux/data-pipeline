@@ -92,6 +92,8 @@ inputs.sort(key=lambda x: 1 if x[0]['type'] == 'internal' else 2)
 # start with inputs[0] and reconcile
 # then filter out any in the new equivalents, and iterate until we find them all
 
+processed = []
+
 while inputs:
     inp = inputs.pop(0)
     reconciler.reconcile(inp[3])
@@ -105,7 +107,7 @@ while inputs:
                 print(f"*** Removing {e}")
                 inputs.remove(i) 
                 break
-
+    processed.append(inp)
 
 raise ValueError()
 

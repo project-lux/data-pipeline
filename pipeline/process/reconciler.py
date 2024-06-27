@@ -98,7 +98,16 @@ class Reconciler(object):
                     if self.debug: print("      (collecting)")
                     self.collector.collect(record)
                     cr_equivs = set([x['id'] for x in record['data'].get('equivalent', [])])
-                    if self.debug: print(f"cr_equivs: {cr_equivs}")                    
+                    if self.debug: print(f"cr_equivs: {cr_equivs}")
+                    if self.debug:
+                        lg = self.collector.debug_graph
+                        for (k,v) in lg.items():
+                            try:
+                                self.debug_graph[k].extend(v)
+                            except:
+                                self.debug_graph[k] = v
+                        self.collector.debug_graph = {}
+
         except Exception as e:
             print(f"\nERROR: Reconciling broke for {record['source']}/{record['identifier']}: {e}")
             raise
