@@ -50,10 +50,11 @@ class Reconciler(object):
 
         if self.debug:
             for eq in record['data']['equivalent']:
-                try:
-                    self.debug_graph[record['data']['id']].append((eq['id'], 'eq'))
-                except:
-                    self.debug_graph[record['data']['id']] = [(eq['id'], 'eq')]
+                if eq['id'] != record['data']['id']:
+                    try:
+                        self.debug_graph[record['data']['id']].append((eq['id'], 'eq'))
+                    except:
+                        self.debug_graph[record['data']['id']] = [(eq['id'], 'eq')]
 
         if self.debug: print(f"\n--- {record['data']['id']} ---")
         leq = len(record['data'].get('equivalent', []))
