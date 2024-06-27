@@ -40,7 +40,7 @@ class PoolManager(object):
         print(" ... made")
 
     def get_conn(self, name, itr=False):
-        print("asked for conn")
+        print("  pool was asked for conn")
         if itr == False:
             return self.conn
         else:
@@ -70,7 +70,7 @@ class PooledCache(object):
         self.conn = None
         self.iterating_conn = None
 
-        print("INIT: {self.name}")
+        print(f"INIT: {self.name}")
         print("  about to make pool")
         if config['host']:
             # TCP/IP
