@@ -14,6 +14,7 @@ import networkx as nx
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
 cfgs = Config(basepath=basepath)
+cfgs.debug_reconciliation = True # Ensure debug is on
 idmap = cfgs.instantiate_map('idmap')['store']
 networkmap = cfgs.instantiate_map('networkmap')['store']
 cfgs.cache_globals()
@@ -66,13 +67,9 @@ if yuid != yuid2:
 # --- set up environment ---
 reconciler = Reconciler(cfgs, idmap, networkmap)
 cfgs.external['gbif']['fetcher'].enabled = True
-reconciler.debug = True
-cfgs.debug_reconciliation = True
-
 
 curr = "0"
 uris = idmap[yuid]
-
 idents = {}
 graph = {}
 names = {}
