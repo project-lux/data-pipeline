@@ -133,9 +133,12 @@ class Reconciler(object):
                     if self.debug and r.debug:
                         # fetch link-graph from reconciler
                         lg = r.debug_graph
+                        for (k,v) in lg.items():
+                            try:
+                                self.debug_graph[k].append(v)
+                            except:
+                                self.debug_graph[k] = [v]
                         r.debug_graph = {}
-                        print(r)
-                        print(lg)
                 except:
                     print(r)
                     raise

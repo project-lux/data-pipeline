@@ -87,7 +87,7 @@ for u in uris:
         continue
     (base, qua) = cfgs.split_qua(u)
     (src, ident) = cfgs.split_uri(base)
-    inputs.append((src, ident, src['acquirer'].acquire(ident)))
+    inputs.append((src, ident, u, src['acquirer'].acquire(ident)))
 
 inputs.sort(key=lambda x: x[0]['datacache'].len_estimate())
 inputs.sort(key=lambda x: 1 if x[0]['type'] == 'internal' else 2)
@@ -95,7 +95,16 @@ inputs.sort(key=lambda x: 1 if x[0]['type'] == 'internal' else 2)
 # start with inputs[0] and reconcile
 # then filter out any in the new equivalents, and iterate until we find them all
 
-reconciler.reconcile(inputs[0][2])
+while inputs:
+    inp = inputs.pop(0)
+    reconciler.reconcile(inp[3])
+    eqs = inp['data'].get('equivalent', [])
+    for e in eqs:
+        for i in inputs[:]:
+            if e == i[2]:
+                inputs.remove(i) 
+                break
+
 
 raise ValueError()
 
