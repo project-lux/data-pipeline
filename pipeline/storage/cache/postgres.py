@@ -26,8 +26,9 @@ class PoolManager(object):
         self.pool = None
 
     def make_pool(self, name, host=None, port=None, user=None, password=None, dbname=None):   
-        print(" PG making connection")
+        print(" pool requested")
         if self.conn is None:
+            print("  ... making new connection")
             if host:
                 # TCP/IP
                 self.conn = psycopg2.connect(host=host, port=port, user=user, password=password, dbname=dbname)
@@ -37,7 +38,8 @@ class PoolManager(object):
                 self.conn = psycopg2.connect(user=user, dbname=dbname)
                 self.iterating_conn = psycopg2.connect(user=user, dbname=dbname)
             self.pool = name
-        print(" ... made")
+            print(" ... made")
+        print(" pool returned")
 
     def get_conn(self, name, itr=False):
         print("  pool was asked for conn")
@@ -71,7 +73,6 @@ class PooledCache(object):
         self.iterating_conn = None
 
         print(f"INIT: {self.name}")
-        print("  about to make pool")
         if config['host']:
             # TCP/IP
             pname = f"{config['host']}:{config['port']}/{config['dbname']}"
