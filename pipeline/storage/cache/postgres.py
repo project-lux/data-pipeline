@@ -88,13 +88,13 @@ class PooledCache(object):
 
         print("  about to test exists")
         # Test that our table exists
-        qry = f'SELECT 1 FROM {self.name} LIMIT 1'
+        qry = 'SELECT 1 FROM pg_tables WHERE tablename = %s'
         with self._cursor(internal=False) as cursor:    
-            try:
-                print(" ... execute select 1")
-                cursor.execute(qry)
-                print(" ... returned")
-            except psycopg2.errors.UndefinedTable:
+            print(" ... execute select 1")
+            cursor.execute(qry, (self.name,))
+            res = cursor.fetchone()
+            print(" ... returned")
+            if res is None:
                 # No such table, build it.
                 print(f"Making cache table {self.name}")
                 self.conn.rollback()
