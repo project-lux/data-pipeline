@@ -66,6 +66,7 @@ class PooledCache(object):
         self.name = config['name'] + '_' + config['tabletype']
         self.conn = None
         self.iterating_conn = None
+
         if config['host']:
             # TCP/IP
             pname = f"{config['host']}:{config['port']}/{config['dbname']}"
@@ -78,15 +79,15 @@ class PooledCache(object):
             self.pool_name = pname
             poolman.make_pool(pname, user=self.config['user'], dbname=self.config['dbname'])
 
+
         # Test that our table exists
-        qry = f'SELECT 1 FROM {self.name} LIMIT 1'
+        qry = "SELECT 1 FROM pg_tables WHERE tablename = %s"
         with self._cursor(internal=False) as cursor:    
-            try:
-                cursor.execute(qry)
-            except psycopg2.errors.UndefinedTable:
+            cursor.execute(qry, (self.name,))
+            res = cursor.fetchone()
+            if res is None:
                 # No such table, build it.
                 print(f"Making cache table {self.name}")
-                self.conn.rollback()
                 self._make_table()
 
     def shutdown(self):
@@ -104,12 +105,10 @@ class PooledCache(object):
             self.iterating_conn = poolman.get_conn(self.pool_name, itr=True)
         elif iter is False and not self.conn:
             self.conn = poolman.get_conn(self.pool_name, itr=False)
-
         if iter:
             conn = self.iterating_conn
         else:
             conn = self.conn
-
         if internal:
             # ensure uniqueness across multiple instances of the code
             name = f"server_cursor_{self.name}_{time.time()}".replace('.', '_')
@@ -120,7 +119,6 @@ class PooledCache(object):
         else:
             # Need this for creating the tables/indexes
             cursor = conn.cursor(cursor_factory=RealDictCursor)
-
         return cursor
 
     # --- pgcache ---
