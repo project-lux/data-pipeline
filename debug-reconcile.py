@@ -98,7 +98,7 @@ inputs.sort(key=lambda x: 1 if x[0]['type'] == 'internal' else 2)
 while inputs:
     inp = inputs.pop(0)
     reconciler.reconcile(inp[3])
-    eqs = inp['data'].get('equivalent', [])
+    eqs = inp[3]['data'].get('equivalent', [])
     for e in eqs:
         for i in inputs[:]:
             if e == i[2]:
