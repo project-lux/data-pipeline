@@ -96,10 +96,12 @@ while inputs:
     inp = inputs.pop(0)
     reconciler.reconcile(inp[3])
     eqs = inp[3]['data'].get('equivalent', [])
+    print(eqs)
+    print([x[2] for x in inputs])
     for e in eqs:
         for i in inputs[:]:
             if e == i[2]:
-                print(f"removing {e}")
+                print(f"*** Removing {e}")
                 inputs.remove(i) 
                 break
 
