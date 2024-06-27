@@ -26,6 +26,7 @@ class PoolManager(object):
         self.pool = None
 
     def make_pool(self, name, host=None, port=None, user=None, password=None, dbname=None):   
+        print(" PG making connection")
         if self.conn is None:
             if host:
                 # TCP/IP
@@ -36,8 +37,10 @@ class PoolManager(object):
                 self.conn = psycopg2.connect(user=user, dbname=dbname)
                 self.iterating_conn = psycopg2.connect(user=user, dbname=dbname)
             self.pool = name
+        print(" ... made")
 
     def get_conn(self, name, itr=False):
+        print("asked for conn")
         if itr == False:
             return self.conn
         else:
@@ -66,6 +69,8 @@ class PooledCache(object):
         self.name = config['name'] + '_' + config['tabletype']
         self.conn = None
         self.iterating_conn = None
+
+        print(" cache in init about to make pool")
         if config['host']:
             # TCP/IP
             pname = f"{config['host']}:{config['port']}/{config['dbname']}"
@@ -78,6 +83,8 @@ class PooledCache(object):
             self.pool_name = pname
             poolman.make_pool(pname, user=self.config['user'], dbname=self.config['dbname'])
 
+
+        print(" cache in init about to test exists")
         # Test that our table exists
         qry = f'SELECT 1 FROM {self.name} LIMIT 1'
         with self._cursor(internal=False) as cursor:    
@@ -109,6 +116,8 @@ class PooledCache(object):
             conn = self.iterating_conn
         else:
             conn = self.conn
+
+        print ("about to issue query")
 
         if internal:
             # ensure uniqueness across multiple instances of the code
