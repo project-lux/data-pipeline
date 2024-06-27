@@ -67,7 +67,7 @@ if yuid != yuid2:
 reconciler = Reconciler(cfgs, idmap, networkmap)
 cfgs.external['gbif']['fetcher'].enabled = True
 reconciler.debug = True
-config['all_configs'].debug_reconciliation = True
+cfgs.debug_reconciliation = True
 
 
 curr = "0"
