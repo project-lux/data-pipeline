@@ -93,7 +93,7 @@ class PooledCache(object):
             print(" ... execute select 1")
             cursor.execute(qry, (self.name,))
             res = cursor.fetchone()
-            print(" ... returned")
+            print(f" ... returned: {res}")
             if res is None:
                 # No such table, build it.
                 print(f"Making cache table {self.name}")
