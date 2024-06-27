@@ -412,9 +412,7 @@ class PooledCache(object):
         # WARNING WARNING ... trash all the data in the cache
         qry = f"TRUNCATE TABLE {self.name} RESTART IDENTITY"
         with self._cursor(internal=False) as cursor:
-            print(f" ... Executing truncate on {self.name}")
             cursor.execute(qry)
-            print(" ... commiting")
             self.conn.commit()
 
 
