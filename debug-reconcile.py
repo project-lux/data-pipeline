@@ -66,13 +66,7 @@ if yuid != yuid2:
 
 # --- set up environment ---
 reconciler = Reconciler(cfgs, idmap, networkmap)
-cfgs.external['gbif']['fetcher'].enabled = True
-
-curr = "0"
 uris = idmap[yuid]
-idents = {}
-graph = {}
-names = {}
 
 ### Idea: We know the final result, try to reconstruct it by following what the reconciler
 # does, but tracking which URIs prompted the inclusion of which others
@@ -109,32 +103,40 @@ while inputs:
                 break
     processed.append(inp)
 
-raise ValueError()
+
+# We've now built reconciler.debug_graph
+# turn it into a networkx graph with shorter node ids
 
 
 
 
+# curr = chr(ord(curr)+1)
 
 
+curr_id = "0"
+idents = {}
+edge_labels = {}
 
-curr = chr(ord(curr)+1)
 G = nx.Graph()
-G.add_nodes_from(list(idents.values()))
 
-new_graph = {}
-for (k,v) in graph.items():
-    subj = idents[k]
-    l = []
-    for u in v:
-        if u in idents:
-            obj = idents[u]
-            l.append(obj)
-            G.add_edge(subj, obj)
-        else:
-            pass
-    l.sort()
-    new_graph[subj] = l
-
+for (k,v) in reconciler.debug_graph.items():
+    try:
+        kl = idents[k]
+    except:
+        (src,ident) = cfgs.split_uri(k)
+        kl = f"{src['name']}:{curr_id}"
+        idents[k] = kl
+        curr_id = chr(ord(curr_id)+1)
+    for vi in v:
+        try:
+            vil = idents[vi[0]]
+        except:
+            (src,ident) = cfgs.split_uri(vi[0])
+            vil = f"{src['name']}:{curr_id}"
+            idents[vi[0]] = vil
+            curr_id = chr(ord(curr_id)+1)        
+        G.add_edge(kl, vil)
+        edge_labels[(kl, vil)] = vi[1]
 
 key = []
 inv_ident = {}
