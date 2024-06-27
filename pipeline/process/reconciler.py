@@ -28,6 +28,7 @@ class Reconciler(object):
         except:
             self.filter_internal = False
 
+        # source-rec-uri: [(added-rec-uri, 'eq|uri|nm')]
         self.debug_graph = {}
 
 
@@ -47,13 +48,12 @@ class Reconciler(object):
         else:
             record['data']['equivalent'] = [me]
 
-
         if self.debug:
             for eq in record['data']['equivalent']:
                 try:
-                    self.debug_graph[record['data']['id']].append(eq['id'])
+                    self.debug_graph[record['data']['id']].append((eq['id'], 'eq'))
                 except:
-                    self.debug_graph[record['data']['id']] = [eq['id']]
+                    self.debug_graph[record['data']['id']] = [(eq['id'], 'eq')]
 
         if self.debug: print(f"\n--- {record['data']['id']} ---")
         leq = len(record['data'].get('equivalent', []))
@@ -130,6 +130,12 @@ class Reconciler(object):
                     # or a list (if the reconciler knows multiple sources,
                     #   or if there's more than one actual match to add from a single source)
                     newids = r.reconcile(record, reconcileType=reconcileType)
+                    if self.debug and r.debug:
+                        # fetch link-graph from reconciler
+                        lg = r.debug_graph
+                        r.debug_graph = {}
+                        print(r)
+                        print(lg)
                 except:
                     print(r)
                     raise

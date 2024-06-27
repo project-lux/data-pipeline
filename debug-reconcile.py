@@ -66,12 +66,15 @@ if yuid != yuid2:
 # --- set up environment ---
 reconciler = Reconciler(cfgs, idmap, networkmap)
 cfgs.external['gbif']['fetcher'].enabled = True
+reconciler.debug = True
+config['all_configs'].debug_reconciliation = True
+
 
 curr = "0"
-idents = {}
-# uri: [uris,that,are,connected]
-graph = {}
 uris = idmap[yuid]
+
+idents = {}
+graph = {}
 names = {}
 
 ### Idea: We know the final result, try to reconstruct it by following what the reconciler
@@ -89,7 +92,12 @@ for u in uris:
 inputs.sort(key=lambda x: x[0]['datacache'].len_estimate())
 inputs.sort(key=lambda x: 1 if x[0]['type'] == 'internal' else 2)
 
+# start with inputs[0] and reconcile
+# then filter out any in the new equivalents, and iterate until we find them all
 
+reconciler.reconcile(inputs[0][2])
+
+raise ValueError()
 
 
 
@@ -98,8 +106,6 @@ inputs.sort(key=lambda x: 1 if x[0]['type'] == 'internal' else 2)
 
 
 curr = chr(ord(curr)+1)
-
-
 G = nx.Graph()
 G.add_nodes_from(list(idents.values()))
 
