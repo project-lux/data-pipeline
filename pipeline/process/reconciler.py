@@ -28,6 +28,9 @@ class Reconciler(object):
         except:
             self.filter_internal = False
 
+        self.debug_graph = {}
+
+
     def reconcile(self, record):
         if self.global_reconciler is None:
             self.global_reconciler = self.configs.results['merged']['reconciler']
@@ -43,6 +46,14 @@ class Reconciler(object):
             record['data']['equivalent'].append(me)
         else:
             record['data']['equivalent'] = [me]
+
+
+        if self.debug:
+            for eq in record['data']['equivalent']:
+                try:
+                    self.debug_graph[record['data']['id']].append(eq['id'])
+                except:
+                    self.debug_graph[record['data']['id']] = [eq['id']]
 
         if self.debug: print(f"\n--- {record['data']['id']} ---")
         leq = len(record['data'].get('equivalent', []))

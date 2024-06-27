@@ -25,99 +25,80 @@ cfgs.instantiate_all()
 from_p = sys.argv[1]
 to_p = sys.argv[2]
 
-
 try:
     (src, ident) = cfgs.split_uri(from_p)
 except:
     print(f"Unknown URI: {from_p}")
     sys.exit()
-try:
-    ref = src['mapper'].get_reference(ident)
-    #get reference returns the wrong type, so it grabs the wrong yuid
-    base = cfgs.canonicalize(from_p)
-    qua = cfgs.make_qua(base, ref.type)
-except:
-    print(f"Could not make typed URI for {from_p}")
-    raise
-    sys.exit()
+
+if '##qua' in from_p:
+    qua = from_p
+else:
+    try:
+        ref = src['mapper'].get_reference(ident)
+        base = cfgs.canonicalize(from_p)
+        qua = cfgs.make_qua(base, ref.type)
+    except:
+        print(f"Could not make typed URI for {from_p}")
+        raise
+        sys.exit()
+
+if '##qua' in to_p:
+    qua2 = to_p
+else:
+    try:
+        ref = src['mapper'].get_reference(ident)
+        base = cfgs.canonicalize(to_p)
+        qua2 = cfgs.make_qua(base, ref.type)
+    except:
+        print(f"Could not make typed URI for {to_p}")
+        raise
+        sys.exit()
 
 yuid = idmap[qua]
+yuid2 = idmap[qua2]
+
+if yuid != yuid2:
+    print("{from_p} is {yuid} but {to_p} is {yuid2}")
+    print("No way to connect these two URIs")
+    sys.exit()
+
 # --- set up environment ---
 reconciler = Reconciler(cfgs, idmap, networkmap)
 cfgs.external['gbif']['fetcher'].enabled = True
-
 
 curr = "0"
 idents = {}
 # uri: [uris,that,are,connected]
 graph = {}
-
 uris = idmap[yuid]
-
 names = {}
 
+### Idea: We know the final result, try to reconstruct it by following what the reconciler
+# does, but tracking which URIs prompted the inclusion of which others
+# Should do it in the approximately same order as 
 
+inputs = []
 for u in uris:
     if u.startswith('__'):
         continue
     (base, qua) = cfgs.split_qua(u)
     (src, ident) = cfgs.split_uri(base)
-    idents[base] = f"{src['name']}:{curr}"
-    curr = chr(ord(curr)+1)
-    rec = src['acquirer'].acquire(ident)
-    if not rec:
-        print(f"Couldn't acquire {src['name']}:{ident}")
-        continue
-    if '_label' in rec['data']:
-        names[base] = rec['data']['_label']
-    if 'equivalent' in rec['data']:
-        for eq in rec['data']['equivalent']:
-            if 'id' in eq:
-                eqid = eq['id']
-                #why does it do this block at all? it already has everything that makes up the record
-                #well actually it doesn't, because it has the wrong yuid. if it did, would it need this block?
-                if not eqid in idents:
-                    try:                        
-                        curr = chr(ord(curr)+1)
-                        (eqsrc, eqident) = cfgs.split_uri(eqid)
-                        #definitely it needs to be eqsrc below
-                        idents[eqid] = f"{eqsrc['name']}:{curr}"
-                        if not eqid in names:
-                            ref = src['mapper'].get_reference(eqident)
-                            if hasattr(ref, '_label'):
-                                names[eqid] = ref._label
-                            else:
-                                names[eqid] = "-no label-"
-                    except:
-                        idents[eqid] = eqid
-                try:
-                    graph[base].append(eq['id'])
-                except:
-                    graph[base] = [eq['id']]
-    rec2 = reconciler.reconcile(rec)
-    if '_label' in rec2['data']:
-        names[base] = rec2['data']['_label']
-    if 'equivalent' in rec2['data']:
-        for eq in rec2['data']['equivalent']:
-            if 'id' in eq:
-                eqid = eq['id']
-                if not eqid in idents:
-                    try:                        
-                        curr = chr(ord(curr)+1)
-                        (eqsrc, eqident) = cfgs.split_uri(eqid)
-                        idents[eqid] = f"{eqsrc['name']}:{curr}"
-                        if not eqid in names:
-                            ref = src['mapper'].get_reference(eqident)
-                            if hasattr(ref, '_label'):
-                                names[eqid] = ref._label
-                            else:
-                                names[eqid] = "-no label-"
-                    except:
-                        idents[eqid] = eqid
-                try:
-                    graph[base].append(eq['id'])
-                except:
-                    graph[base] = [eq['id']]
+    inputs.append((src, ident, src['acquirer'].acquire(ident)))
+
+inputs.sort(key=lambda x: x[0]['datacache'].len_estimate())
+inputs.sort(key=lambda x: 1 if x[0]['type'] == 'internal' else 2)
+
+
+
+
+
+
+
+
+
+curr = chr(ord(curr)+1)
+
 
 G = nx.Graph()
 G.add_nodes_from(list(idents.values()))
