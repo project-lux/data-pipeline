@@ -162,16 +162,14 @@ class LmdbReconciler(Reconciler):
                     if typ is not None and my_type == typ:
                         if self.debug:
                             try:
-                                self.debug_graph[e].append((f"{self.namespace}{uri}", 'nm'))
+                                self.debug_graph[rec['id']].append((f"{self.namespace}{k}", 'nm'))
                             except:
-                                self.debug_graph[e] = [(f"{self.namespace}{uri}", 'nm')]
+                                self.debug_graph[rec['id']] = [(f"{self.namespace}{k}", 'nm')]
                         try:
                             matches[k].append(val)
                         except:
                             matches[k] = [val]
                         break
-
-
 
 
         if reconcileType in ['all', 'uri']:
