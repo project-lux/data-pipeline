@@ -135,9 +135,9 @@ class Reconciler(object):
                         lg = r.debug_graph
                         for (k,v) in lg.items():
                             try:
-                                self.debug_graph[k].append(v)
+                                self.debug_graph[k].extend(v)
                             except:
-                                self.debug_graph[k] = [v]
+                                self.debug_graph[k] = v
                         r.debug_graph = {}
                 except:
                     print(r)
