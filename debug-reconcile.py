@@ -165,7 +165,8 @@ node_labels = {node: node for node in G.nodes()}
 edge_color_values = ['black' for _ in G.edges()] 
 
 pos = nx.spring_layout(G, k=1)
-nodes = nx.draw_networkx_nodes(G, pos, node_color=node_color_values, node_size=150, label="nodes?")
+for n, lbl in idents.items():
+    nx.draw_networkx_nodes(G, pos, nodelist=[n], node_color=node_color_values, node_size=150, label=lbl)
 edges = nx.draw_networkx_edges(G, pos, edge_color=edge_color_values)
 nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=14)
 nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels,font_color='red')
