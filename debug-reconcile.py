@@ -96,11 +96,12 @@ while inputs:
     inp = inputs.pop(0)
     reconciler.reconcile(inp[3])
     eqs = inp[3]['data'].get('equivalent', [])
+    eqs = [x['id'] for x in eqs]
     print(eqs)
     print([x[2] for x in inputs])
     for e in eqs:
         for i in inputs[:]:
-            if e == i[2]:
+            if i[2].startswith(e):
                 print(f"*** Removing {e}")
                 inputs.remove(i) 
                 break
