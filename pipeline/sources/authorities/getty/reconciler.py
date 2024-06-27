@@ -3,6 +3,22 @@ from pipeline.process.base.reconciler import LmdbReconciler
 
 class AatReconciler(LmdbReconciler):
 
+    def extract_names(self, rec):
+        aat_primaryName = self.configs.external['aat']['namespace'] + self.configs.globals_cfg['primaryName']
+        aat_english = self.configs.external['aat']['namespace'] + self.configs.globals_cfg['lang_en']
+
+        vals = []
+        typ = rec['type']
+        nms = rec.get('identified_by', [])
+        for nm in nms:
+            cxns = nm.get('classified_as', [])
+            langs = nm.get('language', [])
+            if aat_primaryName in [cx['id'] for cx in cxns] and 'content' in nm:
+                if (langs and aat_english in [l['id'] for l in langs]) or not langs:
+                    val = nm['content'].lower().strip()
+                    vals.append(val)
+        return vals
+
     def should_reconcile(self, rec, reconcileType="all"):
         if not LmdbReconciler.should_reconcile(self, rec, reconcileType):
             return False
