@@ -159,6 +159,7 @@ for src_name, src in to_do:
             rec3 = final.transform(rec3, rec3['data']['type'])
         except:
             print(f"*** Final transform raised exception for {rec2['identifier']}")
+            raise
         # Store it
         if rec3 is not None:
             try:

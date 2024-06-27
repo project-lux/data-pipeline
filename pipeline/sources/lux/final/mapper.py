@@ -478,10 +478,13 @@ class Cleaner(Mapper):
         subj = []
         #okay should never be empty
         for k in okay:
-            block = ws[k]
-            subj.append(block)
-
-        data['subject_of'] = subj
+            try:
+                block = ws[k]
+                subj.append(block)
+            except:
+                print(f"Could not find {k} in {ws} for {data['id']}")
+        if subj:
+            data['subject_of'] = subj
 
     def transform(self, rec, rectype=None, reference=False):
         data = rec['data']
@@ -498,7 +501,7 @@ class Cleaner(Mapper):
         eventTypes = ['produced_by','used_for','created_by','born','died','formed_by','dissolved_by']
         for et in eventTypes:
             if et in data:
-                self.ensure_timespans(data, et)
+                self.ensure_timespans(data[et])
 
         ### Check names are sane
         okay = self.process_names(data)
