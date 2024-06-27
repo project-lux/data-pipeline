@@ -144,9 +144,11 @@ class Reconciler(object):
                         # fetch link-graph from reconciler
                         lg = r.debug_graph
                         for (k,v) in lg.items():
-                            try:
-                                self.debug_graph[k].extend(v)
-                            except:
+                            if k in self.debug_graph:
+                                for vi in v:
+                                    if not vi in self.debug_graph[k]:
+                                        self.debug_graph[k].append(vi)
+                            else:
                                 self.debug_graph[k] = v
                         r.debug_graph = {}
                 except:

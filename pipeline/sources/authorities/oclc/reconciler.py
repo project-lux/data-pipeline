@@ -58,7 +58,7 @@ class ViafReconciler(LmdbReconciler):
                             found = self.id_index[key]
                             ids[key] = found
                             if self.debug:
-                                print(f" VIAF Found: {eq} --> {found}")
+                                print(f" VIAF Found: {eq} --> {found}")                                
                                 try:
                                     self.debug_graph[eq].append((f"{self.namespace}{found}", 'uri'))
                                 except:
