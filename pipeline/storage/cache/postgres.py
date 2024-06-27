@@ -70,7 +70,8 @@ class PooledCache(object):
         self.conn = None
         self.iterating_conn = None
 
-        print(" cache in init about to make pool")
+        print("INIT: {self.name}")
+        print("  about to make pool")
         if config['host']:
             # TCP/IP
             pname = f"{config['host']}:{config['port']}/{config['dbname']}"
@@ -84,7 +85,7 @@ class PooledCache(object):
             poolman.make_pool(pname, user=self.config['user'], dbname=self.config['dbname'])
 
 
-        print(" cache in init about to test exists")
+        print("  about to test exists")
         # Test that our table exists
         qry = f'SELECT 1 FROM {self.name} LIMIT 1'
         with self._cursor(internal=False) as cursor:    
@@ -95,6 +96,8 @@ class PooledCache(object):
                 print(f"Making cache table {self.name}")
                 self.conn.rollback()
                 self._make_table()
+        print("  tested")
+
 
     def shutdown(self):
         # Close our connections
@@ -117,7 +120,7 @@ class PooledCache(object):
         else:
             conn = self.conn
 
-        print ("about to issue query")
+        print(" about to make cursor")
 
         if internal:
             # ensure uniqueness across multiple instances of the code
@@ -130,6 +133,7 @@ class PooledCache(object):
             # Need this for creating the tables/indexes
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
+        print(" Made cursor") 
         return cursor
 
     # --- pgcache ---
