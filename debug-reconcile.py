@@ -185,7 +185,7 @@ edges = nx.draw_networkx_edges(G, pos, edge_color=edge_color_values)
 nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=14)
 nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels,font_color='red')
 
-plt.legend(bbox_to_anchor=(0.5, -0.05), ncol=2)
+plt.legend(loc=3, bbox_to_anchor=(0.0, 1.02, 1.0, .102), ncol=2)
 
 plt.savefig("graph.png")
 plt.show(block=True) 
