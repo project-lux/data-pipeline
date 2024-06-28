@@ -18,6 +18,7 @@ class Collector(object):
         self.networkmap = config.instantiate_map('networkmap')['store']        
         self.debug = config.debug_reconciliation
         self.global_reconciler = config.results['merged'].get('reconciler', None)
+        self.debug_graph = {}
 
     def test_dates(self, botbr, botbx):
         if not botbr or not botbx:
@@ -181,7 +182,7 @@ class Collector(object):
                     xrlbl = xrec.get('_label', lbl)
                     rec['equivalent'].append({"id": xrid, "type": cls, "_label": xrlbl})
                     equiv_recs[xrec['id']] = xrec
-                    if self.debug: print(f"{xrid} / {xrlbl} into {rec['id']} tested okay")
+                    if self.debug: print(f"  {xrid} / {xrlbl} into {rec['id']} tested okay")
 
                 # 2. xrec is okay, so process *its* equivalents
                 if 'equivalent' in xrec:
@@ -248,6 +249,11 @@ class Collector(object):
                             if known or okay:
                                 equiv.append(eqid)
                                 if self.debug: print(f"       --> Adding {eqid} from {xrec['id']}")
+                                if self.debug:
+                                    try:
+                                        self.debug_graph[xrec['id']].append((eqid, 'eq'))
+                                    except:
+                                        self.debug_graph[xrec['id']] = [(eqid, 'eq')]
                             else:
                                 if self.debug: print(f"       --> NOT adding {eqid} from {xrec['id']}")
             done.append(uri)

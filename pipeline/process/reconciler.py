@@ -28,6 +28,10 @@ class Reconciler(object):
         except:
             self.filter_internal = False
 
+        # source-rec-uri: [(added-rec-uri, 'eq|uri|nm')]
+        self.debug_graph = {}
+
+
     def reconcile(self, record):
         if self.global_reconciler is None:
             self.global_reconciler = self.configs.results['merged']['reconciler']
@@ -43,6 +47,14 @@ class Reconciler(object):
             record['data']['equivalent'].append(me)
         else:
             record['data']['equivalent'] = [me]
+
+        if self.debug:
+            for eq in record['data']['equivalent']:
+                if eq['id'] != record['data']['id']:
+                    try:
+                        self.debug_graph[record['data']['id']].append((eq['id'], 'eq'))
+                    except:
+                        self.debug_graph[record['data']['id']] = [(eq['id'], 'eq')]
 
         if self.debug: print(f"\n--- {record['data']['id']} ---")
         leq = len(record['data'].get('equivalent', []))
@@ -86,7 +98,16 @@ class Reconciler(object):
                     if self.debug: print("      (collecting)")
                     self.collector.collect(record)
                     cr_equivs = set([x['id'] for x in record['data'].get('equivalent', [])])
-                    if self.debug: print(f"cr_equivs: {cr_equivs}")                    
+                    if self.debug: print(f"cr_equivs: {cr_equivs}")
+                    if self.debug:
+                        lg = self.collector.debug_graph
+                        for (k,v) in lg.items():
+                            try:
+                                self.debug_graph[k].extend(v)
+                            except:
+                                self.debug_graph[k] = v
+                        self.collector.debug_graph = {}
+
         except Exception as e:
             print(f"\nERROR: Reconciling broke for {record['source']}/{record['identifier']}: {e}")
             raise
@@ -119,6 +140,17 @@ class Reconciler(object):
                     # or a list (if the reconciler knows multiple sources,
                     #   or if there's more than one actual match to add from a single source)
                     newids = r.reconcile(record, reconcileType=reconcileType)
+                    if self.debug and r.debug:
+                        # fetch link-graph from reconciler
+                        lg = r.debug_graph
+                        for (k,v) in lg.items():
+                            if k in self.debug_graph:
+                                for vi in v:
+                                    if not vi in self.debug_graph[k]:
+                                        self.debug_graph[k].append(vi)
+                            else:
+                                self.debug_graph[k] = v
+                        r.debug_graph = {}
                 except:
                     print(r)
                     raise

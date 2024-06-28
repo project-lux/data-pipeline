@@ -13,6 +13,7 @@ class Reconciler(object):
         self.namespace = config['namespace']
         self.configs = config['all_configs']
         self.debug = config['all_configs'].debug_reconciliation
+        self.debug_graph = {}
 
     def should_reconcile(self, rec, reconcileType="all"):
         if 'data' in rec:
@@ -159,22 +160,34 @@ class LmdbReconciler(Reconciler):
                         k = self.name_index[val]
                         typ = None
                     if typ is not None and my_type == typ:
+                        if self.debug:
+                            try:
+                                self.debug_graph[rec['id']].append((f"{self.namespace}{k}", 'nm'))
+                            except:
+                                self.debug_graph[rec['id']] = [(f"{self.namespace}{k}", 'nm')]
                         try:
                             matches[k].append(val)
                         except:
                             matches[k] = [val]
                         break
 
+
         if reconcileType in ['all', 'uri']:
             for e in self.extract_uris(rec):
                 if e in self.id_index:
                     (uri, typ) = self.id_index[e]
-                    if my_type != typ:
-                        if self.debug: print(f"cross-type match: record has {my_type} and external has {typ}")
+                    if my_type != typ and self.debug:
+                        print(f"cross-type match: record has {my_type} and external has {typ}")
                     try:
                         matches[uri].append(e)
                     except:
                         matches[uri] = [e]
+                    if self.debug:
+                        try:
+                            self.debug_graph[e].append((f"{self.namespace}{uri}", 'uri'))
+                        except:
+                            self.debug_graph[e] = [(f"{self.namespace}{uri}", 'uri')]
+
         if len(matches) == 1:
             return f"{self.namespace}{list(matches.keys())[0]}"
         elif matches:
