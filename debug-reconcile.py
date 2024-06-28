@@ -162,11 +162,11 @@ print(" --> ".join([inv_ident[x] for x in nx.shortest_path(G, idents[from_p], id
 plt.figure(figsize=(12, 12))
 
 uri_colors = {
-    "id.loc.gov": "green",
-    "vocab.getty.edu": "orange",
-    "wikidata.org": "pink",
-    "yale.edu": "purple",
-    "viaf.org": "yellow"
+    "id.loc.gov": "#7CFC00",
+    "vocab.getty.edu": "#FFA07A",
+    "wikidata.org": "#FF69B4",
+    "yale.edu": "#EE82EE",
+    "viaf.org": "#FFD700"
 }
 
 node_color_values = ['skyblue' for _ in G.nodes()]  
@@ -175,12 +175,12 @@ edge_color_values = ['black' for _ in G.edges()]
 
 pos = nx.spring_layout(G, k=1)
 for lbl, n in idents.items():
-    col = 'skyblue'
+    col = '#00FFFF'
     for (k,v) in uri_colors.items():
         if k in lbl:
             col = uri_colors[k]
             break
-    nx.draw_networkx_nodes(G, pos, nodelist=[n], node_color=[col], node_size=150, label=f"{n}: {lbl}")
+    nx.draw_networkx_nodes(G, pos, nodelist=[n], node_color=[col], node_size=250, label=f"{n}: {lbl}")
 edges = nx.draw_networkx_edges(G, pos, edge_color=edge_color_values)
 nx.draw_networkx_labels(G, pos, labels=node_labels, font_size=14)
 nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels,font_color='red')
