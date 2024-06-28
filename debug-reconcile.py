@@ -164,8 +164,8 @@ plt.figure(figsize=(12, 12))
 uri_colors = {
     "id.loc.gov": "#7CFC00",
     "vocab.getty.edu": "#FFA07A",
-    "wikidata.org": "#FF69B4",
-    "yale.edu": "#EE82EE",
+    "wikidata.org": "#FF1493",
+    "yale.edu": "#00BFFF",
     "viaf.org": "#FFD700"
 }
 
@@ -175,7 +175,7 @@ edge_color_values = ['black' for _ in G.edges()]
 
 pos = nx.spring_layout(G, k=1)
 for lbl, n in idents.items():
-    col = '#00FFFF'
+    col = '#E0E0FF'
     for (k,v) in uri_colors.items():
         if k in lbl:
             col = uri_colors[k]
