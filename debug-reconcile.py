@@ -176,7 +176,7 @@ edge_color_values = ['black' for _ in G.edges()]
 pos = nx.spring_layout(G, k=1)
 for lbl, n in idents.items():
     col = 'skyblue'
-    for (k,v) in uri_colors:
+    for (k,v) in uri_colors.items():
         if k in lbl:
             col = uri_colors[k]
             break
