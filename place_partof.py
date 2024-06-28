@@ -33,7 +33,7 @@ for rec in merged.iter_records_type('Place'):
                     name = n['content']
                     break  
         name = name.strip()
-        if name and m := parens.match(name):
+        if (name and (m := parens.match(name))):
             (nm, parent) = m.groups()
             if parent in hiers:
                 hiers[parent].append(nm)
