@@ -4,6 +4,7 @@ from pipeline.process.utils.mapper_utils import make_datetime
 import os
 import ujson as json
 import csv
+import re
 
 multi_props = ['part_of', 'identified_by', 'classified_as', 'equivalent', 'member_of', 'subject_of', \
     'referred_to_by', 'influenced_by', 'about', 'carries', 'shows', 'attributed_by', 'carried_out_by', \
@@ -59,6 +60,16 @@ class YulMapper(Mapper):
                 for row in reader:
                     self.wiki_recon[row[0]] = row[1]
 
+        fn = os.path.join(data_dir, 'parenthetical_places.json')
+        if os.path.exists(fn):
+            fh = open(fn)
+            data = fh.read()
+            fh.close()
+            self.parenthetical_places = json.loads(data)
+        else:
+            self.parenthetical_places = {}
+        self.parens_re = re.compile("^(.+) \((.+)\)$")
+
 
     def walk_multi(self, node, top=False):
         for (k,v) in node.items():
@@ -89,6 +100,21 @@ class YulMapper(Mapper):
 
         if data['id'] in self.object_work_mismatch:
             return None
+
+        if data['type'] == 'Place' and not 'part_of' in data:
+            primary = "http://vocab.getty.edu/aat/300404670"
+            name = ""
+            for n in data['identified_by']:
+                if 'classified_as' in n:
+                    cxns = [x['id'] for x in n['classified_as']]
+                    if primary in cxns:
+                        name = n['content']
+                        break  
+            name = name.strip()
+            if (name and (m := self.parens_re.match(name))):
+                (nm, parent) = m.groups()
+                if (uri := parent.strip() in self.parenthetical_places):
+                    data['part_of'] = [{"id":uri, 'type':'Place','_label':parent}]
 
         # don't process part_of                
         if data['type'] == 'LinguisticObject' and 'part_of' in data:

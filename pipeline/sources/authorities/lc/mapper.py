@@ -4,6 +4,7 @@ from pipeline.process.utils.mapper_utils import make_datetime, test_birth_death
 from cromulent import model, vocab
 import ujson as json
 import sys
+import re
 
 class LcMapper(Mapper):
 
@@ -32,6 +33,7 @@ class LcMapper(Mapper):
             'madsrdf:DeprecatedAuthority',
             'madsrdf:NameTitle'
         ]
+
 
     def fix_identifier(self, identifier):
         if identifier == "@@LMI-SPECIAL-TERM@@":
@@ -393,10 +395,17 @@ class LcnafMapper(LcMapper):
             "http://id.loc.gov/authorities/subjects/sh2018002395"
         ]
 
-        # "non-binary" --> ?
-
         self.config = config
-
+        self.parens_re = re.compile("^(.+) \((.+)\)$")
+        cfgs = config['all_configs']
+        fn = os.path.join(cfgs.data_dir, 'parenthetical_places.json')
+        if os.path.exists(fn):
+            fh = open(fn)
+            data = fh.read()
+            fh.close()
+            self.parenthetical_places = json.loads(data)
+        else:
+            self.parenthetical_places = {}
 
 
     def build_recs_and_reconcile(self, txt, rectype=""):
@@ -441,6 +450,16 @@ class LcnafMapper(LcMapper):
             del top.identified_by
         else:
             self.map_common(new, top)
+
+
+            if topcls == model.Place:
+                # Test if () in name and add a broader if we know it
+                # https://id.loc.gov/authorities/names/n96039009.html
+                name = top._label.strip()
+                if (name and (m := self.parens_re.match(name))):
+                    (nm, parent) = m.groups()
+                    if (uri := parent.strip() in self.parenthetical_places):
+                    top.part_of = model.Place(ident=uri, label=parent)
 
             # Now fill out the details from RWO
             # if we have one
