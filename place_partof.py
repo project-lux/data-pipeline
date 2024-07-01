@@ -79,18 +79,11 @@ with open('place_hiers.tsv') as fh:
                     opts = []
                     tgn = []
                     for e in eqs:
-                        if 'vocab.getty.edu' in e['id'] or 'id.loc.gov' in e['id']:
+                        if 'vocab.getty.edu/tgn' in e['id']:
                             opts.append(e)
-                            if 'vocab.getty.edu' in e['id']:
-                                tgn.append(e['id'])
-                    if tgn:
-                        print(tgn)
-                    else:
+                    if len(opts) > 1:
                         print(opts)
 
             else:
                 print(f" *** {par} [{typ}]: {len(its)}")
-
-
-
 
