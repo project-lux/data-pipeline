@@ -5,6 +5,7 @@ from cromulent import model, vocab
 import ujson as json
 import sys
 import re
+import os
 
 class LcMapper(Mapper):
 
