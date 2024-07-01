@@ -90,7 +90,7 @@ except HttpError as err:
     print(err)
 
 # Now write the dicts to CSVs
-dfn = os.path.join(cfgs.data_dir, 'diferentFrom/google.csv')
+dfn = os.path.join(cfgs.data_dir, 'differentFrom/google.csv')
 with open(dfn, 'w') as fh:
     writer = csv.writer(fh)
     for r in diff_map.items():
