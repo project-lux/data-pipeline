@@ -1,0 +1,376 @@
+Parent	Expanded	Type	Example Place	Count of Kids	Parent URI
+Italy		nation	Pesio Valley	2601	
+China		nation	Shuntian fu	2468	
+France		nation	Sedan Region	2102	
+Germany		nation	Stadtremda	1920	
+Japan		nation	Wakō-shi	1805	
+England		nation	Welland, River	1484	
+Spain		nation	Peralta	1387	
+Russia		nation	Chukotki Peninsula	1044	
+Mexico		nation	San Francisco Pichátaro	1022	
+Poland		nation	Łyna River	936	
+Indonesia		nation	Sepaku	914	
+Calif.	California	states	Minarets Wilderness	886	
+Ukraine		nation	Black Sea Region, Northern	688	
+India		nation	Pegu	609	
+Vietnam		nation	Con Thiền Mountain Region	551	
+Brazil		nation	Ibiara	541	
+Tex.	Texas	states	San Jacinto Battleground State Historic Site	498	
+Peru		nation	Huallaga River Valley	485	
+Ont.	Ontario	states		474	
+N.Y.	New York	states	Carleton Island	444	
+Slovakia		nation	Handlová	438	
+Québec			Lac-Mégantic	435	
+Czech Republic		nation	Litovel	427	
+Greece		nation	Agios Petros Site	414	
+Colo.	Colorado	states	Arkansas River Basin	408	
+Sask.	Saskatchewan	states	Motherwell Homestead National Historic Site	405	
+Switzerland		nation	Martigny	388	
+B.C.	British Columbia	states	Cariboo Gold Mines	378	
+Hungary		nation	Szentpéterfa	368	
+Sweden		nation	Saltsjöbaden	350	
+Egypt		nation	Minūfīyah	339	
+Alta.	Alberta	states	Peace River Region	331	
+Or.	Oregon	states	Sheep Mountain Wilderness	324	
+Alaska		states	Tigara	324	
+N.M.	New Mexico	states	Arch Lake Burial Site	321	
+Serbia		nation	Stepojevac	318	
+Wash.	Washington	states	Offut Lake	311	
+Austria		nation	Kleinklein	296	
+South Africa		nation	Ntabelanga	295	
+Belgium		nation	Froidchapelle	292	
+Turkey		nation	Van Lake Region	292	
+Nigeria		nation	Bauchi Province	292	
+Israel		nation	Kefar Aḥim	282	
+Mont.	Montana	states	Joliet & White Horse Bench Irrigation District	275	
+Croatia		nation	Polje	272	
+Colombia		nation	Urabá, Gulf of	271	
+Ariz.	Arizona	states	Kayenta Region	266	
+Pa.	Pennsylvania	states	Wymans Run	263	
+Scotland		nation	Balnuaran of Clara Site	252	
+Wyo.	Wyoming	states	Osage	251	
+Mass.	Massachusetts	states	Ashumet Pond	245	
+Utah		states	Price Region	242	
+Korea		nation	Seoul Region	238	
+Romania		nation	Predial	237	
+N.Z.	New Zealand	nation	Waiheke County	236	
+Va.	Virginia	states	Bristol Region	233	
+Vietnam : District	Vietnam	nation	Tiên Yên	231	
+Argentina		nation	Kipon	229	
+N.S.W.	New South Wales	states	Blue Mountains Region	227	
+Ill.	Illinois	states	Illinois River Region	217	
+Belarus		nation	Smorgonʹ	215	
+Nev.	Nevada	states	Newark	214	
+Minn.	Minnesota	states	East Otter Tail County Soil and Water Conservation District	212	
+Iran		nation	Mamasānī	202	
+Kan.	Kansas	states	Ennis City	196	
+Fla.	Florida	states	Saint Sebastian River	194	
+Neb.	Nebraska	states	Orleans	194	
+Idaho		states	Milner	186	
+Syria		nation	Jabal Mūsa	178	
+Ireland		nation	Malin	178	
+Mich.	Michigan	states	Leslie	175	
+Conn.	Connecticut	states	Noroton Heights	170	
+Netherlands		nation	Wieringermeer Polder	169	
+Bosnia and Hercegovina		nation	Vrbanje River	169	
+Iowa		states	Beacon	166	
+Philippines		nation	Calatagan Peninsula	157	
+Wis.	Wisconsin	states	Fort Winnebago	154	
+Taiwan		nation	Yunlin County	154	
+Guatemala		nation	Agua Tibia Site	154	
+Me.	Maine	states	Kennebec Patent	154	
+Okla.	Oklahoma	states	Cherokee Outlet	153	
+Norway		nation	Malm herad	153	
+Indonesia : Kabupaten	Indonesia	nation	Pasaman Barat	153	
+Mo.	Missouri	states	Ozark National Scenic Riverways Region	151	
+N.J.	New Jersey	states	Passaic River Region	148	
+Portugal		nation	Sabroso	147	
+N.C.	North Carolina	states	Roanoke River National Wildlife Refuge	147	
+S.D.	South Dakota	states	Faulkton	146	
+Venezuela		nation	Arrecifes	146	
+Ohio		states	Virginia Kendall Reserve	145	
+London, England			Hampton Wick	145	
+W.A.	Western Australia	states	Perth Region	144	
+R.S.F.S.R.			A.S.S.R. Nemt︠s︡ev Povolzhʹi︠a︡	141	
+Wales		nation	Brenig Valley	140	
+N.S.	Nova Scotia	states	Barrington Passage	139	
+Bolivia		nation	Tipuani	138	
+Man.	Manitoba	states	Cranberry Portage	135	
+Ecuador		nation	Leito Grande Hacienda	135	
+Czechoslovakia		nation	Hronec	132	
+Kenya		nation	Suba District	132	
+La.	Louisiana	states	Iota	129	
+Thailand		nation	Mæ Klong Region	127	
+Miss.	Mississippi	states	Wilsford Site	127	
+Bulgaria		nation	Kazanlŭk	125	
+Chile		nation	Fuerte Bulnes	125	
+S. Aust.	South Australia	states	Woodside	122	
+Iraq		nation	Sinjār	119	
+New York, N.Y.	New York City		Canal Street	118	
+Mass. : Town	Massachusetts	states	Cohasset	115	
+Burma		nation	Yenangyaung Region	114	
+Qld.	Queensland	states	Ipswich Region	112	
+Tenn.	Tennessee	states	Dunbar Cave	111	
+Jordan		nation	Maʼdabā Region	111	
+Germany : Landkreis	Germany	nation	Wolfach	110	
+Pakistan		nation	Mingāora	108	
+Ga.	Georgia	states	Southern Nantahala Roadless Area	107	
+S.C.	South Carolina	states	Springfield	102	
+Sudan		nation	Ḥalfāʼ al-Jadīdah	99	
+N.D.	North Dakota	states	Wisner	97	
+N.H.	New Hampshire	states	Mad River	95	
+Vic.	Victoria	states	Ash Range	94	
+Vietnam : Province	Vietnam	nation	Hải Dương	92	
+Conn. : Town	Connecticut	states	Goshen	91	
+Lithuania		nation	Anykščiai	89	
+Morocco		nation	Moulay-Idriss	89	
+Ethiopia		nation	Ārsī Āstedader Ākababī	88	
+Rome, Italy			Piazza Colonna	83	
+Vt.	Vermont	states	Topsham	83	
+Ky.	Kentucky	states	Daniel Boone National Forest	82	
+Papua New Guinea		nation	Hollandia	81	
+N.B.	New Brunswick	states	Saint John County	80	
+N.Y. : Town	New York	states	Rossie	80	
+Ala.	Alabama	states	Black Warrior River Valley	80	
+Saudi Arabia		nation	Ṭubarjal	79	
+Ind.	Indiana	states	Royal Center	79	
+Paris, France			Quartier Beaubourg	79	
+India : District	India	nation	Jhābua	79	
+Lebanon		nation	Nabaṭīyat al-Taḥta	76	
+Slovenia		nation	Vevče	76	
+Ark.	Arkansas	states	Sterling	76	
+Tanzania		nation	Mafia Island Marine Park	76	
+Cameroon		nation	Bamenda Highlands	74	
+Nepal		nation	Rasuwa	73	
+Macedonia		nation	Tikveš	73	
+Denmark		nation	Fur	73	
+Tunisia		nation	Pupput Site	70	
+Saint Petersburg, Russia			Malai︠a︡ Posadskai︠a︡ ulit︠s︡a	69	
+Algeria		nation	Nementcha Mountains	69	
+Okres			Domažlice	69	
+Finland		nation	Hämeen lääni	68	
+Hawaii		states	Makaha	66	
+N.W.T.	North West Territories	states	Nelson River Valley	66	
+Berlin, Germany			Spandau Prison	64	
+Poland : Powiat	Poland	nation	Międzychód	64	
+P.R.	Puerto Rico		Guánica	64	
+Cyprus		nation	Kythraia	62	
+Cuba		nation	Camagüey	61	
+N.L.	Newfoundland	states	Shearstown	60	
+Md.	Maryland	states	Mulberry Grove	60	
+Dominican Republic		nation	Santiago de los Cabellaros	59	
+Ghana		nation	Navrongo Region	59	
+Mozambique		nation	Malehice	59	
+N.T.	Northern Territory	states	South Alligator River	58	
+Zimbabwe		nation	Masoka Ward	53	
+W. Va.	West Virginia	states	Belleville Region	53	
+Moscow, Russia			Kuzʹminki	52	
+London			Tottenham	52	
+England : Parish	England		Preston	51	
+Afghanistan		nation	Uruzgān	50	
+Sabah			Imbak Canyon Conservation Area	50	
+Selangor			Petaling Jaya	49	
+Latvia		nation	Salaspils Mārtin̦sala Site	49	
+Uganda		nation	Rwizi River	49	
+Montenegro		nation	Rožaje Region	48	
+Congo		nation	Uélé	48	
+Moldova		nation	Miclești	48	
+São Paulo, Brazil			Cruzeiro	47	
+Paraguay		nation	Asunción Metropolitan Area	47	
+North Rhine-Westphalia		states	Weisweiler	46	
+Costa Rica		nation	Central Valley	46	
+Kazakhstan		nation	Valikhanov Site	46	
+Bangladesh		nation	Gameranga	45	
+Estonia		nation	Võrumaa	45	
+Yemen		nation	Ṣanʻāʻ	45	
+Baden-Württemberg, Germany			Wildenstein	44	
+R.I.	Rhode Island	states	Narraganset Country	44	
+Yugoslavia		nation	Kupres	43	
+Senegal		nation	Boundou	43	
+Côte d'Ivoire		nation	Parc National de Taï	43	
+Tokyo, Japan			Taitō-ku	42	
+Sri Lanka		nation	Bundala National Park	42	
+Georgia		nation	Adzharskai︠a︡ A.S.S.R.	42	
+Mali		nation	Essouk-Tadmekka Site	42	
+Hesse			Weimar	42	
+Sarawak			Bintulu Region	42	
+Regierungsbezirk			Chemnitz	41	
+Laos		nation	Viangchan Region	41	
+Nicaragua		nation	Rio Negro	41	
+Honduras		nation	Comayagüela	40	
+Beijing, China			Niujie	40	
+Los Angeles, Calif.			Quito Lane	40	
+San Francisco, Calif.			Union Square	39	
+Me. : Town			York	39	
+Jiangsu Sheng, China			Beigu Mountain	39	
+Philadelphia, Pa.			East Falls	39	
+Municipio			Diriomo	39	
+Malawi			Ngonde	38	
+Baden-Württemberg			Leonberg	37	
+N.H. : Town			Lancaster	37	
+Panama			Kuna Yala	36	
+New Jersey			Elizabeth	36	
+Hanoi, Vietnam			Mai Động	36	
+Ont. : Township			Thorold	36	
+Libya			Sabhā	36	
+Yorkshire			Kilburn, Eng.	35	
+Poland : Voivodeship			Kalisz	35	
+Lake			George, Lake	35	
+Municipality			Kalavryta	35	
+Principality			Neuchâtel	35	
+Czech Republic : Okres			Šumperk	35	
+Hebei Sheng, China			Qianxi Xian	34	
+Antarctica			Ongul Islands	34	
+Bavaria			Friedberg, Germany	34	
+Perak			Kinta	34	
+Bezirk			Suhl	34	
+Henan Sheng, China			Zhengxian	34	
+Namibia			Matchless Copper Mine	34	
+Amphoe			Phun Phin	34	
+Iceland			Norður-Múlasýsla	34	
+Nunavut			Kodlunarn Island	34	
+Jerusalem			Gan ḥaside umot ha-ʻolam	33	
+Singapore			Fort Canning Park	33	
+Belize			Pacbitun Site	33	
+Sichuan Sheng, China			Wenchuan	32	
+Pahang			Raub	32	
+Grafschaft			Baden, Switzerland	32	
+Amt			Entlebuch	31	
+Henan Sheng			Hui Xian	31	
+Washington, D.C.			Long Bridge	31	
+Uzbekistan			Kara-Kalpak	31	
+Zaire			Kinshasa	30	
+Northern Ireland			Mount Sandel Site	30	
+Burkina Faso			Houndé Region	30	
+Kedah			Langkawi Island	30	
+Chicago, Ill.			Irving Park	30	
+Zhejiang Sheng, China			Wuzhen	30	
+Lancashire			Ashleigh Buxton	30	
+Ontario			Clearville site	30	
+Pa. : Township			Blockley	29	
+Guangdong Sheng			Taishan Shi	29	
+Florence, Italy			Quartiere di Santo Spirito	29	
+Nord			Armentières	29	
+Haiti			Tortuga Island	29	
+Albania			Zall-Dardhë Region	28	
+El Salvador			Cuscatlán	28	
+Fujian Sheng, China			Shunchang Xian	28	
+Angola			Lobito Bay	28	
+São Paulo			Lapa	28	
+Oxfordshire			Whitchurch	28	
+Yukon			Bennett Lake	28	
+Benin			Kétou	28	
+Berlin			Tempelhof	28	
+Rhineland-Palatinate			Busenberg	27	
+Haiphong, Vietnam			Hạ Lý	27	
+Australia			Marika-Alderton House	27	
+Rio de Janeiro, Brazil			Largo da Carioca	26	
+U.S.			Wiregrass Country	26	
+Sultanate			Palembang	26	
+Zambia			Itezhi-Tezhi Dam Region	26	
+Thanh Hóa, Vietnam			Hà Trung	26	
+Pennsylvania			Adams County	26	
+Shaanxi Sheng, China			Wangchuan yuan	26	
+Concentration camp			Polen-Jugenverwahrlager	26	
+Vienna, Austria			Schönbrunner Strasse	26	
+Germany : Concentration camp			Columbia-Haus	26	
+Uruguay			Atlantic Coast	26	
+Hyōgo-ken, Japan			Kamiitai Site	26	
+Regency			Raja Ampat	26	
+Mexico City, Mexico			Downtown	26	
+Jamaica			Westmoreland	25	
+Madrid, Spain			Retiro	25	
+Peru : Dept.			Apurímac	25	
+New York			Lincoln School	25	
+Oman			Nakhl	25	
+Botswana			Bamangwato	25	
+N.J. : Township			Evesham	25	
+Prague, Czech Republic			Podskali	25	
+Germany : Kreis			Viersen	25	
+Republic			Geofria	25	
+Buenos Aires, Argentina			Fraye ṿorṭ	24	
+Pref.			Okinawa, Japan	24	
+Budapest, Hungary			Andrássy út	24	
+Lower Saxony			Cappel	24	
+Proposed			Tocks Island National Recreation Area	24	
+Texas			McLennan County	24	
+P.E.I.			Malpeque	24	
+Poland : Gmina			Niemcza	24	
+Surrey			Shirley	24	
+Boston, Mass.			Dorchester Heights Monument	24	
+Toronto, Ont.			George Street	24	
+V.I.			Pillsbury Sound	24	
+River			Neisse	24	
+West			Gernany	24	
+Calif. and Nev.			Lake Tahoe Basin National Forest	23	
+Montréal, Québec			Square Victoria	23	
+Managua, Nicaragua			Barrio San Sebastián	23	
+Warsaw, Poland			Jelonki	23	
+Canary Islands			Tajogaite Volcano	23	
+Shaanxi Sheng			Xi'an	23	
+Colombia : Dept.			Cundinamarca	23	
+Peru : Province			Ambo	23	
+Rio Grande do Sul			Guaporé	23	
+Thuringia			Weimar	22	
+Osaka, Japan			Ōyodo-ku	22	
+Sicily			Hyccara	22	
+Madagascar			Mahilaka Site	22	
+Suffolk			Thornham Parva	22	
+Kent			Ashford	22	
+France : Dept.			Lozère	22	
+Süd			Kyūshū	22	
+Fief			Kumamoto, Japan	21	
+Guangdong Sheng, China			Fenghuang Cun	21	
+Guatemala : Dept.			Vera Paz	21	
+Azerbaijan			Naxçıvan	21	
+Gloucestershire			Ironmongers Piece Site	21	
+Jalisco			Mezquitic	21	
+Vt. : Town			Essex	21	
+Johor			Muzr	21	
+Politischer Bezirk			Murau	21	
+Brandenburg			Fürstenwalde	21	
+Cape Town, South Africa			Main Road	20	
+France : Canton			Vitteaux	20	
+Canada			Burrard Inlet	20	
+Micronesia			Neoch	20	
+United Arab Emirates			Saqr Harbor	20	
+Hiroshima-ken, Japan			Ōno-chō	20	
+Beijing			Dongyue miao	20	
+Federation			Russai	20	
+Ecclesiastical principality			Passau	20	
+Chad			Borkou-Ennedi-Tibesti	20	
+Munich, Germany			Neuhausen	20	
+Ivory Coast			Bouaké	20	
+Tajikistan			KuÌlob	20	
+Spain : Province			Almería	20	
+Istanbul, Turkey			Silahtarağa	20	
+Village			Azigbo	20	
+B.C. and Wash.			Kettle River Valley	20	
+North Yorkshire			Cleveland	19	
+Québec : County			Stanstead	19	
+Okayama-ken, Japan			Yubara-chō	19	
+Tas.			Cape Barren Island	19	
+Réunion			La Grande Chaloupe	19	
+Jiangsu Sheng			Lishui Xian	19	
+Wyo. and Mont.			Bighorn River	19	
+Princely State			Bahāwalpur	19	
+West Bank			Khirbet Bal'ama	19	
+Naples, Italy			Via San Biagio dei Librai	19	
+Brazil : State			Pará	19	
+Sichuan Sheng			Luzhou	19	
+Togo			Atakpamé Region	19	
+Barcelona, Spain			Güell Park	19	
+Colony			Vancouver	19	
+Jalisco, Mexico			San Sebastián del Oeste	18	
+Cologne, Germany			Düren	18	
+Nagano-ken, Japan			Kawashima-mura	18	
+Nome			Messinía	18	
+Quebec			St-Pierre, Lake	18	
+Lincolnshire			Crowland	18	
+Gifu-ken, Japan			Shirakawa-chō	18	
+Hebei Sheng			Luan Xian	18	
+Shanxi Sheng			Zhongyang Xian	18	
+Ont. : County			Lanark	18	
+Cambodia			Stœ̆ng Trêng	18	
+Rio de Janeiro			Campos Region	18	
+Mexico : State			Nuevo León	18	
