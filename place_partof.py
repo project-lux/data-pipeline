@@ -74,13 +74,19 @@ with open('place_hiers.tsv') as fh:
                     eqs = rec['data'].get('equivalent', [])
                     # filter for TGN, LCNAF
                     opts = []
+                    tgn = []
                     for e in eqs:
                         if 'vocab.getty.edu' in e['id'] or 'id.loc.gov' in e['id']:
                             opts.append(e)
-                    print(opts)
+                            if 'vocab.getty.edu' in e['id']:
+                                tgn.append(e['id'])
+                    if tgn:
+                        print(tgn)
+                    else:
+                        print(opts)
 
             else:
-                print(f"{par} [{typ}]: {len(its)}")
+                print(f" *** {par} [{typ}]: {len(its)}")
 
 
 
