@@ -58,8 +58,11 @@ with open('place_hiers.tsv') as fh:
         par = row['Expanded'] if row['Expanded'] else row['Parent']
         typ = row['Type']
         if par and typ:
-            q = f"https://lux-front-sbx.collections.yale.edu/api/search/place?q=%7B%22AND%22%3A%5B%7B%22name%22%3A%22{par}%22%2C%22_options%22%3A%5B%22unstemmed%22%2C%22unwildcarded%22%5D%2C%22_complete%22%3Atrue%7D%2C%7B%22classification%22%3A%7B%22name%22%3A%22n{typ}%22%7D%7D%5D%7D"
+            q = f"https://lux-front-sbx.collections.yale.edu/api/search/place?q=%7B%22AND%22%3A%5B%7B%22name%22%3A%22{par}%22%2C%22_options%22%3A%5B%22unstemmed%22%2C%22unwildcarded%22%5D%2C%22_complete%22%3Atrue%7D%2C%7B%22classification%22%3A%7B%22name%22%3A%22{typ}%22%7D%7D%5D%7D"
             res = requests.get(q)
             data = res.json()
-            print(f"{par} [{typ}]:\n{data}")
+            its = data['orderedItems']
+            if len(its) == 1:
+                # seems likely
+                print(f"{par} [{typ}]:\n{its[0]['id']}")
 
