@@ -15,9 +15,10 @@ idmap = cfgs.instantiate_map('idmap')['store']
 cfgs.cache_globals()
 cfgs.instantiate_all()
 
+merged = cfgs.results['merged']['recordcache']
 
 def make_list():
-    merged = cfgs.results['merged']['recordcache']
+
     primary = "https://lux.collections.yale.edu/data/concept/f7ef5bb4-e7fb-443d-9c6b-371a23e717ec"
     parens = re.compile("^(.+) \((.+)\)$")
 
@@ -64,5 +65,21 @@ with open('place_hiers.tsv') as fh:
             its = data['orderedItems']
             if len(its) == 1:
                 # seems likely
-                print(f"{par} [{typ}]:\n{its[0]['id']}")
+                print(f"{par} [{typ}]:\t{its[0]['id']}")
+                # get the record
+                rec = merged[yuid]
+                if rec:
+                    eqs = rec['data'].get('equivalent', [])
+                    # filter for TGN, LCNAF
+                    opts = []
+                    for e in eqs:
+                        if 'vocab.getty.edu' in e['id'] or 'id.loc.gov' in e['id']:
+                            opts.append(e)
+                    print(opts)
+
+            else:
+                print(f"{par} [{typ}]: {len(its)}")
+
+
+
 
