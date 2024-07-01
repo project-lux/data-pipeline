@@ -52,38 +52,52 @@ def make_list():
             durn = time.time() - start
             print(f"{x}/{ttl} in {durn} = {x/durn}/sec; found parents: {len(hiers)}")
 
+def process_list():
+    with open('place_hiers.tsv') as fh:
+        rdr = csv.DictReader(fh, delimiter='\t')
+        for row in rdr:
+            par = row['Expanded'] if row['Expanded'] else row['Parent']
+            typ = row['Type']
+            if par and typ:
+                if typ == "states":
+                    q = f"https://lux-front-sbx.collections.yale.edu/api/search/place?q=%7B%22AND%22%3A%5B%7B%22_lang%22%3A%22en%22%2C%22name%22%3A%22{par}%22%2C%22_options%22%3A%5B%22unstemmed%22%2C%22unwildcarded%22%5D%2C%22_complete%22%3Atrue%7D%2C%7B%22classification%22%3A%7B%22OR%22%3A%5B%7B%22name%22%3A%22state%22%7D%2C%7B%22name%22%3A%22province%22%7D%5D%7D%7D%5D%7D"
+                else:
+                    q = f"https://lux-front-sbx.collections.yale.edu/api/search/place?q=%7B%22AND%22%3A%5B%7B%22name%22%3A%22{par}%22%2C%22_options%22%3A%5B%22unstemmed%22%2C%22unwildcarded%22%5D%2C%22_complete%22%3Atrue%7D%2C%7B%22classification%22%3A%7B%22name%22%3A%22{typ}%22%7D%7D%5D%7D"
+                res = requests.get(q)
+                data = res.json()
+                its = data['orderedItems']
+                if len(its) == 1:
+                    # seems likely
 
+                    # get the record
+                    rest, yuid = its[0]['id'].rsplit('/',1)
+                    print(f"{par} [{typ}]:\t{yuid}")
+                    rec = merged[yuid]
+                    if rec:
+                        eqs = rec['data'].get('equivalent', [])
+                        # filter for TGN, LCNAF
+                        opts = []
+                        tgn = []
+                        for e in eqs:
+                            if 'vocab.getty.edu/tgn' in e['id']:
+                                opts.append(e['id'])
+                        if len(opts) > 1:
+                            print(opts)
+
+                else:
+                    print(f" *** {par} [{typ}]: {len(its)}")
+
+# write results as JSON to load in YUL mapper
 with open('place_hiers.tsv') as fh:
+    results = {}
     rdr = csv.DictReader(fh, delimiter='\t')
     for row in rdr:
-        par = row['Expanded'] if row['Expanded'] else row['Parent']
-        typ = row['Type']
-        if par and typ:
-            if typ == "states":
-                q = f"https://lux-front-sbx.collections.yale.edu/api/search/place?q=%7B%22AND%22%3A%5B%7B%22_lang%22%3A%22en%22%2C%22name%22%3A%22{par}%22%2C%22_options%22%3A%5B%22unstemmed%22%2C%22unwildcarded%22%5D%2C%22_complete%22%3Atrue%7D%2C%7B%22classification%22%3A%7B%22OR%22%3A%5B%7B%22name%22%3A%22state%22%7D%2C%7B%22name%22%3A%22province%22%7D%5D%7D%7D%5D%7D"
-            else:
-                q = f"https://lux-front-sbx.collections.yale.edu/api/search/place?q=%7B%22AND%22%3A%5B%7B%22name%22%3A%22{par}%22%2C%22_options%22%3A%5B%22unstemmed%22%2C%22unwildcarded%22%5D%2C%22_complete%22%3Atrue%7D%2C%7B%22classification%22%3A%7B%22name%22%3A%22{typ}%22%7D%7D%5D%7D"
-            res = requests.get(q)
-            data = res.json()
-            its = data['orderedItems']
-            if len(its) == 1:
-                # seems likely
-
-                # get the record
-                rest, yuid = its[0]['id'].rsplit('/',1)
-                print(f"{par} [{typ}]:\t{yuid}")
-                rec = merged[yuid]
-                if rec:
-                    eqs = rec['data'].get('equivalent', [])
-                    # filter for TGN, LCNAF
-                    opts = []
-                    tgn = []
-                    for e in eqs:
-                        if 'vocab.getty.edu/tgn' in e['id']:
-                            opts.append(e['id'])
-                    if len(opts) > 1:
-                        print(opts)
-
-            else:
-                print(f" *** {par} [{typ}]: {len(its)}")
+        par = row['Parent']
+        uri = row['Parent URI']
+        if par and uri:
+            results[par] = uri
+    jstr = json.dumps(results)
+    fh = open('parenthetical_places.json', 'w')
+    fh.write(jstr)
+    fh.close()
 
