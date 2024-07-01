@@ -65,8 +65,10 @@ with open('place_hiers.tsv') as fh:
             its = data['orderedItems']
             if len(its) == 1:
                 # seems likely
-                print(f"{par} [{typ}]:\t{its[0]['id']}")
+
                 # get the record
+                rest, yuid = its[0]['id'].rsplit('/',1)
+                print(f"{par} [{typ}]:\t{yuid}")
                 rec = merged[yuid]
                 if rec:
                     eqs = rec['data'].get('equivalent', [])
