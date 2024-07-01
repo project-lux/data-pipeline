@@ -17,19 +17,16 @@ load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
 cfgs = Config(basepath=basepath)
 idmap = cfgs.instantiate_map('idmap')['store']
-same_map = cfgs.instantiate_map('equivalents')['store']
-diff_map = cfgs.instantiate_map('distinct')['store']
 cfgs.cache_globals()
 cfgs.instantiate_all()
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
-
 # The ID and range of a sample spreadsheet.
 SPREADSHEET_ID = '--- ID GOES HERE ---'
 
-# FIXME: Provide sample CSV to upload for these
-
+diff_map = {}
+same_map = {}
 SHEET_NAMES = [['Different From', diff_map], ['Same As', same_map]]
 RANGE_START = 2
 
@@ -88,3 +85,16 @@ try:
 
 except HttpError as err:
     print(err)
+
+# Now write the dicts to CSVs
+with open('../data/files/diferentFrom/google.csv', 'w') as fh:
+    writer = csv.writer(fh)
+    for r in diff_map.items():
+        writer.writerow(r)
+with open('../data/files/sameAs/google.csv', 'w') as fh:
+    writer = csv.writer(fh)
+    for r in same_map.items():
+        writer.writerow(r)
+
+# Now call load-csv-map2.py on them
+

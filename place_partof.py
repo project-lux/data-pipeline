@@ -80,7 +80,7 @@ with open('place_hiers.tsv') as fh:
                     tgn = []
                     for e in eqs:
                         if 'vocab.getty.edu/tgn' in e['id']:
-                            opts.append(e)
+                            opts.append(e['id'])
                     if len(opts) > 1:
                         print(opts)
 

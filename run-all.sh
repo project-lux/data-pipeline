@@ -11,19 +11,17 @@ fi
 echo "Did you update the datestamp token in run-merge, run-integrated?"
 echo "Did you check the flags for which units to run?"
 echo ""
-sleep 1
-echo "Clearing all records in 5"
-sleep 1
-echo "4"
-sleep 1
-echo "3"
-sleep 1
-echo "2"
-sleep 1
-echo "1"
-sleep 1
 
-python ./manage-data.py --clear-all
+
+# Always update from google sheet
+python ./google-sames-diffs.py
+python ./load-csv-map2.py --same ../data/files/sameAs/google.csv
+python ./load-csv-map2.py --different ../data/files/differentFrom/google.csv
+
+echo "reloaded same/diffs from Google Sheet"
+
+
+# python ./manage-data.py --clear-all
 rm ../data/logs/*
 
 ### Reconciliation Phase
