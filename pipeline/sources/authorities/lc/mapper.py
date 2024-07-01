@@ -451,7 +451,6 @@ class LcnafMapper(LcMapper):
         else:
             self.map_common(new, top)
 
-
             if topcls == model.Place:
                 # Test if () in name and add a broader if we know it
                 # https://id.loc.gov/authorities/names/n96039009.html
@@ -459,7 +458,7 @@ class LcnafMapper(LcMapper):
                 if (name and (m := self.parens_re.match(name))):
                     (nm, parent) = m.groups()
                     if (uri := parent.strip() in self.parenthetical_places):
-                    top.part_of = model.Place(ident=uri, label=parent)
+                        top.part_of = model.Place(ident=uri, label=parent)
 
             # Now fill out the details from RWO
             # if we have one
