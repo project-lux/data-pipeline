@@ -53,6 +53,7 @@ def get_remote_modified_time(url, source):
 		r.raise_for_status()
 	except requests.exceptions.RequestException as e:
 		print(f"***{source} failed at requesting the URL: {e}")
+		failed.append(source)
 		return None
 
 	head = dict(r.headers)
@@ -62,6 +63,7 @@ def get_remote_modified_time(url, source):
 		return dtobj
 	else:
 		print(f"***{source} failed at getting the last_mod time")
+		failed.append(source)
 		return None
 
 
@@ -78,18 +80,18 @@ def get_local_modified_time(file, source):
 		return datestamp
 	except OSError as e:
 		print(f"***{source} failed at getting timestamp from local file: {e}")
+		failed.append(source)
 		return None
 
-def build_dicts(fileset, local=""):
+def build_dicts(fileset, local=False):
 	times = {}
 	for source, files in fileset.items():
-		if local == "Y" and ":" in source:
-			src, fle = source.split(":")
-			timestamp = get_local_modified_time(files, src)
-		elif local == "":
-			timestamp = get_remote_modified_time(files, source)
-		if timestamp:
-			times[source] = timestamp
+		if local == True:
+			if ":" in source:
+				source = source.split(":",1)[0]
+			timestamp = get_local_modified_time(files, source)
+		timestamp = get_remote_modified_time(files, source)
+		times[source] = timestamp
 	return times
 
 
