@@ -15,7 +15,7 @@ load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
 cfgs = Config(basepath=basepath)
 cfgs.debug_reconciliation = True # Ensure debug is on
-idmap = cfgs.instantiate_map('idmap')['store']
+idmap = cfgs.get_idmap()
 networkmap = cfgs.instantiate_map('networkmap')['store']
 cfgs.cache_globals()
 cfgs.instantiate_all()

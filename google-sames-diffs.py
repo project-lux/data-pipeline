@@ -16,20 +16,20 @@ from pipeline.config import Config
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
 cfgs = Config(basepath=basepath)
-idmap = cfgs.instantiate_map('idmap')['store']
-same_map = cfgs.instantiate_map('equivalents')['store']
-diff_map = cfgs.instantiate_map('distinct')['store']
+idmap = cfgs.get_idmap()
 cfgs.cache_globals()
 cfgs.instantiate_all()
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 
-# The ID and range of a sample spreadsheet.
-SPREADSHEET_ID = '--- ID GOES HERE ---'
+gidfn = os.path.join(cfgs.data_dir, 'google_sheet_id.txt')
+fh = open(gidfn)
+SPREADSHEET_ID = fh.read().strip()
+fh.close()
 
-# FIXME: Provide sample CSV to upload for these
-
+diff_map = {}
+same_map = {}
 SHEET_NAMES = [['Different From', diff_map], ['Same As', same_map]]
 RANGE_START = 2
 
@@ -39,19 +39,19 @@ creds = None
 # time.
 
 ### FIXME: These should use config.data_dir
-
-if os.path.exists('../data/files/token.json'):
-    creds = Credentials.from_authorized_user_file('../data/files/token.json', SCOPES)
+tokfn = os.path.join(cfgs.data_dir, 'token.json')
+credfn = os.path.join(cfgs.data_dir, 'credentials.json')
+if os.path.exists(tokfn):
+    creds = Credentials.from_authorized_user_file(tokfn, SCOPES)
 # If there are no (valid) credentials available, let the user log in.
 if not creds or not creds.valid:
     if creds and creds.expired and creds.refresh_token:
         creds.refresh(Request())
     else:
-        flow = InstalledAppFlow.from_client_secrets_file(
-            '../data/files/credentials.json', SCOPES)
+        flow = InstalledAppFlow.from_client_secrets_file(credfn, SCOPES)
         creds = flow.run_local_server(port=0)
     # Save the credentials for the next run
-    with open('../data/files/token.json', 'w') as token:
+    with open(tokfn, 'w') as token:
         token.write(creds.to_json())
 
 try:
@@ -88,3 +88,17 @@ try:
 
 except HttpError as err:
     print(err)
+
+# Now write the dicts to CSVs
+dfn = os.path.join(cfgs.data_dir, 'differentFrom/google.csv')
+with open(dfn, 'w') as fh:
+    writer = csv.writer(fh)
+    for r in diff_map.items():
+        writer.writerow(r)
+sfn = os.path.join(cfgs.data_dir, 'sameAs/google.csv')
+with open(sfn, 'w') as fh:
+    writer = csv.writer(fh)
+    for r in same_map.items():
+        writer.writerow(r)
+
+# Now call load-csv-map2.py on them

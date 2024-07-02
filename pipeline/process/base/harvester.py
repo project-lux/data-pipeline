@@ -2,6 +2,7 @@ import requests
 import ujson as json
 import sys
 from lxml import etree
+import datetime
 
 class Harvester(object):
 
@@ -172,7 +173,11 @@ class ASHarvester(Harvester):
 			except:
 				print(f"Missing endTime for item:\n{it}")
 				continue
-			if dt < self.last_harvest:
+			if type(dt) != str:
+				# urgh what is this?
+				print(f"Couldn't understand endTime: {dt}")
+				dt = datetime.datetime.utcnow().isoformat()
+			elif dt < self.last_harvest:
 				# We're done with the stream, not just this page
 				self.page = None
 				return

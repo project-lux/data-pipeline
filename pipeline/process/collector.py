@@ -7,14 +7,9 @@ class Collector(object):
         self.internal_sources = list(config.internal.values())
         self.sources.extend( self.internal_sources )
         if idmap is None:
-            if config.idmap_name != "":
-                idmap = config.map_stores[config.idmap_name].get('store', None)
-            if idmap is None:
-                raise ValueError("Cleaner needs an idmap via idmap_name in config")
-            else:
-                self.idmap = idmap
-        else:
-            self.idmap = idmap
+            idmap = self.configs.get_idmap()
+
+        self.idmap = idmap
         self.networkmap = config.instantiate_map('networkmap')['store']        
         self.debug = config.debug_reconciliation
         self.global_reconciler = config.results['merged'].get('reconciler', None)

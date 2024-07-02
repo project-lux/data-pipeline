@@ -14,7 +14,7 @@ MAX_REFS = 10
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
 cfgs = Config(basepath=basepath)
-idmap = cfgs.instantiate_map('idmap')['store']
+idmap = cfgs.get_idmap()
 record_refs = cfgs.instantiate_map('record_refs')['store']
 cfgs.cache_globals()
 cfgs.instantiate_all()
