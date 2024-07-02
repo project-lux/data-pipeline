@@ -147,15 +147,16 @@ def check_datacache_times(check_caches):
 			except KeyError:
 				print(f"couldn't return {sample} from datacache {cache}")
 				continue
-			
-			rectime = rec['record_time']
-			if cache not in failed:
-				if rectime > cachetimes[cache]:
-					print(f"Cache needs updating. Cache {cache} sample rec {sample} has insert time of {rectime}, and is newer than cache time of {cachetimes[cache]}.")
-					break
-				else:
-					print(f"Cache doesn't need updating. Cache {cache} has time of {cachetimes[cache]}, is newer than rec {cache}:{sample}.")
-					break
+
+			if rec:
+				rectime = rec['record_time']
+				if cache not in failed:
+					if rectime > cachetimes[cache]:
+						print(f"{cache} cache needs updating. Sample rec {sample} has insert time of {rectime}, and is newer than cache time of {cachetimes[cache]}.")
+						break
+					else:
+						print(f"{cache} cache doesn't need updating. Cache has time of {cachetimes[cache]}, is newer than rec {cache}:{sample}.")
+						break
 
 def fetch_failed_sources(failed):
 	for fail in failed:
