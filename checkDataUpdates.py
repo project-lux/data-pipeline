@@ -17,7 +17,7 @@ cfgs = Config(basepath=basepath)
 idmap = cfgs.get_idmap()
 cfgs.instantiate_all()
 
-checkcaches = ['aat','bnf','geonames','japan','japansh','lcdgt','tgn','ulan','viaf','wikimedia']
+check_caches = ['aat','bnf','geonames','japan','japansh','lcdgt','tgn','ulan','viaf','wikimedia']
 remote_files = {
 	"lcnaf": "https://lds-downloads.s3.amazonaws.com/authorities/names.madsrdf.jsonld.json",
 	"lcsh": "https://lds-downloads.s3.amazonaws.com/authorities/subjects.madsrdf.jsonld.json",
@@ -103,11 +103,13 @@ def check_local_and_remote_times(local_files, remote_files):
 	for key, local_time in local_times.items():
 		try:
 			remote_time = remote_times[key]
+			if key in ["dnb","geonames"]:	
+				print(f"worked for {key}")
 			print(f"{key} has local time of {local_time}")
 			print(f"{key} has remotetime of {remote_time}")
 			if remote_time > local_time:
 				diff = remote_time - local_time
-				print(f"{key} needs updating. Remote is newer than local. Difference is {diff}.")
+				print(f"-----{key} needs updating. Remote is newer than local. Difference is {diff}.")
 				if ":" in key:
 					src, ext = key.split(":")
 					print(f"Local dumpfile path is: /data-io2/input/{src}/{local_files[key]}")
@@ -124,7 +126,7 @@ def check_local_and_remote_times(local_files, remote_files):
 		except:
 			print(f"***{key} failed at comparing localtimes and remotetimes")
 
-def check_datacache_times(check_caches: list) -> None:
+def check_datacache_times(check_caches):
 	print("*****Checking datacache times and comparing to sample record times*****")
 
 	cachetimes = {}
