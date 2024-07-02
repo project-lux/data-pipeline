@@ -219,8 +219,12 @@ class ASHarvester(Harvester):
 			if chg == 'delete':
 				self.deleted[ident] = 1
 
-			if self.harvest_from and dt > self.harvest_from:
-				continue
+			try:
+				if self.harvest_from and dt > self.harvest_from:
+					continue
+			except:
+				# weird date format?
+				pass
 
 			if refsonly:
 				yield (chg, ident, {}, dt)
