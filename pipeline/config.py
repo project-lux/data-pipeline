@@ -51,7 +51,6 @@ class Config(object):
         self.map_stores = {}
         self.globals = {}
         self.globals_cfg = {}
-        # self.idmap_name = ""
         self.validator = None
         self.configcache = None
 
@@ -253,19 +252,7 @@ class Config(object):
         glbs = self.globals_cfg  
         idmap_name = self.idmap_name
         if idmap_name == "":
-            if 'idmap_name' in glbs:
-                idmap_name = glbs['idmap_name']
-                if not idmap_name in self.map_stores:
-                    raise ValueError(f"Unknown idmap {idmap_name} in globals config")
-                self.idmap_name = glbs['idmap_name']
-                del glbs['idmap_name']
-            else:
-                # None set in globals and none set in code ... raise
-                raise ValueError(f"No idmap set in globals or code")
-        elif 'idmap_name' in glbs:
-            # Configured, but somehow reset
-            # just delete it and use code set version
-            del glbs['idmap_name']
+            raise ValueError(f"No idmap set in config/base.json via code")
 
         cfg = self.map_stores[idmap_name]
         if 'store' in cfg and cfg['store'] is not None:
