@@ -124,7 +124,6 @@ def check_datacache_times(check_caches):
 	print("*****Checking datacache times and comparing to sample record times*****")
 
 	cachetimes = {}
-	samples = {}
 	cacheslice = []
 
 	for cache in check_caches:
@@ -132,6 +131,7 @@ def check_datacache_times(check_caches):
 		cachets = datacache.latest()
 		if cachets.startswith("0000"):
 			print(f"{cache} failed because latest time begins with 0000")
+			failed.append(cache)
 			continue
 		
 		cachedt = datetime.fromisoformat(cachets)
@@ -141,32 +141,21 @@ def check_datacache_times(check_caches):
 			cacheslice.append(s)
 		
 		samplerecs = random.sample(cacheslice, 3)
-		samples[cache] = samplerecs
-
-	samplerecs = {}
-	check_caches = [a for a in check_caches if a not in failed]
-	
-	for cache in check_caches:
-		datacache = cfgs.external[cache]['datacache']
-		samplelist = samples[cache]
-		
-		for sample in samplelist:
+		for sample in samplerecs:
 			try:
 				rec = datacache[sample]
-				samplerecs[cache] = rec
 			except KeyError:
 				print(f"couldn't return {sample} from datacache {cache}")
-				rec = None 
+				return None
 			
-			if rec:
-				rectime = rec['record_time']
-				if cache not in failed:
-					if rectime > cachetimes[cache]:
-						print(f"Cache needs updating. Cache {cache} sample rec {sample} has insert time of {rectime}, and is newer than cache time of {cachetimes[cache]}.")
-						break
-					else:
-						print(f"Cache doesn't need updating. Cache {cache} has time of {cachetimes[cache]}, is newer than rec {cache}:{sample}.")
-						break
+			rectime = rec['record_time']
+			if cache not in failed:
+				if rectime > cachetimes[cache]:
+					print(f"Cache needs updating. Cache {cache} sample rec {sample} has insert time of {rectime}, and is newer than cache time of {cachetimes[cache]}.")
+					break
+				else:
+					print(f"Cache doesn't need updating. Cache {cache} has time of {cachetimes[cache]}, is newer than rec {cache}:{sample}.")
+					break
 
 def fetch_failed_sources(failed):
 	for fail in failed:
