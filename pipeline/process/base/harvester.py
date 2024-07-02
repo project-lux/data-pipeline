@@ -175,7 +175,7 @@ class ASHarvester(Harvester):
 			if type(dt) != str:
 				# urgh what is this?
 				print(f"Couldn't understand endTime: {dt}")
-				dt = self.last_harvest
+				dt = "2024-07-01T00:00:00"
 			elif dt < self.last_harvest:
 				# We're done with the stream, not just this page
 				self.page = None
