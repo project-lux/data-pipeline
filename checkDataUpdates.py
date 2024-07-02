@@ -70,6 +70,8 @@ def get_remote_modified_time(url, source):
 
 
 def get_local_modified_time(file, source):
+	if ":" in source:
+		source = source.split(":",1)[0]
 	filepath = f"/data-io2/input/{source}/{file}"
 
 	try:
@@ -85,8 +87,6 @@ def build_dicts(fileset, local=False):
 	times = {}
 	for source, files in fileset.items():
 		if local == True:
-			if ":" in source:
-				source = source.split(":",1)[0]
 			timestamp = get_local_modified_time(files, source)
 		elif local == False:
 			timestamp = get_remote_modified_time(files, source)
@@ -96,16 +96,12 @@ def build_dicts(fileset, local=False):
 
 def check_local_and_remote_times(local_files, remote_files):
 	local_times = build_dicts(local_files, local=True)
-
-	print(f"LOCAL TIMES IS {local_times}")
 	remote_times = build_dicts(remote_files)
 
 	print("*****Checking local and remote times for dump files*****")
 
 	for key, local_time in local_times.items():
 		try:
-			if ":" in key:
-				key = key.split(":",1)[0]
 			remote_time = remote_times[key]
 			print(f"{key} has local time of {local_time}")
 			print(f"{key} has remotetime of {remote_time}")
