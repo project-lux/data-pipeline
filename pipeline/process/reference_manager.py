@@ -60,7 +60,7 @@ class ReferenceManager(object):
         if my_slice < 0 or max_slice < 0:
             # just read the whole file            
             line = fh.readline()
-            line.strip()
+            line = line.strip()
             line = line.split('|')
             while line:
                 yield line
