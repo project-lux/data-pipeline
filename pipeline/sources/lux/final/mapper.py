@@ -15,11 +15,7 @@ class Cleaner(Mapper):
         self.globals = self.configs.globals
         self.wikimedia = self.configs.external['wikimedia']
 
-        idmap_name = self.configs.idmap_name
-        idmapcfg = self.configs.map_stores[idmap_name]
-        idmap = idmapcfg.get('store', None)
-        if idmap is None:
-            raise ValueError("Cleaner needs an idmap via idmap_name in base")
+        idmap = self.configs.get_idmap()
 
         self.reidentifier = Reidentifier(self.configs, idmap)
         self.idmap = idmap

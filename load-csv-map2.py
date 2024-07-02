@@ -13,7 +13,7 @@ from pipeline.config import Config
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
 cfgs = Config(basepath=basepath)
-idmap = cfgs.instantiate_map('idmap')['store']
+idmap = cfgs.get_idmap()
 cfgs.cache_globals()
 cfgs.instantiate_all()
 

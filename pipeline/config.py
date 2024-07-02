@@ -247,6 +247,9 @@ class Config(object):
                 cfg[k] = v
         return cfg
 
+    def get_idmap(self):
+        return self.instantiate_map(self.idmap_name)['store']
+
     def cache_globals(self, idmap=None):
         new = {}
         glbs = self.globals_cfg  

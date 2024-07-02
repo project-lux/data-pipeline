@@ -12,7 +12,7 @@ from pipeline.process.update_manager import UpdateManager
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
 cfgs = Config(basepath=basepath)
-idmap = cfgs.instantiate_map('idmap')['store']
+idmap = cfgs.get_idmap()
 all_refs = cfgs.instantiate_map('all_refs')['store']
 done_refs = cfgs.instantiate_map('done_refs')['store']
 cfgs.cache_globals()

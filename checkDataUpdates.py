@@ -14,7 +14,7 @@ from urllib3 import disable_warnings
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
 cfgs = Config(basepath=basepath)
-idmap = cfgs.instantiate_map('idmap')['store']
+idmap = cfgs.get_idmap()
 cfgs.instantiate_all()
 
 checkcaches = ['aat','bnf','geonames','japan','japansh','lcdgt','tgn','ulan','viaf','wikimedia']
