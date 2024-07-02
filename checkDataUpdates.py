@@ -113,7 +113,7 @@ def check_local_and_remote_times(local_files, remote_files):
 					src = key.split(":",1)[0]
 					#print(f"Local dumpfile path is: /data-io2/input/{src}/{local_files[key]}")
 				else:
-					#print(f"Local dumpfile path is: /data-io2/input/{key}/{local_files[key]}")
+					print(f"Local dumpfile path is: /data-io2/input/{key}/{local_files[key]}")
 				#print(f"Remote dumpfile path is: {remote_files[key]}")
 			elif remote_time <= local_time:
 				diff = local_time - remote_time
