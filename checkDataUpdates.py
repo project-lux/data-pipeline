@@ -97,24 +97,24 @@ def build_dicts(fileset, local=False):
 def check_local_and_remote_times(local_files, remote_files):
 	local_times = build_dicts(local_files, local=True)
 	remote_times = build_dicts(remote_files)
+	print(f"REMOTE TIMES IS {remote_times}")
 
 	print("*****Checking local and remote times for dump files*****")
 
 	for key, local_time in local_times.items():
-		print(f"{key}:{local_time}")
 		try:
 			remote_time = remote_times[key]
-			#print(f"{key} has local time of {local_time}")
-			#print(f"{key} has remotetime of {remote_time}")
+			print(f"{key} has local time of {local_time}")
+			print(f"{key} has remotetime of {remote_time}")
 			if remote_time > local_time:
 				diff = remote_time - local_time
-				#print(f"-----{key} needs updating. Remote is newer than local. Difference is {diff}.")
+				print(f"-----{key} needs updating. Remote is newer than local. Difference is {diff}.")
 				if ":" in key:
 					src = key.split(":",1)[0]
-					#print(f"Local dumpfile path is: /data-io2/input/{src}/{local_files[key]}")
+					print(f"Local dumpfile path is: /data-io2/input/{src}/{local_files[key]}")
 				else:
 					print(f"Local dumpfile path is: /data-io2/input/{key}/{local_files[key]}")
-				#print(f"Remote dumpfile path is: {remote_files[key]}")
+				print(f"Remote dumpfile path is: {remote_files[key]}")
 			elif remote_time <= local_time:
 				diff = local_time - remote_time
 				diffsec = int(diff.total_seconds())
