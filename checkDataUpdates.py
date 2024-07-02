@@ -101,21 +101,20 @@ def check_local_and_remote_times(local_files, remote_files):
 	print("*****Checking local and remote times for dump files*****")
 
 	for key, local_time in local_times.items():
+		print(f"{key}:{local_time}")
 		try:
 			remote_time = remote_times[key]
-			if key in ["dnb","geonames"]:	
-				print(f"worked for {key}")
-			print(f"{key} has local time of {local_time}")
-			print(f"{key} has remotetime of {remote_time}")
+			#print(f"{key} has local time of {local_time}")
+			#print(f"{key} has remotetime of {remote_time}")
 			if remote_time > local_time:
 				diff = remote_time - local_time
-				print(f"-----{key} needs updating. Remote is newer than local. Difference is {diff}.")
+				#print(f"-----{key} needs updating. Remote is newer than local. Difference is {diff}.")
 				if ":" in key:
-					src, ext = key.split(":")
-					print(f"Local dumpfile path is: /data-io2/input/{src}/{local_files[key]}")
+					src = key.split(":",1)[0]
+					#print(f"Local dumpfile path is: /data-io2/input/{src}/{local_files[key]}")
 				else:
-					print(f"Local dumpfile path is: /data-io2/input/{key}/{local_files[key]}")
-				print(f"Remote dumpfile path is: {remote_files[key]}")
+					#print(f"Local dumpfile path is: /data-io2/input/{key}/{local_files[key]}")
+				#print(f"Remote dumpfile path is: {remote_files[key]}")
 			elif remote_time <= local_time:
 				diff = local_time - remote_time
 				diffsec = int(diff.total_seconds())
@@ -124,7 +123,7 @@ def check_local_and_remote_times(local_files, remote_files):
 				else:
 					print(f"{key} doesn't need updating. Local is newer than remote. Difference is {diff}")
 		except:
-			print(f"***{key} failed at comparing localtimes and remotetimes")
+			print(f"+++{key} failed at comparing localtimes and remotetimes")
 
 def check_datacache_times(check_caches):
 	print("*****Checking datacache times and comparing to sample record times*****")
@@ -137,7 +136,7 @@ def check_datacache_times(check_caches):
 		datacache = cfgs.external[cache]['datacache']
 		cachets = datacache.latest()
 		if cachets.startswith("0000"):
-			print(f"***{cache} failed because latest time begins with 0000")
+			print(f"{cache} failed because latest time begins with 0000")
 			continue
 		
 		cachedt = datetime.fromisoformat(cachets)
