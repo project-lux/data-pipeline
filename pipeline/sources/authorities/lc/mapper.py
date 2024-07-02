@@ -459,7 +459,7 @@ class LcnafMapper(LcMapper):
                 name = top._label.strip()
                 if (name and (m := self.parens_re.match(name))):
                     (nm, parent) = m.groups()
-                    if (uri := parent.strip() in self.parenthetical_places):
+                    if ((uri := parent.strip()) in self.parenthetical_places):
                         top.part_of = model.Place(ident=uri, label=parent)
 
             # Now fill out the details from RWO

@@ -113,7 +113,7 @@ class YulMapper(Mapper):
             name = name.strip()
             if (name and (m := self.parens_re.match(name))):
                 (nm, parent) = m.groups()
-                if (uri := parent.strip() in self.parenthetical_places):
+                if ((uri := parent.strip()) in self.parenthetical_places):
                     data['part_of'] = [{"id":uri, 'type':'Place','_label':parent}]
 
         # don't process part_of                
