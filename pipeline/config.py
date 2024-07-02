@@ -51,7 +51,7 @@ class Config(object):
         self.map_stores = {}
         self.globals = {}
         self.globals_cfg = {}
-        self.idmap_name = ""
+        # self.idmap_name = ""
         self.validator = None
         self.configcache = None
 
