@@ -70,11 +70,7 @@ def get_remote_modified_time(url, source):
 
 
 def get_local_modified_time(file, source):
-
-	if file == "macs.nt":
-		filepath = f"/data-io2/input/{source}/old/{file}"
-	else:
-		filepath = f"/data-io2/input/{source}/{file}"
+	filepath = f"/data-io2/input/{source}/{file}"
 
 	try:
 		timestamp = os.path.getmtime(filepath)
@@ -92,7 +88,8 @@ def build_dicts(fileset, local=False):
 			if ":" in source:
 				source = source.split(":",1)[0]
 			timestamp = get_local_modified_time(files, source)
-		timestamp = get_remote_modified_time(files, source)
+		elif local == False:
+			timestamp = get_remote_modified_time(files, source)
 		times[source] = timestamp
 	return times
 
