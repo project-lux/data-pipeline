@@ -103,17 +103,15 @@ def check_local_and_remote_times(local_files, remote_files):
 
 	for key, local_time in local_times.items():
 		try:
+			if ":" in key:
+				key = key.split(":",1)[0]
 			remote_time = remote_times[key]
 			print(f"{key} has local time of {local_time}")
 			print(f"{key} has remotetime of {remote_time}")
 			if remote_time > local_time:
 				diff = remote_time - local_time
 				print(f"-----{key} needs updating. Remote is newer than local. Difference is {diff}.")
-				if ":" in key:
-					src = key.split(":",1)[0]
-					print(f"Local dumpfile path is: /data-io2/input/{src}/{local_files[key]}")
-				else:
-					print(f"Local dumpfile path is: /data-io2/input/{key}/{local_files[key]}")
+				print(f"Local dumpfile path is: /data-io2/input/{key}/{local_files[key]}")
 				print(f"Remote dumpfile path is: {remote_files[key]}")
 			elif remote_time <= local_time:
 				diff = local_time - remote_time
