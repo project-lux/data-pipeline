@@ -96,8 +96,9 @@ def build_dicts(fileset, local=False):
 
 def check_local_and_remote_times(local_files, remote_files):
 	local_times = build_dicts(local_files, local=True)
+
+	print(f"LOCAL TIMES IS {local_times}")
 	remote_times = build_dicts(remote_files)
-	print(f"REMOTE TIMES IS {remote_times}")
 
 	print("*****Checking local and remote times for dump files*****")
 
