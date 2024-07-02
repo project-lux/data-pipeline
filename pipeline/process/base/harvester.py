@@ -175,6 +175,7 @@ class ASHarvester(Harvester):
 			if type(dt) != str:
 				# urgh what is this?
 				print(f"Couldn't understand endTime: {dt}")
+				dt = self.last_harvest
 			elif dt < self.last_harvest:
 				# We're done with the stream, not just this page
 				self.page = None
@@ -219,12 +220,8 @@ class ASHarvester(Harvester):
 			if chg == 'delete':
 				self.deleted[ident] = 1
 
-			try:
-				if self.harvest_from and dt > self.harvest_from:
-					continue
-			except:
-				# weird date format?
-				pass
+			if self.harvest_from and dt > self.harvest_from:
+				continue
 
 			if refsonly:
 				yield (chg, ident, {}, dt)
