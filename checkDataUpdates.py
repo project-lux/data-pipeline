@@ -146,7 +146,7 @@ def check_datacache_times(check_caches):
 				rec = datacache[sample]
 			except KeyError:
 				print(f"couldn't return {sample} from datacache {cache}")
-				return None
+				continue
 			
 			rectime = rec['record_time']
 			if cache not in failed:
