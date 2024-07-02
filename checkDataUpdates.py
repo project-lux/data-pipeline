@@ -46,6 +46,8 @@ local_files = {
 }
 
 
+failed = []
+
 def get_remote_modified_time(url, source):
 	disable_warnings(InsecureRequestWarning)
 	try:
@@ -187,7 +189,6 @@ def fetch_failed_sources(failed):
 
 
 def main():
-	failed = []
 	check_local_and_remote_times(local_files, remote_files)
 	check_datacache_times(check_caches)
 	fetch_failed_sources(failed)
