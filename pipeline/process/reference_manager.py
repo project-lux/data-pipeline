@@ -65,7 +65,7 @@ class ReferenceManager(object):
             while line:
                 yield line
                 line = fh.readline()
-                line.strip()
+                line = line.strip()
                 if line:
                     line = line.split('|')
         else:
