@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import datetime
 from pipeline.config import Config
 from dotenv import load_dotenv
 
@@ -15,6 +16,8 @@ cfgs.instantiate_all()
 ml = cfgs.results['marklogic']['recordcache']
 store = cfgs.marklogic_stores['ml_sandbox']['store']
 
+
+total = ml.len_estimate()
 BATCH_SIZE = 200
 
 if len(sys.argv) > 2:
@@ -24,6 +27,11 @@ else:
     my_slice = 0
     max_slice = 1
 
+to_do = int(total / max_slice)
+done = 0
+curr_amt = 0.0
+prev_pct = 0
+
 batch = []
 start = time.time()
 for rec in ml.iter_records_slice(my_slice, max_slice):
@@ -31,12 +39,20 @@ for rec in ml.iter_records_slice(my_slice, max_slice):
     batch.append(rec)
 
     if len(batch) >= BATCH_SIZE:
-        print(f"Batch built: {time.time()-start}")
-        nstart = time.time()
         store.update_multiple(batch)
-        print(f"Batch sent: {time.time()-nstart}")
+        done += len(batch)
+        # spit out every 1% like mlcp does
+        if done / total > curr_amt:
+            ct = time.time()
+            durn = ct - start
+            now = datetime.datetime.utcnow().isoformat()
+            if prev_pct:
+                diff = int(ct - prev_pct)
+            else:
+                diff = 0
+            persec = done / durn
+            print(f"[{now}] {done} = {curr_amt * 100}% last:{diff} per sec: {persec}")
         batch = []
-        start = time.time()
 
 if batch:
     store.update_multiple(batch)
