@@ -13,7 +13,6 @@ fh = open(gidfn)
 SPREADSHEET_ID = fh.read().strip()
 fh.close()
 
-directory = "/Users/kd736/Desktop/Development/data-pipeline/"
 scope = ['https://www.googleapis.com/auth/spreadsheets']
 
 tokfn = os.path.join(directory, 'token.json')
