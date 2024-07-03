@@ -62,8 +62,8 @@ try:
 	service = build('sheets', 'v4', credentials=creds)
 	sheet = service.spreadsheets()
 
-	for i, row in enumerate(data, start=1):  # Adjust 'start' based on your sheet's requirements
-		for j, value in enumerate(row, start=1):  # Adjust 'start' based on your sheet's requirements
+	for i, row in enumerate(data, start=1):  
+		for j, value in enumerate(row, start=1):  
 			sheet.update_cell(i, j, value)
 
 
