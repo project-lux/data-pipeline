@@ -46,13 +46,13 @@ scope = ['https://www.googleapis.com/auth/spreadsheets']
 tokfn = os.path.join(cfgs.data_dir, 'timestamps-token.json')
 credfn = os.path.join(cfgs.data_dir, 'credentials.json')
 if os.path.exists(tokfn):
-	creds = Credentials.from_authorized_user_file(tokfn, SCOPES)
+	creds = Credentials.from_authorized_user_file(tokfn, scope)
 	# If there are no (valid) credentials available, let the user log in.
 	if not creds or not creds.valid:
 		if creds and creds.expired and creds.refresh_token:
 			creds.refresh(Request())
 		else:
-			flow = InstalledAppFlow.from_client_secrets_file(credfn, SCOPES)
+			flow = InstalledAppFlow.from_client_secrets_file(credfn, scope)
 			creds = flow.run_local_server(port=0)
 		# Save the credentials for the next run
 		with open(tokfn, 'w') as token:
