@@ -41,7 +41,6 @@ for rec in ml.iter_records_slice(my_slice, max_slice):
     if len(batch) >= BATCH_SIZE:
         store.update_multiple(batch)
         done += len(batch)
-        # spit out every 1% like mlcp does
         if done / to_do > curr_amt:
             ct = time.time()
             durn = ct - start
@@ -56,6 +55,7 @@ for rec in ml.iter_records_slice(my_slice, max_slice):
             end = start + total_secs
             expected = datetime.datetime.fromtimestamp(end)
             print(f"[{now}] {done}/{to_do} = {curr_amt * 100}% last:{diff} per sec: {persec} finish: {expected}")
+            sys.stdout.flush()
             curr_amt += 0.005
         batch = []
 

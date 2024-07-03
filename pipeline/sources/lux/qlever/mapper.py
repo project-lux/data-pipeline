@@ -165,9 +165,7 @@ class QleverMapper(Mapper):
         }
 
 
-
     def walk_for_triples(self, node, conf, ignore=False):
-
         if not 'id' in node:
             me = f"{conf['base']}_{conf['bid']}"
             conf['bid'] += 1
@@ -202,7 +200,6 @@ class QleverMapper(Mapper):
             pred = self.prop_map.get(k, None)
             if pred is None:
                 if k in ['part', 'part_of']:
-                    # FIXME: calculate
                     if 'type' in node:
                         mytype = node['type']
                         if mytype in ['LinguisticObject', 'VisualItem', 'DigitalObject', 'Name', \
@@ -361,6 +358,7 @@ class QleverMapper(Mapper):
     def transform(self, record, rectype=None, reference=False):
 
         # QLever needs NT / TTL format
+        # Returns a list of triples
 
         data = record['data']
         me = data['id']
