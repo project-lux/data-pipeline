@@ -1,12 +1,16 @@
-from oauth2client.service_account import ServiceAccountCredentials
-import gspread
-
 import os
 import sys
 import csv
 import json
 import time
 
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from oauth2client.service_account import ServiceAccountCredentials
+import gspread
 
 from dotenv import load_dotenv
 from pipeline.config import Config
@@ -14,28 +18,53 @@ from pipeline.config import Config
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
 cfgs = Config(basepath=basepath)
+idmap = cfgs.get_idmap()
+cfgs.cache_globals()
+cfgs.instantiate_all()
 
-def populate_google_sheet(sheet_name, data):
-    # Step 2: Define the scope and load credentials
-    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/spreadsheets']
+gidfn = os.path.join(cfgs.data_dir, 'populate-timestamps.txt')
+fh = open(gidfn)
+SPREADSHEET_ID = fh.read().strip()
+fh.close()
 
-    credfn = os.path.join(cfgs.data_dir, 'credentials.json')
-    creds = ServiceAccountCredentials.from_json_keyfile_name(cdfn, scope)
-    client = gspread.authorize(creds)
 
-    # Step 3: Open the sheet and select the first worksheet
-    sheet = client.open("LUX Dataset Timestamps").sheet1
+RANGE_START = 2
 
-    # Step 4: Populate the sheet
-    # Assuming 'data' is a list of lists, where each sublist is a row
-    for i, row in enumerate(data, start=1):  # Adjust 'start' based on your sheet's requirements
-        for j, value in enumerate(row, start=1):  # Adjust 'start' based on your sheet's requirements
-            sheet.update_cell(i, j, value)
 
 # Example usage
 data = [
-    ['Name', 'Age', 'City'],
-    ['Alice', '24', 'New York'],
-    ['Bob', '30', 'Los Angeles']
+	['Name', 'Age', 'City'],
+	['Alice', '24', 'New York'],
+	['Bob', '30', 'Los Angeles']
 ]
-populate_google_sheet('Your Sheet Name', data)
+
+creds = None
+
+scope = ['https://www.googleapis.com/auth/spreadsheets']
+
+tokfn = os.path.join(cfgs.data_dir, 'timestamps-token.json')
+credfn = os.path.join(cfgs.data_dir, 'credentials.json')
+if os.path.exists(tokfn):
+	creds = Credentials.from_authorized_user_file(tokfn, SCOPES)
+	# If there are no (valid) credentials available, let the user log in.
+	if not creds or not creds.valid:
+		if creds and creds.expired and creds.refresh_token:
+			creds.refresh(Request())
+		else:
+			flow = InstalledAppFlow.from_client_secrets_file(credfn, SCOPES)
+			creds = flow.run_local_server(port=0)
+		# Save the credentials for the next run
+		with open(tokfn, 'w') as token:
+			token.write(creds.to_json())
+
+try:
+	service = build('sheets', 'v4', credentials=creds)
+	sheet = service.spreadsheets()
+
+	for i, row in enumerate(data, start=1):  # Adjust 'start' based on your sheet's requirements
+		for j, value in enumerate(row, start=1):  # Adjust 'start' based on your sheet's requirements
+			sheet.update_cell(i, j, value)
+
+
+except HttpError as err:
+	print(err)
