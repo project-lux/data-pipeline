@@ -52,6 +52,7 @@ for rec in ml.iter_records_slice(my_slice, max_slice):
                 diff = 0
             persec = done / durn
             print(f"[{now}] {done} = {curr_amt * 100}% last:{diff} per sec: {persec}")
+            curr_amt += 0.005
         batch = []
 
 if batch:
