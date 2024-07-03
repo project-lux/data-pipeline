@@ -101,25 +101,6 @@ class YulMapper(Mapper):
         if data['id'] in self.object_work_mismatch:
             return None
 
-        if data['type'] == 'Place' and not 'part_of' in data:
-            primary = "http://vocab.getty.edu/aat/300404670"
-            name = ""
-            for n in data['identified_by']:
-                if 'classified_as' in n:
-                    cxns = [x['id'] for x in n['classified_as']]
-                    if primary in cxns:
-                        name = n['content']
-                        break  
-            print(f"found place name: {name}")
-            name = name.strip()
-            if (name and (m := self.parens_re.match(name))):
-                (nm, parent) = m.groups()
-                print(f"got parent: {parent}")
-                if parent.strip() in self.parenthetical_places:
-                    print("Found parent, adding")
-                    uri = self.parenthetical_places[parent.strip()]
-                    data['part_of'] = [{"id":uri, 'type':'Place','_label':parent}]
-
         # don't process part_of                
         if data['type'] == 'LinguisticObject' and 'part_of' in data:
             # if only id, type, label, part_of, identified_by, then kill it 
@@ -229,6 +210,25 @@ class YulMapper(Mapper):
         # Trash all part_ofs for SBX testing June 5 2024
         if data['type'] == 'Place' and 'part_of' in data:
             del data['part_of']
+
+        if data['type'] == 'Place':
+            primary = "http://vocab.getty.edu/aat/300404670"
+            name = ""
+            for n in data['identified_by']:
+                if 'classified_as' in n:
+                    cxns = [x['id'] for x in n['classified_as']]
+                    if primary in cxns:
+                        name = n['content']
+                        break  
+            print(f"found place name: {name}")
+            name = name.strip()
+            if (name and (m := self.parens_re.match(name))):
+                (nm, parent) = m.groups()
+                print(f"got parent: {parent}")
+                if parent.strip() in self.parenthetical_places:
+                    print("Found parent, adding")
+                    uri = self.parenthetical_places[parent.strip()]
+                    rec['data']['part_of'] = [{"id":uri, 'type':'Place','_label':parent}]
 
 
         # Swap MarcGT to AAT equivalents
