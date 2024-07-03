@@ -19,7 +19,7 @@ def populate_google_sheet(sheet_name, data):
     # Step 2: Define the scope and load credentials
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/spreadsheets']
 
-	credfn = os.path.join(cfgs.data_dir, 'credentials.json')
+    credfn = os.path.join(cfgs.data_dir, 'credentials.json')
     creds = ServiceAccountCredentials.from_json_keyfile_name(cdfn, scope)
     client = gspread.authorize(creds)
 
