@@ -1,7 +1,7 @@
 import os
 import sys
 import time
-from pipeline.config.config import Config
+from pipeline.config import Config
 from dotenv import load_dotenv
 
 load_dotenv()
