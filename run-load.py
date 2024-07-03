@@ -1,10 +1,8 @@
 import os
 import sys
-import json
 import time
 from pipeline.config.config import Config
 from dotenv import load_dotenv
-from pipeline.storage.cache.postgres import poolman
 
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
@@ -15,7 +13,9 @@ cfgs.instantiate_all()
 ### STOP. You probably want to use MLCP instead
 
 ml = cfgs.results['marklogic']['recordcache']
-store = cfgs.marklogic_stores['sandbox']
+store = cfgs.marklogic_stores['sandbox']['store']
+
+BATCH_SIZE = 200
 
 if len(sys.argv) > 2:
     my_slice = int(sys.argv[1])
