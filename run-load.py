@@ -13,7 +13,7 @@ cfgs.instantiate_all()
 ### STOP. You probably want to use MLCP instead
 
 ml = cfgs.results['marklogic']['recordcache']
-store = cfgs.marklogic_stores['sandbox']['store']
+store = cfgs.marklogic_stores['ml_sandbox']['store']
 
 BATCH_SIZE = 200
 
