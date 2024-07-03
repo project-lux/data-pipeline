@@ -52,7 +52,10 @@ for rec in ml.iter_records_slice(my_slice, max_slice):
                 diff = 0
             prev_pct = ct
             persec = done / durn
-            print(f"[{now}] {done}/{to_do} = {curr_amt * 100}% last:{diff} per sec: {persec}")
+            total_secs = to_do / persec
+            end = start + total_secs
+            expected = datetime.datetime.fromtimestamp(end)
+            print(f"[{now}] {done}/{to_do} = {curr_amt * 100}% last:{diff} per sec: {persec} finish: {expected}")
             curr_amt += 0.005
         batch = []
 
