@@ -21,7 +21,9 @@ idmap = cfgs.get_idmap()
 cfgs.cache_globals()
 cfgs.instantiate_all()
 
-gidfn = os.path.join(cfgs.data_dir, 'populate-timestamps.txt')
+directory = "/home/kd736/data-pipeline"
+
+gidfn = os.path.join(directory, 'populate-timestamps.txt')
 fh = open(gidfn)
 SPREADSHEET_ID = fh.read().strip()
 fh.close()
