@@ -2,6 +2,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 import os
 import requests
@@ -44,58 +45,63 @@ if not creds or not creds.valid:
 
 
 def populate_google_sheet(data):    
-    service = build('sheets', 'v4', credentials=creds)
-    sheet = service.spreadsheets()
-    
-    now = datetime.now()
-    now_str = now.strftime("%B %d, %Y")
+    try:
+        service = build('sheets', 'v4', credentials=creds)
+        sheet = service.spreadsheets()
+        
+        now = datetime.now()
+        now_str = now.strftime("%B %d, %Y")
 
-    # Create a new sheet
-    sheet_body = {
-        'requests': [
-            {
-                'addSheet': {
-                    'properties': {
-                        'title': now_str
+        # Create a new sheet
+        sheet_body = {
+            'requests': [
+                {
+                    'addSheet': {
+                        'properties': {
+                            'title': now_str
+                        }
                     }
                 }
-            }
-        ]
-    }
-    sheet.batchUpdate(
-        spreadsheetId=SPREADSHEET_ID,
-        body=sheet_body
-    ).execute()
-    
-    # Get the ID of the newly created sheet
-    sheet_metadata = sheet.get(
-        spreadsheetId=SPREADSHEET_ID,
-        ranges=[],
-        includeGridData=False
-    ).execute()
-    sheets = sheet_metadata.get('sheets', [])
-    new_sheet_id = sheets[-1]['properties']['sheetId']
-    
-    # Update the new sheet with data
-    body = {
-        'values': [['Source', 'Timestamp']] + data
-    }
-    
-    result = sheet.values().update(
-        spreadsheetId=SPREADSHEET_ID,
-        range=f'{now_str}!A1',
-        valueInputOption='RAW',
-        body=body
-    ).execute()
+            ]
+        }
+        sheet.batchUpdate(
+            spreadsheetId=SPREADSHEET_ID,
+            body=sheet_body
+        ).execute()
+        
+        # Get the ID of the newly created sheet
+        sheet_metadata = sheet.get(
+            spreadsheetId=SPREADSHEET_ID,
+            ranges=[],
+            includeGridData=False
+        ).execute()
+        sheets = sheet_metadata.get('sheets', [])
+        new_sheet_id = sheets[-1]['properties']['sheetId']
+        
+        # Update the new sheet with data
+        body = {
+            'values': [['Source', 'Timestamp','Internal or External?']] + data
+        }
+        
+        result = sheet.values().update(
+            spreadsheetId=SPREADSHEET_ID,
+            range=f'{now_str}!A1',
+            valueInputOption='RAW',
+            body=body
+        ).execute()
 
-    print(f"{result.get('updatedCells')} cells updated.")
+        print(f"{result.get('updatedCells')} cells updated.")
 
+    except HttpError as err:
+        print(err)
 
 def check_datacache_times(cache):
     print(f"Checking {cache} timestamp")
 
+    internal = False
     if cache in ['ils','ipch','ycba','yuag','ypm']:
         datacache = cfgs.internal[cache]['datacache']
+        internal = True
     else:
         datacache = cfgs.external[cache]['datacache']
     cachets = datacache.latest()
@@ -105,8 +111,8 @@ def check_datacache_times(cache):
     
     cachedt = datetime.fromisoformat(cachets)
     datetime_str = cachedt.strftime("%Y-%m-%d %H:%M:%S")
-    cachetimes.append([cache, datetime_str])
 
+    cachetimes.append([cache, datetime_str, "Internal" if internal else "External"])    
 
 
 cachetimes = []
