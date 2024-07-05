@@ -117,15 +117,6 @@ class YulMapper(Mapper):
         if data["id"] in self.object_work_mismatch:
             return None
 
-        # don't process part_of
-        if data["type"] == "LinguisticObject" and "part_of" in data:
-            # if only id, type, label, part_of, identified_by, then kill it
-            # it's a left over table of contents record
-            min_keys = {"@context", "id", "type", "_label", "part_of", "identified_by"}
-            if set(data.keys()) == min_keys:
-                print(f"Skipping part_of record {rec['identifier']}")
-                return None
-
         # add abouts for ycba exhs & objs
         if data["type"] == "LinguisticObject":
             aboutblock = data.get("about", [])

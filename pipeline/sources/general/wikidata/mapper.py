@@ -1,5 +1,3 @@
-
-
 from .base import WdConfigManager
 from pipeline.process.base.mapper import Mapper
 from pipeline.process.utils.mapper_utils import make_datetime
@@ -8,19 +6,21 @@ from shapely.geometry import Polygon
 import datetime
 import math
 
-class WdMapper(Mapper, WdConfigManager):
 
+class WdMapper(Mapper, WdConfigManager):
     def __init__(self, config):
         WdConfigManager.__init__(self, config)
         Mapper.__init__(self, config)
         self.acquirer = None
-        self.precision_map = {11:'D', 12:'h', 13:'m', 14:'s', 10:'M', 9:'Y'}
+        self.precision_map = {11: "D", 12: "h", 13: "m", 14: "s", 10: "M", 9: "Y"}
         self.process_all_langs = False
-        self.gender_map = {"Q6581072": vocab.instances['female'],
-                "Q6581097": vocab.instances['male'],
-                "Q2449503": vocab.instances['transgender'], # trans male
-                "Q1052281": vocab.instances['transgender'], # trans female
-                "Q1097630": vocab.instances['intersex']} # intersex --> aat:300438739
+        self.gender_map = {
+            "Q6581072": vocab.instances["female"],
+            "Q6581097": vocab.instances["male"],
+            "Q2449503": vocab.instances["transgender"],  # trans male
+            "Q1052281": vocab.instances["transgender"],  # trans female
+            "Q1097630": vocab.instances["intersex"],
+        }  # intersex --> aat:300438739
 
         self.ext_hash = {
             "P2163": "http://id.worldcat.org/fast/{ident}",
@@ -28,7 +28,7 @@ class WdMapper(Mapper, WdConfigManager):
             "P245": "http://vocab.getty.edu/ulan/{ident}",
             "P1667": "http://vocab.getty.edu/tgn/{ident}",
             "P214": "https://viaf.org/viaf/{ident}",
-            "P1566": "https://sws.geonames.org/{ident}",            
+            "P1566": "https://sws.geonames.org/{ident}",
             "P227": "https://d-nb.info/gnd/{ident}",
             "P4801": "http://id.loc.gov/vocabulary/{ident}",
             "P268": "http://data.bnf.fr/ark:/12148/cb{ident}",
@@ -40,41 +40,39 @@ class WdMapper(Mapper, WdConfigManager):
             "P3500": "https://ringgold.com/{ident}",
             "P6782": "https://ror.org/{ident}",
             "P496": "https://orcid.org/{ident}",
-            "P3430": "https://snaccooperative.org/ark:/99166/{ident}"
+            "P3430": "https://snaccooperative.org/ark:/99166/{ident}",
         }
 
-            #'P830': 'eol',
-            #'P6944': 'bionomia',
-            #'P213': 'isni',
-            #'P8516': 'lcpm', # https://id.loc.gov/authorities/performanceMediums/{ident}
-            #'P3763': 'mimo', # http://www.mimo-db.eu/InstrumentsKeywords/{ident}
-            #'P402': 'osm', # Open Street Map relation id
-            #'P349': 'ndl', # Japan
-            #'P5587': 'snl' # Sweden
-
+        #'P830': 'eol',
+        #'P6944': 'bionomia',
+        #'P213': 'isni',
+        #'P8516': 'lcpm', # https://id.loc.gov/authorities/performanceMediums/{ident}
+        #'P3763': 'mimo', # http://www.mimo-db.eu/InstrumentsKeywords/{ident}
+        #'P402': 'osm', # Open Street Map relation id
+        #'P349': 'ndl', # Japan
+        #'P5587': 'snl' # Sweden
 
     def clean_date(self, date):
         if type(date) == list:
-            date = date[0]                            
+            date = date[0]
         if type(date) == dict:
-            precision = date['precision']
-            date = date['time']
+            precision = date["precision"]
+            date = date["time"]
         else:
             precision = 11
 
-        if date[0] == '+':
+        if date[0] == "+":
             date = date[1:]
-        if date[-1] == 'Z':
+        if date[-1] == "Z":
             date = date[:-1]
 
-        idx = date.find('-00')
-        if idx > 0: # Don't want to break -0010-01-00
-            date = date[0] + date[1:].replace('-00', '-01')
+        idx = date.find("-00")
+        if idx > 0:  # Don't want to break -0010-01-00
+            date = date[0] + date[1:].replace("-00", "-01")
 
         return (date, precision)
 
     def make_datetime(self, date, precision=11):
-
         if precision < 9:
             # 8 = decade, 7 = century, 6 = millenium
             # Log and ignore for now
@@ -85,11 +83,11 @@ class WdMapper(Mapper, WdConfigManager):
         if date[0] == "+":
             date = date[1:]
         if precision < 11:
-            if date[0] == '-':
-                (yy, mm, rest) = date[1:].split('-',2)
+            if date[0] == "-":
+                (yy, mm, rest) = date[1:].split("-", 2)
                 yy = "-" + yy
             else:
-                (yy, mm, rest) = date.split('-',2)
+                (yy, mm, rest) = date.split("-", 2)
             if precision == 9:
                 date = yy
             elif precision == 10:
@@ -98,7 +96,7 @@ class WdMapper(Mapper, WdConfigManager):
         res = make_datetime(date, precision=self.precision_map[precision])
         if res:
             return res
-            
+
     def guess_type(self, data):
         # using P31 is not possible to determine the class, as the class hierarchy
         # is self-contradictory in wikidata
@@ -106,9 +104,9 @@ class WdMapper(Mapper, WdConfigManager):
 
         # Concept: only care about common properties ... but need to know to build it
         #  ... best is to look for identifiers in known concept hierarchies like AAT
-        #  ... P1014, P1843, P1036, P244 (value starting with sh) 
-        # Currency: P489, P562, P31:Q8142, P498, 
-        # Material: Also very hard to pick out. P31:Q214609, P2054, P2067 
+        #  ... P1014, P1843, P1036, P244 (value starting with sh)
+        # Currency: P489, P562, P31:Q8142, P498,
+        # Material: Also very hard to pick out. P31:Q214609, P2054, P2067
         # VisualItem:  Always merged with HMO? :(
         # Set: No equivalent? collection? Is conflated with organization
         # Digital: Never going to reconcile these
@@ -120,17 +118,31 @@ class WdMapper(Mapper, WdConfigManager):
         # P571 is inception, which means it cannot be a place ... most likely a group
 
         prop_dist = {
-            "person":["P21", "P569", "P570", "P19", "P20", "P734", "P735"],
-            "group":["P112", "P740", "P159", "P488", "P749", "P2124", "P169", "P355", "P1037"],
-            "place": ["P625", "P3896", "P2046", "P47", "P36", "P1082", "P6766", "P1566", "P1667", "P1332", "P1333", "P1334", "P1335"],
+            "person": ["P21", "P569", "P570", "P19", "P20", "P734", "P735"],
+            "group": ["P112", "P740", "P159", "P488", "P749", "P2124", "P169", "P355", "P1037"],
+            "place": [
+                "P625",
+                "P3896",
+                "P2046",
+                "P47",
+                "P36",
+                "P1082",
+                "P6766",
+                "P1566",
+                "P1667",
+                "P1332",
+                "P1333",
+                "P1334",
+                "P1335",
+            ],
             #  "event": ["P580", "P585", "P582", "P710", "P1132", "P1542"],
             "type": ["P1014", "P1843", "P1036"],
             "language": ["P282", "P1098", "P3823", "P218", "P219", "P220", "P1394"],
             "currency": ["P489", "P562", "P498"],
             "unit": ["P2370", "P2442", "P111"],
             "material": ["P2054", "P2067"],
-            "object": ["P127", "P186", "P217", "P2049", "P571", "P176"], # height used on people
-            "text": ["P747", "P50", "P655", "P123", "P291", "P840"]
+            "object": ["P127", "P186", "P217", "P2049", "P571", "P176"],  # height used on people
+            "text": ["P747", "P50", "P655", "P123", "P291", "P840"],
         }
 
         class_dist = {
@@ -143,11 +155,11 @@ class WdMapper(Mapper, WdConfigManager):
             "unit": model.MeasurementUnit,
             "material": model.Material,
             "object": model.HumanMadeObject,
-            "text": model.LinguisticObject
-        }        
+            "text": model.LinguisticObject,
+        }
 
         hits = {}
-        for (k,l) in prop_dist.items():
+        for k, l in prop_dist.items():
             for p in l:
                 if p in data:
                     try:
@@ -160,26 +172,25 @@ class WdMapper(Mapper, WdConfigManager):
             typ = opts[0][0]
             return class_dist[typ]
         else:
-            return class_dist['type']
-
+            return class_dist["type"]
 
     def process_only_label(self, data, top):
         for lang in self.must_have:
-            if lang in data['prefLabel']:
-                val = data['prefLabel'][lang]
+            if lang in data["prefLabel"]:
+                val = data["prefLabel"][lang]
                 if val:
                     top._label = val
                     return
-        for (lang, val) in data['prefLabel'].items():
+        for lang, val in data["prefLabel"].items():
             if lang in self.process_langs:
                 top._label = val
                 return
 
     def process_labels(self, data, top):
-        # Top 25 (or so) languages spoken: 
+        # Top 25 (or so) languages spoken:
         # english (en), chinese (zh), hindi (hi), spanish (es), french (fr), arabic (ar)
-        # german (de), bengali (bn), russian (ru), urdu (ur), 
-        # portuguese (pt), italian (it), greek (el), swahili (sw), japanese (ja), 
+        # german (de), bengali (bn), russian (ru), urdu (ur),
+        # portuguese (pt), italian (it), greek (el), swahili (sw), japanese (ja),
         # indonesian (id), telugu (te), tamil (ta), turkish (tr), persian/farsi (fa),
         # korean (ko), thai (th), marathi (mr), punjabi (pa), dutch (nl), swedish (sv), finnish (fi)
 
@@ -187,40 +198,40 @@ class WdMapper(Mapper, WdConfigManager):
 
         vals = {}
         for lang in self.must_have:
-            if lang in data['prefLabel']:
-                val = data['prefLabel'][lang]
+            if lang in data["prefLabel"]:
+                val = data["prefLabel"][lang]
                 if not val in vals:
                     lbl = vocab.PrimaryName(content=val)
                     vals[val] = lbl
                     top.identified_by = lbl
-                    if not hasattr(top, '_label'):
+                    if not hasattr(top, "_label"):
                         top._label = val
                 else:
                     lbl = vals[val]
                 lbl.language = self.process_langs[lang]
 
         # Might need to process everything to get any labels
-        if self.process_all_langs or not hasattr(top, 'identified_by'):
-            for (lang, val) in data['prefLabel'].items():
+        if self.process_all_langs or not hasattr(top, "identified_by"):
+            for lang, val in data["prefLabel"].items():
                 if lang in self.process_langs and not val in vals:
                     lbl = vocab.PrimaryName(content=val)
                     vals[val] = lbl
                     lbl.language = self.process_langs[lang]
                     top.identified_by = lbl
-                    if not hasattr(top, '_label'):
+                    if not hasattr(top, "_label"):
                         top._label = val
 
         descs = []
         for lang in self.must_have:
-            if lang in data['description']:
-                val = data['description'][lang]
+            if lang in data["description"]:
+                val = data["description"][lang]
                 descs.append(val)
                 desc = vocab.Description(content=val)
                 desc.language = self.process_langs[lang]
                 top.referred_to_by = desc
 
         if self.process_all_langs:
-            for (lang, val) in data['description'].items():
+            for lang, val in data["description"].items():
                 if lang in self.process_langs and not val in vals:
                     descs.append(val)
                     desc = vocab.Description(content=val)
@@ -230,7 +241,7 @@ class WdMapper(Mapper, WdConfigManager):
     def process_equivalents(self, data, top):
         # Useful Equivalents
         sames = []
-        for (k,v) in self.ext_hash.items():
+        for k, v in self.ext_hash.items():
             if k in data:
                 for ki in data[k]:
                     sames.append(v.format(ident=ki))
@@ -239,22 +250,21 @@ class WdMapper(Mapper, WdConfigManager):
         # No way to distinguish, unlike LC below
 
         # Need to look at first character to determine which authority :(
-        lc = data.get('P244', [])
+        lc = data.get("P244", [])
         if lc:
             for x in lc:
-                if x[0] == 's':
+                if x[0] == "s":
                     u = f"http://id.loc.gov/authorities/subjects/{x}"
-                elif x[0] == 'n':
+                elif x[0] == "n":
                     u = f"http://id.loc.gov/authorities/names/{x}"
                 else:
                     print(f"   --- unknown LC type: {x} in {data['id']}")
                     continue
                 sames.append(u)
 
-
         # URGH
         # https://data.whosonfirst.org/890/424/287/890424287.geojson
-        wofid = data.get('P6766', [])
+        wofid = data.get("P6766", [])
         if wofid:
             for x in wofid:
                 # f"https://data.whosonfirst.org/{x[:3]}/{x[3:6]}/.../{x}.geojson"
@@ -266,10 +276,10 @@ class WdMapper(Mapper, WdConfigManager):
                         npid = npid[3:]
                     else:
                         chunks.append(npid)
-                        npid = ''
+                        npid = ""
                 uri = f"https://data.whosonfirst.org/{'/'.join(chunks)}/{x}.geojson"
                 sames.append(uri)
-                
+
         try:
             lbl = top._label
         except:
@@ -277,12 +287,12 @@ class WdMapper(Mapper, WdConfigManager):
         for s in sames:
             top.equivalent = top.__class__(ident=s, label=lbl)
 
-    def process_imageref(self, data, top, prop='P18'):
+    def process_imageref(self, data, top, prop="P18"):
         image = data.get(prop, None)
         if image:
-            # https://commons.wikimedia.org/wiki/File:Nadar_Niboyet.jpg 
+            # https://commons.wikimedia.org/wiki/File:Nadar_Niboyet.jpg
             for i in image:
-                i = i.replace(' ', '_')
+                i = i.replace(" ", "_")
                 ref = f"https://commons.wikimedia.org/wiki/Special:FilePath/{i}"
                 jpg = vocab.DigitalImage()
                 jpg.access_point = model.DigitalObject(ident=ref)
@@ -291,7 +301,7 @@ class WdMapper(Mapper, WdConfigManager):
                 top.representation = img
 
     def process_website(self, data, top):
-        props = ["P856","P973"]
+        props = ["P856", "P973"]
         wp = False
         options = []
         for p in props:
@@ -300,24 +310,24 @@ class WdMapper(Mapper, WdConfigManager):
                 if type(s) != list:
                     s = [s]
                 for v in s:
-                    if not v.endswith('.pdf'):
+                    if not v.endswith(".pdf"):
                         options.append(v)
 
-        if 'sitelinks' in data and 'enwiki' in data['sitelinks']:
-            lnk = data['sitelinks']['enwiki']
-            if 'url' in lnk:
-                options.append(lnk['url'])
-            elif 'title' in lnk:
+        if "sitelinks" in data and "enwiki" in data["sitelinks"]:
+            lnk = data["sitelinks"]["enwiki"]
+            if "url" in lnk:
+                options.append(lnk["url"])
+            elif "title" in lnk:
                 # construct it
-                title = lnk['title'].strip().replace(' ', '_')
+                title = lnk["title"].strip().replace(" ", "_")
                 url = f"https://en.wikipedia.org/wiki/{title}"
                 options.append(url)
-                
+
         if options:
             # already stripped pdfs, just take first for now
             url = options[0]
             lo = model.LinguisticObject(label="Website Text")
-            do = vocab.WebPage(label="Home Page")            
+            do = vocab.WebPage(label="Home Page")
             do.access_point = model.DigitalObject(ident=url)
             lo.digitally_carried_by = do
             top.subject_of = lo
@@ -331,7 +341,7 @@ class WdMapper(Mapper, WdConfigManager):
                 top.member_of = model.Group(ident=self.expand_uri(grp))
         mbr = data.get("P108", None)
         person = False
-        #only add employer if employer is Group
+        # only add employer if employer is Group
         if mbr:
             for grp in mbr:
                 ref = self.get_reference(grp)
@@ -346,16 +356,15 @@ class WdMapper(Mapper, WdConfigManager):
 
         #
         # Don't show residences
-        # 
-        #residence = data.get("P551", None)
-        #if residence:
+        #
+        # residence = data.get("P551", None)
+        # if residence:
         #    for rp in residence:
         #        top.residence = model.Place(ident=self.expand_uri(rp))
 
-
-        # 
+        #
         # Instead show occupation above
-        # 
+        #
 
         # field_of_work = data.get("P101", None)
         # work_location = data.get("P937", None)
@@ -365,7 +374,7 @@ class WdMapper(Mapper, WdConfigManager):
         #     # Make a professional activities
         #     act = vocab.Active()
         #     if work_location:
-        #         for wl in work_location:                       
+        #         for wl in work_location:
         #             act.took_place_at = model.Place(ident=self.expand_uri(wl))
         #     if work_start or work_end:
         #         ts = model.TimeSpan()
@@ -374,7 +383,7 @@ class WdMapper(Mapper, WdConfigManager):
         #         if work_start:
         #             bdate, precision = self.clean_date(work_start)
         #             try:
-        #                 bstart, bend = self.make_datetime(bdate, precision)                
+        #                 bstart, bend = self.make_datetime(bdate, precision)
         #             except TypeError:
         #                 bstart = None
         #             if bstart is not None:
@@ -383,22 +392,19 @@ class WdMapper(Mapper, WdConfigManager):
         #         if work_end:
         #             ddate, precision = self.clean_date(work_end)
         #             try:
-        #                 dstart, dend = self.make_datetime(ddate, precision)                
+        #                 dstart, dend = self.make_datetime(ddate, precision)
         #             except TypeError:
         #                 dstart = None
-        #             if dstart is not None: 
+        #             if dstart is not None:
         #                 ts.begin_of_the_end = dstart
-        #                 ts.end_of_the_end = dend                    
+        #                 ts.end_of_the_end = dend
         #         if bstart or dstart:
         #             act.timespan = ts
         #     if field_of_work:
         #         for fow in field_of_work:
         #             act.classified_as = model.Type(ident=self.expand_uri(fow))
 
-
-
     def process_person(self, data, top):
-
         # Name Parts: Family Name P734, Given Name P735
         # SKIP -- Don't need these in LUX
         # Family: Father P22, Mother P25
@@ -409,13 +415,13 @@ class WdMapper(Mapper, WdConfigManager):
             gender = [gender]
         for g in gender:
             if g in self.gender_map:
-                top.classified_as = self.gender_map[g] 
+                top.classified_as = self.gender_map[g]
             else:
                 # FIXME: logging
                 # print(f"Unknown wikidata gender: {g}")
                 pass
 
-        bdate = data.get('P569', None)
+        bdate = data.get("P569", None)
         if bdate:
             bdate, precision = self.clean_date(bdate)
             try:
@@ -433,19 +439,19 @@ class WdMapper(Mapper, WdConfigManager):
                 ts.identified_by = vocab.DisplayName(content=bdate[:10])
                 top.born = birth
 
-        bplace = data.get('P19', None)
+        bplace = data.get("P19", None)
         if bplace:
             if type(bplace) == list:
                 # Can only be born in one place :P
                 bplace = bplace[0]
-            if not hasattr(top, 'born'):
+            if not hasattr(top, "born"):
                 birth = model.Birth()
                 top.born = birth
             else:
                 birth = top.born
             birth.took_place_at = model.Place(ident=self.expand_uri(bplace))
 
-        ddate = data.get('P570', None)
+        ddate = data.get("P570", None)
         if ddate:
             ddate, precision = self.clean_date(ddate)
             try:
@@ -461,12 +467,12 @@ class WdMapper(Mapper, WdConfigManager):
                 ts.identified_by = vocab.DisplayName(content=ddate[:10])
                 top.died = death
 
-        dplace = data.get('P20', None)
+        dplace = data.get("P20", None)
         if dplace:
             if type(dplace) == list:
                 # Can only die in one place :P
                 dplace = dplace[0]
-            if not hasattr(top, 'died'):
+            if not hasattr(top, "died"):
                 death = model.Death()
                 top.died = death
             else:
@@ -476,7 +482,7 @@ class WdMapper(Mapper, WdConfigManager):
         dtype = data.get("P1196", None)
         if dtype:
             # e.g. natural causes vs suicide
-            if not hasattr(top, 'died'):
+            if not hasattr(top, "died"):
                 death = model.Death()
                 top.died = death
             else:
@@ -486,16 +492,16 @@ class WdMapper(Mapper, WdConfigManager):
             for dt in dtype:
                 death.classified_as = model.Type(ident=self.expand_uri(dt))
 
-        nationality = data.get('P27', None)
+        nationality = data.get("P27", None)
         # FIXME: Need to map country of origin to nationality as classification
         # Reconcile Place.P1549 with AAT?
         # 1549 is just a lang-string :(
-        #SELECT ?item ?itemLabel ?demo 
-        #WHERE 
-        #{
+        # SELECT ?item ?itemLabel ?demo
+        # WHERE
+        # {
         #  ?item wdt:P1549 ?demo ; wdt:P31 wd:Q6256 . FILTER(lang(?demo)='en')
         #  SERVICE wikibase:label { bd:serviceParam wikibase:language "[AUTO_LANGUAGE],en". } # Helps get the label in your language, if not, then en language
-        #}
+        # }
         # But there's Q33829 Human Population, which has P27 Country of Citizenship
         # Might be able to back into it comparing P1549 and P27 ?
 
@@ -506,16 +512,15 @@ class WdMapper(Mapper, WdConfigManager):
         self.process_actor(data, top)
         self.process_imageref(data, top)
 
-
     def process_group(self, data, top):
         # ["P112", "P159", "P488", "P749", "P2124", "P169", "P355", "P1037"],
 
-        parent = data.get('P749', None)
+        parent = data.get("P749", None)
         if parent:
             for p in parent:
                 top.member_of = model.Group(ident=self.expand_uri(p))
 
-        bdate = data.get('P571', None)
+        bdate = data.get("P571", None)
         if bdate:
             bdate, precision = self.clean_date(bdate)
             try:
@@ -531,31 +536,31 @@ class WdMapper(Mapper, WdConfigManager):
                 ts.identified_by = vocab.DisplayName(content=bdate[:10])
                 top.formed_by = birth
 
-        bplace = data.get('P740', None)
+        bplace = data.get("P740", None)
         if bplace:
             if type(bplace) == list:
                 # Can only be born in one place :P
                 bplace = bplace[0]
-            if not hasattr(top, 'formed_by'):
+            if not hasattr(top, "formed_by"):
                 birth = model.Formation()
                 top.formed_by = birth
             else:
                 birth = top.formed_by
             birth.took_place_at = model.Place(ident=self.expand_uri(bplace))
 
-        founder = data.get('P112', None)
+        founder = data.get("P112", None)
         if founder:
-            if not hasattr(top, 'formed_by'):
+            if not hasattr(top, "formed_by"):
                 birth = model.Formation()
                 top.formed_by = birth
             else:
-                birth = top.formed_by            
+                birth = top.formed_by
             for f in founder:
                 ref = self.get_reference(f)
                 if ref and ref.__class__ in [model.Person, model.Group]:
                     birth.carried_out_by = ref
 
-        ddate = data.get('P576', None)
+        ddate = data.get("P576", None)
         if ddate:
             ddate, precision = self.clean_date(ddate)
             try:
@@ -569,16 +574,16 @@ class WdMapper(Mapper, WdConfigManager):
                 ts.begin_of_the_begin = dstart
                 ts.end_of_the_end = dend
                 ts.identified_by = vocab.DisplayName(content=ddate[:10])
-                top.dissolved_by = death            
+                top.dissolved_by = death
 
         # headquarters
-        #residence = data.get("P159", None)
-        #if residence:
+        # residence = data.get("P159", None)
+        # if residence:
         #    for rp in residence:
         #        top.residence = model.Place(ident=self.expand_uri(rp))
 
         # street address
-        saddr = data.get('P6375', None)
+        saddr = data.get("P6375", None)
         if saddr:
             saddr = saddr[0]
             if type(saddr) == dict:
@@ -591,22 +596,21 @@ class WdMapper(Mapper, WdConfigManager):
         self.process_imageref(data, top, prop="P154")
 
     def process_place(self, data, top):
-
         # Need to filter types down, so do pre-re-identification
         place_type_map = {
-            "Q5107": "300128176", # Continent
-            "Q6256": "300128207", # Country
-            "Q35657": "300000776", # US State -> Province / State
-            "Q106458883": "300000776", # State
-            "Q515": "300008389", # City
+            "Q5107": "300128176",  # Continent
+            "Q6256": "300128207",  # Country
+            "Q35657": "300000776",  # US State -> Province / State
+            "Q106458883": "300000776",  # State
+            "Q515": "300008389",  # City
         }
 
         # regions are divided up per country in wikidata
-        # So can't do an easy test for county / provice / region etc. :( 
+        # So can't do an easy test for county / provice / region etc. :(
         # Classifications
         # P31: Q6256 = Country
-        types = data.get('P31', [])
-        for (q,aat) in place_type_map.items():
+        types = data.get("P31", [])
+        for q, aat in place_type_map.items():
             if q in types:
                 top.classified_as = model.Type(ident=f"http://vocab.getty.edu/aat/{aat}")
                 break
@@ -616,16 +620,16 @@ class WdMapper(Mapper, WdConfigManager):
         broader.extend(data.get("P131", []))
         # otherwise country
         if not broader:
-            broader = data.get('P17', [])
+            broader = data.get("P17", [])
 
         for b in broader:
             top.part_of = model.Place(ident=self.expand_uri(b))
 
         # Coordinates
-        northmost = data.get('P1332', None)
-        southmost = data.get('P1333', None)
-        eastmost = data.get('P1334', None)
-        westmost = data.get('P1335', None)
+        northmost = data.get("P1332", None)
+        southmost = data.get("P1333", None)
+        eastmost = data.get("P1334", None)
+        westmost = data.get("P1335", None)
 
         coords = []
         if northmost and southmost and eastmost and westmost:
@@ -634,8 +638,8 @@ class WdMapper(Mapper, WdConfigManager):
             coords = []
             for pt in [northmost, eastmost, southmost, westmost]:
                 if type(pt) == list:
-                    pt = pt[0]                      
-                pt = [float(pt['long']), float(pt['lat'])]
+                    pt = pt[0]
+                pt = [float(pt["long"]), float(pt["lat"])]
                 coords.append(pt)
 
             # make into a box
@@ -655,7 +659,7 @@ class WdMapper(Mapper, WdConfigManager):
                 top.defined_by = f"POLYGON (( {','.join(pairs)} ))"
 
         if not coords:
-            coords = data.get('P625', None)
+            coords = data.get("P625", None)
             if coords:
                 # This is a point
 
@@ -665,14 +669,14 @@ class WdMapper(Mapper, WdConfigManager):
                     coords = coords[0]
                 # dict of lat, long, alt
                 if type(coords) == dict:
-                    coords = [float(coords['long']), float(coords['lat'])]  
+                    coords = [float(coords["long"]), float(coords["lat"])]
 
                 top.defined_by = f"POINT ( {coords[0]} {coords[1]} )"
 
         # UI doesn't need images on places
         # and search ends up searching the attribution, which makes things weird
-        #self.process_imageref(data, top)
-        #self.process_imageref(data, top, prop="P1943")
+        # self.process_imageref(data, top)
+        # self.process_imageref(data, top, prop="P1943")
 
     def process_type(self, data, top):
         return self.process_concept(data, top)
@@ -682,30 +686,30 @@ class WdMapper(Mapper, WdConfigManager):
         # P737 --> influenced by (meaning its creation)
 
         # codes for Materials
-        elm = data.get('P246', None)
+        elm = data.get("P246", None)
         if elm:
             elm = elm[0]
             top.identified_by = model.Identifier(content=elm)
         else:
-            elm = data.get('P274')
+            elm = data.get("P274")
             if elm:
                 elm = elm[0]
                 top.identified_by = model.Identifier(content=elm)
 
         # codes for Languages
-        two = data.get('P218', None)
+        two = data.get("P218", None)
         if two:
             if type(two) == list:
                 two = two[0]
             top.identified_by = model.Identifier(content=two)
 
-        three = data.get('P219', None)
+        three = data.get("P219", None)
         if three:
             if type(three) == list:
                 three = three[0]
             top.identified_by = model.Identifier(content=three)
         else:
-            threeb = data.get('P220', None)
+            threeb = data.get("P220", None)
             if threeb:
                 if type(threeb) == list:
                     threeb = threeb[0]
@@ -736,18 +740,17 @@ class WdMapper(Mapper, WdConfigManager):
     # Core record types
 
     def process_humanmadeobject(self, data, top):
-
         # Find common P31 links
         # Q3305213 --> painting
         # Q860861 --> sculpture
         type_map = {
-            "Q3305213": "300033618", # Painting
-            "Q860861": "300047090", # Sculpture
-            "Q93184": "300033973", # Drawing
-            "Q125191": "300046300" # Photograph
+            "Q3305213": "300033618",  # Painting
+            "Q860861": "300047090",  # Sculpture
+            "Q93184": "300033973",  # Drawing
+            "Q125191": "300046300",  # Photograph
         }
         classns = data.get("P31", [])
-        for (k,v) in type_map.items():
+        for k, v in type_map.items():
             if k in classns:
                 top.classified_as = model.Type(ident=f"http://vocab.getty.edu/aat/{v}")
                 break
@@ -757,15 +760,15 @@ class WdMapper(Mapper, WdConfigManager):
         # production date
         creator = data.get("P170", None)
         if creator is None:
-            #try manufacturer
+            # try manufacturer
             creator = data.get("P176", None)
         # production carried_out_by
         prod_loc = data.get("P1071", None)
         # production took_place_at
-        #commiss = data.get("P88", None)
+        # commiss = data.get("P88", None)
         # production commissioned by --> don't have this data anywhere else
         # And requires full provenance activity modeling:
-        # https://linked.art/model/provenance/promises/#commissions-for-artwork 
+        # https://linked.art/model/provenance/promises/#commissions-for-artwork
 
         if bdate or creator or prod_loc:
             bstart = None
@@ -780,7 +783,7 @@ class WdMapper(Mapper, WdConfigManager):
                     ts = model.TimeSpan()
                     prod.timespan = ts
                     ts.begin_of_the_begin = bstart
-                    ts.end_of_the_end = bend                
+                    ts.end_of_the_end = bend
             if creator:
                 # Could be a Group
                 for c in creator:
@@ -793,9 +796,8 @@ class WdMapper(Mapper, WdConfigManager):
             if bstart or creator or prod_loc:
                 top.produced_by = prod
 
-
-        #curloc = data.get("P276", None) --> collection
-        #loc = data.get("P625", None) # coordinate loc is real place
+        # curloc = data.get("P276", None) --> collection
+        # loc = data.get("P625", None) # coordinate loc is real place
         # ... but just coordinates :(
         # current location ... but might not be a place
         # e.g. a museum = in collection of museum
@@ -826,7 +828,7 @@ class WdMapper(Mapper, WdConfigManager):
         height = data.get("P2048", None)
         depth = data.get("P2610", None)
         # dimensions
-        for (d, dt) in [(width, vocab.Width), (height, vocab.Height), (depth, vocab.Depth)]:
+        for d, dt in [(width, vocab.Width), (height, vocab.Height), (depth, vocab.Depth)]:
             if d:
                 d = d[0]
                 val = d[0]
@@ -837,9 +839,9 @@ class WdMapper(Mapper, WdConfigManager):
                 unit = d[1]
                 # map common units
                 if unit.endswith("Q174728"):
-                    unit = vocab.instances['cm'].id
+                    unit = vocab.instances["cm"].id
                 elif unit.endswith("Q218593"):
-                    unit = vocab.instances['inches'].id
+                    unit = vocab.instances["inches"].id
                 else:
                     unit = self.expand_uri(unit)
                 dim = dt(value=val)
@@ -862,20 +864,19 @@ class WdMapper(Mapper, WdConfigManager):
             if bstart is not None:
                 ts = model.TimeSpan()
                 ts.begin_of_the_begin = bstart
-                ts.end_of_the_end = bend                
+                ts.end_of_the_end = bend
                 enc.timespan = ts
         if enc_loc or enc_date:
             top.encountered_by = enc
 
-
         if 0:
-            # FIXME: This causes a mess 
+            # FIXME: This causes a mess
             genre = data.get("P136", None)
             movement = data.get("P135", None)
             depicts = data.get("P180", None)
             subj = data.get("P921", None)
             if genre or movement or depicts or subj:
-                viqid = self.configs.make_qua(top.id, 'VisualItem')
+                viqid = self.configs.make_qua(top.id, "VisualItem")
                 vi = model.VisualItem(ident=viqid)
                 top.shows = vi
 
@@ -896,7 +897,6 @@ class WdMapper(Mapper, WdConfigManager):
         if mvmt:
             for m in mvmt:
                 top.classified_as = model.Type(ident=self.expand_uri(m))
-
 
         author = data.get("P50", [])
         cre_place = data.get("P495", [])
@@ -949,7 +949,6 @@ class WdMapper(Mapper, WdConfigManager):
                     ts.identified_by = vocab.DisplayName(content=bdate[:10])
 
     def process_visualitem(self, data, top):
-
         depicts = data.get("P180", None)
         if depicts:
             for d in depicts:
@@ -957,44 +956,41 @@ class WdMapper(Mapper, WdConfigManager):
                 if ref:
                     top.represents = ref
         self.process_work(data, top)
-        self.process_imageref(data, top)     
+        self.process_imageref(data, top)
 
     def process_linguisticobject(self, data, top):
-
         lang = data.get("P407", [])
         for l in lang:
             top.language = model.Language(ident=self.expand_uri(l))
 
         self.process_work(data, top)
-        self.process_imageref(data, top)     
+        self.process_imageref(data, top)
 
     def process_event(self, data, top):
         self.process_imageref(data, top)
 
     def process_period(self, data, top):
-        self.process_imageref(data, top)        
+        self.process_imageref(data, top)
 
     def process_activity(self, data, top):
-        self.process_imageref(data, top)  
+        self.process_imageref(data, top)
 
     def process_digitalobject(self, data, top):
         # FIXME: Not sure what to do with this, or what would cause it?
         print(f"WD Mapper found a top level digital object")
         self.process_linguisticobject(data, top)
 
-
     def process_set(self, data, top):
         print(f"WD Mapper was given a Set")
-        
 
-    def transform(self, record, rectype, reference=False):
+    def transform(self, record, rectype=None, reference=False):
         # Take native wikidata json and produce linked art
         # self.factory is a pre-configured factory...
         # ... but it is just the same factory instance from model
         if not self.acquirer:
-            self.acquirer = self.config['acquirer']
+            self.acquirer = self.config["acquirer"]
 
-        data = record['data']
+        data = record["data"]
         myid = f"{self.namespace}{data['id']}"
 
         if not rectype:
@@ -1018,12 +1014,4 @@ class WdMapper(Mapper, WdConfigManager):
             fn(data, top)
 
         data = model.factory.toJSON(top)
-        return {'data': data, 'identifier': record['identifier'], 'source': 'wikidata'}
-
-
-
-
-
-
-
-
+        return {"data": data, "identifier": record["identifier"], "source": "wikidata"}
