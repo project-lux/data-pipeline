@@ -78,7 +78,7 @@ def populate_google_sheet(data):
     
     # Update the new sheet with data
     body = {
-        'values': data
+        'values': [['Source', 'Timestamp']] + data
     }
     
     result = sheet.values().update(
