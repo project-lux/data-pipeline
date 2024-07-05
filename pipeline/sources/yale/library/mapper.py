@@ -195,11 +195,7 @@ class YulMapper(Mapper):
                             names = []
                         aps.append((ap, names))
                         del_reps.append(r)
-                    elif (
-                        "type" in r
-                        and r["type"] == "VisualItem"
-                        and "digitally_shown_by" in r
-                    ):
+                    elif "type" in r and r["type"] == "VisualItem" and "digitally_shown_by" in r:
                         kill = False
                         for dsb in r["digitally_shown_by"]:
                             if "id" in dsb:
@@ -257,9 +253,7 @@ class YulMapper(Mapper):
                 (nm, parent) = m.groups()
                 if parent.strip() in self.parenthetical_places:
                     uri = self.parenthetical_places[parent.strip()]
-                    rec["data"]["part_of"] = [
-                        {"id": uri, "type": "Place", "_label": parent}
-                    ]
+                    rec["data"]["part_of"] = [{"id": uri, "type": "Place", "_label": parent}]
 
         # Swap MarcGT to AAT equivalents
         if "classified_as" in data:
@@ -349,10 +343,7 @@ class YulMapper(Mapper):
                         if "classified_as" in i:
                             for c in i["classified_as"]:
                                 if "id" in c:
-                                    if (
-                                        c["id"]
-                                        == "http://vocab.getty.edu/aat/300404670"
-                                    ):
+                                    if c["id"] == "http://vocab.getty.edu/aat/300404670":
                                         cont = i.get("content", "")
                                         if cont and "," in cont:
                                             dates = cont.rsplit(",", 1)[-1].strip()
