@@ -83,7 +83,7 @@ def populate_google_sheet(data):
     
     result = sheet.values().update(
         spreadsheetId=SPREADSHEET_ID,
-        range=f'New Tab!A1',
+        range=f'{now_str}!A1',
         valueInputOption='RAW',
         body=body
     ).execute()
