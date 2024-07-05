@@ -82,12 +82,19 @@ def populate_google_sheet(data):
         body = {
             'values': [
                 [
-                    {'userEnteredValue': 'Source', 'userEnteredFormat': {'textFormat': {'bold': True}}},
-                    {'userEnteredValue': 'Timestamp', 'userEnteredFormat': {'textFormat': {'bold': True}}},
-                    {'userEnteredValue': 'Internal or External?', 'userEnteredFormat': {'textFormat': {'bold': True}}}
+                    {'userEnteredValue': {'stringValue': 'Source'}, 'userEnteredFormat': {'textFormat': {'bold': True}}},
+                    {'userEnteredValue': {'stringValue': 'Timestamp'}, 'userEnteredFormat': {'textFormat': {'bold': True}}},
+                    {'userEnteredValue': {'stringValue': 'Internal or External?'}, 'userEnteredFormat': {'textFormat': {'bold': True}}}
                 ]
-            ] + [d for d in data]
+            ] + [
+                [
+                    {'userEnteredValue': {'stringValue': d['source']}},
+                    {'userEnteredValue': {'stringValue': d['timestamp']}},
+                    {'userEnteredValue': {'stringValue': d['type']}}
+                ] for d in data
+            ]
         }
+
             
         result = sheet.values().update(
             spreadsheetId=SPREADSHEET_ID,
@@ -118,10 +125,12 @@ def check_datacache_times(cache):
     cachedt = datetime.fromisoformat(cachets)
     datetime_str = cachedt.strftime("%Y-%m-%d %H:%M:%S")
 
-    cachetimes.append([cache, datetime_str, "Internal" if internal else "External"])    
+    cachetimes[cache] = {
+        'timestamp': datetime_str,
+        'type': "Internal" if internal else "External"
+    }
 
-
-cachetimes = []
+cachetimes = {}
 for cache in cfgs.internal:
     check_datacache_times(cache)
 
