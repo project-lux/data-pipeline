@@ -137,7 +137,6 @@ for cache in cfgs.internal:
 for cache in cfgs.external:
     check_datacache_times(cache)
 
-print(f"cachetimes is {cachetimes}")
 
 print("Writing to Google Sheet")
-#populate_google_sheet(cachetimes)
+populate_google_sheet(cachetimes)
