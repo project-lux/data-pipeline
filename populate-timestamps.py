@@ -116,12 +116,11 @@ def check_datacache_times(cache):
 
 
 cachetimes = []
-for cache in cfgs.external:
-    check_datacache_times(cache)
-
 for cache in cfgs.internal:
     check_datacache_times(cache)
 
+for cache in cfgs.external:
+    check_datacache_times(cache)
 
 print("Writing to Google Sheet")
 populate_google_sheet(cachetimes)
