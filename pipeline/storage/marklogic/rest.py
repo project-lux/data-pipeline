@@ -35,7 +35,6 @@ class RequestThread(threading.Thread):
             headers=headers, data=post_body, timeout=self.store.timeout_short, verify=self.store.verify_ssl)
         if resp.status_code != 200:
             print(resp.text)
-        print(f"POST finished in {time.time() - start}: {resp.status_code}")
         self.result = resp
 
 class MarkLogicStore(object):

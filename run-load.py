@@ -1,10 +1,9 @@
 import os
 import sys
-import json
 import time
-from pipeline.config.config import Config
+import datetime
+from pipeline.config import Config
 from dotenv import load_dotenv
-from pipeline.storage.cache.postgres import poolman
 
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
@@ -15,7 +14,11 @@ cfgs.instantiate_all()
 ### STOP. You probably want to use MLCP instead
 
 ml = cfgs.results['marklogic']['recordcache']
-store = cfgs.marklogic_stores['sandbox']
+store = cfgs.marklogic_stores['ml_sandbox']['store']
+
+
+total = ml.len_estimate()
+BATCH_SIZE = 200
 
 if len(sys.argv) > 2:
     my_slice = int(sys.argv[1])
@@ -24,6 +27,11 @@ else:
     my_slice = 0
     max_slice = 1
 
+to_do = int(total / max_slice)
+done = 0
+curr_amt = 0.0
+prev_pct = 0
+
 batch = []
 start = time.time()
 for rec in ml.iter_records_slice(my_slice, max_slice):
@@ -31,12 +39,25 @@ for rec in ml.iter_records_slice(my_slice, max_slice):
     batch.append(rec)
 
     if len(batch) >= BATCH_SIZE:
-        print(f"Batch built: {time.time()-start}")
-        nstart = time.time()
         store.update_multiple(batch)
-        print(f"Batch sent: {time.time()-nstart}")
+        done += len(batch)
+        if done / to_do > curr_amt:
+            ct = time.time()
+            durn = ct - start
+            now = datetime.datetime.utcnow().isoformat()
+            if prev_pct:
+                diff = int(ct - prev_pct)
+            else:
+                diff = 0
+            prev_pct = ct
+            persec = done / durn
+            total_secs = to_do / persec
+            end = start + total_secs
+            expected = datetime.datetime.fromtimestamp(end)
+            print(f"[{now}] {done}/{to_do} = {curr_amt * 100}% last:{diff} per sec: {persec} finish: {expected}")
+            sys.stdout.flush()
+            curr_amt += 0.005
         batch = []
-        start = time.time()
 
 if batch:
     store.update_multiple(batch)
