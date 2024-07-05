@@ -86,7 +86,7 @@ def populate_google_sheet(data):
                     {'userEnteredValue': 'Timestamp', 'userEnteredFormat': {'textFormat': {'bold': True}}},
                     {'userEnteredValue': 'Internal or External?', 'userEnteredFormat': {'textFormat': {'bold': True}}}
                 ]
-            ] + data
+            ] + [d for d in data]
         }
             
         result = sheet.values().update(
