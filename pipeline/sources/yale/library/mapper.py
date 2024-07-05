@@ -220,13 +220,10 @@ class YulMapper(Mapper):
                     if primary in cxns:
                         name = n['content']
                         break  
-            print(f"found place name: {name}")
             name = name.strip()
             if (name and (m := self.parens_re.match(name))):
                 (nm, parent) = m.groups()
-                print(f"got parent: {parent}")
                 if parent.strip() in self.parenthetical_places:
-                    print("Found parent, adding")
                     uri = self.parenthetical_places[parent.strip()]
                     rec['data']['part_of'] = [{"id":uri, 'type':'Place','_label':parent}]
 
