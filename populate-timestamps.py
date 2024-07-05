@@ -74,7 +74,7 @@ def check_datacache_times(cache):
         return None
     
     cachedt = datetime.fromisoformat(cachets)
-    datetime_str = cachdt.strftime("%Y-%m-%d %H:%M:%S")
+    datetime_str = cachedt.strftime("%Y-%m-%d %H:%M:%S")
     cachetimes.append([cache, datetime_str])
 
 
