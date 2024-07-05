@@ -17,7 +17,6 @@ cfgs = Config(basepath=basepath)
 idmap = cfgs.get_idmap()
 cfgs.instantiate_all()
 
-
 directory = "/home/kd736/data-pipeline"
 creds = None
 gidfn = os.path.join(directory, 'populate-timestamps.txt')
@@ -35,14 +34,13 @@ if os.path.exists(tokfn):
 # If there are no (valid) credentials available, let the user log in.
 if not creds or not creds.valid:
     if creds and creds.expired and creds.refresh_token:
-    	creds.refresh(Request())
+        creds.refresh(Request())
     else:
         flow = InstalledAppFlow.from_client_secrets_file(credfn, scope)
         creds = flow.run_local_server(port=0)
     # Save the credentials for the next run
     with open(tokfn, 'w') as token:
         token.write(creds.to_json())
-
 
 def populate_google_sheet(data):    
     try:
@@ -68,17 +66,6 @@ def populate_google_sheet(data):
             spreadsheetId=SPREADSHEET_ID,
             body=sheet_body
         ).execute()
-        
-        # Get the ID of the newly created sheet
-        sheet_metadata = sheet.get(
-            spreadsheetId=SPREADSHEET_ID,
-            ranges=[],
-            includeGridData=False
-        ).execute()
-        sheets = sheet_metadata.get('sheets', [])
-        new_sheet_id = sheets[-1]['properties']['sheetId']
-        
-        # Update the new sheet with data
 
         header_row = [
             {'userEnteredValue': {'stringValue': 'Source'}, 'userEnteredFormat': {'textFormat': {'bold': True}}},
@@ -93,18 +80,50 @@ def populate_google_sheet(data):
                 {'userEnteredValue': {'stringValue': data[cache]['type']}}
             ] for cache in data
         ]
+        
+        # Use batchUpdate to set cell values with formatting
+        requests = []
+        # Append header row
+        requests.append({
+            'updateCells': {
+                'range': {
+                    'sheetId': sheet_body['requests'][0]['addSheet']['properties']['sheetId'],
+                    'startRowIndex': 0,
+                    'endRowIndex': 1,
+                    'startColumnIndex': 0,
+                    'endColumnIndex': 3
+                },
+                'rows': [{'values': header_row}],
+                'fields': 'userEnteredValue,userEnteredFormat'
+            }
+        })
+
+        # Append data rows
+        for i, row in enumerate(data_rows, start=1):
+            requests.append({
+                'updateCells': {
+                    'range': {
+                        'sheetId': sheet_body['requests'][0]['addSheet']['properties']['sheetId'],
+                        'startRowIndex': i,
+                        'endRowIndex': i + 1,
+                        'startColumnIndex': 0,
+                        'endColumnIndex': 3
+                    },
+                    'rows': [{'values': row}],
+                    'fields': 'userEnteredValue'
+                }
+            })
+
         body = {
-            'values': [header_row] + data_rows
+            'requests': requests
         }
 
-        result = sheet.values().update(
+        sheet.batchUpdate(
             spreadsheetId=SPREADSHEET_ID,
-            range=f'{now_str}!A1',
-            valueInputOption='USER_ENTERED',
             body=body
         ).execute()
-
-        print(f"{result.get('updatedCells')} cells updated.")
+        
+        print(f"Sheet '{now_str}' updated successfully.")
 
     except HttpError as err:
         print(err)
