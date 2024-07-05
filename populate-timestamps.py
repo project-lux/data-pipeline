@@ -79,27 +79,28 @@ def populate_google_sheet(data):
         new_sheet_id = sheets[-1]['properties']['sheetId']
         
         # Update the new sheet with data
-        body = {
-            'values': [
+
+        header_row = [
+            {'userEnteredValue': {'stringValue': 'Source'}, 'userEnteredFormat': {'textFormat': {'bold': True}}},
+            {'userEnteredValue': {'stringValue': 'Timestamp'}, 'userEnteredFormat': {'textFormat': {'bold': True}}},
+            {'userEnteredValue': {'stringValue': 'Internal or External?'}, 'userEnteredFormat': {'textFormat': {'bold': True}}}
+        ]
+
+        data_rows = [
             [
-                'userEnteredValue': {'stringValue': 'Source'}, 'userEnteredFormat': {'textFormat': {'bold': True}},
-                'userEnteredValue': {'stringValue': 'Timestamp'}, 'userEnteredFormat': {'textFormat': {'bold': True}},
-                'userEnteredValue': {'stringValue': 'Internal or External?'}, 'userEnteredFormat': {'textFormat': {'bold': True}}
-            ]
-            ] + [
-            [
-                'userEnteredValue': {'stringValue': cache},
-                'userEnteredValue': {'stringValue': data[cache]['timestamp']},
-                'userEnteredValue': {'stringValue': data[cache]['type']}
+                {'userEnteredValue': {'stringValue': cache}},
+                {'userEnteredValue': {'stringValue': data[cache]['timestamp']}},
+                {'userEnteredValue': {'stringValue': data[cache]['type']}}
             ] for cache in data
-            ]
+        ]
+        body = {
+            'values': [header_row] + data_rows
         }
 
-            
         result = sheet.values().update(
             spreadsheetId=SPREADSHEET_ID,
             range=f'{now_str}!A1',
-            valueInputOption='RAW',
+            valueInputOption='USER_ENTERED',
             body=body
         ).execute()
 
