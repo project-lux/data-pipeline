@@ -2,8 +2,19 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
+
 import os
+import requests
+import random
+from datetime import datetime
+from pipeline.config import Config
+from dotenv import load_dotenv
+
+load_dotenv()
+basepath = os.getenv('LUX_BASEPATH', "")
+cfgs = Config(basepath=basepath)
+idmap = cfgs.get_idmap()
+cfgs.instantiate_all()
 
 
 directory = "/home/kd736/data-pipeline"
@@ -31,6 +42,7 @@ if not creds or not creds.valid:
     with open(tokfn, 'w') as token:
         token.write(creds.to_json())
 
+
 def populate_google_sheet(data):    
     service = build('sheets', 'v4', credentials=creds)
     sheet = service.spreadsheets()
@@ -48,11 +60,30 @@ def populate_google_sheet(data):
 
     print(f"{result.get('updatedCells')} cells updated.")
 
-# Example usage
-data = [
-    ['Name', 'Age', 'City'],
-    ['Alice', '24', 'New York'],
-    ['Bob', '30', 'Los Angeles']
-]
 
-populate_google_sheet(data)
+def check_datacache_times(cache, cachetimes):
+    print("*****Checking datacache times*****")
+
+    if cache in ['ils','ipch','ycba','yuag','ypm']:
+        datacache = cfgs.internal[cache]['datacache']
+    else:
+        datacache = cfgs.external[cache]['datacache']
+    cachets = datacache.latest()
+    if cachets.startswith("0000"):
+        print(f"{cache} failed because latest time begins with 0000")
+        continue
+    
+    cachedt = datetime.fromisoformat(cachets)
+    cachetimes.append = [cache, cachedt]
+
+
+
+cachetimes = []
+for cache in cfgs.external:
+    check_datacache_times(cache)
+
+for cache in cfgs.internal:
+    check_datacache_times(cache)
+
+
+populate_google_sheet(cachetimes)
