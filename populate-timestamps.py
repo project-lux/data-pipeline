@@ -81,17 +81,17 @@ def populate_google_sheet(data):
         # Update the new sheet with data
         body = {
             'values': [
-                [
-                    {'userEnteredValue': {'stringValue': 'Source'}, 'userEnteredFormat': {'textFormat': {'bold': True}}},
-                    {'userEnteredValue': {'stringValue': 'Timestamp'}, 'userEnteredFormat': {'textFormat': {'bold': True}}},
-                    {'userEnteredValue': {'stringValue': 'Internal or External?'}, 'userEnteredFormat': {'textFormat': {'bold': True}}}
-                ]
+            [
+                {'userEnteredValue': {'stringValue': 'Source'}, 'userEnteredFormat': {'textFormat': {'bold': True}}},
+                {'userEnteredValue': {'stringValue': 'Timestamp'}, 'userEnteredFormat': {'textFormat': {'bold': True}}},
+                {'userEnteredValue': {'stringValue': 'Internal or External?'}, 'userEnteredFormat': {'textFormat': {'bold': True}}}
+            ]
             ] + [
-                [
-                    {'userEnteredValue': {'stringValue': cache}},
-                    {'userEnteredValue': {'stringValue': data[cache]['timestamp']}},
-                    {'userEnteredValue': {'stringValue': data[cache]['type']}}
-                ] for cache in data
+            [
+                {'userEnteredValue': {'stringValue': cache}},
+                {'userEnteredValue': {'stringValue': data[cache]['timestamp']}},
+                {'userEnteredValue': {'stringValue': data[cache]['type']}}
+            ] for cache in data
             ]
         }
 
@@ -137,5 +137,7 @@ for cache in cfgs.internal:
 for cache in cfgs.external:
     check_datacache_times(cache)
 
+print(f"cachetimes is {cachetimes}")
+
 print("Writing to Google Sheet")
-populate_google_sheet(cachetimes)
+#populate_google_sheet(cachetimes)
