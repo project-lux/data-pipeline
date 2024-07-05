@@ -50,8 +50,8 @@ def populate_google_sheet(data):
         now = datetime.now()
         now_str = now.strftime("%B %d, %Y")
 
-        # Create a new sheet
-        sheet_body = {
+        # Create a new sheet and get the sheet ID
+        add_sheet_body = {
             'requests': [
                 {
                     'addSheet': {
@@ -62,10 +62,12 @@ def populate_google_sheet(data):
                 }
             ]
         }
-        sheet.batchUpdate(
+        response = sheet.batchUpdate(
             spreadsheetId=SPREADSHEET_ID,
-            body=sheet_body
+            body=add_sheet_body
         ).execute()
+
+        sheet_id = response['replies'][0]['addSheet']['properties']['sheetId']
 
         header_row = [
             {'userEnteredValue': {'stringValue': 'Source'}, 'userEnteredFormat': {'textFormat': {'bold': True}}},
@@ -87,7 +89,7 @@ def populate_google_sheet(data):
         requests.append({
             'updateCells': {
                 'range': {
-                    'sheetId': sheet_body['requests'][0]['addSheet']['properties']['sheetId'],
+                    'sheetId': sheet_id,
                     'startRowIndex': 0,
                     'endRowIndex': 1,
                     'startColumnIndex': 0,
@@ -103,7 +105,7 @@ def populate_google_sheet(data):
             requests.append({
                 'updateCells': {
                     'range': {
-                        'sheetId': sheet_body['requests'][0]['addSheet']['properties']['sheetId'],
+                        'sheetId': sheet_id,
                         'startRowIndex': i,
                         'endRowIndex': i + 1,
                         'startColumnIndex': 0,
