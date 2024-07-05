@@ -80,9 +80,15 @@ def populate_google_sheet(data):
         
         # Update the new sheet with data
         body = {
-            'values': [['Source', 'Timestamp','Internal or External?']] + data
+            'values': [
+                [
+                    {'userEnteredValue': 'Source', 'userEnteredFormat': {'textFormat': {'bold': True}}},
+                    {'userEnteredValue': 'Timestamp', 'userEnteredFormat': {'textFormat': {'bold': True}}},
+                    {'userEnteredValue': 'Internal or External?', 'userEnteredFormat': {'textFormat': {'bold': True}}}
+                ]
+            ] + data
         }
-        
+            
         result = sheet.values().update(
             spreadsheetId=SPREADSHEET_ID,
             range=f'{now_str}!A1',
