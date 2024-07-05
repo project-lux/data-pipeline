@@ -82,15 +82,15 @@ def populate_google_sheet(data):
         body = {
             'values': [
             [
-                {'userEnteredValue': {'stringValue': 'Source'}}, {'userEnteredFormat': {'textFormat': {'bold': True}}},
-                {'userEnteredValue': {'stringValue': 'Timestamp'}}, {'userEnteredFormat': {'textFormat': {'bold': True}}},
-                {'userEnteredValue': {'stringValue': 'Internal or External?'}}, {'userEnteredFormat': {'textFormat': {'bold': True}}}
+                'userEnteredValue': {'stringValue': 'Source'}, 'userEnteredFormat': {'textFormat': {'bold': True}},
+                'userEnteredValue': {'stringValue': 'Timestamp'}, 'userEnteredFormat': {'textFormat': {'bold': True}},
+                'userEnteredValue': {'stringValue': 'Internal or External?'}, 'userEnteredFormat': {'textFormat': {'bold': True}}
             ]
             ] + [
             [
-                {'userEnteredValue': {'stringValue': cache}},
-                {'userEnteredValue': {'stringValue': data[cache]['timestamp']}},
-                {'userEnteredValue': {'stringValue': data[cache]['type']}}
+                'userEnteredValue': {'stringValue': cache},
+                'userEnteredValue': {'stringValue': data[cache]['timestamp']},
+                'userEnteredValue': {'stringValue': data[cache]['type']}
             ] for cache in data
             ]
         }
