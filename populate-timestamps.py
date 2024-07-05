@@ -88,10 +88,10 @@ def populate_google_sheet(data):
                 ]
             ] + [
                 [
-                    {'userEnteredValue': {'stringValue': d['source']}},
-                    {'userEnteredValue': {'stringValue': d['timestamp']}},
-                    {'userEnteredValue': {'stringValue': d['type']}}
-                ] for d in data
+                    {'userEnteredValue': {'stringValue': cache}},
+                    {'userEnteredValue': {'stringValue': data[cache]['timestamp']}},
+                    {'userEnteredValue': {'stringValue': data[cache]['type']}}
+                ] for cache in data
             ]
         }
 
