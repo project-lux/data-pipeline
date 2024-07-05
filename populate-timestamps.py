@@ -61,8 +61,8 @@ def populate_google_sheet(data):
     print(f"{result.get('updatedCells')} cells updated.")
 
 
-def check_datacache_times(cache, cachetimes):
-    print("*****Checking datacache times*****")
+def check_datacache_times(cache):
+    print(f"*****Checking {cache} timestamp*****")
 
     if cache in ['ils','ipch','ycba','yuag','ypm']:
         datacache = cfgs.internal[cache]['datacache']
@@ -71,10 +71,11 @@ def check_datacache_times(cache, cachetimes):
     cachets = datacache.latest()
     if cachets.startswith("0000"):
         print(f"{cache} failed because latest time begins with 0000")
-        continue
+        return None
     
     cachedt = datetime.fromisoformat(cachets)
-    cachetimes.append = [cache, cachedt]
+    datetime_str = cachdt.strftime("%Y-%m-%d %H:%M:%S")
+    cachetimes.append([cache, datetime_str])
 
 
 
@@ -86,4 +87,5 @@ for cache in cfgs.internal:
     check_datacache_times(cache)
 
 
+print("Writing to Google Sheet")
 populate_google_sheet(cachetimes)
