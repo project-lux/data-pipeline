@@ -47,13 +47,43 @@ def populate_google_sheet(data):
     service = build('sheets', 'v4', credentials=creds)
     sheet = service.spreadsheets()
     
+    now = datetime.now()
+    now_str = now.strftime("%B %d, %Y")
+
+    # Create a new sheet
+    sheet_body = {
+        'requests': [
+            {
+                'addSheet': {
+                    'properties': {
+                        'title': now_str
+                    }
+                }
+            }
+        ]
+    }
+    sheet.batchUpdate(
+        spreadsheetId=SPREADSHEET_ID,
+        body=sheet_body
+    ).execute()
+    
+    # Get the ID of the newly created sheet
+    sheet_metadata = sheet.get(
+        spreadsheetId=SPREADSHEET_ID,
+        ranges=[],
+        includeGridData=False
+    ).execute()
+    sheets = sheet_metadata.get('sheets', [])
+    new_sheet_id = sheets[-1]['properties']['sheetId']
+    
+    # Update the new sheet with data
     body = {
         'values': data
     }
     
     result = sheet.values().update(
         spreadsheetId=SPREADSHEET_ID,
-        range='Sheet1!A1',
+        range=f'New Tab!A1',
         valueInputOption='RAW',
         body=body
     ).execute()
@@ -62,7 +92,7 @@ def populate_google_sheet(data):
 
 
 def check_datacache_times(cache):
-    print(f"*****Checking {cache} timestamp*****")
+    print(f"Checking {cache} timestamp")
 
     if cache in ['ils','ipch','ycba','yuag','ypm']:
         datacache = cfgs.internal[cache]['datacache']
