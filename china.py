@@ -46,11 +46,15 @@ get_names(wd_differents)
 
 all_names = same_names + different_names
 
-encoder = OneHotEncoder(sparse=False)
+encoder = OneHotEncoder(sparse_output=False)
 encoder.fit(np.array(all_names).reshape(-1, 1))
 
 encoded_sames = encoder.transform(np.array(same_names).reshape(-1, 1))
 encoded_diffs = encoder.transform(np.array(different_names).reshape(-1, 1))
+
+print(f"encoded sames is {encoded_sames}")
+print("-------------")
+print(f"encoded diffs is {encoded_diffs}")
 
 similarity = cosine_similarity(encoded_sames, encoded_diffs)
 
