@@ -1,5 +1,6 @@
 import numpy as np 
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.metrics.pairwise import cosine_similarity
 from dotenv import load_dotenv
 from pipeline.config import Config
 import os
