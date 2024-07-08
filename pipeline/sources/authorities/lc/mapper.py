@@ -586,6 +586,8 @@ class LcnafMapper(LcMapper):
                         lbl = lbl.get("@value", "")
 
                     txt = lbl.strip()
+                    if txt and "(" in txt:
+                        txt = re.sub(r'^\(.*?\)\s*', '', txt)
                     if txt:
                         if not bpid or bpid.startswith("_:"):
                             bpid = self.build_recs_and_reconcile(txt, "place")
@@ -648,6 +650,8 @@ class LcnafMapper(LcMapper):
                     if type(lbl) == dict:
                         lbl = lbl.get("@value", "")
                     txt = lbl.strip()
+                    if txt and "(" in txt:
+                        txt = re.sub(r'^\(.*?\)\s*', '', txt)
                     if txt:
                         if not dpid or dpid.startswith("_:"):
                             dpid = self.build_recs_and_reconcile(txt, "place")
@@ -682,7 +686,7 @@ class LcnafMapper(LcMapper):
                             al = al.get("@value", "")
                         if fid.startswith("_:"):
                             if al.startswith("("):
-                                al = al.split(" ")[-1]
+                                al = re.sub(r'^\(.*?\)\s*', '', al)
                             fid = self.build_recs_and_reconcile(al, "concept")
                         if fid:
                             if "authorities/names" in fid:
@@ -717,7 +721,7 @@ class LcnafMapper(LcMapper):
                             al = al.get("@value", "")
                         if oid.startswith("_:"):
                             if al.startswith("("):
-                                al = al.split(" ")[-1]
+                                al = re.sub(r'^\(.*?\)\s*', '', al)
                             oid = self.build_recs_and_reconcile(al, "concept")
                         if oid and "names" in oid:
                             # actually member_of
@@ -777,7 +781,7 @@ class LcnafMapper(LcMapper):
                         if type(lbl) == dict:
                             lbl = lbl["@value"]
                         if lbl.startswith("("):
-                            lbl = lbl.split(" ")[-1]
+                            lbl = re.sub(r'^\(.*?\)\s*', '', lbl)
                         gid = o.get("@id", "")
 
                         if (gid == "" or gid.startswith("_")) and lbl:
