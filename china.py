@@ -16,9 +16,10 @@ cfgs.instantiate_all()
 
 wdrc = cfgs.external['wikidata']['recordcache']
 
-wd_sames = ['Q148','Q13426199','Q29520']
+wd_sames = ['Q148']
 
-wd_differents = ['Q20233549','Q942154']
+#wd_differents = ['Q20233549','Q942154']
+wd_differents = ['Q13426199','Q29520']
 
 same_names = []
 
