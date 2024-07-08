@@ -166,12 +166,6 @@ class YulMapper(Mapper):
         # EG https://linked-art.library.yale.edu/node/07e71913-f2be-479c-a388-65025173b4fb
         #    https://linked-art.library.yale.edu/node/14a3551f-6e93-4501-9b18-1b107f0274aa
 
-        # rewrite exemplary_member_of to just member_of
-        # We wouldn't do anything differently between the two predicates
-        if "exemplary_member_of" in data:
-            data["member_of"] = data["exemplary_member_of"]
-            del data["exemplary_member_of"]
-
         for key in ["representation", "digitally_shown_by", "digitally_carried_by"]:
             if key in data:
                 del_reps = []

@@ -188,6 +188,7 @@ class ViafMapper(Mapper):
             if which in self.viaf_prefixes:
                 val = val.replace(" ", "")  # eg sometimes LC is "n  123456" and should be n123456
 
+                # Only include Wikidata references from VIAF if they guess to the right class
                 if which == "WKP":
                     wdeq = wdm.get_reference(val)
                     if wdeq.type == rec.type:
