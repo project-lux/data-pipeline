@@ -55,7 +55,7 @@ encoded_diffs = encoder.transform(np.array(different_names).reshape(-1, 1))
 
 similarity = cosine_similarity(encoded_sames, encoded_diffs)
 
-highest_similarity = np.max(similarity_matrix)
+highest_similarity = np.max(similarity)
 print(f"Highest Similarity: {highest_similarity}")
 
 if highest_similarity > 0.9:
