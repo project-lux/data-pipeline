@@ -687,6 +687,7 @@ class LcnafMapper(LcMapper):
                         if fid.startswith("_:"):
                             if al.startswith("("):
                                 al = re.sub(r'^\(.*?\)\s*', '', al)
+                                print(f"al is {al}")
                             fid = self.build_recs_and_reconcile(al, "concept")
                         if fid:
                             if "authorities/names" in fid:
