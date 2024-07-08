@@ -75,18 +75,45 @@ if "--reload" in sys.argv:
     if "--tgn" in sys.argv:
         acq = cfgs.external["tgn"]["acquirer"]
         cfgs.external["tgn"]["fetcher"].enabled = True
-        acq.force_rebuild = True
         dc = cfgs.external["tgn"]["datacache"]
+    elif "--ulan" in sys.argv:
+        acq = cfgs.external["ulan"]["acquirer"]
+        cfgs.external["ulan"]["fetcher"].enabled = True
+        dc = cfgs.external["ulan"]["datacache"]
+
+    elif "--wikidata" in sys.argv:
+        acq = cfgs.external["wikidata"]["acquirer"]
+        cfgs.external["wikidata"]["fetcher"].enabled = True
+        rc = cfgs.external["wikidata"]["recordcache"]
+
+        # For wikidata, fetch only retrieve ones that we've used
+
+        acq.force_rebuild = True
         if len(sys.argv) > 4 and sys.argv[1].isnumeric() and sys.argv[2].isnumeric():
             my_slice = int(sys.argv[1])
             max_slice = int(sys.argv[2])
         else:
             my_slice = max_slice = -1
 
-        for recid in dc.iter_keys_slice(my_slice, max_slice):
+        for recid in rc.iter_keys_slice(my_slice, max_slice):
+            recid = cfgs.split_qua(recid)[0]
             acq.do_fetch(recid)
             sys.stdout.write(".")
             sys.stdout.flush()
+        sys.exit()
+
+    # For most, just refresh everything
+    acq.force_rebuild = True
+    if len(sys.argv) > 4 and sys.argv[1].isnumeric() and sys.argv[2].isnumeric():
+        my_slice = int(sys.argv[1])
+        max_slice = int(sys.argv[2])
+    else:
+        my_slice = max_slice = -1
+
+    for recid in dc.iter_keys_slice(my_slice, max_slice):
+        acq.do_fetch(recid)
+        sys.stdout.write(".")
+        sys.stdout.flush()
 
 
 ### VALIDATION
