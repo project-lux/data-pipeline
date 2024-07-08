@@ -44,12 +44,13 @@ def get_names(reclist, same=False):
 get_names(wd_sames,same=True)
 get_names(wd_differents)
 
-encoder_same = OneHotEncoder(sparse=False)
-encoder_diff = OneHotEncoder(sparse=False)
+all_names = same_names + different_names
 
-encoded_sames = encoder_same.fit_transform(np.array(same_names).reshape(-1, 1))
-encoded_diffs = encoder_diff.fit_transform(np.array(different_names).reshape(-1, 1))
+encoder = OneHotEncoder(sparse=False)
+encoder.fit(np.array(all_names).reshape(-1, 1))
 
+encoded_sames = encoder.transform(np.array(same_names).reshape(-1, 1))
+encoded_diffs = encoder.transform(np.array(different_names).reshape(-1, 1))
 
 similarity = cosine_similarity(encoded_sames, encoded_diffs)
 
