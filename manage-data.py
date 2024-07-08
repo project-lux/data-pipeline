@@ -85,6 +85,8 @@ if "--reload" in sys.argv:
 
         for recid in dc.iter_keys_slice(my_slice, max_slice):
             acq.do_fetch(recid)
+            sys.stdout.write(".")
+            sys.stdout.flush()
 
 
 ### VALIDATION
