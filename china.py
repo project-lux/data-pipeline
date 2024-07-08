@@ -51,6 +51,6 @@ encoded_sames = encoder_same.fit_transform(np.array(same_names).reshape(-1, 1))
 encoded_diffs = encoder_diff.fit_transform(np.array(different_names).reshape(-1, 1))
 
 
-similarity = cosine_similarity([encoded_sames], [encoded_diffs])
+similarity = cosine_similarity(encoded_sames, encoded_diffs)
 
 print(f"Similarity is: {similarity}")
