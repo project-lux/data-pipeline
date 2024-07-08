@@ -2,6 +2,7 @@ import numpy as np
 from sklearn.preprocessing import OneHotEncoder
 from dotenv import load_dotenv
 from pipeline.config import Config
+import os
 
 
 load_dotenv()
@@ -25,7 +26,7 @@ different_names = []
 
 def get_names(reclist, same=False):
 	for name in reclist:
-		rec = wdrc[f"{name}##quaplace"]
+		rec = wdrc[f"{name}##quaPlace"]
 		data = rec['data']
 		idents = data.get("identified_by")
 		if idents:
