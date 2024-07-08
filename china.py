@@ -18,8 +18,8 @@ wdrc = cfgs.external['wikidata']['recordcache']
 
 wd_sames = ['Q148']
 
-#wd_differents = ['Q20233549','Q942154']
-wd_differents = ['Q13426199','Q29520']
+wd_differents = ['Q20233549','Q942154']
+#wd_differents = ['Q13426199','Q29520']
 
 same_names = []
 
@@ -55,4 +55,16 @@ encoded_diffs = encoder.transform(np.array(different_names).reshape(-1, 1))
 
 similarity = cosine_similarity(encoded_sames, encoded_diffs)
 
-print(f"Similarity is: {similarity}")
+highest_similarity = np.max(similarity_matrix)
+print(f"Highest Similarity: {highest_similarity}")
+
+if highest_similarity > 0.9:
+    print("Very high similarity")
+elif highest_similarity > 0.7:
+    print("High similarity")
+elif highest_similarity > 0.5:
+    print("Moderate similarity")
+elif highest_similarity > 0.3:
+    print("Low similarity")
+else:
+    print("Very low similarity")
