@@ -532,6 +532,10 @@ class TgnMapper(GettyMapper):
                     for c in br['classified_as']:
                         if 'id' in c and c['id'] == "http://vocab.getty.edu/aat/300449152":
                             top.part_of = model.Place(ident=br['id'], label=lbl)
+                        else:
+                            top.part_of = model.Place(ident=br['id'], label=lbl)
+                else:
+                    top.part_of = model.Place(ident=br['id'], label=lbl)
 
         data = model.factory.toJSON(top)
         return {'identifier': record['identifier'], 'data': data, 'source':'tgn'}
