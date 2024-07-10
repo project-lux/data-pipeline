@@ -73,7 +73,7 @@ for r in results:
                         if wyuid:
                             print(f" ... Assigned YUID: {wyuid}")
                             uu = wyuid.rsplit("/", 1)[-1]
-                            luxrec = merged[wyuid]
+                            luxrec = merged[uu]
                             names = [x["content"] for x in luxrec["data"]["identified_by"]]
                             print(f" ... LUX names: {names} ")
                         else:
