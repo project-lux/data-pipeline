@@ -74,6 +74,7 @@ for r in results:
                     if yuid:
                         equivs = idmap[yuid]
                     else:
+                        yuid = ""
                         equivs = []
                     wduri = wdns + wd
 
