@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import requests
 from dotenv import load_dotenv
@@ -30,6 +31,8 @@ if os.path.exists("../data/files/results.jsonl.copy"):
         results.append(jss)
         place_hash[jss["child_id"][0]] = jss
     fh.close()
+
+print(f"Testing {len(results)} rows")
 
 test_res = []
 
