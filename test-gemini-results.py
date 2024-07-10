@@ -15,7 +15,10 @@ cfgs.instantiate_all()
 #  {"batchcomplete": "", "query": {"normalized": [{"from": "Narayanganj_District", "to": "Narayanganj District"}],
 #   "pages": {"2096733": {"pageid": 2096733, "ns": 0, "title": "Narayanganj District", "pageprops": {"wikibase_item": "Q2208354"}}}}}
 
+wd_acq = cfgs.external["wikidata"]["acquirer"]
 wmuri = "https://{LANG}.wikipedia.org/w/api.php?format=json&action=query&prop=pageprops&ppprop=wikibase_item&redirects=1&titles={PAGENAME}"
+wdns = cfgs.external["wikidata"]["namespace"]
+libns = cfgs.internal["ils"]["namespace"]
 
 results = []
 place_hash = {}
@@ -27,7 +30,6 @@ if os.path.exists("../data/files/results.jsonl.copy"):
         place_hash[jss["child_id"][0]] = jss
     fh.close()
 
-wd_acq = cfgs.external["wikidata"]["acquirer"]
 
 for r in results:
     if "wp" in r:
@@ -57,9 +59,21 @@ for r in results:
                 if "pageprops" in pg and "wikibase_item" in pg["pageprops"]:
                     wd = pg["pageprops"]["wikibase_item"]
                     # Now look to see if this item is connected back in LUX
-                    print(f"{r['child_id'][0]}/{r['child_id'][1]} = {r['wp']} = {wd}")
-                    wdrec = wd_acq.acquire(wd, rectype="Place")
-                    names = [x["content"] for x in wdrec["data"]["identified_by"]]
-                    print(names)
+                    cid = r["child_id"][0]
+                    yuid = idmap[libns + cid]
+                    equivs = idmap[yuid]
+                    wduri = wdns + wd
+
+                    print(f"{cid}/{r['child_id'][1]} = {r['wp']} = {wd}")
+                    if wduri in equivs:
+                        print(" ... Positive match!")
+                    else:
+                        wyuid = idmap[wduri]
+                        if wyuid:
+                            print(f" ... Assigned YUID: {wyuid}")
+
+                        wdrec = wd_acq.acquire(wd, rectype="Place")
+                        names = [x["content"] for x in wdrec["data"]["identified_by"]]
+                        print(f" ... Names: {names}")
             else:
                 print("no pages")
