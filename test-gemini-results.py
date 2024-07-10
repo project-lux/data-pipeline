@@ -71,7 +71,10 @@ for r in results:
                     # Now look to see if this item is connected back in LUX
                     cid = r["child_id"][0]
                     yuid = idmap[libns + cid + "##quaPlace"]
-                    equivs = idmap[yuid]
+                    if yuid:
+                        equivs = idmap[yuid]
+                    else:
+                        equivs = []
                     wduri = wdns + wd
 
                     sys.stdout.write(".")
