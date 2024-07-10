@@ -100,14 +100,16 @@ for r in results:
                         if not done:
                             # print(f" ... Unknown WD entry")
                             wdrec = wd_acq.acquire(wd, rectype="Place")
-                            names = [x["content"] for x in wdrec["data"]["identified_by"]]
-                            # print(f" ... WD Name 1: {names[0]}")
-                            tr.append("not seen")
-                            tr.append("")
-                            tr.append(names[0])
-                            test_res.append(tr)
+                            if wdrec:
+                                names = [x["content"] for x in wdrec["data"]["identified_by"]]
+                                # print(f" ... WD Name 1: {names[0]}")
+                                tr.append("not seen")
+                                tr.append("")
+                                tr.append(names[0])
+                                test_res.append(tr)
+                            else:
+                                tr.append("invalid")
 
                     tsv.write("\t".join(tr))
                     tsv.flush()
-
 tsv.close()
