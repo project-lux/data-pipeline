@@ -16,6 +16,7 @@ cfgs.instantiate_all()
 #   "pages": {"2096733": {"pageid": 2096733, "ns": 0, "title": "Narayanganj District", "pageprops": {"wikibase_item": "Q2208354"}}}}}
 
 wd_acq = cfgs.external["wikidata"]["acquirer"]
+merged = cfgs.results["merged"]["recordcache"]
 wmuri = "https://{LANG}.wikipedia.org/w/api.php?format=json&action=query&prop=pageprops&ppprop=wikibase_item&redirects=1&titles={PAGENAME}"
 wdns = cfgs.external["wikidata"]["namespace"]
 libns = cfgs.internal["ils"]["namespace"]
@@ -71,9 +72,14 @@ for r in results:
                         wyuid = idmap[wduri + "##quaPlace"]
                         if wyuid:
                             print(f" ... Assigned YUID: {wyuid}")
-
-                        wdrec = wd_acq.acquire(wd, rectype="Place")
-                        names = [x["content"] for x in wdrec["data"]["identified_by"]]
-                        print(f" ... Names: {names}")
+                            uu = wyuid.rsplit("/", 1)[-1]
+                            luxrec = merged[wyuid]
+                            names = [x["content"] for x in luxrec["data"]["identified_by"]]
+                            print(f" ... LUX names: {names} ")
+                        else:
+                            print(f" ... Unknown WD entry")
+                            wdrec = wd_acq.acquire(wd, rectype="Place")
+                            names = [x["content"] for x in wdrec["data"]["identified_by"]]
+                            print(f" ... WD Name 1: {names[0]}")
             else:
                 print("no pages")
