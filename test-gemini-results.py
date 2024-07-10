@@ -60,7 +60,7 @@ for r in results:
                     wd = pg["pageprops"]["wikibase_item"]
                     # Now look to see if this item is connected back in LUX
                     cid = r["child_id"][0]
-                    yuid = idmap[libns + cid]
+                    yuid = idmap[libns + cid + "##quaPlace"]
                     equivs = idmap[yuid]
                     wduri = wdns + wd
 
@@ -68,7 +68,7 @@ for r in results:
                     if wduri in equivs:
                         print(" ... Positive match!")
                     else:
-                        wyuid = idmap[wduri]
+                        wyuid = idmap[wduri + "##quaPlace"]
                         if wyuid:
                             print(f" ... Assigned YUID: {wyuid}")
 
