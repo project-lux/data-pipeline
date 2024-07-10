@@ -115,5 +115,6 @@ for r in results:
                                 tr.append("invalid")
 
                     tsv.write("\t".join(tr))
+                    tsv.write("\n")
                     tsv.flush()
 tsv.close()
