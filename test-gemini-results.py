@@ -104,7 +104,7 @@ for r in results:
                             tr.append(names[0])
                             test_res.append(tr)
 
-                    tsv.write("\t".join(test_res))
+                    tsv.write("\t".join(tr))
                     tsv.flush()
 
 tsv.close()
