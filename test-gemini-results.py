@@ -31,30 +31,36 @@ if os.path.exists("../data/files/results.jsonl.copy"):
         place_hash[jss["child_id"][0]] = jss
     fh.close()
 
+test_res = []
+
+tsv = open("testing.tsv", "w")
 
 for r in results:
     if "wp" in r:
+        wp = r["wp"]
+        wpname = wp.rsplit("/", 1)[-1]
+
         # fetch it from wikimedia and recache at end
-        try:
-            wp = r["wp"]
-            wpname = wp.rsplit("/", 1)[-1]
-            lang = wp.replace("https://", "")
-            lang = lang.replace("http://", "")  # just in case
-            lang = lang.split(".")[0]
-            if lang != "en" or not "wp_wd" in r:
-                print(f"Fetching: {wpname} from {lang}")
-                resp = requests.get(wmuri.replace("{PAGENAME}", wpname).replace("{LANG}", lang))
-                js = resp.json()
-                r["wp_wd"] = js
-        except Exception as e:
-            print("Wikimedia API request raised exception:")
-            print(e)
+        if 0:  # run through current known
+            try:
+                lang = wp.replace("https://", "")
+                lang = lang.replace("http://", "")  # just in case
+                lang = lang.split(".")[0]
+                if lang != "en" or not "wp_wd" in r:
+                    print(f"Fetching: {wpname} from {lang}")
+                    resp = requests.get(wmuri.replace("{PAGENAME}", wpname).replace("{LANG}", lang))
+                    js = resp.json()
+                    r["wp_wd"] = js
+            except Exception as e:
+                print("Wikimedia API request raised exception:")
+                print(e)
+
         if "wp_wd" in r:
             qry = r["wp_wd"].get("query", {})
             if "normalized" in qry:
                 title = qry["normalized"][0]["to"]
             else:
-                title = r["wp"].rsplit("/", 1)[-1]
+                title = ""
             if "pages" in qry:
                 pg = list(qry["pages"].values())[0]
                 if "pageprops" in pg and "wikibase_item" in pg["pageprops"]:
@@ -65,21 +71,37 @@ for r in results:
                     equivs = idmap[yuid]
                     wduri = wdns + wd
 
+                    sys.stdout.write(".")
+                    sys.stdout.flush()
+
+                    tr = [cid, r["child_id"][1], r.get("name", ""), wpname, title, wduri, yuid]
                     print(f"{cid}/{r['child_id'][1]} = {r['wp']} = {wd}")
                     if wduri in equivs:
-                        print(" ... Positive match!")
+                        tr.append("match")
+                        test_res.append(tr)
                     else:
                         wyuid = idmap[wduri + "##quaPlace"]
                         if wyuid:
-                            print(f" ... Assigned YUID: {wyuid}")
+                            # print(f" ... Assigned YUID: {wyuid}")
                             uu = wyuid.rsplit("/", 1)[-1]
                             luxrec = merged[uu]
                             names = [x["content"] for x in luxrec["data"]["identified_by"] if x["type"] == "Name"]
-                            print(f" ... LUX name 1: {names[0]} ")
+                            # print(f" ... LUX name 1: {names[0]} ")
+                            tr.append("other")
+                            tr.append(uu)
+                            tr.append(names[0])
+                            test_res.append(tr)
                         else:
-                            print(f" ... Unknown WD entry")
+                            # print(f" ... Unknown WD entry")
                             wdrec = wd_acq.acquire(wd, rectype="Place")
                             names = [x["content"] for x in wdrec["data"]["identified_by"]]
-                            print(f" ... WD Name 1: {names[0]}")
-            else:
-                print("no pages")
+                            # print(f" ... WD Name 1: {names[0]}")
+                            tr.append("not seen")
+                            tr.append("")
+                            tr.append(names[0])
+                            test_res.append(tr)
+
+                    tsv.write("\t".join(test_res))
+                    tsv.flush()
+
+tsv.close()
