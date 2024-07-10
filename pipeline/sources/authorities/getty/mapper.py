@@ -513,6 +513,7 @@ class TgnMapper(GettyMapper):
                 elif cxid in self.accept_values:
                     top.classified_as = model.Type(ident=cxid, label=lbl)
 
+
         if topcls == model.Place:
             # broader
             brdrs = rec.get('part_of', [])
@@ -522,6 +523,8 @@ class TgnMapper(GettyMapper):
             if type(brdrs2) != list:
                 brdrs2 = [brdrs2]       
             brdrs.extend(brdrs2)
+
+            has_300449152 = False
             for br in brdrs:
                 if type(br) == str:
                     br = {'id': br, '_label': ""}
@@ -532,11 +535,16 @@ class TgnMapper(GettyMapper):
                     for c in br['classified_as']:
                         if 'id' in c and c['id'] == "http://vocab.getty.edu/aat/300449152":
                             top.part_of = model.Place(ident=br['id'], label=lbl)
+                            has_300449152 = True
                             break
-                        else:
-                            top.part_of = model.Place(ident=br['id'], label=lbl)
-                else:
-                    top.part_of = model.Place(ident=br['id'], label=lbl)
+            if not has_300449152:
+                for br in brdrs:
+                    if type(br) == str:
+                        br = {'id': br, '_label': ""}
+                    lbl = br.get("_label", "")
+                    if type(lbl) == dict:
+                        lbl = lbl['@value']
+                    top.broader = model.Place(ident=br['id'], label=lbl)
 
         data = model.factory.toJSON(top)
         return {'identifier': record['identifier'], 'data': data, 'source':'tgn'}
