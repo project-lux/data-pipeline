@@ -78,23 +78,26 @@ for r in results:
                     sys.stdout.flush()
 
                     tr = [cid, r["child_id"][1], r.get("name", ""), wpname, title, wduri, yuid]
-                    print(f"{cid}/{r['child_id'][1]} = {r['wp']} = {wd}")
+                    # print(f"{cid}/{r['child_id'][1]} = {r['wp']} = {wd}")
                     if wduri in equivs:
                         tr.append("match")
                         test_res.append(tr)
                     else:
+                        done = 0
                         wyuid = idmap[wduri + "##quaPlace"]
                         if wyuid:
                             # print(f" ... Assigned YUID: {wyuid}")
                             uu = wyuid.rsplit("/", 1)[-1]
                             luxrec = merged[uu]
-                            names = [x["content"] for x in luxrec["data"]["identified_by"] if x["type"] == "Name"]
-                            # print(f" ... LUX name 1: {names[0]} ")
-                            tr.append("other")
-                            tr.append(uu)
-                            tr.append(names[0])
-                            test_res.append(tr)
-                        else:
+                            if luxrec:
+                                names = [x["content"] for x in luxrec["data"]["identified_by"] if x["type"] == "Name"]
+                                # print(f" ... LUX name 1: {names[0]} ")
+                                tr.append("other")
+                                tr.append(uu)
+                                tr.append(names[0])
+                                test_res.append(tr)
+                                done = 1
+                        if not done:
                             # print(f" ... Unknown WD entry")
                             wdrec = wd_acq.acquire(wd, rectype="Place")
                             names = [x["content"] for x in wdrec["data"]["identified_by"]]
