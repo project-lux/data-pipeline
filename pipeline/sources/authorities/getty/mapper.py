@@ -532,6 +532,7 @@ class TgnMapper(GettyMapper):
                     for c in br['classified_as']:
                         if 'id' in c and c['id'] == "http://vocab.getty.edu/aat/300449152":
                             top.part_of = model.Place(ident=br['id'], label=lbl)
+                            break
                         else:
                             top.part_of = model.Place(ident=br['id'], label=lbl)
                 else:
