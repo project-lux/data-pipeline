@@ -74,8 +74,8 @@ for r in results:
                             print(f" ... Assigned YUID: {wyuid}")
                             uu = wyuid.rsplit("/", 1)[-1]
                             luxrec = merged[uu]
-                            names = [x["content"] for x in luxrec["data"]["identified_by"]]
-                            print(f" ... LUX names: {names} ")
+                            names = [x["content"] for x in luxrec["data"]["identified_by"] if x["type"] == "Name"]
+                            print(f" ... LUX name 1: {names[0]} ")
                         else:
                             print(f" ... Unknown WD entry")
                             wdrec = wd_acq.acquire(wd, rectype="Place")
