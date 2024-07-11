@@ -61,13 +61,20 @@ for r in results:
                 sys.stdout.write(".")
                 sys.stdout.flush()
 
-                tr = [cid, r["child_id"][1], r.get("name", ""), wpname, wduri, yuid]
-                # print(f"{cid}/{r['child_id'][1]} = {r['wp']} = {wd}")
-                if wduri in equivs:
-                    tr.append("match")
+                tr = [
+                    libns + cid,  # Library record URI
+                    wp,  # Wikipedia URI
+                    wduri,  # Wikidata URI
+                    yuid,  # LUX URI from idmap
+                    r["child_id"][1],  # Name from Library
+                    r.get("name", ""),  # Name from LLM
+                    wpname,
+                ]
+
+                if wduri + "##quaPlace" in equivs:
+                    tr.append("match!")
                     test_res.append(tr)
                 else:
-                    done = 0
                     wyuid = idmap[wduri + "##quaPlace"]
                     if wyuid:
                         # print(f" ... Assigned YUID: {wyuid}")
@@ -76,8 +83,8 @@ for r in results:
                         if luxrec:
                             names = [x["content"] for x in luxrec["data"]["identified_by"] if x["type"] == "Name"]
                             # print(f" ... LUX name 1: {names[0]} ")
-                            tr.append("other")
-                            tr.append(uu)
+                            tr.append("WD Exists")
+                            tr.append(wyuid)
                             tr.append(names[0])
                             test_res.append(tr)
                             done = 1
@@ -87,8 +94,8 @@ for r in results:
                         if wdrec:
                             names = [x["content"] for x in wdrec["data"]["identified_by"]]
                             # print(f" ... WD Name 1: {names[0]}")
-                            tr.append("not seen")
-                            tr.append("")
+                            tr.append("WD Unseen")
+                            tr.append("--")
                             tr.append(names[0])
                             test_res.append(tr)
                         else:
