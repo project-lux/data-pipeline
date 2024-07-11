@@ -77,12 +77,17 @@ for r in results:
                 else:
                     wdrec = wd_acq.acquire(wd, rectype="Place")
                     if wdrec:
-                        names = [x["content"] for x in wdrec["data"]["identified_by"]]
-                        # print(f" ... WD Name 1: {names[0]}")
-                        tr.append("WD Unseen")
-                        tr.append(names[0])
+                        try:
+                            names = [x["content"] for x in wdrec["data"]["identified_by"]]
+                            # print(f" ... WD Name 1: {names[0]}")
+                            tr.append("WD Exists")
+                            tr.append(names[0])
+                        except:
+                            # No names? Terrible record...
+                            tr.append("WD Exists")
+                            tr.append("...But No Names")
                     else:
-                        tr.append("WD invalid?")
+                        tr.append("WD invalid")
                         tr.append("")
 
                     wyuid = idmap[wduri + "##quaPlace"]
