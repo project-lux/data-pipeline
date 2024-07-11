@@ -72,34 +72,30 @@ for r in results:
                 ]
 
                 if wduri + "##quaPlace" in equivs:
-                    tr.append("match!")
+                    tr.append("match!!")
                     test_res.append(tr)
                 else:
+                    wdrec = wd_acq.acquire(wd, rectype="Place")
+                    if wdrec:
+                        names = [x["content"] for x in wdrec["data"]["identified_by"]]
+                        # print(f" ... WD Name 1: {names[0]}")
+                        tr.append("WD Unseen")
+                        tr.append(names[0])
+                    else:
+                        tr.append("WD invalid?")
+                        tr.append("")
+
                     wyuid = idmap[wduri + "##quaPlace"]
                     if wyuid:
-                        # print(f" ... Assigned YUID: {wyuid}")
                         uu = wyuid.rsplit("/", 1)[-1]
                         luxrec = merged[uu]
                         if luxrec:
                             names = [x["content"] for x in luxrec["data"]["identified_by"] if x["type"] == "Name"]
                             # print(f" ... LUX name 1: {names[0]} ")
-                            tr.append("WD Exists")
+                            tr.append("WD in LUX")
                             tr.append(wyuid)
                             tr.append(names[0])
-                            test_res.append(tr)
-                            done = 1
-                    if not done:
-                        # print(f" ... Unknown WD entry")
-                        wdrec = wd_acq.acquire(wd, rectype="Place")
-                        if wdrec:
-                            names = [x["content"] for x in wdrec["data"]["identified_by"]]
-                            # print(f" ... WD Name 1: {names[0]}")
-                            tr.append("WD Unseen")
-                            tr.append("--")
-                            tr.append(names[0])
-                            test_res.append(tr)
-                        else:
-                            tr.append("invalid")
+                    test_res.append(tr)
 
                 tsv.write("\t".join(tr))
                 tsv.write("\n")
