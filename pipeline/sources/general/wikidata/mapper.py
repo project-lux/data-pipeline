@@ -115,7 +115,54 @@ class WdMapper(Mapper, WdConfigManager):
         # * Nationality -- wikidata has a Place, model expects a Type
         # * Organizations are often conflation of 2+ of Place, Group, Collection (Set), Building (HMO)
 
-        # P571 is inception, which means it cannot be a place ... most likely a group
+        # Some basic tests:
+        if "identifier" in data and "data" in data:
+            # Actually a record
+            data = data["data"]
+
+        useful_instance_of = {
+            "Q4167410": None,  # Disambiguation page ... this isn't anything so abort
+            "Q5": model.Person,  # Human = Person
+            "Q4830453": model.Group,
+            "Q43229": model.Group,
+            "Q16334295": model.Group,
+            "Q167037": model.Group,
+            "Q783794": model.Group,
+            "Q163740": model.Group,
+            "Q34770": model.Language,
+            "Q1288568": model.Language,
+            "Q33742": model.Language,
+            "Q20162172": model.Language,
+            "Q436240": model.Language,
+            "Q2315359": model.Language,
+            "Q515": model.Place,
+            "Q6256": model.Place,
+            "Q3624078": model.Place,
+            "Q7275": model.Place,
+            "Q28575": model.Place,
+            "Q82794": model.Place,
+            "Q3957": model.Place,
+            "Q1549591": model.Place,
+            "Q702492": model.Place,
+            "Q35657": model.Place,
+            "Q106458883": model.Place,
+            "Q34876": model.Place,
+            "Q486972": model.Place,
+            "Q15284": model.Place,
+            "Q532": model.Place,
+            "Q208469": model.MeasurementUnit,
+            "Q1978718": model.MeasurementUnit,
+            "Q11344": model.Material,
+            "Q1371562": model.MeasurementUnit,
+            "Q1790144": model.MeasurementUnit,
+            "Q3647172": model.MeasurementUnit,
+            "Q3550873": model.MeasurementUnit,
+        }
+
+        if "P31" in data:
+            for p in data["P31"]:
+                if p in useful_instance_of:
+                    return useful_instance_of[p]
 
         prop_dist = {
             "person": ["P21", "P569", "P570", "P19", "P20", "P734", "P735"],

@@ -4,6 +4,7 @@ import json
 import requests
 from dotenv import load_dotenv
 from pipeline.config import Config
+from cromulent.model import Place
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")
@@ -16,6 +17,8 @@ cfgs.instantiate_all()
 #  {"batchcomplete": "", "query": {"normalized": [{"from": "Narayanganj_District", "to": "Narayanganj District"}],
 #   "pages": {"2096733": {"pageid": 2096733, "ns": 0, "title": "Narayanganj District", "pageprops": {"wikibase_item": "Q2208354"}}}}}
 
+wd_data = cfgs.external["wikidata"]["datacache"]
+wd_mapper = cfgs.external["wikidata"]["mapper"]
 wd_acq = cfgs.external["wikidata"]["acquirer"]
 merged = cfgs.results["merged"]["recordcache"]
 wmuri = "https://{LANG}.wikipedia.org/w/api.php?format=json&action=query&prop=pageprops&ppprop=wikibase_item&redirects=1&titles={PAGENAME}"
@@ -77,6 +80,14 @@ for r in results:
                 else:
                     wdrec = wd_acq.acquire(wd, rectype="Place")
                     if wdrec:
+                        # Does it predict as a Place?
+                        data = wd_data[wd]
+                        guessed = wd_mapper.guess_type(data)
+                        if guessed != Place:
+                            # Probably bad
+                            tr.append("NOT PLACE")
+                        else:
+                            tr.append("place okay")
                         try:
                             names = [x["content"] for x in wdrec["data"]["identified_by"]]
                             # print(f" ... WD Name 1: {names[0]}")
