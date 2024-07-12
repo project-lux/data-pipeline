@@ -23,7 +23,7 @@ if os.path.exists("testing.tsv"):
         okay = info[7]
         if not okay in ["NOT PLACE", "WD invalid"]:
             # fetch from datacache, hash the properties
-            wd = okay[2].split("/")[-1]
+            wd = info[2].split("/")[-1]
             data = wd_data[wd]
             for k in data["data"].keys():
                 if k.startswith("P"):
