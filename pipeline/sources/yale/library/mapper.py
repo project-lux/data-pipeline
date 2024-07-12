@@ -91,6 +91,15 @@ class YulMapper(Mapper):
             self.parenthetical_places = {}
         self.parens_re = re.compile("^(.+) \((.+)\)$")
 
+        fn = os.path.join(data_dir, "lib_enhance_places.json")
+        if os.path.exists(fn):
+            fh = open(fn)
+            data = fh.read()
+            fh.close()
+            self.gemini_place_data = json.loads(data)
+        else:
+            self.gemini_place_data = {}
+
     def walk_multi(self, node, top=False):
         for k, v in node.items():
             if k in multi_props and not type(v) == list:
@@ -239,6 +248,48 @@ class YulMapper(Mapper):
                 if parent.strip() in self.parenthetical_places:
                     uri = self.parenthetical_places[parent.strip()]
                     rec["data"]["part_of"] = [{"id": uri, "type": "Place", "_label": parent}]
+
+            uu = data["id"].split("/")[-1]
+            if uu in self.gemini_place_data:
+                info = self.gemini_place_data[uu]
+                del self.gemini_place_data[uu]
+                if "wd" in info:
+                    try:
+                        data["equivalent"].append({"id": info["wd"], "type": "Place", "_label": data.get("_label", name)})
+                    except:
+                        data["equivalent"] = [{"id": info["wd"], "type": "Place", "_label": data.get("_label", name)}]
+                if "desc" in info:
+                    dt = {
+                        "id": "http://vocab.getty.edu/aat/300435416",
+                        "type": "Type",
+                        "classified_as": [{"id": "http://vocab.getty.edu/aat/300418049", "type": "Type"}],
+                    }
+                    desc = {
+                        "type": "LinguisticObject",
+                        "content": info["desc"] + " (AI generated)",
+                        "classified_as": [dt],
+                    }
+                    try:
+                        data["referred_to_by"].append(desc)
+                    except:
+                        data["referred_to_by"] = [desc]
+
+                if "wp" in info:
+                    page = {"id": "http://vocab.getty.edu/aat/300264578", "type": "Type", "_label": "Web Page"}
+                    wp = {
+                        "type": "LinguisticObject",
+                        "digitally_carried_by": [
+                            {
+                                "type": "DigitalObject",
+                                "classified_as": [page],
+                                "access_point": [{"id": info["wp"], "type": "DigitalObject"}],
+                            }
+                        ],
+                    }
+                    try:
+                        data["subject_of"].append(wp)
+                    except:
+                        data["subject_of"] = [wp]
 
         # Swap MarcGT to AAT equivalents
         if "classified_as" in data:
