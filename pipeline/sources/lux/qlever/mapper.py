@@ -32,11 +32,11 @@ SELECT DISTINCT ?what ?ql_matchingword_t_nann WHERE {
   } LIMIT 1000
 """
 
-class QleverMapper(Mapper):
 
+class QleverMapper(Mapper):
     def __init__(self, config):
         Mapper.__init__(self, config)
-        self.configs = config['all_configs']      
+        self.configs = config["all_configs"]
         self.luxns = "https://lux.collections.yale.edu/ns/"
         self.crmns = "http://www.cidoc-crm.org/cidoc-crm/"
         self.lans = "https://linked.art/ns/terms/"
@@ -54,31 +54,45 @@ class QleverMapper(Mapper):
         self.date_type = "^^<http://www.w3.org/2001/XMLSchema#dateTime>"
 
         self.globals = self.configs.globals
-        self.ignore_props_for_refs = ['identified_by', 'referred_to_by', 'equivalent',  \
-            'subject_of', 'attributed_by', 'contact_point', 'defined_by', \
-            'shown_by', 'carried_by', 'digitally_carried_by', 'digitally_shown_by', \
-            'approximated_by', 'dimension', 'access_point',\
-            'digitally_carries', 'subject_to', 'assigned_by', 'exemplary_member_of']
+        self.ignore_props_for_refs = [
+            "identified_by",
+            "referred_to_by",
+            "equivalent",
+            "subject_of",
+            "attributed_by",
+            "contact_point",
+            "defined_by",
+            "shown_by",
+            "carried_by",
+            "digitally_carried_by",
+            "digitally_shown_by",
+            "approximated_by",
+            "dimension",
+            "access_point",
+            "digitally_carries",
+            "subject_to",
+            "assigned_by",
+            "exemplary_member_of",
+        ]
 
         self.type_map = {
             "HumanMadeObject": f"{self.crmns}E22_Human-Made_Object",
-            "DigitalObject": f"{self.digns}D1_Digital_Object", 
-            "VisualItem": f"{self.crmns}E36_Visual_Item", 
-            "LinguisticObject": f"{self.crmns}E33_Linguistic_Object", 
+            "DigitalObject": f"{self.digns}D1_Digital_Object",
+            "VisualItem": f"{self.crmns}E36_Visual_Item",
+            "LinguisticObject": f"{self.crmns}E33_Linguistic_Object",
             "Set": f"{self.lans}Set",
-            "Person": f"{self.crmns}E21_Person", 
-            "Group": f"{self.crmns}E74_Group", 
+            "Person": f"{self.crmns}E21_Person",
+            "Group": f"{self.crmns}E74_Group",
             "Place": f"{self.crmns}E53_Place",
-            "Type": f"{self.crmns}E55_Type", 
-            "Material": f"{self.crmns}E57_Material", 
-            "Language": f"{self.crmns}E56_Language", 
-            "Unit": f"{self.crmns}E58_Measurement_Unit", 
-            "MeasurementUnit": f"{self.crmns}E58_Measurement_Unit", 
+            "Type": f"{self.crmns}E55_Type",
+            "Material": f"{self.crmns}E57_Material",
+            "Language": f"{self.crmns}E56_Language",
+            "Unit": f"{self.crmns}E58_Measurement_Unit",
+            "MeasurementUnit": f"{self.crmns}E58_Measurement_Unit",
             "Currency": f"{self.crmns}E98_Currency",
-            "Event": f"{self.crmns}E5_Event", 
-            "Activity": f"{self.crmns}E7_Activity", 
-            "Period": f"{self.crmns}E4_Period", 
-
+            "Event": f"{self.crmns}E5_Event",
+            "Activity": f"{self.crmns}E7_Activity",
+            "Period": f"{self.crmns}E4_Period",
             "Production": f"{self.crmns}E12_Production",
             "AttributeAssignment": f"{self.crmns}E13_Attribute_Assignment",
             "Right": f"{self.crmns}E30_Right",
@@ -93,7 +107,7 @@ class QleverMapper(Mapper):
             "InformationObject": f"{self.crmns}E73_Information_Object",
             "Name": f"{self.crmns}E33_E41_Linguistic_Appellation",
             "DigitalService": f"{self.lans}DigitalService",
-            "Encounter": f"{self.scins}S19_Encounter"
+            "Encounter": f"{self.scins}S19_Encounter",
         }
 
         self.prop_map = {
@@ -108,7 +122,7 @@ class QleverMapper(Mapper):
             "used_for": f"{self.crmns}P16i_was_used_for",
             "type": f"{self.rdfns}type",
             "referred_to_by": f"{self.crmns}P67i_is_referred_to_by",
-            "equivalent": f"{self.lans}equivalent",           
+            "equivalent": f"{self.lans}equivalent",
             "representation": f"{self.crmns}P138i_has_representation",
             "subject_of": f"{self.crmns}P129i_is_subject_of",
             "attributed_by": f"{self.crmns}P140i_was_attributed_by",
@@ -161,31 +175,30 @@ class QleverMapper(Mapper):
             "value": f"{self.crmns}P90_has_value",
             "subject_to": f"{self.crmns}P104_is_subject_to",
             "occurs_during": f"{self.crmns}P10_during",
-            "used_object_of_type": f"{self.crmns}P125_used_object_of_type"
+            "used_object_of_type": f"{self.crmns}P125_used_object_of_type",
         }
 
-
     def walk_for_triples(self, node, conf, ignore=False):
-        if not 'id' in node:
+        if not "id" in node:
             me = f"{conf['base']}_{conf['bid']}"
-            conf['bid'] += 1
+            conf["bid"] += 1
         else:
-            me = node['id']
-            if me != conf['base'] and me.startswith(self.datans):
+            me = node["id"]
+            if me != conf["base"] and me.startswith(self.datans):
                 # Triples will come from its own record, including metatypes
                 if not ignore:
-                    conf['refs'][me] = 1
+                    conf["refs"][me] = 1
                 return me
             else:
                 if not me.startswith(self.datans):
                     # sanitize external links
-                    me = me.replace(' ', '%20')
-                    me = me.replace('\n', '')
-                    me = me.replace('\t', '')
-                    me = me.replace('\r', '')
-                    me = me.replace('"', '')
-                    me = me.replace('{', '%7B')
-                    me = me.replace('}', '%7D')
+                    me = me.replace(" ", "%20")
+                    me = me.replace("\n", "")
+                    me = me.replace("\t", "")
+                    me = me.replace("\r", "")
+                    me = me.replace('"', "")
+                    me = me.replace("{", "%7B")
+                    me = me.replace("}", "%7D")
 
         try:
             uri_me = URIRef(me).n3()
@@ -194,38 +207,52 @@ class QleverMapper(Mapper):
             print(e)
             return None
 
-        for (k,v) in node.items():
-            if k in ['id', '_label', '@context']:
+        for k, v in node.items():
+            if k in ["id", "_label", "@context"]:
                 continue
             pred = self.prop_map.get(k, None)
             if pred is None:
-                if k in ['part', 'part_of']:
-                    if 'type' in node:
-                        mytype = node['type']
-                        if mytype in ['LinguisticObject', 'VisualItem', 'DigitalObject', 'Name', \
-                                        'Identifier', 'InformationObject']:
-                            if k == 'part':
+                if k in ["part", "part_of"]:
+                    if "type" in node:
+                        mytype = node["type"]
+                        if mytype in [
+                            "LinguisticObject",
+                            "VisualItem",
+                            "DigitalObject",
+                            "Name",
+                            "Identifier",
+                            "InformationObject",
+                        ]:
+                            if k == "part":
                                 pred = f"{self.crmns}P106_is_composed_of"
                             else:
                                 pred = f"{self.crmns}P106i_forms_part_of"
-                        elif mytype in ['Production', 'Creation', 'Formation', 'Dissolution', 'Event', \
-                                        'Activity', 'Period', 'AttributeAssignment']:
-                            if k == 'part':
+                        elif mytype in [
+                            "Production",
+                            "Creation",
+                            "Formation",
+                            "Dissolution",
+                            "Event",
+                            "Activity",
+                            "Period",
+                            "AttributeAssignment",
+                        ]:
+                            if k == "part":
                                 pred = f"{self.crmns}P9_consists_of"
                             else:
                                 pred = f"{self.crmns}P9i_forms_part_of"
-                        elif mytype == 'HumanMadeObject':
-                            if k == 'part':
+                        elif mytype == "HumanMadeObject":
+                            if k == "part":
                                 pred = f"{self.crmns}P46_is_composed_of"
                             else:
                                 pred = f"{self.crmns}P46i_forms_part_of"
-                        elif mytype == 'Place':
-                            if k == 'part':
+                        elif mytype == "Place":
+                            if k == "part":
                                 pred = f"{self.crmns}P89i_contains"
                             else:
                                 pred = f"{self.crmns}P89_falls_within"
-                        elif mytype in ['Type', 'Currency', 'MeasurementUnit', 'Material', 'Language']:
-                            if k == 'part':
+                        elif mytype in ["Type", "Currency", "MeasurementUnit", "Material", "Language"]:
+                            if k == "part":
                                 pred = f"{self.skosns}broader"
                             else:
                                 pred = f"{self.skosns}narrower"
@@ -235,17 +262,17 @@ class QleverMapper(Mapper):
                     else:
                         print(f"Saw {node} with {k} but no type?")
                         pred = f"{self.luxns}{k}"
-                elif k == 'member_of':
-                    if v and type(v) == list and type(v[0]) == dict and 'type' in v[0]:
-                        objtype = v[0]['type']
+                elif k == "member_of":
+                    if v and type(v) == list and type(v[0]) == dict and "type" in v[0]:
+                        objtype = v[0]["type"]
                         if objtype == "Set":
                             pred = f"{self.lans}member_of"
                         elif objtype == "Group":
                             pred = f"{self.crmns}P107i_is_current_or_former_member_of"
                         else:
                             print(f"Saw {objtype} as class of object of 'member_of'")
-                            pred = f"{self.lans}member_of"                            
-                    elif 'type' in node and node['type'] in ['Person', 'Group']:
+                            pred = f"{self.lans}member_of"
+                    elif "type" in node and node["type"] in ["Person", "Group"]:
                         pred = f"{self.crmns}P107i_is_current_or_former_member_of"
                     else:
                         print(f"Saw {v} as value for member_of")
@@ -254,7 +281,7 @@ class QleverMapper(Mapper):
                     print(f"Failed to process property: {k} in {me}")
                     continue
 
-            t = {"subject": me, 'predicate': pred}
+            t = {"subject": me, "predicate": pred}
             ignore_now = ignore
             if not ignore:
                 ignore = k in self.ignore_props_for_refs
@@ -262,154 +289,151 @@ class QleverMapper(Mapper):
             if not type(v) in [list, dict]:
                 # process a value
                 if k in ["content", "format", "defined_by"]:
-                    value = v.replace('\t', '\\t')
-                    value = value.replace('\n', '\\n')
-                    value = value.replace('\r', '\\r')
-                    t['datatype'] = ""
+                    value = v.replace("\t", "\\t")
+                    value = value.replace("\n", "\\n")
+                    value = value.replace("\r", "\\r")
+                    t["datatype"] = ""
                     try:
                         nvalue = Literal(value).n3()
-                        t['value'] = nvalue
+                        t["value"] = nvalue
                     except Exception as e:
                         print(f"Failed to process literal {v} in {me}")
                         print(e)
                         continue
-                    if k == 'content':
-                        conf['recordText'].append(value)
+                    if k == "content":
+                        conf["recordText"].append(value)
                 elif k == "value":
                     # t['datatype'] = self.number_type
-                    t['datatype'] = ""
-                    t['value'] = str(v)
-                elif k in ['begin_of_the_begin', 'end_of_the_end', 'begin_of_the_end', 'end_of_the_begin']:
-                    t['datatype'] = self.date_type
-                    t['value'] = f"\"{v}\""
+                    t["datatype"] = ""
+                    t["value"] = str(v)
+                elif k in ["begin_of_the_begin", "end_of_the_end", "begin_of_the_end", "end_of_the_begin"]:
+                    t["datatype"] = self.date_type
+                    t["value"] = f'"{v}"'
                 elif k == "type":
-                    t['object'] = self.type_map[v]
-                    conf['triples'].append(self.triple_pattern.format(**t))
+                    t["object"] = self.type_map[v]
+                    conf["triples"].append(self.triple_pattern.format(**t))
                     continue
-                elif k == 'access_point':
+                elif k == "access_point":
                     # magic @vocab props
-                    t['object'] = v
-                    conf['triples'].append(self.triple_pattern.format(**t))
+                    t["object"] = v
+                    conf["triples"].append(self.triple_pattern.format(**t))
                     continue
                 elif k == "assigned_property":
                     po = self.prop_map.get(v, None)
                     if pos is None:
                         print(f"Could not calculate expansion of {v} in {k}")
                     else:
-                        t['object'] = pos
-                        conf['triples'].append(self.triple_pattern.format(**t))
+                        t["object"] = pos
+                        conf["triples"].append(self.triple_pattern.format(**t))
                     continue
                 else:
                     print(f"Unhandled literal value type: {k} / {pred}")
                     continue
-                conf['triples'].append(self.literal_pattern.format(**t))
+                conf["triples"].append(self.literal_pattern.format(**t))
             elif type(v) == list:
                 for vi in v:
                     if type(vi) == dict:
                         obj = self.walk_for_triples(vi, conf, ignore)
                         if obj is not None:
-                            t['object'] = obj
-                            conf['triples'].append(self.triple_pattern.format(**t))
+                            t["object"] = obj
+                            conf["triples"].append(self.triple_pattern.format(**t))
                     else:
                         print(f"found non dict in a list :( {node}")
             elif type(v) == dict:
                 obj = self.walk_for_triples(v, conf, ignore)
                 if obj is not None:
-                    t['object'] = obj
-                    conf['triples'].append(self.triple_pattern.format(**t))
+                    t["object"] = obj
+                    conf["triples"].append(self.triple_pattern.format(**t))
             ignore = ignore_now
 
         return me
 
-
     def do_bs_html(self, part):
-        content = part.get('content','')
+        content = part.get("content", "")
         content = content.strip()
-        if content.startswith('<'):
+        if content.startswith("<"):
             soup = BeautifulSoup(content, features="lxml")
             clncont = soup.get_text()
             if clncont == "":
                 pass
             else:
-                part['content'] = clncont
+                part["content"] = clncont
 
     def get_prefix(self, which):
-        if which in ['VisualItem', 'LinguisticObject']:
+        if which in ["VisualItem", "LinguisticObject"]:
             pfx = "work"
-        elif which in ['HumanMadeObject', 'DigitalObject']:
+        elif which in ["HumanMadeObject", "DigitalObject"]:
             pfx = "item"
-        elif which in ['Person', 'Group']:
+        elif which in ["Person", "Group"]:
             pfx = "agent"
-        elif which == 'Place':
+        elif which == "Place":
             pfx = "place"
-        elif which in ['Type', 'Language', 'Material', 'Currency', 'MeasurementUnit', 'Set']:
+        elif which in ["Type", "Language", "Material", "Currency", "MeasurementUnit", "Set"]:
             # Set here is Collection / Holdings. UI decision to put in with concepts
             pfx = "concept"
-        elif which in ['Activity', 'Event', 'Period']:
+        elif which in ["Activity", "Event", "Period"]:
             pfx = "event"
         else:
             # Things that don't fall into the above categories
             # Probably due to bugs
             print(f"Failed to find a prefix for {which}")
-            pfx = "other"        
+            pfx = "other"
         return pfx
 
-
     def transform(self, record, rectype=None, reference=False):
-
         # QLever needs NT / TTL format
         # Returns a list of triples
 
-        data = record['data']
-        me = data['id']
+        data = record["data"]
+        me = data["id"]
 
-        #strip html from content (at least for now)
-        for part in data.get('referred_to_by',[]):
-            self.do_bs_html(part) 
-        for rep in data.get('representation', []):
-            for dsb in rep.get('digitally_shown_by', []):
-                for ref in dsb.get('referred_to_by', []):
+        # strip html from content (at least for now)
+        for part in data.get("referred_to_by", []):
+            self.do_bs_html(part)
+        for rep in data.get("representation", []):
+            for dsb in rep.get("digitally_shown_by", []):
+                for ref in dsb.get("referred_to_by", []):
                     self.do_bs_html(ref)
 
         # Where do we generally live
-        cxns = [x['id'] for x in data.get('classified_as', []) if 'id' in x]
-        if (self.globals['archives'] in cxns) and data['type'] == 'Set':
+        cxns = [x["id"] for x in data.get("classified_as", []) if "id" in x]
+        if (self.globals["archives"] in cxns) and data["type"] == "Set":
             pfx = "work"
         else:
-            pfx = self.get_prefix(data['type'])
+            pfx = self.get_prefix(data["type"])
 
         triples = []
-        conf = {'triples': triples, 'base': me, 'bid': 0, 'recordText': [], 'refs': {}}
+        conf = {"triples": triples, "base": me, "bid": 0, "recordText": [], "refs": {}}
         self.walk_for_triples(data, conf)
 
         if cxns:
             cxPred = f"{self.luxns}{pfx}ClassifiedAs"
             for c in cxns:
-                t = {'subject': me, 'predicate': cxPred, 'object': c}
+                t = {"subject": me, "predicate": cxPred, "object": c}
                 triples.append(self.triple_pattern.format(**t))
 
-        if conf['recordText']:
-            value = ' '.join(conf['recordText'])
+        if conf["recordText"]:
+            value = " ".join(conf["recordText"])
             try:
                 nvalue = Literal(value).n3()
-                t = {'subject': me, 'predicate': f"{self.luxns}recordText", 'value': nvalue, 'datatype': ""}
+                t = {"subject": me, "predicate": f"{self.luxns}recordText", "value": nvalue, "datatype": ""}
                 triples.append(self.literal_pattern.format(**t))
             except Exception as e:
                 print(f"Failed to build full record text for {me}: {e}")
 
         shortcuts = {
-            'produced_by': "Production",
-            'created_by': "Creation",
-            'born': 'Beginning',
-            'died': "Ending",
-            'formed_by': 'Beginning',
-            'dissolved_by': 'Ending',
-            'used_for': 'Publication',
-            'encountered_by': 'Encounter',
-            'carried_out': 'Activity'
+            "produced_by": "Production",
+            "created_by": "Creation",
+            "born": "Beginning",
+            "died": "Ending",
+            "formed_by": "Beginning",
+            "dissolved_by": "Ending",
+            "used_for": "Publication",
+            "encountered_by": "Encounter",
+            "carried_out": "Activity",
         }
 
-        for (prop, predClass) in shortcuts.items():
+        for prop, predClass in shortcuts.items():
             if prop in data:
                 node = data[prop]
                 apred = f"agentOf{predClass}"
@@ -427,47 +451,47 @@ class QleverMapper(Mapper):
                     node = [node]
 
                 for n in node:
-                    if 'carried_out_by' in n:
-                        agents.extend([x['id'] for x in n['carried_out_by'] if 'id' in x])
-                    if 'took_place_at' in n:
-                        places.extend([x['id'] for x in n['took_place_at'] if 'id' in x])
-                    if 'technique' in n:
-                        techs.extend([x['id'] for x in n['technique'] if 'id' in x])
-                    if 'caused_by' in n:
-                        causes.extend([x['id'] for x in n['caused_by'] if 'id' in x])
-                    if 'influenced_by' in n:
-                        influences.extend([x['id'] for x in n['influenced_by'] if 'id' in x])
-                    if 'part' in n:
-                        for p in n['part']:
-                            if 'carried_out_by' in p:
-                                agents.extend([x['id'] for x in p['carried_out_by'] if 'id' in x])
-                            if 'took_place_at' in p:
-                                places.extend([x['id'] for x in p['took_place_at'] if 'id' in x])
-                            if 'technique' in p:
-                                techs.extend([x['id'] for x in p['technique'] if 'id' in x])
-                            if 'influenced_by' in p:
-                                influences.extend([x['id'] for x in p['influenced_by'] if 'id' in x])
-                            if 'attributed_by' in p:
-                                for aa in p['attributed_by']:
-                                    if 'assigned' in aa:
-                                        for p2 in aa['assigned']:
-                                            if 'carried_out_by' in p2:
-                                                agents.extend([x['id'] for x in p2['carried_out_by'] if 'id' in x])
-                                            if 'took_place_at' in p2:
-                                                places.extend([x['id'] for x in p2['took_place_at'] if 'id' in x])
-                                            if 'technique' in p2:
-                                                techs.extend([x['id'] for x in p2['technique'] if 'id' in x])
+                    if "carried_out_by" in n:
+                        agents.extend([x["id"] for x in n["carried_out_by"] if "id" in x])
+                    if "took_place_at" in n:
+                        places.extend([x["id"] for x in n["took_place_at"] if "id" in x])
+                    if "technique" in n:
+                        techs.extend([x["id"] for x in n["technique"] if "id" in x])
+                    if "caused_by" in n:
+                        causes.extend([x["id"] for x in n["caused_by"] if "id" in x])
+                    if "influenced_by" in n:
+                        influences.extend([x["id"] for x in n["influenced_by"] if "id" in x])
+                    if "part" in n:
+                        for p in n["part"]:
+                            if "carried_out_by" in p:
+                                agents.extend([x["id"] for x in p["carried_out_by"] if "id" in x])
+                            if "took_place_at" in p:
+                                places.extend([x["id"] for x in p["took_place_at"] if "id" in x])
+                            if "technique" in p:
+                                techs.extend([x["id"] for x in p["technique"] if "id" in x])
+                            if "influenced_by" in p:
+                                influences.extend([x["id"] for x in p["influenced_by"] if "id" in x])
+                            if "attributed_by" in p:
+                                for aa in p["attributed_by"]:
+                                    if "assigned" in aa:
+                                        for p2 in aa["assigned"]:
+                                            if "carried_out_by" in p2:
+                                                agents.extend([x["id"] for x in p2["carried_out_by"] if "id" in x])
+                                            if "took_place_at" in p2:
+                                                places.extend([x["id"] for x in p2["took_place_at"] if "id" in x])
+                                            if "technique" in p2:
+                                                techs.extend([x["id"] for x in p2["technique"] if "id" in x])
 
-                    if 'attributed_by' in n:
-                        for p in n['attributed_by']:
-                            if 'assigned' in p:
-                                for p2 in p['assigned']:
-                                    if 'carried_out_by' in p2:
-                                        agents.extend([x['id'] for x in p2['carried_out_by'] if 'id' in x])
-                                    if 'took_place_at' in p2:
-                                        places.extend([x['id'] for x in p2['took_place_at'] if 'id' in x])
-                                    if 'technique' in p2:
-                                        techs.extend([x['id'] for x in p2['technique'] if 'id' in x])
+                    if "attributed_by" in n:
+                        for p in n["attributed_by"]:
+                            if "assigned" in p:
+                                for p2 in p["assigned"]:
+                                    if "carried_out_by" in p2:
+                                        agents.extend([x["id"] for x in p2["carried_out_by"] if "id" in x])
+                                    if "took_place_at" in p2:
+                                        places.extend([x["id"] for x in p2["took_place_at"] if "id" in x])
+                                    if "technique" in p2:
+                                        techs.extend([x["id"] for x in p2["technique"] if "id" in x])
 
                 for a in agents:
                     t = {"subject": me, "predicate": f"{self.luxns}{apred}", "object": a}
@@ -485,21 +509,21 @@ class QleverMapper(Mapper):
                     t = {"subject": me, "predicate": f"{self.luxns}{ipred}", "object": i}
                     triples.append(self.triple_pattern.format(**t))
 
-        # Pre-construct other useful triples    
+        # Pre-construct other useful triples
 
         # Make primary name its own triple
-        if 'identified_by' in data:
-            for nm in data['identified_by']:
-                nmcxns = [y['id'] for y in nm.get('classified_as', []) if 'id' in y]
-                if 'type' in nm and nm['type'] == 'Name' and self.globals['primaryName'] in nmcxns and 'content' in nm:
-                    t = {'subject': me, 'predicate': f"{self.luxns}primaryName", 'value': '', 'datatype':''}
-                    v = nm['content']
-                    value = v.replace('\t', '\\t')
-                    value = value.replace('\n', '\\n')
-                    value = value.replace('\r', '\\r')
+        if "identified_by" in data:
+            for nm in data["identified_by"]:
+                nmcxns = [y["id"] for y in nm.get("classified_as", []) if "id" in y]
+                if "type" in nm and nm["type"] == "Name" and self.globals["primaryName"] in nmcxns and "content" in nm:
+                    t = {"subject": me, "predicate": f"{self.luxns}primaryName", "value": "", "datatype": ""}
+                    v = nm["content"]
+                    value = v.replace("\t", "\\t")
+                    value = value.replace("\n", "\\n")
+                    value = value.replace("\r", "\\r")
                     try:
                         nvalue = Literal(value).n3()
-                        t['value'] = nvalue
+                        t["value"] = nvalue
                     except Exception as e:
                         print(f"Failed to process literal {v} in {data['identifier']}")
                         print(e)
@@ -507,133 +531,165 @@ class QleverMapper(Mapper):
                     triples.append(self.literal_pattern.format(**t))
 
         # {pfx}Any
-        for ref in conf['refs'].keys():
+        for ref in conf["refs"].keys():
             t = {"subject": me, "predicate": f"{self.luxns}{pfx}Any", "object": ref}
             triples.append(self.triple_pattern.format(**t))
 
         if pfx == "agent":
-            natls = [x['id'] for x in data.get('classified_as', []) if self.globals['nationality'] in 
-                [y['id'] for y in x.get('classified_as', [])] and 'id' in x]
+            natls = [
+                x["id"]
+                for x in data.get("classified_as", [])
+                if self.globals["nationality"] in [y["id"] for y in x.get("classified_as", [])] and "id" in x
+            ]
             for f in natls:
                 t = {"subject": me, "predicate": f"{self.luxns}agentNationality", "object": f}
                 triples.append(self.triple_pattern.format(**t))
 
-            occs = [x['id'] for x in data.get('classified_as', []) if self.globals['occupation'] in 
-                [y['id'] for y in x.get('classified_as', [])] and 'id' in x]
+            occs = [
+                x["id"]
+                for x in data.get("classified_as", [])
+                if self.globals["occupation"] in [y["id"] for y in x.get("classified_as", [])] and "id" in x
+            ]
             for f in occs:
                 t = {"subject": me, "predicate": f"{self.luxns}agentOccupation", "object": f}
                 triples.append(self.triple_pattern.format(**t))
-        elif data['type'] in ['LinguisticObject', 'Set', 'VisualItem']:
-            if 'about' in data:
-                for a in data['about']:
-                    if 'id' in a:
-                        t = {"subject": me, "predicate": f"{self.luxns}about_or_depicts", "object": a['id']}
-                        triples.append(self.triple_pattern.format(**t))       
+        elif data["type"] in ["LinguisticObject", "Set", "VisualItem"]:
+            if "about" in data:
+                for a in data["about"]:
+                    if "id" in a:
+                        t = {"subject": me, "predicate": f"{self.luxns}about_or_depicts", "object": a["id"]}
+                        triples.append(self.triple_pattern.format(**t))
                         # add target specific triples
-                        if 'type' in a:
-                            typ = self.get_prefix(a['type'])
-                            t = {"subject": me, "predicate": f"{self.luxns}about_or_depicts_{typ}", "object": a['id']}
-                            triples.append(self.triple_pattern.format(**t))                                  
+                        if "type" in a:
+                            typ = self.get_prefix(a["type"])
+                            t = {"subject": me, "predicate": f"{self.luxns}about_or_depicts_{typ}", "object": a["id"]}
+                            triples.append(self.triple_pattern.format(**t))
         elif pfx == "event":
             # Add triples for carried_out_by, took_place_at of record, vs production etc
-            if 'carried_out_by' in data:
-                ags = [x['id'] for x in data.get('carried_out_by', []) if 'id' in x]
+            if "carried_out_by" in data:
+                ags = [x["id"] for x in data.get("carried_out_by", []) if "id" in x]
                 aPred = f"{self.luxns}{pfx}CarriedOutBy"
                 for a in ags:
                     t = {"subject": me, "predicate": aPred, "object": a}
-                    triples.append(self.triple_pattern.format(**t))                     
-            if 'took_place_at' in data:
-                places = [x['id'] for x in data.get('took_place_at', []) if 'id' in x]
+                    triples.append(self.triple_pattern.format(**t))
+            if "took_place_at" in data:
+                places = [x["id"] for x in data.get("took_place_at", []) if "id" in x]
                 pPred = f"{self.luxns}{pfx}TookPlaceAt"
                 for p in places:
                     t = {"subject": me, "predicate": pPred, "object": p}
-                    triples.append(self.triple_pattern.format(**t))                 
+                    triples.append(self.triple_pattern.format(**t))
 
         elif pfx == "concept":
-            if 'created_by' in data and 'influenced_by' in data['created_by']:
-                for inf in data['created_by']['influenced_by']:
-                    if 'id' in inf and 'type' in inf:
-                        typ = self.get_prefix(inf['type'])
-                        t = {"subject":me,"predicate":f"{self.luxns}influenced_by_{typ}","object":inf['id']}
-                        triples.append(self.triple_pattern.format(**t)) 
+            if "created_by" in data and "influenced_by" in data["created_by"]:
+                for inf in data["created_by"]["influenced_by"]:
+                    if "id" in inf and "type" in inf:
+                        typ = self.get_prefix(inf["type"])
+                        t = {"subject": me, "predicate": f"{self.luxns}influenced_by_{typ}", "object": inf["id"]}
+                        triples.append(self.triple_pattern.format(**t))
 
-
-        if data['type'] == 'Person':
+        if data["type"] == "Person":
             # Do person indexes here
-            genders = [x['id'] for x in data.get('classified_as', []) if self.globals['gender'] in 
-                [y['id'] for y in x.get('classified_as', [])] and 'id' in x]            
+            genders = [
+                x["id"]
+                for x in data.get("classified_as", [])
+                if self.globals["gender"] in [y["id"] for y in x.get("classified_as", [])] and "id" in x
+            ]
             for f in genders:
                 t = {"subject": me, "predicate": f"{self.luxns}agentGender", "object": f}
                 triples.append(self.triple_pattern.format(**t))
 
-            if 'born' in data and 'timespan' in data['born']:
-                bd = data['born']['timespan'].get('begin_of_the_begin', "")
+            if "born" in data and "timespan" in data["born"]:
+                bd = data["born"]["timespan"].get("begin_of_the_begin", "")
                 if bd:
-                    t = {"subject": me, "predicate": f"{self.luxns}agentBeginDate", "value": f"\"{bd}\"", "datatype": self.date_type}
+                    t = {
+                        "subject": me,
+                        "predicate": f"{self.luxns}agentBeginDate",
+                        "value": f'"{bd}"',
+                        "datatype": self.date_type,
+                    }
                     triples.append(self.literal_pattern.format(**t))
-            if 'died' in data and 'timespan' in data['died']:
-                dd = data['died']['timespan'].get('end_of_the_end', "")
+            if "died" in data and "timespan" in data["died"]:
+                dd = data["died"]["timespan"].get("end_of_the_end", "")
                 if dd:
-                    t = {"subject": me, "predicate": f"{self.luxns}agentEndDate", "value": f"\"{dd}\"", "datatype": self.date_type}
+                    t = {
+                        "subject": me,
+                        "predicate": f"{self.luxns}agentEndDate",
+                        "value": f'"{dd}"',
+                        "datatype": self.date_type,
+                    }
                     triples.append(self.literal_pattern.format(**t))
 
-        elif data['type'] == 'Group':
-            if 'formed_by' in data and 'timespan' in data['formed_by']:
-                bd = data['formed_by']['timespan'].get('begin_of_the_begin', "")
+        elif data["type"] == "Group":
+            if "formed_by" in data and "timespan" in data["formed_by"]:
+                bd = data["formed_by"]["timespan"].get("begin_of_the_begin", "")
                 if bd:
-                    t = {"subject": me, "predicate": f"{self.luxns}agentBeginDate", "value": f"\"{bd}\"", "datatype": self.date_type}
+                    t = {
+                        "subject": me,
+                        "predicate": f"{self.luxns}agentBeginDate",
+                        "value": f'"{bd}"',
+                        "datatype": self.date_type,
+                    }
                     triples.append(self.literal_pattern.format(**t))
-            if 'dissolved_by' in data and 'timespan' in data['dissolved_by']:
-                dd = data['dissolved_by']['timespan'].get('end_of_the_end', "")
+            if "dissolved_by" in data and "timespan" in data["dissolved_by"]:
+                dd = data["dissolved_by"]["timespan"].get("end_of_the_end", "")
                 if dd:
-                    t = {"subject": me, "predicate": f"{self.luxns}agentEndDate", "value": f"\"{dd}\"", "datatype": self.date_type}
+                    t = {
+                        "subject": me,
+                        "predicate": f"{self.luxns}agentEndDate",
+                        "value": f'"{dd}"',
+                        "datatype": self.date_type,
+                    }
                     triples.append(self.literal_pattern.format(**t))
 
-        elif data['type'] == 'Set':
-            if 'used_for' in data:
-                for uf in data['used_for']:
-                    if 'classified_as' in uf and 'carried_out_by' in uf:
-                        for c in uf['classified_as']:
-                            if 'id' in c and c['id'] == self.globals['curation']:
-                                for who in uf['carried_out_by']:
-                                    if 'id' in who:
-                                        t = {"subject": me, "predicate": f"{self.luxns}agentOfCuration", "object": who['id']}
+        elif data["type"] == "Set":
+            if "used_for" in data:
+                for uf in data["used_for"]:
+                    if "classified_as" in uf and "carried_out_by" in uf:
+                        for c in uf["classified_as"]:
+                            if "id" in c and c["id"] == self.globals["curation"]:
+                                for who in uf["carried_out_by"]:
+                                    if "id" in who:
+                                        t = {
+                                            "subject": me,
+                                            "predicate": f"{self.luxns}agentOfCuration",
+                                            "object": who["id"],
+                                        }
                                         triples.append(self.triple_pattern.format(**t))
 
-        elif data['type'] == 'HumanMadeObject':
-            if 'carries' in data:
-                for c in data['carries']:
-                    if 'id' in c:
-                        t = {"subject": me, "predicate": f"{self.luxns}carries_or_shows", "object": c['id']}
+        elif data["type"] == "HumanMadeObject":
+            if "carries" in data:
+                for c in data["carries"]:
+                    if "id" in c:
+                        t = {"subject": me, "predicate": f"{self.luxns}carries_or_shows", "object": c["id"]}
                         triples.append(self.triple_pattern.format(**t))
-            if 'shows' in data:
-                for s in data['shows']:
-                    if 'id' in s:
-                        t = {"subject": me, "predicate": f"{self.luxns}carries_or_shows", "object": s['id']}
+            if "shows" in data:
+                for s in data["shows"]:
+                    if "id" in s:
+                        t = {"subject": me, "predicate": f"{self.luxns}carries_or_shows", "object": s["id"]}
                         triples.append(self.triple_pattern.format(**t))
 
-        elif data['type'] == 'DigitalObject':
-            if 'digitally_carries' in data:
-                for c in data['digitally_carries']:
-                    if 'id' in c:
-                        t = {"subject": me, "predicate": f"{self.luxns}carries_or_shows", "object": c['id']}
+        elif data["type"] == "DigitalObject":
+            if "digitally_carries" in data:
+                for c in data["digitally_carries"]:
+                    if "id" in c:
+                        t = {"subject": me, "predicate": f"{self.luxns}carries_or_shows", "object": c["id"]}
                         triples.append(self.triple_pattern.format(**t))
-            if 'digitally_shows' in data:
-                for s in data['digitally_shows']:
-                    if 'id' in s:
-                        t = {"subject": me, "predicate": f"{self.luxns}carries_or_shows", "object": s['id']}
-                        triples.append(self.triple_pattern.format(**t))            
+            if "digitally_shows" in data:
+                for s in data["digitally_shows"]:
+                    if "id" in s:
+                        t = {"subject": me, "predicate": f"{self.luxns}carries_or_shows", "object": s["id"]}
+                        triples.append(self.triple_pattern.format(**t))
 
-        elif data['type'] == 'VisualItem': 
-            if 'represents' in data:
-                for r in data['represents']:
-                    if 'id' in r:
-                        t = {"subject": me, "predicate": f"{self.luxns}about_or_depicts", "object": r['id']}
-                        triples.append(self.triple_pattern.format(**t))    
+        elif data["type"] == "VisualItem":
+            if "represents" in data:
+                for r in data["represents"]:
+                    if "id" in r:
+                        t = {"subject": me, "predicate": f"{self.luxns}about_or_depicts", "object": r["id"]}
+                        triples.append(self.triple_pattern.format(**t))
 
-                        if 'type' in r:
-                            typ = self.get_prefix(r['type'])
-                            t = {"subject": me, "predicate": f"{self.luxns}about_or_depicts_{typ}", "object": r['id']}
-                            triples.append(self.triple_pattern.format(**t))   
+                        if "type" in r:
+                            typ = self.get_prefix(r["type"])
+                            t = {"subject": me, "predicate": f"{self.luxns}about_or_depicts_{typ}", "object": r["id"]}
+                            triples.append(self.triple_pattern.format(**t))
 
         return triples

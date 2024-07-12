@@ -8,20 +8,17 @@ then
   exit 0
 fi 
 
-echo "Did you update the datestamp token in run-merge, run-integrated?"
+echo "Did you clear and update the token?"
+echo "    python ./manage-data --clear-all --new-token"
 echo "Did you check the flags for which units to run?"
 echo ""
-
 
 # Always update from google sheet
 python ./google-sames-diffs.py
 python ./load-csv-map2.py --same ../data/files/sameAs/google.csv
 python ./load-csv-map2.py --different ../data/files/differentFrom/google.csv
-
 echo "reloaded same/diffs from Google Sheet"
 
-
-# python ./manage-data.py --clear-all
 rm ../data/logs/*
 
 ### Reconciliation Phase

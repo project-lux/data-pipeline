@@ -1,4 +1,3 @@
-
 from pipeline.process.base.fetcher import Fetcher
 import requests
 import ujson as json
@@ -7,11 +6,11 @@ import os
 ### 2024-04 RS: Not sure this is necessary now that Getty has made linked art the default serialization
 ### for the vocabs
 
-class GettyFetcher(Fetcher):
 
+class GettyFetcher(Fetcher):
     def __init__(self, config):
         Fetcher.__init__(self, config)
-        fn = os.path.join(config['all_configs'].data_dir, 'getty_replacements.json')
+        fn = os.path.join(config["all_configs"].data_dir, "getty_replacements.json")
         if os.path.exists(fn):
             fh = open(fn)
             data = fh.read()
@@ -21,16 +20,15 @@ class GettyFetcher(Fetcher):
         try:
             js = json.loads(data)
         except:
-            js = {'results': {'bindings': []}}
+            js = {"results": {"bindings": []}}
         self.redirects = {}
-        res = js['results']['bindings']
+        res = js["results"]["bindings"]
         for r in res:
-            f = r['from']['value'].replace('http://vocab.getty.edu/', '')
-            t = r['to']['value'].replace('http://vocab.getty.edu/', '')
+            f = r["from"]["value"].replace("http://vocab.getty.edu/", "")
+            t = r["to"]["value"].replace("http://vocab.getty.edu/", "")
             self.redirects[f] = t
 
     def fetch(self, identifier):
-
         if not self.enabled:
             return None
 
@@ -41,9 +39,10 @@ class GettyFetcher(Fetcher):
 
         f = f"{self.name}/{identifier}"
         if f in self.redirects:
-            identifier = self.redirects[f].split('/')[1]
+            identifier = self.redirects[f].split("/")[1]
 
         result = Fetcher.fetch(self, identifier)
+
         if not result:
             # Try and fetch original from vocab.getty.edu
             newurl = f"http://vocab.getty.edu/{self.name}/{identifier}.jsonld"
@@ -64,8 +63,8 @@ class GettyFetcher(Fetcher):
                 data = json.loads(resp.text)
                 if type(data) == list:
                     try:
-                        newid = data[0]['http://purl.org/dc/terms/isReplacedBy'][0]['@id']
-                        newid = newid.replace(f"http://vocab.getty.edu/{self.name}/", '')
+                        newid = data[0]["http://purl.org/dc/terms/isReplacedBy"][0]["@id"]
+                        newid = newid.replace(f"http://vocab.getty.edu/{self.name}/", "")
                         print(f"Got new id for {identifier}: {newid}")
                     except:
                         print("got nuttin")
@@ -77,5 +76,9 @@ class GettyFetcher(Fetcher):
             else:
                 self.networkmap[newurl] = resp.status_code
                 return None
-            return {'data': result, 'identifier': identifier, 'source': self.name}
-        return result
+            return {"data": result, "identifier": identifier, "source": self.name}
+        else:
+            if did := result["data"].get("id", None):
+                if "data.getty.edu" in did:
+                    result["data"]["id"] = did.replace("https://data.getty.edu/vocab/", "http://vocab.getty.edu/")
+            return result
