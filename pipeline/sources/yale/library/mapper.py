@@ -254,10 +254,11 @@ class YulMapper(Mapper):
                 info = self.gemini_place_data[uu]
                 del self.gemini_place_data[uu]
                 if "wd" in info:
+                    wd = "http://www.wikidata.org/entity/" + info["wd"]
                     try:
-                        data["equivalent"].append({"id": info["wd"], "type": "Place", "_label": data.get("_label", name)})
+                        data["equivalent"].append({"id": wd, "type": "Place", "_label": data.get("_label", name)})
                     except:
-                        data["equivalent"] = [{"id": info["wd"], "type": "Place", "_label": data.get("_label", name)}]
+                        data["equivalent"] = [{"id": wd, "type": "Place", "_label": data.get("_label", name)}]
                 if "desc" in info:
                     dt = {
                         "id": "http://vocab.getty.edu/aat/300435416",
