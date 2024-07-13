@@ -463,6 +463,10 @@ class Cleaner(Mapper):
 
         del data["subject_of"]
 
+        ### FIXME: this still doesn't work correctly
+        # Lots of triggers to the except block at line 504
+        # where it can't find the URL selected
+
         for a in aps:
             http = a.replace("http://", "https://", 1)
             https = a.replace("https://", "http://", 1)
@@ -497,7 +501,8 @@ class Cleaner(Mapper):
                 block = ws[k]
                 subj.append(block)
             except:
-                print(f"Could not find {k} in {ws} for {data['id']}")
+                # print(f"Could not find {k} in {ws} for {data['id']}")
+                pass
         if subj:
             data["subject_of"] = subj
 
