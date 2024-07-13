@@ -259,6 +259,25 @@ class YulMapper(Mapper):
                         data["equivalent"].append({"id": wd, "type": "Place", "_label": data.get("_label", name)})
                     except:
                         data["equivalent"] = [{"id": wd, "type": "Place", "_label": data.get("_label", name)}]
+
+                    # Too often wp but no wd means invented wp URI :(
+                    if "wp" in info:
+                        page = {"id": "http://vocab.getty.edu/aat/300264578", "type": "Type", "_label": "Web Page"}
+                        wp = {
+                            "type": "LinguisticObject",
+                            "digitally_carried_by": [
+                                {
+                                    "type": "DigitalObject",
+                                    "classified_as": [page],
+                                    "access_point": [{"id": info["wp"], "type": "DigitalObject"}],
+                                }
+                            ],
+                        }
+                        try:
+                            data["subject_of"].append(wp)
+                        except:
+                            data["subject_of"] = [wp]
+
                 if "desc" in info:
                     dt = {
                         "id": "http://vocab.getty.edu/aat/300435416",
@@ -274,23 +293,6 @@ class YulMapper(Mapper):
                         data["referred_to_by"].append(desc)
                     except:
                         data["referred_to_by"] = [desc]
-
-                if "wp" in info:
-                    page = {"id": "http://vocab.getty.edu/aat/300264578", "type": "Type", "_label": "Web Page"}
-                    wp = {
-                        "type": "LinguisticObject",
-                        "digitally_carried_by": [
-                            {
-                                "type": "DigitalObject",
-                                "classified_as": [page],
-                                "access_point": [{"id": info["wp"], "type": "DigitalObject"}],
-                            }
-                        ],
-                    }
-                    try:
-                        data["subject_of"].append(wp)
-                    except:
-                        data["subject_of"] = [wp]
 
         # Swap MarcGT to AAT equivalents
         if "classified_as" in data:
