@@ -24,10 +24,7 @@ class MergeHandler(object):
                     trash = True
                     break
             if trash:
-                if (
-                    record["source"] in self.config.internal
-                    and "part_of" in record["data"]
-                ):
+                if record["source"] in self.config.internal and "part_of" in record["data"]:
                     del record["data"]["part_of"]
                 for s, r in to_do:
                     if s["type"] == "internal" and "part_of" in r["data"]:
@@ -112,9 +109,7 @@ class RecordMerger(object):
                 mc = merge["created_by"]["influenced_by"]
                 rc = rec["created_by"]["influenced_by"]
                 if len(mc) != len(rc):
-                    print(
-                        f"In {rec['id']} - Strange creation influences - different counts!"
-                    )
+                    print(f"In {rec['id']} - Strange creation influences - different counts!")
                     print(f"    {mc}\n    {rc}")
                 else:
                     infs = []
@@ -133,17 +128,12 @@ class RecordMerger(object):
                                 else:
                                     rc[i]["_label"] = rc[i]["_label"].strip()
                                     infs.append(rc[i])
-                            elif (
-                                mc[i]["_label"] == rc[i]["_label"]
-                                and mc[i]["type"] != rc[i]["type"]
-                            ):
+                            elif mc[i]["_label"] == rc[i]["_label"] and mc[i]["type"] != rc[i]["type"]:
                                 # Label can be the same with different class
                                 # select more specific over Type
                                 if mc[i]["type"] == "Type" and rc[i]["type"] != "Type":
                                     infs.append(rc[i])
-                                elif (
-                                    rc[i]["type"] == "Type" and mc[i]["type"] != "Type"
-                                ):
+                                elif rc[i]["type"] == "Type" and mc[i]["type"] != "Type":
                                     infs.append(mc[i])
                                 else:
                                     # print(f" {rec['id']} Df type: {mc[i]}\n          {rc[i]}")
@@ -187,11 +177,7 @@ class RecordMerger(object):
                 for x in [a, b]:
                     if x.startswith("{") and x.endswith("}"):
                         geo = json.loads(x)
-                        if (
-                            "type" in geo
-                            and geo["type"] == "FeatureCollection"
-                            and "features" in geo
-                        ):
+                        if "type" in geo and geo["type"] == "FeatureCollection" and "features" in geo:
                             ftrs = geo["features"]
                             if len(ftrs) == 1:
                                 ftr = ftrs[0]
@@ -231,17 +217,13 @@ class RecordMerger(object):
                         p1a = shapes[0].exterior.coords[0]
                         p1b = shapes[1].exterior.coords[0]
                         # assuming that the non decimal is the same, just compare str len
-                        if len(str(p1b[0])) > len(str(p1a[0])) or len(
-                            str(p1b[1])
-                        ) > len(str(p1a[1])):
+                        if len(str(p1b[0])) > len(str(p1a[0])) or len(str(p1b[1])) > len(str(p1a[1])):
                             rec["defined_by"] = bwkt
 
                 elif awkt.startswith("POINT") and bwkt.startswith("POINT"):
                     p1a = shapes[0].coords[0]
                     p1b = shapes[1].coords[0]
-                    if len(str(p1b[0])) > len(str(p1a[0])) or len(str(p1b[1])) > len(
-                        str(p1a[1])
-                    ):
+                    if len(str(p1b[0])) > len(str(p1a[0])) or len(str(p1b[1])) > len(str(p1a[1])):
                         rec["defined_by"] = bwkt
                 elif awkt.startswith("POLYGON") and bwkt.startswith("POINT"):
                     # Nope
@@ -369,8 +351,7 @@ class RecordMerger(object):
                             if (
                                 dm["unit"]["id"] == dr["unit"]["id"]
                                 and dm["value"] == dr["value"]
-                                and dm["classified_as"][0]["id"]
-                                == dr["classified_as"][0]["id"]
+                                and dm["classified_as"][0]["id"] == dr["classified_as"][0]["id"]
                             ):
                                 # These are the same
                                 found = True
@@ -413,9 +394,7 @@ class RecordMerger(object):
         # Single Event - created_by
         part_skips = ["carried_out_by", "took_place_at", "influenced_by", "caused_by"]
         if "created_by" in merge and not "created_by" in skip:
-            self.merge_common(
-                rec["created_by"], merge["created_by"], msource, part_skips
-            )
+            self.merge_common(rec["created_by"], merge["created_by"], msource, part_skips)
 
         # Multi Event - used_for
         # Process publishing event
@@ -563,20 +542,10 @@ class RecordMerger(object):
 
             # Fix end of the end seconds :P
             try:
-                if (
-                    re
-                    and int(rb[:4]) == int(re[:4]) - 1
-                    and re[5:10] == "01-01"
-                    and rb[5:10] == "01-01"
-                ):
+                if re and int(rb[:4]) == int(re[:4]) - 1 and re[5:10] == "01-01" and rb[5:10] == "01-01":
                     rts["end_of_the_end"] = f"{int(re[:4])-1}-12-31T23:59:59Z"
                     re = rts["end_of_the_end"]
-                if (
-                    me
-                    and int(mb[:4]) == int(me[:4]) - 1
-                    and me[5:10] == "01-01"
-                    and mb[5:10] == "01-01"
-                ):
+                if me and int(mb[:4]) == int(me[:4]) - 1 and me[5:10] == "01-01" and mb[5:10] == "01-01":
                     mts["end_of_the_end"] = f"{int(me[:4])-1}-12-31T23:59:59Z"
                     me = mts["end_of_the_end"]
             except:
@@ -666,12 +635,7 @@ class RecordMerger(object):
                         ids.append(i["id"])
 
         # further process Provenance and Exhibition top level for embedded parts
-        if (
-            "@context" in rec
-            and "classified_as" in rec
-            and "part" in merge
-            and not "part" in skip
-        ):
+        if "@context" in rec and "classified_as" in rec and "part" in merge and not "part" in skip:
             cids = [x["id"] for x in rec["classified_as"]]
             if "http://vocab.getty.edu/aat/300055863" in cids:
                 self.merge_provenance_parts(rec, merge, msource, skip)
@@ -697,15 +661,9 @@ class RecordMerger(object):
         if rec["type"] != merge["type"]:
             # FIXME: make this log somewhere sensible
             # Prefer Language (etc) over Type
-            if (
-                rec["type"] in ["Language", "Material", "MeasurementUnit", "Currency"]
-                and merge["type"] == "Type"
-            ):
+            if rec["type"] in ["Language", "Material", "MeasurementUnit", "Currency"] and merge["type"] == "Type":
                 pass
-            elif (
-                merge["type"] in ["Language", "Material", "MeasurementUnit", "Currency"]
-                and rec["type"] == "Type"
-            ):
+            elif merge["type"] in ["Language", "Material", "MeasurementUnit", "Currency"] and rec["type"] == "Type":
                 rec["type"] = merge["type"]
             else:
                 # print(f"Trying to merge records with different classes: {rec.get('id', '')}={rec['type']} / {merge.get('id', '')}={merge['type']}")
@@ -819,9 +777,7 @@ class RecordMerger(object):
                     main = nm_conts[cont.lower()]
                     if "classified_as" in i:
                         icxns = [x.get("id", None) for x in i["classified_as"]]
-                        mcxns = [
-                            x.get("id", None) for x in main.get("classified_as", [])
-                        ]
+                        mcxns = [x.get("id", None) for x in main.get("classified_as", [])]
 
                         for ic in icxns:
                             if ic == primaryName:
@@ -834,10 +790,7 @@ class RecordMerger(object):
                                     # do nothing
                                     pass
                             elif ic == alternateName:
-                                if (
-                                    not primaryName in mcxns
-                                    and not alternateName in mcxns
-                                ):
+                                if not primaryName in mcxns and not alternateName in mcxns:
                                     if not "classified_as" in main:
                                         main["classified_as"] = []
                                     main["classified_as"].append(alternateType)
@@ -867,6 +820,7 @@ class RecordMerger(object):
                 print(f"Broken ref_to_by in {rec}")
                 conts = []
             if conts:
+                has_ai = any(["AI generated" in x for x in conts])
                 ids = [x.get("id", "") for x in rec["referred_to_by"]]
                 for i in merge["referred_to_by"]:
                     if "content" in i:
@@ -877,8 +831,12 @@ class RecordMerger(object):
                                 i["content"] = i["content"][0]
                         cont = i["content"].strip()
                         if not cont in conts:
-                            rec["referred_to_by"].append(i)
-                            conts.append(cont)
+                            if has_ai and "AI generated" in cont:
+                                # don't add multiple
+                                pass
+                            else:
+                                rec["referred_to_by"].append(i)
+                                conts.append(cont)
                     elif "id" in i:
                         if not i["id"] in ids:
                             rec["referred_to_by"].append(i)
