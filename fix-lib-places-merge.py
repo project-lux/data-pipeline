@@ -62,10 +62,14 @@ start_time = datetime.datetime.now()
 # merge only reads, so enable AAT memory cache
 idmap.enable_memory_cache()
 
+x = 0
 for src_name, src in to_do:
     rcache = src["recordcache"]
 
     for recid in recids:
+        x += 1
+        if not x % 10000:
+            print(x)
         distance = 0
         rec = rcache[recid]
         if not rec:
