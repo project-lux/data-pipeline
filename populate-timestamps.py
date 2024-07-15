@@ -17,7 +17,7 @@ cfgs = Config(basepath=basepath)
 idmap = cfgs.get_idmap()
 cfgs.instantiate_all()
 
-directory = "/home/kd736/data-pipeline"
+directory = cfgs.data_dir
 creds = None
 gidfn = os.path.join(directory, 'populate-timestamps.txt')
 fh = open(gidfn)
@@ -26,7 +26,7 @@ fh.close()
 
 scope = ['https://www.googleapis.com/auth/spreadsheets']
 
-tokfn = os.path.join(directory, 'token.json')
+tokfn = os.path.join(directory, 'token-timestamps.json')
 credfn = os.path.join(directory, 'credentials.json')
 if os.path.exists(tokfn):
     creds = Credentials.from_authorized_user_file(tokfn, scope)
