@@ -17,6 +17,7 @@ coordinate_pattern = re.compile(r'(-?\d+\.\d+|-?\d+)\s*,?\s*(-?\d+\.\d+|-?\d+)')
 
 equivs = idmap['https://lux.collections.yale.edu/data/place/bbd6d968-c465-4f56-b779-ac7b7196083c']
 
+coords = []
 
 for e in equivs:
 	if e.startswith("__"):
@@ -34,11 +35,13 @@ for e in equivs:
 		defined_by = rec['data'].get('defined_by')
 		if defined_by:
 			coordinates = coordinate_pattern.findall(defined_by)
-			longitude, latitude = map(float, coordinates) 
+			longitude, latitude = map(float, coordinates[0])
 			# Create a NumPy array from the coordinates
-			coordinates_array = np.array([longitude, latitude])
+			coords.append([longitude, latitude])
 
+coordinates_array = np.array(coordinates_list)
 print(len(coordinates_array))
+print(coordinates_array)
 
 
 # kmeans = KMeans(n_clusters=2, random_state=0)
