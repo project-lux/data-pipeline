@@ -24,15 +24,20 @@ for e in equivs:
 	(base, qua) = cfgs.split_qua(e)
 	(src, ident) = cfgs.split_uri(base)
 	#acquire recordcache rec
-	rec = src['acquirer'].acquire(ident)
+	print(f"trying to acquire {ident} from {src}")
+	try:
+		rec = src['acquirer'].acquire(ident)
+	except:
+		rec = None
 
 	#get current recs coords
-	defined_by = rec.get('defined_by')
-	if defined_by:
-		coordinates = coordinate_pattern.findall(defined_by)
-		longitude, latitude = map(float, coordinates) 
-		# Create a NumPy array from the coordinates
-		coordinates_array = np.array([longitude, latitude])
+	if rec:
+		defined_by = rec.get('defined_by')
+		if defined_by:
+			coordinates = coordinate_pattern.findall(defined_by)
+			longitude, latitude = map(float, coordinates) 
+			# Create a NumPy array from the coordinates
+			coordinates_array = np.array([longitude, latitude])
 
 print(len(coordinates_array))
 
