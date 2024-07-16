@@ -527,7 +527,7 @@ class TgnMapper(GettyMapper):
             has_300449152 = False
             for br in brdrs:
                 if type(br) == str:
-                    br = {'id': br, '_label': ""}
+                    br = {'id': br, '_label': ''}
                 lbl = br.get("_label", "")
                 if type(lbl) == dict:
                     lbl = lbl['@value']
@@ -537,10 +537,12 @@ class TgnMapper(GettyMapper):
                             top.part_of = model.Place(ident=br['id'], label=lbl)
                             has_300449152 = True
                             break
+                if has_300449152:
+                    break
             if not has_300449152:
                 for br in brdrs:
                     if type(br) == str:
-                        br = {'id': br, '_label': ""}
+                        br = {'id': br, '_label': ''}
                     lbl = br.get("_label", "")
                     if type(lbl) == dict:
                         lbl = lbl['@value']
