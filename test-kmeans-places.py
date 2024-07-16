@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 from pipeline.config import Config
 import re
+import os
 import numpy as np
 from sklearn.cluster import KMeans
 
@@ -17,13 +18,10 @@ coordinate_pattern = re.compile(r'(-?\d+\.\d+|-?\d+)\s*,?\s*(-?\d+\.\d+|-?\d+)')
 equivs = idmap['https://lux.collections.yale.edu/data/place/bbd6d968-c465-4f56-b779-ac7b7196083c']
 
 
-
-
-
 for e in equivs:
 	if e.startswith("__"):
 		continue
-	(base, qua) = cfgs.split_qua(u)
+	(base, qua) = cfgs.split_qua(e)
 	(src, ident) = cfgs.split_uri(base)
 	#acquire recordcache rec
 	rec = src['acquirer'].acquire(ident)
