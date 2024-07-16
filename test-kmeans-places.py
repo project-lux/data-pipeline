@@ -24,7 +24,6 @@ for e in equivs:
 	(base, qua) = cfgs.split_qua(e)
 	(src, ident) = cfgs.split_uri(base)
 	#acquire recordcache rec
-	print(f"trying to acquire {ident} from {src}")
 	try:
 		rec = src['acquirer'].acquire(ident)
 	except:
@@ -32,7 +31,7 @@ for e in equivs:
 
 	#get current recs coords
 	if rec:
-		defined_by = rec.get('defined_by')
+		defined_by = rec['data'].get('defined_by')
 		if defined_by:
 			coordinates = coordinate_pattern.findall(defined_by)
 			longitude, latitude = map(float, coordinates) 
