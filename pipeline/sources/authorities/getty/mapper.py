@@ -7,8 +7,8 @@ class GettyMapper(Mapper):
     # Core functions
 
     def __init__(self, config):
-        self.name = config['name']
         Mapper.__init__(self, config)
+        self.name = config['name']
         # None = drop / no mapping
         self.name_classifications = {
             'http://vocab.getty.edu/term/type/Descriptor': vocab.PrimaryName,
@@ -492,7 +492,7 @@ class TgnMapper(GettyMapper):
     def guess_type(self, data):
         return model.Place
 
-    def transform(self, record, rectype, reference=False):
+    def transform(self, record, rectype, reference=False):        
         rec = record['data']
         myid = rec['id'].rsplit('/',1)[1]
         # get the numeric and reapply to the namespace :(
@@ -516,6 +516,7 @@ class TgnMapper(GettyMapper):
                 elif cxid in self.accept_values:
                     top.classified_as = model.Type(ident=cxid, label=lbl)
 
+
         if topcls == model.Place:
             # broader
             brdrs = rec.get('part_of', [])
@@ -524,14 +525,31 @@ class TgnMapper(GettyMapper):
             brdrs2 = rec.get('broader', [])
             if type(brdrs2) != list:
                 brdrs2 = [brdrs2]       
-            brdrs.extend(brdrs2)        
+            brdrs.extend(brdrs2)
+
+            has_300449152 = False
             for br in brdrs:
                 if type(br) == str:
-                    br = {'id': br, '_label': ""}
+                    br = {'id': br, '_label': ''}
                 lbl = br.get("_label", "")
                 if type(lbl) == dict:
                     lbl = lbl['@value']
-                top.part_of = model.Place(ident=br['id'], label=lbl)
+                if "classified_as" in br:
+                    for c in br['classified_as']:
+                        if 'id' in c and c['id'] == "http://vocab.getty.edu/aat/300449152":
+                            top.part_of = model.Place(ident=br['id'], label=lbl)
+                            has_300449152 = True
+                            break
+                if has_300449152:
+                    break
+            if not has_300449152:
+                for br in brdrs:
+                    if type(br) == str:
+                        br = {'id': br, '_label': ''}
+                    lbl = br.get("_label", "")
+                    if type(lbl) == dict:
+                        lbl = lbl['@value']
+                    top.broader = model.Place(ident=br['id'], label=lbl)
 
         data = model.factory.toJSON(top)
         return {'identifier': record['identifier'], 'data': data, 'source':'tgn'}
