@@ -39,7 +39,7 @@ for e in equivs:
 			# Create a NumPy array from the coordinates
 			coords.append([longitude, latitude])
 
-coordinates_array = np.array(coordinates_list)
+coordinates_array = np.array(coords)
 print(len(coordinates_array))
 print(coordinates_array)
 
