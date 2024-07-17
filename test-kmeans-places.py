@@ -15,7 +15,9 @@ cfgs.instantiate_all()
 
 cfgs.debug_reconcile = False
 
-coordinate_pattern = re.compile(r'(-?\d+\.\d+|-?\d+)\s*,?\s*(-?\d+\.\d+|-?\d+)')
+point_pattern = re.compile(r'(-?\d+\.\d+|-?\d+)\s*,?\s*(-?\d+\.\d+|-?\d+)')
+polygon_pattern = re.compile(r'POLYGON\s*\(\(\s*([-?\d+\.\d+\s*,?]+)\s*\)\)')
+
 
 #Mexico
 #equivs = idmap['https://lux.collections.yale.edu/data/place/bbd6d968-c465-4f56-b779-ac7b7196083c']
@@ -43,10 +45,19 @@ for e in equivs:
 	if rec:
 		defined_by = rec['data'].get('defined_by')
 		if defined_by:
-			coordinates = coordinate_pattern.findall(defined_by)
-			longitude, latitude = map(float, coordinates[0])
-			# Create a NumPy array from the coordinates
-			coords.append([longitude, latitude])
+			if defined_by.startswith("POINT")
+				coordinates = point_pattern.findall(defined_by)
+				longitude, latitude = map(float, coordinates[0].strip())
+				coords.append([longitude, latitude])
+			elif defined_by.startswith("POLYGON"):
+				coordinates = polygon_pattern.findall(defined_by)
+				coordinates_str = coordinates[0].split(',')
+				for coord in coordinates_str:
+        			# Split each coordinate pair by whitespace
+        			longitude, latitude = map(float, coord.strip().split())
+        			# Append the coordinates to the list
+        			coords.append([longitude, latitude])
+
 
 coordinates_array = np.array(coords)
 print(coordinates_array)
