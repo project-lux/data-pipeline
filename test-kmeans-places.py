@@ -47,7 +47,7 @@ for e in equivs:
 		if defined_by:
 			if defined_by.startswith("POINT"):
 				coordinates = point_pattern.findall(defined_by)
-				longitude, latitude = map(float, coordinates[0].strip())
+				longitude, latitude = map(float, coordinates[0])
 				coords.append([longitude, latitude])
 			elif defined_by.startswith("POLYGON"):
 				coordinates = polygon_pattern.findall(defined_by)
