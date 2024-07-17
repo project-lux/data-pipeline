@@ -13,6 +13,8 @@ idmap = cfgs.get_idmap()
 cfgs.cache_globals()
 cfgs.instantiate_all()
 
+cfgs.debug_reconcile = False
+
 coordinate_pattern = re.compile(r'(-?\d+\.\d+|-?\d+)\s*,?\s*(-?\d+\.\d+|-?\d+)')
 
 #Mexico
@@ -26,8 +28,13 @@ coords = []
 for e in equivs:
 	if e.startswith("__"):
 		continue
+	if "yale" in e:
+		#library recs don't have defined_by
+		continue
+	print(f"testing {e}")
 	(base, qua) = cfgs.split_qua(e)
 	(src, ident) = cfgs.split_uri(base)
+	print(f"ident is {ident} from {base}")
 	#acquire recordcache rec
 	try:
 		rec = src['acquirer'].acquire(ident)
@@ -37,6 +44,7 @@ for e in equivs:
 
 	#get current recs coords
 	if rec:
+		print(f"acquired rec from {base}")
 		defined_by = rec['data'].get('defined_by')
 		if defined_by:
 			coordinates = coordinate_pattern.findall(defined_by)
