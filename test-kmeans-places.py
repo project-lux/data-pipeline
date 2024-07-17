@@ -31,20 +31,16 @@ for e in equivs:
 	if "yale" in e:
 		#library recs don't have defined_by
 		continue
-	print(f"testing {e}")
 	(base, qua) = cfgs.split_qua(e)
 	(src, ident) = cfgs.split_uri(base)
-	print(f"ident is {ident} from {base}")
 	#acquire recordcache rec
 	try:
-		rec = src['acquirer'].acquire(ident)
+		rec = src['acquirer'].acquire(ident,rectype=qua)
 	except:
 		rec = None
-		print(f"failed to acquire {base}")
 
 	#get current recs coords
 	if rec:
-		print(f"acquired rec from {base}")
 		defined_by = rec['data'].get('defined_by')
 		if defined_by:
 			coordinates = coordinate_pattern.findall(defined_by)
@@ -53,7 +49,7 @@ for e in equivs:
 			coords.append([longitude, latitude])
 
 coordinates_array = np.array(coords)
-#print(coordinates_array)
+print(coordinates_array)
 
 
 # kmeans = KMeans(n_clusters=2, random_state=0)
