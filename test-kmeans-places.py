@@ -33,10 +33,10 @@ for e in equivs:
 		rec = src['acquirer'].acquire(ident)
 	except:
 		rec = None
+		print(f"failed to acquire {base}")
 
 	#get current recs coords
 	if rec:
-		print(f"got rec {base}")
 		defined_by = rec['data'].get('defined_by')
 		if defined_by:
 			coordinates = coordinate_pattern.findall(defined_by)
@@ -45,7 +45,7 @@ for e in equivs:
 			coords.append([longitude, latitude])
 
 coordinates_array = np.array(coords)
-print(coordinates_array)
+#print(coordinates_array)
 
 
 # kmeans = KMeans(n_clusters=2, random_state=0)
