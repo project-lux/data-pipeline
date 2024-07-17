@@ -45,7 +45,7 @@ for e in equivs:
 	if rec:
 		defined_by = rec['data'].get('defined_by')
 		if defined_by:
-			if defined_by.startswith("POINT")
+			if defined_by.startswith("POINT"):
 				coordinates = point_pattern.findall(defined_by)
 				longitude, latitude = map(float, coordinates[0].strip())
 				coords.append([longitude, latitude])
@@ -53,10 +53,10 @@ for e in equivs:
 				coordinates = polygon_pattern.findall(defined_by)
 				coordinates_str = coordinates[0].split(',')
 				for coord in coordinates_str:
-        			# Split each coordinate pair by whitespace
-        			longitude, latitude = map(float, coord.strip().split())
-        			# Append the coordinates to the list
-        			coords.append([longitude, latitude])
+					# Split each coordinate pair by whitespace
+					longitude, latitude = map(float, coord.strip().split())
+					# Append the coordinates to the list
+					coords.append([longitude, latitude])
 
 
 coordinates_array = np.array(coords)
