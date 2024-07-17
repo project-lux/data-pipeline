@@ -28,6 +28,7 @@ for e in equivs:
 		continue
 	(base, qua) = cfgs.split_qua(e)
 	(src, ident) = cfgs.split_uri(base)
+	print(f"contributing recs are {base}")
 	#acquire recordcache rec
 	try:
 		rec = src['acquirer'].acquire(ident)
@@ -40,11 +41,12 @@ for e in equivs:
 		if defined_by:
 			coordinates = coordinate_pattern.findall(defined_by)
 			longitude, latitude = map(float, coordinates[0])
+			latitude = latitude.strip()
+			longitude = longitude.strip()
 			# Create a NumPy array from the coordinates
 			coords.append([longitude, latitude])
 
 coordinates_array = np.array(coords)
-print(len(coordinates_array))
 print(coordinates_array)
 
 
