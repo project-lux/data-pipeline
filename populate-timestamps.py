@@ -154,6 +154,7 @@ def check_datacache_times(cache):
 
 def check_file_timestamps():
     filepath = f"/data-io2-2/output/lux/latest/"
+    print(f"Checking Marklogic timestamp")
     for filename in os.listdir(filepath):
         file = os.path.join(filepath, filename)
         if os.path.isfile(file):         
@@ -169,17 +170,18 @@ def check_file_timestamps():
             except OSError as e:
                 print(f"***Failed getting timestamp from Marklogic export")
                 return None
-                
+
     return cachetimes
 
 cachetimes = {}
+check_file_timestamps()
+
 for cache in cfgs.internal:
     check_datacache_times(cache)
 
 for cache in cfgs.external:
     check_datacache_times(cache)
 
-check_file_timestamps()
 
 print("Writing to Google Sheet")
 populate_google_sheet(cachetimes)
