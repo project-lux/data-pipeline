@@ -161,15 +161,16 @@ def check_file_timestamps():
                 timestamp = os.path.getmtime(file)
                 datestamp = datetime.fromtimestamp(timestamp)
                 datetime_str = datestamp.strftime("%Y-%m-%d %H:%M:%S")
-                return cachetimes["Marklogic Export"] = {
-                'timestamp': datetime_str,
-                'type': "Internal"
-            }
+                cachetimes["Marklogic Export"] = {
+                    'timestamp': datetime_str,
+                    'type': "Internal"
+                }
                 break
             except OSError as e:
                 print(f"***Failed getting timestamp from Marklogic export")
                 return None
-
+                
+    return cachetimes
 
 cachetimes = {}
 for cache in cfgs.internal:
