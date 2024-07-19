@@ -72,8 +72,9 @@ test_dir = os.path.join(tests_base, test_name)
 if os.path.exists(test_dir):
     print(f"Test directory already exists ({test_dir}), aborting")
     sys.exit()
-recids = sys.argv[2:]
-recids.extend(cfgs.globals.values())
+
+recids = list(cfgs.globals.values())
+recids.extend(sys.argv[2:])
 
 
 ### Collect Records Needed from CLI
