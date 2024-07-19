@@ -138,7 +138,7 @@ for cfg, recid in record_list.values():
 
 if not ONLY_LISTED:
     # Do refs from ref_mgr
-    for ref, info in reg_mgr.all_refs.items():
+    for ref, info in ref_mgr.all_refs.items():
         rectype = info["type"]
         (uri, qua) = cfgs.split_qua(ref)
         (cfg, recid) = cfgs.split_uri(uri)
