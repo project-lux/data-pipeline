@@ -127,18 +127,28 @@ for recid in recids:
 # Ensure records are built
 for cfg, recid in record_list.values():
     # Do reconcile per record
-    rec = cfg["acquirer"].acquire(recid)
+    rec = cfg["acquirer"].acquire(recid, store=False)
     if not rec:
         print(f"Could not acquire {cfg['name']}:{recid}")
         continue
     rec2 = reconciler.reconcile(rec)
     cfg["mapper"].post_reconcile(rec2)
     ref_mgr.walk_top_for_refs(rec2["data"], 0)
+    # FIXME store in memory?
 
 if not ONLY_LISTED:
     # Do refs from ref_mgr
-    print(ref_mgr.all_refs)
-    raise ValueError(-1)
+    for ref, info in reg_mgr.all_refs.items():
+        rectype = info["type"]
+        (uri, qua) = cfgs.split_qua(ref)
+        (cfg, recid) = cfgs.split_uri(uri)
+        rec = cfg["acquirer"].acquire(recid, rectype=rectype, store=False)
+        if not rec:
+            print(f"Could not acquire {cfg['name']}:{recid}")
+            continue
+        rec2 = reconciler.reconcile(rec)
+        cfg["mapper"].post_reconcile(rec2)
+        # FIXME store in memory
 
 # No need to merge records
 
