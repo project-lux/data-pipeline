@@ -13,9 +13,17 @@ load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")
 cfgs = Config(basepath=basepath)
 idmap = cfgs.get_idmap()
+networkmap = cfgs.instantiate_map("networkmap")["store"]
 cfgs.cache_globals()
 cfgs.instantiate_all()
+
 merged = cfgs.results["merged"]["recordcache"]
+reconciler = Reconciler(cfgs, idmap, networkmap)
+ref_mgr = ReferenceManager(cfgs, idmap)
+
+# Ensure we don't write to real data
+ref_mgr.all_refs = {}
+ref_mgr.done_refs = {}
 
 
 def walk_for_refs(node, refs, top=False):
@@ -72,6 +80,7 @@ idmap2 = {}
 record_list = {}
 cfgs_needed = {}
 
+
 print("Collecting Records")
 for recid in recids:
     if recid.startswith("https://lux.collections.yale.edu/data/"):
@@ -101,24 +110,21 @@ for recid in recids:
         (src2, id2) = cfgs.split_uri(i)
         record_list[f"{src2['name']}:{id2}"] = (src2, id2)
 
-    # Now walk referred to records on the result
-    rec = merged[yuid.split("/")[-1]]
-    refs = {}
-    if not ONLY_LISTED:
-        walk_for_refs(rec["data"], refs, top=True)
-        for ref in refs.keys():
-            try:
-                inputs = idmap[ref]
-            except:
-                continue
-            idmap2[ref] = list(inputs)
-            for i in inputs:
-                if i.startswith("__") and i.endswith("__"):
-                    # internal token
-                    continue
-                i = i.split("##qua")[0]
-                (src2, id2) = cfgs.split_uri(i)
-                record_list[f"{src2['name']}:{id2}"] = (src2, id2)
+# Ensure records are built
+for cfg, recid in record_list.values():
+    # Do reconcile per record
+    rec = cfg["acquirer"].acquire(recid)
+    rec2 = reconciler.reconcile(rec)
+    cfg["mapper"].post_reconcile(rec2)
+    ref_mgr.walk_top_for_refs(rec2["data"], 0)
+
+if not ONLY_LISTED:
+    # Do refs from ref_mgr
+    print(ref_mgr.all_refs)
+    raise ValueError(-1)
+
+# No need to merge records
+
 
 if not record_list:
     print("No records to process, aborting")
