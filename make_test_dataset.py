@@ -128,6 +128,9 @@ for recid in recids:
 for cfg, recid in record_list.values():
     # Do reconcile per record
     rec = cfg["acquirer"].acquire(recid)
+    if not rec:
+        print(f"Could not acquire {cfg['name']}:{recid}")
+        continue
     rec2 = reconciler.reconcile(rec)
     cfg["mapper"].post_reconcile(rec2)
     ref_mgr.walk_top_for_refs(rec2["data"], 0)
