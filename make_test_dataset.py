@@ -23,9 +23,18 @@ merged = cfgs.results["merged"]["recordcache"]
 reconciler = Reconciler(cfgs, idmap, networkmap)
 ref_mgr = ReferenceManager(cfgs, idmap)
 
+
 # Ensure we don't write to real data
-ref_mgr.all_refs = {}
-ref_mgr.done_refs = {}
+# redis returns None rather than raising on missing key
+class RedisDictLike(dict):
+    def __getitem__(self, key):
+        if not key in self:
+            return None
+        return dict.__getitem__(self, key)
+
+
+ref_mgr.all_refs = RedisDictLike()
+ref_mgr.done_refs = RedisDictLike()
 
 
 def walk_for_refs(node, refs, top=False):
