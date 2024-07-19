@@ -141,6 +141,8 @@ if not ONLY_LISTED:
     for ref, info in ref_mgr.all_refs.items():
         rectype = info["type"]
         (uri, qua) = cfgs.split_qua(ref)
+        if not rectype:
+            rectype = qua
         (cfg, recid) = cfgs.split_uri(uri)
         rec = cfg["acquirer"].acquire(recid, rectype=rectype, store=False)
         if not rec:
