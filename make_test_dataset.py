@@ -317,6 +317,6 @@ else:
     fh.write(f"__{tok}__")
     fh.close()
 
-files = ["run-integrated.py", "run-merge2.py", "run-export.py", "run-all.sh"]
+files = ["run-reconcile.py", "run-merge.py", "run-export.py", "run-all.sh"]
 for fn in files:
     shutil.copyfile(fn, os.path.join(test_dir, fn))
