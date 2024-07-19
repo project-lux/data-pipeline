@@ -22,6 +22,7 @@ cfgs.instantiate_all()
 merged = cfgs.results["merged"]["recordcache"]
 reconciler = Reconciler(cfgs, idmap, networkmap)
 ref_mgr = ReferenceManager(cfgs, idmap)
+reconciler.collector.acquirer_should_store = False
 
 
 # Ensure we don't write to real data
