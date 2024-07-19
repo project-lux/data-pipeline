@@ -85,6 +85,8 @@ cfgs_needed = {}
 
 print("Collecting Records")
 for recid in recids:
+    if not recid:
+        continue
     if recid.startswith("https://lux.collections.yale.edu/data/"):
         recid = recid.replace("https://lux.collections.yale.edu/data/", "yuid:")
     try:
