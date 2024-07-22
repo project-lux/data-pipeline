@@ -1073,7 +1073,7 @@ class WdMapper(Mapper, WdConfigManager):
             except TypeError:
                 pass
         
-        if ts.begin_of_the_begin or ts.begin_of_the_end:
+        if startTime or endTime:
             top.timespan = ts
                 
         participant = data.get("P710",[])
