@@ -438,7 +438,7 @@ class Cleaner(Mapper):
                             self.metatype_yuid_cache[md] = mdy
                         if not mdy in curr:
                             # Find the AAT equivalent
-                            aat = cfgs.split_qua(md)[0]
+                            aat = self.configs.split_qua(md)[0]
                             data["classified_as"].append(
                                 {
                                     "id": mdy,
