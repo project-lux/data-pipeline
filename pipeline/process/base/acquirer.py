@@ -70,7 +70,6 @@ class Acquirer(object):
                     else:
                         return None
             if store:
-                raise ValueError("trying to store")
                 if self.config["type"] == "external":
                     try:
                         qrecid = self.configs.make_qua(rec3["identifier"], rectype)
