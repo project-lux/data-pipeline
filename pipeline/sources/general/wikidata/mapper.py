@@ -1077,10 +1077,12 @@ class WdMapper(Mapper, WdConfigManager):
             top.timespan = ts
                 
         participant = data.get("P710",[])
-        for p in participant:
-            pcls = self.get_reference(p)
-            if pcls in [model.Group, model.Person]:
-                top.participant = pcls
+        chairperson = data.get("P488",[])
+        participants = participant + chairperson
+        for p in participants:
+            pref = self.get_reference(p)
+            if pref and pref.__class__ in [model.Group, model.Person]:
+                top.participant = pref
 
         #P361 part_of
         broader = data.get("P361",[])
