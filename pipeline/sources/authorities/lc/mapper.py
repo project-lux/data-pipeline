@@ -790,7 +790,10 @@ class LcnafMapper(LcMapper):
                             fetchid = gid.rsplit("/", 1)[-1]
                             frec = self.get_reference(fetchid)
                             if frec.__class__ == model.Group:
-                                top.member_of = frec
+                                if topcls in [model.Group, model.Person]:
+                                    top.member_of = frec
+                                elif topcls in [model.Activity]:
+                                    top.carried_out_by = frec
 
                 if "madsrdf:hasCorporateParentAuthority" in rwo:
                     print(f"got parent: {rwo['madsrdf:hasCorporateParentAuthority']}")
