@@ -48,8 +48,8 @@ class WdFetcher(Fetcher):
                 if 'qualifiers' in val and 'P2241' in val['qualifiers']:
                     # deprecated reason, but not deprecated rank
                     continue
-                if prop in ['P131','P17']:
-                    # Don't include historical part_ofs
+                if prop in ['P131','P17','P2283','P276']:
+                    # Don't include historical part_ofs or Activity took_place_at
                     if 'qualifiers' in val and 'P582' in val['qualifiers']:
                         continue
 
