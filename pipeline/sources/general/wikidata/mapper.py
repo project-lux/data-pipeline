@@ -1051,6 +1051,53 @@ class WdMapper(Mapper, WdConfigManager):
         self.process_imageref(data, top)
 
     def process_activity(self, data, top):
+        startTime = data.get("P580")
+        endTime = data.get("P582")
+        ts = model.TimeSpan()
+        
+        if startTime:
+            startTime, precision = self.clean_date(startTime)
+            try:
+                bstart, bend = self.make_datetime(startTime, precision)
+                ts.begin_of_the_begin = bstart
+                ts.end_of_the_begin = bend
+            except TypeError:
+                pass
+        
+        if endTime:
+            endTime, precision = self.clean_date(endTime)
+            try:
+                estart, eend = self.make_datetime(endTime, precision)
+                ts.begin_of_the_end = estart
+                ts.end_of_the_end = eend
+            except TypeError:
+                pass
+        
+        if startTime or endTime:
+            top.timespan = ts
+                
+        participant = data.get("P710",[])
+        chairperson = data.get("P488",[])
+        participants = participant + chairperson
+        for p in participants:
+            pref = self.get_reference(p)
+            if pref and pref.__class__ in [model.Group, model.Person]:
+                top.participant = pref
+
+        #P361 part_of
+        broader = data.get("P361",[])
+        for b in broader:
+            top.part_of = model.Activity(ident=self.expand_uri(b))
+
+
+        country = data.get("P17",[])
+        location = data.get("P276",[])
+        venue = data.get("P2293",[])
+        
+        places = country + location + venue
+        for p in places:
+            top.took_place_at = model.Place(ident=self.expand_uri(p))
+
         self.process_imageref(data, top)
 
     def process_digitalobject(self, data, top):
