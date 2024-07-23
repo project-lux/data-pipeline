@@ -73,10 +73,11 @@ class Reconciler(object):
                             elif aat_lastName in [cx['id'] for cx in cxns]:
                                 last = part['content'].lower().strip()
 
-                        if last and first:
+                        if last and first and middle:
+                            vals.append(f"{last}, {first} {middle}")
+                            break                          
+                        elif last and first:
                             vals.append(f"{last}, {first}")
-                            if middle:
-                                vals.append(f"{last}, {first} {middle}")
                 elif typ == 'Place' and '--' in val:
                     val1, val2 = val.split("--", 1)
                     vals.append(f"{val2} ({val1})")
