@@ -73,10 +73,11 @@ class Reconciler(object):
                             elif aat_lastName in [cx['id'] for cx in cxns]:
                                 last = part['content'].lower().strip()
 
-                        if last and first:
+                        if last and first and middle:
+                            vals.append(f"{last}, {first} {middle}")
+                            break                          
+                        elif last and first:
                             vals.append(f"{last}, {first}")
-                            if middle:
-                                vals.append(f"{last}, {first} {middle}")
                 elif typ == 'Place' and '--' in val:
                     val1, val2 = val.split("--", 1)
                     vals.append(f"{val2} ({val1})")
@@ -161,10 +162,12 @@ class LmdbReconciler(Reconciler):
                         typ = None
                     if typ is not None and my_type == typ:
                         if self.debug:
-                            try:
-                                self.debug_graph[rec['id']].append((f"{self.namespace}{k}", 'nm'))
-                            except:
-                                self.debug_graph[rec['id']] = [(f"{self.namespace}{k}", 'nm')]
+                            recid = rec.get("id","")
+                            if recid:
+                                try:
+                                    self.debug_graph[rec['id']].append((f"{self.namespace}{k}", 'nm'))
+                                except:
+                                    self.debug_graph[rec['id']] = [(f"{self.namespace}{k}", 'nm')]
                         try:
                             matches[k].append(val)
                         except:
