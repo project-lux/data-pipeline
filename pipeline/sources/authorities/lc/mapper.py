@@ -705,12 +705,12 @@ class LcnafMapper(LcMapper):
                 if fid.startswith("_:"):
                     if al.startswith("("):
                         al = re.sub(r'^\(.*?\)\s*', '', al)
-                    fid1 = self.build_recs_and_reconcile(al, "concept")
-                if fid1:
-                    if "authorities/names" in fid1:
+                    fid = self.build_recs_and_reconcile(al, "concept")
+                if fid:
+                    if "authorities/names" in fid:
                         continue
                     act = vocab.Active()
-                    act.classified_as = model.Type(ident=fid1, label=al)
+                    act.classified_as = model.Type(ident=fid, label=al)
                     top.carried_out = act
         if "madsrdf:activityStartDate" in rwo:
             print(f"LCNAF start activity: {rwo['madsrdf:activityStartDate']}")
