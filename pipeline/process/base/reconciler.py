@@ -161,7 +161,8 @@ class LmdbReconciler(Reconciler):
                         typ = None
                     if typ is not None and my_type == typ:
                         if self.debug:
-                            if rec['id']:
+                            recid = rec.get("id","")
+                            if recid:
                                 try:
                                     self.debug_graph[rec['id']].append((f"{self.namespace}{k}", 'nm'))
                                 except:
