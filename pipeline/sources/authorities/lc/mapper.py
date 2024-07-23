@@ -418,11 +418,10 @@ class LcnafMapper(LcMapper):
         else:
             self.parenthetical_places = {}
 
-    def build_recs_and_reconcile(self, txt, ident, rectype=""):
+    def build_recs_and_reconcile(self, txt, rectype=""):
         # reconrec returns URI
 
         rec = {
-            "id" : ident
             "type": "",
             "identified_by": [
                 {
@@ -609,7 +608,7 @@ class LcnafMapper(LcMapper):
                 txt = re.sub(r'^\(.*?\)\s*', '', txt)
             if txt:
                 if not bpid or bpid.startswith("_:"):
-                    bpid = self.build_recs_and_reconcile(txt, top['id'], "place")
+                    bpid = self.build_recs_and_reconcile(txt, "place")
             if bpid:
                 # bpid is full uri
                 src, ident = self.config["all_configs"].split_uri(bpid)
@@ -673,7 +672,7 @@ class LcnafMapper(LcMapper):
                 txt = re.sub(r'^\(.*?\)\s*', '', txt)
             if txt:
                 if not dpid or dpid.startswith("_:"):
-                    dpid = self.build_recs_and_reconcile(txt, top['id'], "place")
+                    dpid = self.build_recs_and_reconcile(txt, "place")
             if dpid:
                 # dpid is full uri
                 src, ident = self.config["all_configs"].split_uri(dpid)
@@ -706,7 +705,7 @@ class LcnafMapper(LcMapper):
                 if fid.startswith("_:"):
                     if al.startswith("("):
                         al = re.sub(r'^\(.*?\)\s*', '', al)
-                    fid1 = self.build_recs_and_reconcile(al, top['id'], "concept")
+                    fid1 = self.build_recs_and_reconcile(al, "concept")
                 if fid1:
                     if "authorities/names" in fid1:
                         continue
@@ -737,7 +736,7 @@ class LcnafMapper(LcMapper):
                 if oid.startswith("_:"):
                     if al.startswith("("):
                         al = re.sub(r'^\(.*?\)\s*', '', al)
-                    oid = self.build_recs_and_reconcile(al, top['id'], "concept")
+                    oid = self.build_recs_and_reconcile(al, "concept")
                 if oid and "names" in oid:
                     # actually member_of
                     top.member_of = model.Group(ident=oid, label=al)
@@ -800,7 +799,7 @@ class LcnafMapper(LcMapper):
                 gid = o.get("@id", "")
 
                 if (gid == "" or gid.startswith("_")) and lbl:
-                    gid = self.build_recs_and_reconcile(lbl, top['id'], "group")
+                    gid = self.build_recs_and_reconcile(lbl, "group")
                 if gid:
                     fetchid = gid.rsplit("/", 1)[-1]
                     frec = self.get_reference(fetchid)
