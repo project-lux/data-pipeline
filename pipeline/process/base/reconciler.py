@@ -162,10 +162,12 @@ class LmdbReconciler(Reconciler):
                         typ = None
                     if typ is not None and my_type == typ:
                         if self.debug:
-                            try:
-                                self.debug_graph[rec['id']].append((f"{self.namespace}{k}", 'nm'))
-                            except:
-                                self.debug_graph[rec['id']] = [(f"{self.namespace}{k}", 'nm')]
+                            recid = rec.get("id","")
+                            if recid:
+                                try:
+                                    self.debug_graph[rec['id']].append((f"{self.namespace}{k}", 'nm'))
+                                except:
+                                    self.debug_graph[rec['id']] = [(f"{self.namespace}{k}", 'nm')]
                         try:
                             matches[k].append(val)
                         except:
