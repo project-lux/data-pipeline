@@ -184,7 +184,7 @@ if "--nt" in sys.argv:
 
     mpr = QleverMapper(cfgs.results["marklogic"])
     rc = cfgs.results["merged"]["recordcache"]
-    with gzip.open(f"/data-io2-2/output/lux/lux_{my_slice}.nt.gz", "wt", 1) as fh:
+    with gzip.open(f"/data-io2-2/output/lux/nt/lux_{my_slice}.nt.gz", "wt", 1) as fh:
         if my_slice == -1:
             itr = rc.iter_keys()
         else:

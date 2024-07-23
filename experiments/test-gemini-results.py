@@ -42,9 +42,14 @@ test_res = []
 tsv = open("testing.tsv", "w")
 
 for r in results:
-    if "wp" in r and "wp_wd" in r:
+    if "wp" in r:
         wp = r["wp"]
         wpname = wp.rsplit("/", 1)[-1]
+
+
+        if not "wp_wd" in r:
+            # Could be overly specific
+
 
         qry = r["wp_wd"].get("query", {})
         if "pages" in qry:

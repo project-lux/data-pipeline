@@ -438,12 +438,13 @@ class Cleaner(Mapper):
                             self.metatype_yuid_cache[md] = mdy
                         if not mdy in curr:
                             # Find the AAT equivalent
+                            aat = self.configs.split_qua(md)[0]
                             data["classified_as"].append(
                                 {
                                     "id": mdy,
                                     "type": "Type",
                                     "_label": "Metatype",
-                                    "equivalent": [{"id": md, "type": "Type", "_label": "Metatype"}],
+                                    "equivalent": [{"id": aat, "type": "Type", "_label": "Metatype"}],
                                 }
                             )
 
