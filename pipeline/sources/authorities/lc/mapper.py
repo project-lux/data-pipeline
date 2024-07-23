@@ -490,10 +490,9 @@ class LcnafMapper(LcMapper):
 
             if "madsrdf:identifiesRWO" in new:
                 rwo = new["madsrdf:identifiesRWO"]
-                print(f"got rwo {rwo}")
                 if type(rwo) == list:
                     rwo = rwo[0]
-                    print("rwo was a list")
+                    print(rwo)
 
                 # Name is rdfs:label, and copied from concept
                 if "madsrdf:gender" in rwo:
