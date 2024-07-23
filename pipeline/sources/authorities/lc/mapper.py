@@ -422,7 +422,7 @@ class LcnafMapper(LcMapper):
         # reconrec returns URI
 
         rec = {
-            "id" : txt
+            "id" : ""
             "type": "",
             "identified_by": [
                 {
