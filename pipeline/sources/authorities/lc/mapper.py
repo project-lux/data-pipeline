@@ -454,19 +454,14 @@ class LcnafMapper(LcMapper):
             if type(record) == list:
                 # BAD CALLER!
                 rec = record
-        if rec:
-            print("got rec at line 451")
         if not rec["@graph"] or rec["@graph"] == {}:
-            print("returning none at line 457")
             return None
 
         new = LcMapper.transform(self, record, rectype, reference)
 
         if new and not rectype:
             rectype = self.guess_type(new)
-            print("got rectype at line 467")
         if not new or not rectype:
-            print("returning none at line 468")
             return None
 
 
@@ -494,6 +489,7 @@ class LcnafMapper(LcMapper):
             # if we have one
 
             if "madsrdf:identifiesRWO" in new:
+                print("got rwo at line 491")
                 rwo = new["madsrdf:identifiesRWO"]
                 if type(rwo) == list:
                     rwo = rwo[0]
@@ -541,6 +537,7 @@ class LcnafMapper(LcMapper):
                         top.classified_as = gender
 
                 if "madsrdf:birthDate" in rwo:
+                    print("got birthdate at line 539")
                     #'madsrdf:birthDate': {'@type': 'http://id.loc.gov/datatypes/edtf/EDTF', '@value': '1757-11-28'}
                     txt = ""
                     bd = rwo["madsrdf:birthDate"]
