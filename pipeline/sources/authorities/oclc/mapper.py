@@ -191,7 +191,7 @@ class ViafMapper(Mapper):
                 # Only include Wikidata references from VIAF if they guess to the right class
                 if which == "WKP":
                     wdeq = wdm.get_reference(val)
-                    if wdeq.type == rec.type:
+                    if wdeq is not None and wdeq.type == rec.type:
                         rec.equivalent = wdeq
                 else:
                     rec.equivalent = topCls(ident=f"{self.viaf_prefixes[which]}{val}", label=rec._label)
