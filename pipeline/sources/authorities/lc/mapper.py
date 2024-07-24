@@ -788,7 +788,6 @@ class LcnafMapper(LcMapper):
                     gid = self.build_recs_and_reconcile(lbl, "group")
                 if gid:
                     fetchid = gid.rsplit("/", 1)[-1]
-                    print(f" ---> {fetchid}")
                     frec = self.get_reference(fetchid)
                     if frec.__class__ == model.Group:
                         if topcls in [model.Group, model.Person]:
