@@ -108,8 +108,8 @@ class YulMapper(Mapper):
             if k in single_props and type(v) == list:
                 node[k] = v[0]
             if not top and "id" in node and node["id"] in self.object_work_mismatch:
-                node["id"] = self.object_work_mismatch[node["id"]][0]
                 node["type"] = self.object_work_mismatch[node["id"]][1]
+                node["id"] = self.object_work_mismatch[node["id"]][0]
 
             if type(v) == list:
                 for vi in v:
