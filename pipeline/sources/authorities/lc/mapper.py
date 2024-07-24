@@ -590,8 +590,12 @@ class LcnafMapper(LcMapper):
                     bpid = self.build_recs_and_reconcile(txt, "place")
             if bpid:
                 # bpid is full uri
-                src, ident = self.config["all_configs"].split_uri(bpid)
-                where = src["mapper"].get_reference(ident)
+                try:
+                    src, ident = self.config["all_configs"].split_uri(bpid)
+                    where = src["mapper"].get_reference(ident)
+                except:
+                    print(f"Failed to split URI: {bpid}")
+                    where = None
                 if where and where.__class__ == model.Place:
                     if not hasattr(top, "born"):
                         birth = model.Birth()
