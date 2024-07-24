@@ -140,11 +140,7 @@ class LcMapper(Mapper):
         top._label = prefs[0]["@value"]
         for p in prefs:
             nm = vocab.PrimaryName(content=p["@value"])
-            if (
-                "@language" in p
-                and p["@language"]
-                and p["@language"] in self.process_langs
-            ):
+            if "@language" in p and p["@language"] and p["@language"] in self.process_langs:
                 nm.language = self.process_langs[p["@language"]]
             top.identified_by = nm
 
@@ -168,12 +164,7 @@ class LcMapper(Mapper):
                     nm = vocab.AlternateName(content=vl[0]["@value"])
                 else:
                     nm = vocab.AlternateName(content=vl["@value"])
-                if (
-                    type(a) == dict
-                    and "@language" in a
-                    and a["@language"]
-                    and a["@language"] in self.process_langs
-                ):
+                if type(a) == dict and "@language" in a and a["@language"] and a["@language"] in self.process_langs:
                     nm.language = self.process_langs[a["@language"]]
                 top.identified_by = nm
             else:
@@ -330,9 +321,7 @@ class LcshMapper(LcMapper):
             ]:
                 cxn = new.get("madsrdf:classification", "")
                 if cxn and type(cxn) == str:
-                    top.equivalent = topcls(
-                        ident=f"https://id.loc.gov/authorities/classification/{cxn}"
-                    )
+                    top.equivalent = topcls(ident=f"https://id.loc.gov/authorities/classification/{cxn}")
 
                 # broader == madsrdf:hasBroaderAuthority
                 brdr = new.get("madsrdf:hasBroaderAuthority", [])
@@ -397,14 +386,10 @@ class LcnafMapper(LcMapper):
             "http://id.loc.gov/authorities/subjects/sh2007003708",
         ]
 
-        self.lc_transgender_woman_uris = [
-            "http://id.loc.gov/authorities/subjects/sh2018002623"
-        ]
+        self.lc_transgender_woman_uris = ["http://id.loc.gov/authorities/subjects/sh2018002623"]
 
         # or string "transgender man"
-        self.lc_transgender_male_uris = [
-            "http://id.loc.gov/authorities/subjects/sh2018002395"
-        ]
+        self.lc_transgender_male_uris = ["http://id.loc.gov/authorities/subjects/sh2018002395"]
 
         self.config = config
         self.parens_re = re.compile("^(.+) \((.+)\)$")
@@ -436,11 +421,7 @@ class LcnafMapper(LcMapper):
             reconrec = self.config["reconciler"].reconcile(rec, reconcileType="name")
         elif rectype == "concept":
             rec["type"] = "Type"
-            reconrec = (
-                self.config["all_configs"]
-                .external["lcsh"]["reconciler"]
-                .reconcile(rec, reconcileType="name")
-            )
+            reconrec = self.config["all_configs"].external["lcsh"]["reconciler"].reconcile(rec, reconcileType="name")
         elif rectype == "group":
             rec["type"] = "Group"
             reconrec = self.config["reconciler"].reconcile(rec, reconcileType="name")
@@ -463,7 +444,6 @@ class LcnafMapper(LcMapper):
             rectype = self.guess_type(new)
         if not new or not rectype:
             return None
-
 
         recid = new["@id"]
         topcls = getattr(model, rectype)
@@ -505,7 +485,6 @@ class LcnafMapper(LcMapper):
                     except:
                         # This shouldn't ever happen, but not going to die on the hill
                         pass
-
 
         js = model.factory.toJSON(top)
         return {"identifier": record["identifier"], "data": js, "source": self.name}
@@ -605,7 +584,7 @@ class LcnafMapper(LcMapper):
 
             txt = lbl.strip()
             if txt and "(" in txt:
-                txt = re.sub(r'^\(.*?\)\s*', '', txt)
+                txt = re.sub(r"^\(.*?\)\s*", "", txt)
             if txt:
                 if not bpid or bpid.startswith("_:"):
                     bpid = self.build_recs_and_reconcile(txt, "place")
@@ -669,7 +648,7 @@ class LcnafMapper(LcMapper):
                 lbl = lbl.get("@value", "")
             txt = lbl.strip()
             if txt and "(" in txt:
-                txt = re.sub(r'^\(.*?\)\s*', '', txt)
+                txt = re.sub(r"^\(.*?\)\s*", "", txt)
             if txt:
                 if not dpid or dpid.startswith("_:"):
                     dpid = self.build_recs_and_reconcile(txt, "place")
@@ -704,7 +683,7 @@ class LcnafMapper(LcMapper):
                     al = al.get("@value", "")
                 if fid.startswith("_:"):
                     if al.startswith("("):
-                        al = re.sub(r'^\(.*?\)\s*', '', al)
+                        al = re.sub(r"^\(.*?\)\s*", "", al)
                     fid = self.build_recs_and_reconcile(al, "concept")
                 if fid:
                     if "authorities/names" in fid:
@@ -735,7 +714,7 @@ class LcnafMapper(LcMapper):
                     al = al.get("@value", "")
                 if oid.startswith("_:"):
                     if al.startswith("("):
-                        al = re.sub(r'^\(.*?\)\s*', '', al)
+                        al = re.sub(r"^\(.*?\)\s*", "", al)
                     oid = self.build_recs_and_reconcile(al, "concept")
                 if oid and "names" in oid:
                     # actually member_of
@@ -745,11 +724,12 @@ class LcnafMapper(LcMapper):
                     cxn.classified_as = model.Type(
                         ident="http://vocab.getty.edu/aat/300435108",
                         label="Occupation",
-                        )
+                    )
                     top.classified_as = cxn
 
         if "madsrdf:hasAffiliation" in rwo:
             # affiliation to organization = member_of Group
+            topcls = top.__class__
             orgs = []
             affs = rwo["madsrdf:hasAffiliation"]
             if type(affs) != list:
@@ -795,7 +775,7 @@ class LcnafMapper(LcMapper):
                 if type(lbl) == dict:
                     lbl = lbl["@value"]
                 if lbl.startswith("("):
-                    lbl = re.sub(r'^\(.*?\)\s*', '', lbl)
+                    lbl = re.sub(r"^\(.*?\)\s*", "", lbl)
                 gid = o.get("@id", "")
 
                 if (gid == "" or gid.startswith("_")) and lbl:
@@ -877,4 +857,3 @@ class LcnafMapper(LcMapper):
         # if 'madsrdf:associatedLanguage' in rwo:
         # if 'madsrdf:associatedLocale' in rwo:
         # Could use AttributeAssignment pattern
-        
