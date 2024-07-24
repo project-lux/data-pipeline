@@ -467,24 +467,23 @@ class LcnafMapper(LcMapper):
 
             # Now fill out the details from RWO
             # if we have one
+            if "madsrdf:identifiesRWO" in new:
+                rwo = new["madsrdf:identifiesRWO"]
+                if type(rwo) == list:
+                    for r in rwo:
+                        self.process_rwo(r, top)
+                elif type(rwo) == dict:
+                    self.process_rwo(rwo, top)
 
-        if "madsrdf:identifiesRWO" in new:
-            rwo = new["madsrdf:identifiesRWO"]
-            if type(rwo) == list:
-                for r in rwo:
-                    self.process_rwo(r, top)
-            elif type(rwo) == dict:
-                self.process_rwo(rwo, top)
-
-            if top.type == "Person":
-                okay = test_birth_death(top)
-                if not okay:
-                    try:
-                        top.born = None
-                        top.died = None
-                    except:
-                        # This shouldn't ever happen, but not going to die on the hill
-                        pass
+                if top.type == "Person":
+                    okay = test_birth_death(top)
+                    if not okay:
+                        try:
+                            top.born = None
+                            top.died = None
+                        except:
+                            # This shouldn't ever happen, but not going to die on the hill
+                            pass
 
         js = model.factory.toJSON(top)
         return {"identifier": record["identifier"], "data": js, "source": self.name}
