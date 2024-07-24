@@ -585,17 +585,20 @@ class LcnafMapper(LcMapper):
             txt = lbl.strip()
             if txt and "(" in txt:
                 txt = re.sub(r"^\(.*?\)\s*", "", txt)
-            if txt:
-                if not bpid or bpid.startswith("_:"):
-                    bpid = self.build_recs_and_reconcile(txt, "place")
+            if txt and (not bpid or bpid.startswith("_:")):
+                bpid = self.build_recs_and_reconcile(txt, "place")
             if bpid:
                 # bpid is full uri
-                try:
-                    src, ident = self.config["all_configs"].split_uri(bpid)
-                    where = src["mapper"].get_reference(ident)
-                except:
-                    print(f"Failed to split URI: {bpid}")
-                    where = None
+                if "/rwo/" in bpid:
+                    ident = bpid.rsplit("/", 1)[-1]
+                    where = self.get_reference(ident)
+                else:
+                    try:
+                        src, ident = self.config["all_configs"].split_uri(bpid)
+                        where = src["mapper"].get_reference(ident)
+                    except:
+                        print(f"Failed to split URI: {bpid}")
+                        where = None
                 if where and where.__class__ == model.Place:
                     if not hasattr(top, "born"):
                         birth = model.Birth()
