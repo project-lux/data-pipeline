@@ -655,9 +655,8 @@ class LcnafMapper(LcMapper):
             txt = lbl.strip()
             if txt and "(" in txt:
                 txt = re.sub(r"^\(.*?\)\s*", "", txt)
-            if txt:
-                if not dpid or dpid.startswith("_:"):
-                    dpid = self.build_recs_and_reconcile(txt, "place")
+            if txt and (not dpid or dpid.startswith("_:")):
+                dpid = self.build_recs_and_reconcile(txt, "place")
             if dpid:
                 # dpid is full uri
                 if "/rwo/" in dpid:
@@ -668,7 +667,9 @@ class LcnafMapper(LcMapper):
                         src, ident = self.config["all_configs"].split_uri(dpid)
                         where = src["mapper"].get_reference(ident)
                     except:
-                        print(f"Failed to split URI: {dpid}")
+                        print(f"In record: {top.id}")
+                        print(f"Failed to split deathPlace URI: {dpid}")
+                        print(f"txt is: {txt}")
                         where = None
                 if where and where.__class__ == model.Place:
                     if not hasattr(top, "died"):
