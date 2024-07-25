@@ -660,7 +660,16 @@ class LcnafMapper(LcMapper):
                     dpid = self.build_recs_and_reconcile(txt, "place")
             if dpid:
                 # dpid is full uri
-                src, ident = self.config["all_configs"].split_uri(dpid)
+                if "/rwo/" in bpid:
+                    ident = bpid.rsplit("/", 1)[-1]
+                    where = self.get_reference(ident)
+                else:
+                    try:
+                        src, ident = self.config["all_configs"].split_uri(bpid)
+                        where = src["mapper"].get_reference(ident)
+                    except:
+                        print(f"Failed to split URI: {bpid}")
+                        where = None
                 where = src["mapper"].get_reference(ident)
                 if where and where.__class__ == model.Place:
                     if not hasattr(top, "died"):
@@ -722,6 +731,8 @@ class LcnafMapper(LcMapper):
                     if al.startswith("("):
                         al = re.sub(r"^\(.*?\)\s*", "", al)
                     oid = self.build_recs_and_reconcile(al, "concept")
+
+                # Can this be /rwo/ ?
                 if oid and "names" in oid:
                     # actually member_of
                     top.member_of = model.Group(ident=oid, label=al)
