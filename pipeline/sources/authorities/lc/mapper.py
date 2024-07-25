@@ -670,7 +670,6 @@ class LcnafMapper(LcMapper):
                     except:
                         print(f"Failed to split URI: {dpid}")
                         where = None
-                where = src["mapper"].get_reference(ident)
                 if where and where.__class__ == model.Place:
                     if not hasattr(top, "died"):
                         death = model.Death()
