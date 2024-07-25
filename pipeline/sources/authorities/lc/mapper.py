@@ -660,15 +660,15 @@ class LcnafMapper(LcMapper):
                     dpid = self.build_recs_and_reconcile(txt, "place")
             if dpid:
                 # dpid is full uri
-                if "/rwo/" in bpid:
-                    ident = bpid.rsplit("/", 1)[-1]
+                if "/rwo/" in dpid:
+                    ident = dpid.rsplit("/", 1)[-1]
                     where = self.get_reference(ident)
                 else:
                     try:
-                        src, ident = self.config["all_configs"].split_uri(bpid)
+                        src, ident = self.config["all_configs"].split_uri(dpid)
                         where = src["mapper"].get_reference(ident)
                     except:
-                        print(f"Failed to split URI: {bpid}")
+                        print(f"Failed to split URI: {dpid}")
                         where = None
                 where = src["mapper"].get_reference(ident)
                 if where and where.__class__ == model.Place:
