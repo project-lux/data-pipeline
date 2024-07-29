@@ -44,7 +44,7 @@ class RorMapper(Mapper):
                 nm = model.Name(content=n["value"])
             else:
                 continue
-            if "lang" in n:
+            if "lang" in n and n["lang"] in self.process_langs:
                 nm.language = self.process_langs[n["lang"]]
             top.identified_by = nm
 
