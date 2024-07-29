@@ -28,6 +28,8 @@ class RorMapper(Mapper):
 
         top = model.Group(ident=rec["id"])
         for n in rec["names"]:
+            if type(n) == str:
+                n = {"value": n, "types": ["ror_display"]}
             if "ror_display" in n["types"]:
                 nm = vocab.PrimaryName(content=n["value"])
             elif not "alias" in n["types"]:
