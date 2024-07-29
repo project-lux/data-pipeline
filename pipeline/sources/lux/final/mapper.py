@@ -189,6 +189,8 @@ class Cleaner(Mapper):
 
             # lang_names = {None: [{pn}, {sn}]}
 
+            print(f"lang_names: {lang_names}")
+
             for lang, nms in lang_names.items():
                 has_sort = False
                 primaryNameVals = []
