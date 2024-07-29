@@ -22,7 +22,7 @@ class RorMapper(Mapper):
             if not "names" in rec:
                 rec["names"] = []
             for l in rec["labels"]:
-                n = {"value": l["label"]}
+                n = {"value": l["label"], "types": []}
                 if "iso639" in l:
                     n["lang"] = l["iso639"]
                 rec["names"].append(n)
