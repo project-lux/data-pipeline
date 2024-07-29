@@ -461,6 +461,9 @@ class Cleaner(Mapper):
 
     def dedupe_webpages(self, data):
         webs = data["subject_of"]
+        if len(webs) < 2:
+            # Nothing to do
+            return
         aps = []
         ws = {}
         okay = []
