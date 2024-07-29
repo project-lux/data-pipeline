@@ -62,8 +62,12 @@ class RorMapper(Mapper):
         # Education, Healthcare, Company, Archive, Nonprofit, Government
         # Facility, Other
 
+        if "addresses" in rec:
+            rec["locations"] = rec["addresses"]
+            del rec["addresses"]
+
         if "locations" in rec and rec["locations"]:
-            for addr in rec["addresses"]:
+            for addr in rec["locations"]:
                 if "geonames_id" in addr:
                     gn = addr["geonames_id"]
                     top.residence = model.Place(ident=f"https://sws.geonames.org/{gn}")
