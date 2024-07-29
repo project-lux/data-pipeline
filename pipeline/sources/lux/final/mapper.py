@@ -273,6 +273,15 @@ class Cleaner(Mapper):
                         target = candidates[0]
                         if not "classified_as" in target:
                             target["classified_as"] = []
+                        else:
+                            # remove alternate if present
+                            remove = []
+                            for cx in target["classified_as"]:
+                                if "id" in cx and cx["id"] in [alternateName, alternateTitle]:
+                                    remove.append(cx)
+                            for r in remove:
+                                target["classified_as"].remove(r)
+
                         target["classified_as"].append(primaryType)
                     primaryNameVals = [target]
                     primary_name_langs[lang] = target
