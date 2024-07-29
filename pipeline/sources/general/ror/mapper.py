@@ -18,6 +18,14 @@ class RorMapper(Mapper):
         if "name" in rec and not "names" in rec:
             rec["names"] = [rec["name"]]
             del rec["name"]
+        if "labels" in rec:
+            if not "names" in rec:
+                rec["names"] = []
+            for l in rec["labels"]:
+                n = {"value": l["label"]}
+                if "iso639" in l:
+                    n["lang"] = l["iso639"]
+                rec["names"].append(n)
 
         if not rectype:
             rectype = "Group"
@@ -63,6 +71,8 @@ class RorMapper(Mapper):
         if "links" in rec:
             # home page
             for l in rec["links"]:
+                if type(l) == str:
+                    l = {"type": "website", "value": l}
                 if l["type"] == "website":
                     lo = model.LinguisticObject(label="Website Text")
                     do = vocab.WebPage(label="Website")
