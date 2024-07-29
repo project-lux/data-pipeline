@@ -245,6 +245,9 @@ class YulMapper(Mapper):
             name = name.strip()
             if name and (m := self.parens_re.match(name)):
                 (nm, parent) = m.groups()
+                parent = parent.strip()
+                if ":" in parent:
+                    parent = parent.split(":")[0].strip()
                 if parent.strip() in self.parenthetical_places:
                     uri = self.parenthetical_places[parent.strip()]
                     rec["data"]["part_of"] = [{"id": uri, "type": "Place", "_label": parent}]
