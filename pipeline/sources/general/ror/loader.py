@@ -16,7 +16,7 @@ class RorLoader(Loader):
             x += 1
             ident = r["id"]
             ident = ident.split("/")[-1]
-            self.out_cache[ident] = rec
+            self.out_cache[ident] = r
             if not x % 10000:
                 t = time.time() - start
                 xps = x / t
