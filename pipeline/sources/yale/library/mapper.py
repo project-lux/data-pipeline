@@ -244,18 +244,43 @@ class YulMapper(Mapper):
                         break
             name = name.strip()
             if name and (m := self.parens_re.match(name)):
-                (nm, parent) = m.groups()
-                parent = parent.strip()
-                if ":" in parent:
-                    parent = parent.split(":")[0].strip()
-                if "," in parent and not parent in self.parenthetical_places:
-                    (a, b) = parent.split(",", 1)
-                    if b.strip() in self.parenthetical_places:
-                        parent = b.strip()
-                    elif a.strip() in self.parenthetical_places:
+                (nm, par) = m.groups()
+                par = par.strip()
+                if ":" in par:
+                    test = par.split(":", 1)
+                    # Now test both to find which is right
+                    # Could be: 'Abbey : Paris, France'
+                    # or: (Norfolk, England : Parish)
+                    # or: (Sweden : Kommun)
+                    # (etc)
+                else:
+                    test = [par]
+                parent = None
+
+                for t in test:
+                    if "," in t and not t in self.parenthetical_places:
+                        (a, b) = t.split(",", 1)
+                        if b.strip() in self.parenthetical_places:
+                            # (Potsdam, Germany)
+                            parent = b.strip()
+                            break
+                        elif a.strip() in self.parenthetical_places:
+                            parent = a.strip()
+                            break
+                    elif t.strip() in self.parenthetical_places:
+                        parent = t.strip()
+                        break
+
+                if parent is None and " and " in par and not par in self.parenthetical_places:
+                    (a, b) = par.split(" and ", 1)
+                    # just pick the first
+                    if a.strip() in self.parenthetical_places:
                         parent = a.strip()
-                if parent in self.parenthetical_places:
-                    uri = self.parenthetical_places[parent.strip()]
+                    elif b.strip() in self.parenthetical_places:
+                        parent = b.strip()
+
+                if parent:
+                    uri = self.parenthetical_places[parent]
                     rec["data"]["part_of"] = [{"id": uri, "type": "Place", "_label": parent}]
 
             uu = data["id"].split("/")[-1]
