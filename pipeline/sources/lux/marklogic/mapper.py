@@ -269,8 +269,8 @@ class MlMapper(Mapper):
                                 techs.extend([x["id"] for x in p["technique"] if "id" in x])
                             if "influenced_by" in p:
                                 influences.extend([x["id"] for x in p["influenced_by"] if "id" in x])
-                            if "caused_by" in n:
-                                causes.extend([x["id"] for x in n["caused_by"] if "id" in x])
+                            if "caused_by" in p:
+                                causes.extend([x["id"] for x in p["caused_by"] if "id" in x])
                             if "attributed_by" in p:
                                 for aa in p["attributed_by"]:
                                     if "assigned" in aa:
