@@ -465,7 +465,7 @@ class Cleaner(Mapper):
             if "digitally_carried_by" in web:
                 for points in web["digitally_carried_by"]:
                     if "access_point" in points and "id" in points["access_point"][0]:
-                        ap = normalize_url(points["access_point"][0]["id"])
+                        ap = self.normalize_url(points["access_point"][0]["id"])
                         aps.append(ap)
                         ws[ap] = web
 
@@ -473,7 +473,7 @@ class Cleaner(Mapper):
 
         for a in aps:
             found = False
-            normalized_a = normalize_url(a)
+            normalized_a = self.normalize_url(a)
             variations = [normalized_a]
 
             # Create variations for comparison
@@ -504,7 +504,7 @@ class Cleaner(Mapper):
                 block = ws[k]
                 subj.append(block)
             except KeyError:
-                #print(f"Could not find {k} in {ws} for {data['id']}")
+                print(f"Could not find {k} in {ws} for {data['id']}")
                 pass
 
         if subj:
