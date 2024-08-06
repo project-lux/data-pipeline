@@ -246,7 +246,6 @@ class MlMapper(Mapper):
 
                 if type(node) == dict:
                     node = [node]
-
                 for n in node:
                     if "carried_out_by" in n:
                         agents.extend([x["id"] for x in n["carried_out_by"] if "id" in x])
@@ -256,6 +255,23 @@ class MlMapper(Mapper):
                         techs.extend([x["id"] for x in n["technique"] if "id" in x])
                     if "caused_by" in n:
                         causes.extend([x["id"] for x in n["caused_by"] if "id" in x])
+                    if "influenced_by" in n:
+                        for inf in n["influenced_by"]:
+                            if "id" in inf:
+                                if "type" in inf:
+                                    typ = inf["type"]
+                                    if typ in ["Type", "Language", "Material", "Currency", "MeasurementUnit"]:
+                                        typ = "concept"
+                                    elif typ in ["Person", "Group"]:
+                                        typ = "agent"
+                                    elif typ in ["Period", "Event", "Activity"]:
+                                        # FIXME: this should be event
+                                        typ = "activity"
+                                    typ = typ.lower()
+                                else:
+                                    typ = "other"
+                                t = {"subject": me, "predicate": f"{luxns}{typ}Influenced{predClass}", "object": inf["id"]}
+                                ml["triples"].append({"triple": t})
                     if "part" in n:
                         for p in n["part"]:
                             if "carried_out_by" in p:
@@ -264,6 +280,23 @@ class MlMapper(Mapper):
                                 places.extend([x["id"] for x in p["took_place_at"] if "id" in x])
                             if "technique" in p:
                                 techs.extend([x["id"] for x in p["technique"] if "id" in x])
+                            if "influenced_by" in p:
+                                for inf in p["influenced_by"]:
+                                    if "id" in inf:
+                                        if "type" in inf:
+                                            typ = inf["type"]
+                                            if typ in ["Type", "Language", "Material", "Currency", "MeasurementUnit"]:
+                                                typ = "concept"
+                                            elif typ in ["Person", "Group"]:
+                                                typ = "agent"
+                                            elif typ in ["Period", "Event", "Activity"]:
+                                                # FIXME: this should be event
+                                                typ = "activity"
+                                            typ = typ.lower()
+                                        else:
+                                            typ = "other"
+                                        t = {"subject": me, "predicate": f"{luxns}{typ}Influenced{predClass}", "object": inf["id"]}
+                                        ml["triples"].append({"triple": t})
                             if "attributed_by" in p:
                                 for aa in p["attributed_by"]:
                                     if "assigned" in aa:
@@ -297,6 +330,9 @@ class MlMapper(Mapper):
                     ml["triples"].append({"triple": t})
                 for c in causes:
                     t = {"subject": me, "predicate": f"{luxns}{cpred}", "object": c}
+                    ml["triples"].append({"triple": t})
+                for i in influences:
+                    t = {"subject": me, "predicate": f"{luxns}{ipred}", "object": i}
                     ml["triples"].append({"triple": t})
 
 
@@ -528,25 +564,6 @@ class MlMapper(Mapper):
                             ml["triples"].append({"triple": t})
                             t = {"subject": me, "predicate": f"{luxns}depicts_{typ}", "object": r["id"]}
                             ml["triples"].append({"triple": t})
-        elif pfx in ["work", "concept"]:
-            influences = []
-            if "created_by" in data:
-                influenced_by = data["created_by"].get("influenced_by", [])
-                influences.append(influenced_by)
-            elif "created_by" in data and "part" in data["created_by"]:
-                influenced_by_part = data["created_by"]["influenced_by"]["part"]
-                influences.append(influenced_by_part)
-            for inf in influences:
-                if "id" in inf:
-                    typ = inf.get("type", "").lower()
-                    if typ in ["type", "language", "material", "currency", "measurementunit"]:
-                        typ = "concept"
-                    elif typ in ["person", "group"]:
-                        typ = "agent"
-                    elif typ in ["period", "event", "activity"]:
-                        typ = "activity"
-                    t = {"subject": me, "predicate": f"{luxns}influenced_by_{typ}", "object": inf["id"]}
-                    ml["triples"].append({"triple": t})
 
         elif pfx == "event":
             # Add triples for carried_out_by, took_place_at of record, vs production etc
