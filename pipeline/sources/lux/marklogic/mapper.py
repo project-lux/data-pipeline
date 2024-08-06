@@ -331,9 +331,6 @@ class MlMapper(Mapper):
                 for c in causes:
                     t = {"subject": me, "predicate": f"{luxns}{cpred}", "object": c}
                     ml["triples"].append({"triple": t})
-                for i in influences:
-                    t = {"subject": me, "predicate": f"{luxns}{ipred}", "object": i}
-                    ml["triples"].append({"triple": t})
 
 
         # extracted data for indexes/facets
