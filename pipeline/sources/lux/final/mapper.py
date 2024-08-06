@@ -448,7 +448,7 @@ class Cleaner(Mapper):
                                 }
                             )
 
-    def normalize_url(url):
+    def normalize_url(self, url):
         parsed_url = urlparse(url)
         scheme = parsed_url.scheme or 'http'
         netloc = parsed_url.netloc.replace('www.', '')
