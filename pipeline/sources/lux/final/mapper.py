@@ -465,8 +465,7 @@ class Cleaner(Mapper):
             if "digitally_carried_by" in web:
                 for points in web["digitally_carried_by"]:
                     if "access_point" in points and "id" in points["access_point"][0]:
-                        ap = self.normalize_url(points["access_point"][0]["id"])
-                        aps.append(ap)
+                        aps.append(points["access_point"][0]["id"])
                         ws[ap] = web
 
         del data["subject_of"]
