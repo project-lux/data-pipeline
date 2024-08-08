@@ -15,6 +15,7 @@ class ViafLoader(Loader):
         self.total = config.get("totalRecords", -1)
         self.skip_lines = 0
         self.config = config
+        self.configs = config["all_configs"]
 
     def get_identifier_raw(self, line):
         # Find identifier from raw line
