@@ -1,9 +1,10 @@
 from pipeline.process.base.index_loader import LmdbIndexLoader
 import gzip
 import time
+import os
+
 
 class ViafIndexLoader(LmdbIndexLoader):
-
     def load(self):
         viaf_prefixes = {
             "ISNI": "isni",
@@ -14,29 +15,35 @@ class ViafIndexLoader(LmdbIndexLoader):
             "LC": "lcnaf",
             "LCSH": "lcsh",
             "JPG": "ulan",
-            "FAST": "fast"
+            "FAST": "fast",
         }
 
-        total = 115000000 # approx as of 2024-04
+        total = 115000000  # approx as of 2024-04
         (index, eqindex) = self.get_storage()
-        fh = gzip.open(self.in_path)
+
+        # Merge and sort
+        fns = os.path.join(self.configs.temp_dir, f"viaf_equivs_*.csv")
+        outfn = os.path.join(self.configs.temp_dir, f"viaf_sort_equivs.csv")
+        os.system(f"sort {fns} > {outfn}")
+
+        fh = open(outfn)
         l = fh.readline()
         n = 1
         start = time.time()
         updates = {}
         while l:
             l = l.strip()
-            l = l.decode('utf-8')
-            viaf, ident = l.split('\t')
-            viaf = viaf.replace('http://viaf.org/viaf/', '')
+            l = l.decode("utf-8")
+            viaf, ident = l.split("\t")
+            viaf = viaf.replace("http://viaf.org/viaf/", "")
 
-            if '|' in ident:
-                (pfx, ident) = ident.split('|')
-                ident = ident.replace(' ', '')
+            if "|" in ident:
+                (pfx, ident) = ident.split("|")
+                ident = ident.replace(" ", "")
                 if pfx in viaf_prefixes:
                     if pfx == "LC":
                         # test for sh vs n
-                        if ident[0] == "s": 
+                        if ident[0] == "s":
                             pfx = "LCSH"
                     p = viaf_prefixes[pfx]
                     updates[f"{p}:{ident}"] = f"{viaf}"
@@ -52,5 +59,5 @@ class ViafIndexLoader(LmdbIndexLoader):
         start = time.time()
         eqindex.update(updates)
         end = time.time()
-        durn = end-start
+        durn = end - start
         print(f"Load: {durn} = {n/durn}/sec")
