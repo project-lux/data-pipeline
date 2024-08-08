@@ -21,10 +21,12 @@ class ViafIndexLoader(LmdbIndexLoader):
         total = 115000000  # approx as of 2024-04
         (index, eqindex) = self.get_storage()
 
+        # Now use data extracted from records
         # Merge and sort
-        fns = os.path.join(self.configs.temp_dir, f"viaf_equivs_*.csv")
         outfn = os.path.join(self.configs.temp_dir, f"viaf_sort_equivs.csv")
-        os.system(f"sort {fns} > {outfn}")
+        if not os.path.exists(outfn):
+            fns = os.path.join(self.configs.temp_dir, f"viaf_equivs_*.csv")
+            os.system(f"sort {fns} > {outfn}")
 
         fh = open(outfn)
         l = fh.readline()
@@ -33,12 +35,11 @@ class ViafIndexLoader(LmdbIndexLoader):
         updates = {}
         while l:
             l = l.strip()
-            l = l.decode("utf-8")
-            viaf, ident = l.split("\t")
-            viaf = viaf.replace("http://viaf.org/viaf/", "")
+            # l = l.decode("utf-8")
+            ident, viaf = l.split("\t")
 
-            if "|" in ident:
-                (pfx, ident) = ident.split("|")
+            if ":" in ident:
+                (pfx, ident) = ident.split(":")
                 ident = ident.replace(" ", "")
                 if pfx in viaf_prefixes:
                     if pfx == "LC":

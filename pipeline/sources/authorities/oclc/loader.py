@@ -12,7 +12,7 @@ class ViafLoader(Loader):
         self.in_url = config.get("remoteDumpFile", "")
         self.in_path = config["dumpFilePath"]
         self.out_cache = config["datacache"]
-        self.total = config.get("totalRecords", -1)
+        self.total = config.get("totalRecords", 14000000)
         self.skip_lines = 0
         self.config = config
         self.configs = config["all_configs"]
