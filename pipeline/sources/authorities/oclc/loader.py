@@ -49,7 +49,7 @@ class ViafLoader(Loader):
             self.out_cache[what] = new
 
             # Need to extract links to index
-            top = mapper.parse_xml(new)
+            top = mapper.parse_xml(xml)
             equivs = top.xpath("./viaf:sources/viaf:source/text()", namespaces=nss)
             for eq in equivs:
                 (which, val) = eq.split("|")
