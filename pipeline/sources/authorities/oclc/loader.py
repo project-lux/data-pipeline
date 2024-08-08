@@ -66,7 +66,10 @@ class ViafLoader(Loader):
                     # Only include Wikidata references from VIAF if they guess to the right class
                     if which == "WKP":
                         wdeq = wdm.get_reference(val)
-                        if wdeq is not None and wdeq.type == rec.type:
+                        nameType = top.xpath("./viaf:nameType/text()", namespaces=nss)[0]
+                        topCls = mapper.nameTypeMap.get(nameType, None)
+
+                        if wdeq is not None and wdeq.type == topCls.__name__:
                             efh.write(f"{which}:{val}\t{what}\n")
                     else:
                         efh.write(f"{which}:{val}\t{what}\n")
