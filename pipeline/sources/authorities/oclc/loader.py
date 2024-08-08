@@ -26,6 +26,7 @@ class ViafLoader(Loader):
         efh = open(os.path.join(self.configs.temp_dir, f"viaf_equivs_{slicen}.csv"), "w")
         mapper = self.config["mapper"]
         wdm = mapper.wikidata_config["mapper"]
+        nss = mapper.nss
 
         xstart = time.time()
         start = time.time()
