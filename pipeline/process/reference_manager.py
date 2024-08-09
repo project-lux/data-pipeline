@@ -397,7 +397,10 @@ class ReferenceManager(object):
                     qeq = eq
                 if self.debug:
                     print(f"Setting {qeq} to {uu} in idmap")
-                self.idmap[qeq] = uu
+                try:
+                    self.idmap[qeq] = uu
+                except Exception as e:
+                    print(f"Failed to set {qeq} to {uu}?: {e}")
             else:
                 if self.debug:
                     print(f"Saw {eq} in existing, not setting")

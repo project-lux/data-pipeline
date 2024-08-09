@@ -193,7 +193,7 @@ class Cleaner(Mapper):
                 has_sort = False
                 primaryNameVals = []
                 for nm in nms:
-                    cxns = [x["id"] for x in nm.get("classified_as", [])]
+                    cxns = [x.get("id", None) for x in nm.get("classified_as", [])]
                     if primary in cxns and alternateName in cxns:
                         if primaryNameVals:
                             # make it alternate
