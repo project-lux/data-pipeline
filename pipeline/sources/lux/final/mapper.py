@@ -230,7 +230,7 @@ class Cleaner(Mapper):
                         # FIXME: Any other heuristics here to make a better guess?
                         candidates = []
                         for nm in nms:
-                            cxns = [x["id"] for x in nm.get("classified_as", [])]
+                            cxns = [x.get("id", None) for x in nm.get("classified_as", [])]
                             if not cxns:
                                 candidates.insert(0, nm)
                             else:
@@ -257,7 +257,7 @@ class Cleaner(Mapper):
                         # Everything was bad :(
                         target = nms[0]
                         done = False
-                        cxns = [x["id"] for x in target.get("classified_as", [])]
+                        cxns = [x.get("id", None) for x in target.get("classified_as", [])]
                         for a in [alternateName, alternateTitle, translatedTitle]:
                             if a in cxns:
                                 # Gah. Overwrite. We need a primary name
