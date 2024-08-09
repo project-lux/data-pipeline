@@ -374,8 +374,14 @@ class ReferenceManager(object):
                     if existing_ud:
                         for eqd in existing_ud:
                             if not eqd.startswith("__"):
-                                self.idmap.delete(eqd)
-                                self.idmap[eqd] = uu
+                                try:
+                                    self.idmap.delete(eqd)
+                                except:
+                                    print(f" Failed to delete {eqd} from idmap; ref_mgr")
+                                try:
+                                    self.idmap[eqd] = uu
+                                except:
+                                    print(f" Failed to set {eqd} to {uu} in idmap; ref_mgr")
 
         # Ensure we touch the token
         if not updated_token and not has_update:
