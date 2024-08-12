@@ -32,6 +32,7 @@ if typ == "concept":
 
 typ = typ.title()
 
+equivrecs = {}
 
 if rec:
 	equivs = rec.get("equivalent",[])
@@ -47,9 +48,21 @@ if rec:
 				except:
 					cacherec = None
 					print(f"Could not fetch {identqua} from cache")
-
-
+				if cacherec:
+					data = cacherec['data']
+					names = data['identified_by']
+					for n in names:
+						cont = n.get("content")
+						if identqua in equivrecs:
+							equivrecs[identqua].append(cont)
+						else:
+							equivrecs[identqua] = [cont]						
 	else:
 		print(f"No equivs in {uri}??")
+
+for recs, names in equivrecs.items():
+	print(f"Record {recs} is \n")
+	for n in names:
+		print(f"{names}\n")
 
 
