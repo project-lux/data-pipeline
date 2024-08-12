@@ -29,7 +29,7 @@ except:
 typ = uri.rsplit("/",2)[-2]
 print(typ)
 if typ == "concept":
-	typ == "type"
+	typ = "type"
 
 typ = typ.title()
 
