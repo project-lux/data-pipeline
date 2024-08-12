@@ -35,11 +35,11 @@ typ = typ.title()
 equivrecs = {}
 
 if rec:
-	print(rec)
 	equivs = rec.get("equivalent",[])
 	if equivs:
 		for e in equivs:
 			ident = e.get("id","")
+			print(ident)
 			if ident:
 				try:
 					(src, identifier) = cfgs.split_uri(ident)
