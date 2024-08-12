@@ -54,14 +54,18 @@ if rec:
 							recnames[identqua].append(cont)
 						else:
 							recnames[identqua] = [cont]
-					cacheequivs = data.get("equivalent")
-					for c in cacheequivs:
-						cid = c.get("id","")
-						if cid:
-							if identqua in recequivs:
-								recequivs[identqua].append(cid)
-							else:
-								recequivs[identqua] = [cid]
+					try:
+						cacheequivs = data['equivalent']
+					except:
+						print(f"Record {identqua} has no equivalents")
+					if cacheequivs:
+						for c in cacheequivs:
+							cid = c.get("id","")
+							if cid:
+								if identqua in recequivs:
+									recequivs[identqua].append(cid)
+								else:
+									recequivs[identqua] = [cid]
 
 	else:
 		print(f"No equivs in {uri}??")
