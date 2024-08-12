@@ -43,21 +43,23 @@ if rec:
 			if ident:
 				(src, identifier) = cfgs.split_uri(ident)
 				cache = src['recordcache']
+				cachename = src['name']
 				identqua = identifier + "##qua" + typ
 				cacherec = cache[identqua]
+				keyname = cachename + ": " + identqua
 				if cacherec:
 					data = cacherec['data']
 					names = data['identified_by']
 					for n in names:
 						cont = n.get("content")
-						if identqua in recnames:
-							recnames[identqua].append(cont)
+						if keyname in recnames:
+							recnames[keyname].append(cont)
 						else:
-							recnames[identqua] = [cont]
+							recnames[keyname] = [cont]
 					try:
 						cacheequivs = data['equivalent']
 					except:
-						print(f"Record {identqua} has no equivalents")
+						print(f"Record {keyname} has no equivalents")
 						cacheequivs = None
 					if cacheequivs:
 						for c in cacheequivs:
