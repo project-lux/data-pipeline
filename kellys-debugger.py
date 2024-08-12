@@ -40,19 +40,13 @@ if rec:
 			ident = e.get("id","")
 			if ident:
 				(src, identifier) = cfgs.split_uri(ident)
-				print(src)
-				break
-				try:
-					cache = cfgs.external[src]['recordcache']
-				except:
-					print(f"It doesn't work to fetch the cache this way")
+				cache = src['recordcache']
 				identqua = identifier + "##qua" + typ
 				try:
 					cacherec = cache[identqua]
 				except:
 					cacherec = None
 					print(f"Could not fetch {identqua} from cache")
-
 
 
 	else:
