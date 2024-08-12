@@ -49,6 +49,7 @@ if rec:
 					cacherec = None
 					print(f"Could not fetch {identqua} from cache")
 				if cacherec:
+					print("got cacherec")
 					data = cacherec['data']
 					names = data['identified_by']
 					for n in names:
