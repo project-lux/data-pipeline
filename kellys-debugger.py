@@ -42,14 +42,13 @@ if rec:
 			if ident:
 				try:
 					(src, identifier) = cfgs.split_uri(ident)
-					print(src)
-					print(identifier)
-					break
 				except:
 					print("failed at line 44")
 				try:
 					cache = src['recordcache']
 					identqua = identifier + "##qua" + typ
+					print(cache)
+					print(identqua)
 				except:
 					print("failed at line 48")
 				try:
