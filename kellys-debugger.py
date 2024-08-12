@@ -58,6 +58,7 @@ if rec:
 						cacheequivs = data['equivalent']
 					except:
 						print(f"Record {identqua} has no equivalents")
+						cacheequivs = None
 					if cacheequivs:
 						for c in cacheequivs:
 							cid = c.get("id","")
