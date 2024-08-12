@@ -56,6 +56,7 @@ if rec:
 							recnames[keyname].append(cont)
 						else:
 							recnames[keyname] = [cont]
+
 					try:
 						cacheequivs = data['equivalent']
 					except:
@@ -65,11 +66,21 @@ if rec:
 						for c in cacheequivs:
 							cid = c.get("id","")
 							if cid:
-								if keyname in recequivs:
-									recequivs[keyname].append(cid)
-								else:
-									recequivs[keyname] = [cid]
-
+								(src, identifier) = cfgs.split_uri(cid)
+								cache = src['recordcache']
+								cachename = src['name']
+								identqua = identifier + "##qua" + typ
+								cacherec = cache[identqua]
+								keyname = cachename + ": " + identqua
+								if cacherec:
+									data = cacherec['data']
+									names = data['identified_by']
+									for n in names:
+										cont = n.get("content")
+										if keyname in recequivs:
+											recequivs[keyname].append(cont)
+										else:
+											recequivs[keyname] = [cont]
 	else:
 		print(f"No equivs in {uri}??")
 
