@@ -40,6 +40,8 @@ if rec:
 			ident = e.get("id","")
 			if ident:
 				(src, identifier) = cfgs.split_uri(ident)
+				print(src)
+				break
 				try:
 					cache = cfgs.external[src]['recordcache']
 				except:
