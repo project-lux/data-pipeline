@@ -32,7 +32,8 @@ if typ == "concept":
 
 typ = typ.title()
 
-equivrecs = {}
+recnames = {}
+recequivs = {}
 
 if rec:
 	equivs = rec.get("equivalent",[])
@@ -49,15 +50,27 @@ if rec:
 					names = data['identified_by']
 					for n in names:
 						cont = n.get("content")
-						if identqua in equivrecs:
-							equivrecs[identqua].append(cont)
+						if identqua in recnames:
+							recnames[identqua].append(cont)
 						else:
-							equivrecs[identqua] = [cont]						
+							recnames[identqua] = [cont]
+					cacheequivs = data.get("equivalent")
+					for c in cacheequivs:
+						cid = c.get("id","")
+						if cid:
+							if identqua in recequivs:
+								recequivs[identqua].append(cid)
+							else:
+								recequivs[identqua] = [cid]
+
 	else:
 		print(f"No equivs in {uri}??")
 
-for recs, names in equivrecs.items():
-	print(f"Record {recs} is \n")
+for rec, names in recnames.items():
+	print(f"Record {rec} is \n")
 	print(f"{names}\n")
+	for r, equivs in recequivs.items():
+		if rec == r:
+			print(f"And says it is {equivs}\n")
 
 
