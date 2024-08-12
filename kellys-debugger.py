@@ -65,10 +65,10 @@ if rec:
 						for c in cacheequivs:
 							cid = c.get("id","")
 							if cid:
-								if identqua in recequivs:
-									recequivs[identqua].append(cid)
+								if keyname in recequivs:
+									recequivs[keyname].append(cid)
 								else:
-									recequivs[identqua] = [cid]
+									recequivs[keyname] = [cid]
 
 	else:
 		print(f"No equivs in {uri}??")
