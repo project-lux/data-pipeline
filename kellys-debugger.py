@@ -27,6 +27,7 @@ except:
 	print(f"Could not fetch uri {uri}")
 
 typ = uri.rsplit("/",2)[-2]
+print(typ)
 if typ == "concept":
 	typ == "type"
 
@@ -47,8 +48,6 @@ if rec:
 				try:
 					cache = src['recordcache']
 					identqua = identifier + "##qua" + typ
-					print(cache)
-					print(identqua)
 				except:
 					print("failed at line 48")
 				try:
