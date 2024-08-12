@@ -39,10 +39,12 @@ if rec:
 	if equivs:
 		for e in equivs:
 			ident = e.get("id","")
-			print(ident)
 			if ident:
 				try:
 					(src, identifier) = cfgs.split_uri(ident)
+					print(src)
+					print(identifier)
+					break
 				except:
 					print("failed at line 44")
 				try:
