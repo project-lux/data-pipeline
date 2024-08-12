@@ -35,6 +35,7 @@ typ = typ.title()
 equivrecs = {}
 
 if rec:
+	print(rec)
 	equivs = rec.get("equivalent",[])
 	if equivs:
 		for e in equivs:
