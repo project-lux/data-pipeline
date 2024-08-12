@@ -27,7 +27,6 @@ except:
 	print(f"Could not fetch uri {uri}")
 
 typ = uri.rsplit("/",2)[-2]
-print(typ)
 if typ == "concept":
 	typ = "type"
 
@@ -41,20 +40,10 @@ if rec:
 		for e in equivs:
 			ident = e.get("id","")
 			if ident:
-				try:
-					(src, identifier) = cfgs.split_uri(ident)
-				except:
-					print("failed at line 44")
-				try:
-					cache = src['recordcache']
-					identqua = identifier + "##qua" + typ
-				except:
-					print("failed at line 48")
-				try:
-					cacherec = cache[identqua]
-				except:
-					cacherec = None
-					print(f"Could not fetch {identqua} from cache")
+				(src, identifier) = cfgs.split_uri(ident)
+				cache = src['recordcache']
+				identqua = identifier + "##qua" + typ
+				cacherec = cache[identqua]
 				if cacherec:
 					data = cacherec['data']
 					names = data['identified_by']
@@ -69,7 +58,6 @@ if rec:
 
 for recs, names in equivrecs.items():
 	print(f"Record {recs} is \n")
-	for n in names:
-		print(f"{names}\n")
+	print(f"{names}\n")
 
 
