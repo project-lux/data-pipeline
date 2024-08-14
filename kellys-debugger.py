@@ -47,8 +47,14 @@ if rec:
 				identqua = identifier + "##qua" + typ
 				cacherec = cache[identqua]
 				keyname = cachename + ": " + identqua
-				if cacherec:
+				if cacherec:					
 					data = cacherec['data']
+					try:
+						cacheequivs = data['equivalent']
+					except:
+						print(f"Record {keyname} has no equivalents")
+						cacheequivs = None
+						continue
 					names = data['identified_by']
 					for n in names:
 						cont = n.get("content")
@@ -56,12 +62,6 @@ if rec:
 							recnames[keyname].append(cont)
 						else:
 							recnames[keyname] = [cont]
-
-					try:
-						cacheequivs = data['equivalent']
-					except:
-						print(f"Record {keyname} has no equivalents")
-						cacheequivs = None
 					if cacheequivs:
 						for c in cacheequivs:
 							cid = c.get("id","")
