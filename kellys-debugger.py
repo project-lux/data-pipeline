@@ -71,7 +71,6 @@ if rec:
 								cachename = src['name']
 								identqua = identifier + "##qua" + typ
 								cacherec = cache[identqua]
-								keyname = cachename + ": " + identqua
 								if cacherec:
 									data = cacherec['data']
 									names = data['identified_by']
@@ -90,8 +89,9 @@ if rec:
 for rec, names in recnames.items():
 	print(f"Record {rec} is \n")
 	print(f"{names}\n")
-	for r, equivs in recequivs.items():
+	for r in recequivs.keys():
 		if rec == r:
-			print(f"And says it is {equivs}\n")
+			for e in recequivs.values():
+				print(f"And says it is {e}\n")
 
 
