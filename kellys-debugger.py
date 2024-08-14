@@ -66,7 +66,6 @@ if rec:
 						for c in cacheequivs:
 							cid = c.get("id","")
 							if cid:
-								allnames = {}
 								(src, identifier) = cfgs.split_uri(cid)
 								cache = src['recordcache']
 								cachename = src['name']
@@ -77,16 +76,10 @@ if rec:
 									names = data['identified_by']
 									for n in names:
 										cont = n.get("content")
-										if cid in allnames:
-											allnames[cid].append(n)
-										else:
-											allnames[cid] = [n]
-									if keyname in recequivs:
-										for a in allnames:
-											recequivs[keyname].append({a})
-									else:
-										for a in allnames:
-											recequivs[keyname] = [a]
+										if cont:
+											recequivs[keyname] = [f"{cid}: {cont}"]
+											break
+
 ##this is not doing exactly what I want, needs more work
 #recnames: key: each equivalent uri from original record: their PNs
 #recequivs: key: each equivalent uri from original record: their equivalents uris + PNs
