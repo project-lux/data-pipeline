@@ -18,7 +18,6 @@ cfgs.instantiate_all()
 
 
 #given a uri, get the equivalents, check them in the recordcache, spit out the primary names
-#https://lux-front-sbx.collections.yale.edu/data/concept/d7964e61-cca4-408a-b726-35d1717cb7f6
 
 uri = sys.argv[1]
 try:
@@ -36,11 +35,14 @@ recnames = {}
 recequivs = {}
 
 if rec:
+	print("got rec")
 	equivs = rec.get("equivalent",[])
 	if equivs:
+		print("got equivs")
 		for e in equivs:
 			ident = e.get("id","")
 			if ident:
+				print(ident)
 				(src, identifier) = cfgs.split_uri(ident)
 				cache = src['recordcache']
 				cachename = src['name']
