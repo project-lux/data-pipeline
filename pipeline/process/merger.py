@@ -977,7 +977,10 @@ class RecordMerger(object):
 
         if self.should_merge(base, to_merge):
             # delete context
-            del merge["@context"]
+            try:
+                del merge["@context"]
+            except KeyError:
+                pass
             self.merge_common(rec, merge, msource)
             base["sources"].append(to_merge["source"])
         else:
