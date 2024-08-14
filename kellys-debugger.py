@@ -80,7 +80,7 @@ if rec:
 											if keyname not in recequivs:
 												recequivs[keyname] = [f"{cid}:{cont}"]
 											elif keyname in recequivs:
-												recequivs[keyname].append()
+												recequivs[keyname].append(f"{cid}:{cont}")
 
 ##this is not doing exactly what I want, needs more work
 #recnames: key: each equivalent uri from original record: their PNs
