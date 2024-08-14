@@ -82,9 +82,11 @@ if rec:
 										else:
 											allnames[cid] = [n]
 									if keyname in recequivs:
-										recequivs[keyname].append({allnames})
+										for a in allnames:
+											recequivs[keyname].append({a})
 									else:
-										recequivs[keyname] = [allnames]
+										for a in allnames:
+											recequivs[keyname] = [a]
 ##this is not doing exactly what I want, needs more work
 #recnames: key: each equivalent uri from original record: their PNs
 #recequivs: key: each equivalent uri from original record: their equivalents uris + PNs
