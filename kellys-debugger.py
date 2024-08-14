@@ -77,7 +77,7 @@ if rec:
 									for n in names:
 										cont = n.get("content")
 										if keyname in recequivs:
-											recequivs[keyname].append(f"{cid}: {cont}")
+											continue
 										else:
 											recequivs[keyname] = [f"{cid}: {cont}"]
 ##this is not doing exactly what I want, needs more work
