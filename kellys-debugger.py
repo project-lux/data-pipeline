@@ -74,10 +74,14 @@ if rec:
 								if cacherec:
 									data = cacherec['data']
 									names = data['identified_by']
+									pns = {cid:[]}
 									for n in names:
 										cont = n.get("content")
+										pns[cid].append(n)
 										if cont and keyname not in recequivs:
-											recequivs[keyname] = [f"{cid}: {cont}"]
+											recequivs[keyname] = [pns]
+										elif cont and keyname in recequivs:
+											recequivs[keyname].extend([pns])
 
 ##this is not doing exactly what I want, needs more work
 #recnames: key: each equivalent uri from original record: their PNs
@@ -90,7 +94,7 @@ for rec, names in recnames.items():
 	print(f"{names}\n")
 	if rec in recequivs:
 		eqv = recequivs[rec]
-		for e in eqv:
-			print(f"And says it is {e}\n")
+		for k, v in eqv.items():
+			print(f"And says it is {k}:{v}\n")
 
 
