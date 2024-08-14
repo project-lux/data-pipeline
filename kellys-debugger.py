@@ -45,9 +45,7 @@ if rec:
 				cachename = src['name']
 				identqua = identifier + "##qua" + typ
 				cacherec = cache[identqua]
-				print(cacherec)
 				keyname = cachename + ": " + identqua
-				print(keyname)
 				if cacherec:					
 					data = cacherec['data']
 					try:
