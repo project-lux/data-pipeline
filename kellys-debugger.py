@@ -79,10 +79,10 @@ if rec:
 										cont = n.get("content")
 										if keyname in recequivs:
 											recequivs[keyname].append(f"{cid}: {cont}")
-											break
+											continue
 										else:
 											recequivs[keyname] = [f"{cid}: {cont}"]
-											break
+											continue
 ##this is not doing exactly what I want, needs more work
 #key: each equivalent uri from original record: their PNs
 #key: each equivalent uri from original record: their equivalents uris + PNs
