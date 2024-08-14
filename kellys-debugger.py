@@ -78,9 +78,12 @@ if rec:
 									for n in names:
 										cont = n.get("content")
 										if keyname in recequivs:
-											recequivs[keyname].append(cont)
+											recequivs[keyname].append(f"{cid}: {cont}")
 										else:
-											recequivs[keyname] = [cont]
+											recequivs[keyname] = [f"{cid}: {cont}"]
+##this is not doing exactly what I want, needs more work
+#key: each equivalent uri from original record: their PNs
+#key: each equivalent uri from original record: their equivalents uris + PNs
 	else:
 		print(f"No equivs in {uri}??")
 
