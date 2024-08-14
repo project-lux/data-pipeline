@@ -77,7 +77,7 @@ if rec:
 									pns = {cid:[]}
 									for n in names:
 										cont = n.get("content")
-										pns[cid].append(n)
+										pns[cid].append(cont)
 										if cont and keyname not in recequivs:
 											recequivs[keyname] = [pns]
 										elif cont and keyname in recequivs:
