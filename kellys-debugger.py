@@ -43,11 +43,11 @@ if rec:
 				(src, identifier) = cfgs.split_uri(ident)
 				cache = src['recordcache']
 				cachename = src['name']
-				print(cachename)
 				identqua = identifier + "##qua" + typ
-				print(identqua)
 				cacherec = cache[identqua]
+				print(cacherec)
 				keyname = cachename + ": " + identqua
+				print(keyname)
 				if cacherec:					
 					data = cacherec['data']
 					try:
@@ -85,9 +85,8 @@ if rec:
 									elif keyname in recequivs:
 										recequivs[keyname].append(f"{cid}:{cont}")
 
-##this is not doing exactly what I want, needs more work
 #recnames: key: each equivalent uri from original record: their PNs
-#recequivs: key: each equivalent uri from original record: their equivalents uris + PNs
+#recequivs: key: each equivalent uri from original record: their equivalents uris + PN
 	else:
 		print(f"No equivs in {uri}??")
 
