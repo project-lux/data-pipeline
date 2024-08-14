@@ -194,6 +194,8 @@ class Cleaner(Mapper):
                 primaryNameVals = []
                 for nm in nms:
                     cxns = [x.get("id", None) for x in nm.get("classified_as", [])]
+                    if None in cxns:
+                        print(f" ---> {data['id']} has {nm['classified_as']} name cxns")
                     if primary in cxns and alternateName in cxns:
                         if primaryNameVals:
                             # make it alternate
