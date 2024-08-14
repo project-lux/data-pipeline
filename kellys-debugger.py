@@ -62,6 +62,7 @@ if rec:
 					except:
 						print(f"Record {keyname} has no equivalents")
 						cacheequivs = None
+						break
 					if cacheequivs:
 						for c in cacheequivs:
 							cid = c.get("id","")
@@ -76,9 +77,8 @@ if rec:
 									names = data['identified_by']
 									for n in names:
 										cont = n.get("content")
-										if cont:
+										if cont and keyname not in recequivs:
 											recequivs[keyname] = [f"{cid}: {cont}"]
-											break
 
 ##this is not doing exactly what I want, needs more work
 #recnames: key: each equivalent uri from original record: their PNs
