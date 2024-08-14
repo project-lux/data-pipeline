@@ -53,7 +53,7 @@ class Reconciler(object):
             cxns = nm.get("classified_as", [])
             cxnids = [cx.get("id", None) for cx in cxns]
             if None in cxnids:
-                print("  None in Name classifications: {rec['id']}")
+                print(f"  None in Name classifications: {rec['id']}")
             if aat_primaryName in cxnids and "content" in nm:
                 val = nm["content"].lower().strip()
                 vals.append(val)
