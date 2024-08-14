@@ -62,7 +62,6 @@ if rec:
 					except:
 						print(f"Record {keyname} has no equivalents")
 						cacheequivs = None
-						break
 					if cacheequivs:
 						for c in cacheequivs:
 							cid = c.get("id","")
