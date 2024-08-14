@@ -66,11 +66,15 @@ if rec:
 						for c in cacheequivs:
 							cid = c.get("id","")
 							if cid:
-								(src, identifier) = cfgs.split_uri(cid)
-								cache = src['recordcache']
-								cachename = src['name']
-								identqua = identifier + "##qua" + typ
-								cacherec = cache[identqua]
+								try:
+									(src, identifier) = cfgs.split_uri(cid)
+									cache = src['recordcache']
+									cachename = src['name']
+									identqua = identifier + "##qua" + typ
+									cacherec = cache[identqua]
+								except:
+									cacherec = None
+									print(f"could not split uri on {cid}")
 								if cacherec:
 									data = cacherec['data']
 									names = data['identified_by']
