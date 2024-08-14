@@ -41,11 +41,11 @@ if rec:
 			ident = e.get("id","")
 			if ident:
 				(src, identifier) = cfgs.split_uri(ident)
-				print(src)
-				print(identifier)
 				cache = src['recordcache']
 				cachename = src['name']
+				print(cachename)
 				identqua = identifier + "##qua" + typ
+				print(identqua)
 				cacherec = cache[identqua]
 				keyname = cachename + ": " + identqua
 				if cacherec:					
