@@ -94,7 +94,7 @@ for rec, names in recnames.items():
 	print(f"{names}\n")
 	if rec in recequivs:
 		eqv = recequivs[rec]
-		for k, v in eqv.items():
-			print(f"And says it is {k}:{v}\n")
+		for k in eqv:
+			print(f"And says it is {k}\n")
 
 
