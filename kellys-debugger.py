@@ -35,15 +35,14 @@ recnames = {}
 recequivs = {}
 
 if rec:
-	print("got rec")
 	equivs = rec.get("equivalent",[])
 	if equivs:
-		print("got equivs")
 		for e in equivs:
 			ident = e.get("id","")
 			if ident:
-				print(ident)
 				(src, identifier) = cfgs.split_uri(ident)
+				print(src)
+				print(identifier)
 				cache = src['recordcache']
 				cachename = src['name']
 				identqua = identifier + "##qua" + typ
