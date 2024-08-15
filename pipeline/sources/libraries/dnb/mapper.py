@@ -286,6 +286,8 @@ class DnbMapper(Mapper):
             typ = 'group'
         elif typ == "place":
             topcls = model.Place
+        elif typ == "event":
+            topcls = model.Event
         else:
             print(f"Unknown @type in dnb {data['@id']}: {typ}")
             return None
