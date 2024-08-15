@@ -71,6 +71,7 @@ class Cleaner(Mapper):
 
                 # Munge stupid wikimedia image URLs
                 if "commons.wikimedia.org/wiki/special:filepath" in apid.lower():
+                    wd_aps.append(apid.lower())
                     if apid.startswith("http:"):
                         apid = apid.replace("http://", "https://")
                     url, fn = apid.rsplit("/", 1)
