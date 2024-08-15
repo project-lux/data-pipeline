@@ -486,6 +486,8 @@ class DnbMapper(Mapper):
                 # Image is actually in @id
                 jpg = d['@id']
                 jpg = jpg.replace(" ", "_")
+                if "%20" in jpg:
+                    jpg = jpg.replace("%20","_")
                 do = vocab.DigitalImage(label=f"Digital Image of {pn}")
                 vi = model.VisualItem(label=f"Appearance of {pn}")
                 do.access_point = model.DigitalObject(ident=jpg)
