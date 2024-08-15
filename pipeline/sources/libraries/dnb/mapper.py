@@ -476,19 +476,6 @@ class DnbMapper(Mapper):
                 lo.digitally_carried_by = do
                 top.subject_of = lo
 
-        if 'depiction' in rec:
-            dep = rec['depiction']
-            if type(dep) != list:
-                dep = [dep]
-            for d in dep:
-                # Image is actually in @id
-                jpg = d['@id']
-                do = vocab.DigitalImage(label=f"Digital Image of {pn}")
-                vi = model.VisualItem(label=f"Appearance of {pn}")
-                do.access_point = model.DigitalObject(ident=jpg)
-                vi.digitally_shown_by = do
-                top.representation = vi
-
         if 'sameAs' in rec:
             sa = rec['sameAs']
             try:
