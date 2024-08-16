@@ -389,7 +389,8 @@ class MlMapper(Mapper):
             if "carried_out" in data:
                 for co in data["carried_out"]:
                     cxns = [x["id"] for x in co.get("classified_as", []) if "id" in x]
-                    if self.globals["active"] in cxns:
+                    equiv = [x["id"] for x in co.get("equivalent", []) if "id" in x]
+                    if self.globals["active"] in equiv:
                         if "took_place_at" in co:
                             facets["agentActivePlaceId"].extend([y["id"] for y in co["took_place_at"] if "id" in y])
                         for cx in cxns:
