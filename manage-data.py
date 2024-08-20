@@ -39,6 +39,9 @@ if "--load" in sys.argv:
     if "--lcsh" in sys.argv or "--all" in sys.argv:
         cfgs.external["lcsh"]["datacache"].clear()
         cfgs.external["lcsh"]["loader"].load()
+    if "--fast" in sys.argv or "--all" in sys.argv:
+        cfgs.external["fast"]["datacache"].clear()
+        cfgs.external["fast"]["loader"].load()
 
     if "--viaf" in sys.argv or "--all" in sys.argv:
         my_slice = int(sys.argv[1])
