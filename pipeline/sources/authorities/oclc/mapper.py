@@ -319,7 +319,7 @@ class FASTMapper(Mapper):
             return None
         if xml_string:
             root = etree.XML(xml_string)
-            return top
+            return root
 
     def transform(self, record, rectype=None, reference=False):
         nss = self.nss
