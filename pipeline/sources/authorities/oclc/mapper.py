@@ -334,9 +334,9 @@ class FASTMapper(Mapper):
             identifier = description.find('dct:identifier', nss)
             pref_label = description.find('skos:prefLabel', nss)
             name = description.find('schema:name', nss)
-            print(about)
-            print(identifier)
-            print(pref_label)
-            print(name)
+            print(f"about is: {about}")
+            print(f"identifier is: {identifier}")
+            print(f"pref label is: {pref_label}")
+            print(f"name is: {name}")
 
 
