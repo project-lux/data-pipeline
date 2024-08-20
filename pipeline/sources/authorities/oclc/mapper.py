@@ -329,14 +329,25 @@ class FASTMapper(Mapper):
         if top is None:
             return top
 
-        for description in top.findall("rdf:Description",nss):
-            about = description.get(f'{{{nss["rdf"]}}}about')
-            identifier = description.find('dct:identifier', nss)
-            pref_label = description.find('skos:prefLabel', nss)
-            name = description.find('schema:name', nss)
-            print(f"about is: {about}")
-            print(f"identifier is: {identifier}")
-            print(f"pref label is: {pref_label}")
-            print(f"name is: {name}")
+        # for description in top.findall("rdf:Description",nss):
+        #     about = description.get(f'{{{nss["rdf"]}}}about')
+        #     identifier = description.find('dct:identifier', nss)
+        #     pref_label = description.find('skos:prefLabel', nss)
+        #     name = description.find('schema:name', nss)
+        self.extract_fields(top)
+
+    def extract_fields(element, level=0):
+        indent = "  " * level
+        print(f"{indent}Tag: {element.tag}, Text: {element.text.strip() if element.text else ''}")
+    
+        # Print all attributes of the element
+        if element.attrib:
+            for attr_name, attr_value in element.attrib.items():
+                print(f"{indent}  Attribute - {attr_name}: {attr_value}")
+    
+        # Recursively process child elements
+        for child in element:
+            extract_fields(child, level + 1)
+
 
 
