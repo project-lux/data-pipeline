@@ -294,3 +294,49 @@ class ViafMapper(Mapper):
 
         new = model.factory.toJSON(rec)
         return {"identifier": record["identifier"], "data": new, "source": "viaf"}
+
+class FASTMapper(Mapper):
+    def __init__(self, config):
+        Mapper.__init__(self, config)
+
+        self.nss = {
+            'rdf': "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+            'dct': "http://purl.org/dc/terms/",
+            'skos': "http://www.w3.org/2004/02/skos/core#",
+            'schema': "http://schema.org/",
+            'foaf': "http://xmlns.com/foaf/0.1/",
+            'rdfs': "http://www.w3.org/2000/01/rdf-schema#",
+            'void': "http://rdfs.org/ns/void#",
+            'dc': "http://purl.org/dc/elements/1.1/",
+            'owl': "http://www.w3.org/2002/07/owl#"
+        }
+
+    def parse_xml(self, data):
+        try:
+            xml_string = data.get("value","")
+        except:
+            raise
+            return None
+        if xml_string:
+            root = etree.XML(xml_string)
+            return top
+
+    def transform(self, record, rectype=None, reference=False):
+        nss = self.nss
+        data = record["data"]
+
+        top = self.parse_xml(data)
+        if top is None:
+            return top
+
+        for description in top.findall("rdf:Description",nss):
+            about = description.get(f'{{{nss["rdf"]}}}about')
+            identifier = description.find('dct:identifier', namespaces)
+            pref_label = description.find('skos:prefLabel', namespaces)
+            name = description.find('schema:name', namespaces)
+            print(about)
+            print(identifier)
+            print(pref_label)
+            print(name)
+
+
