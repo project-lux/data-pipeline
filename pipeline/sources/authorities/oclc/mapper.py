@@ -331,9 +331,9 @@ class FASTMapper(Mapper):
 
         for description in top.findall("rdf:Description",nss):
             about = description.get(f'{{{nss["rdf"]}}}about')
-            identifier = description.find('dct:identifier', namespaces)
-            pref_label = description.find('skos:prefLabel', namespaces)
-            name = description.find('schema:name', namespaces)
+            identifier = description.find('dct:identifier', nss)
+            pref_label = description.find('skos:prefLabel', nss)
+            name = description.find('schema:name', nss)
             print(about)
             print(identifier)
             print(pref_label)
