@@ -81,13 +81,11 @@ class FastLoader(ViafLoader):
             except:
                 pass
 
-            nss = {'mx': 'http://www.loc.gov/MARC21/slim', 
-                   'default':'http://www.w3.org/TR/xhtml1/strict'
-                  }
+            nss = {'mx': 'http://www.loc.gov/MARC21/slim'}
             records = tree.xpath('//mx:record', namespaces=nss)
             for record in records:
                 try:
-                    identfield = record.xpath('//mx:controlfield[@tag="001"]', namespaces=nss)
+                    identfield = record.xpath('.//mx:controlfield[@tag="001"]', namespaces=nss)
                     print(identfield)
                 except:
                     #no id??
