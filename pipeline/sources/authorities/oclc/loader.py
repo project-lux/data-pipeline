@@ -81,16 +81,14 @@ class FastLoader(ViafLoader):
                 pass
 
             nss = {'mx': 'http://www.loc.gov/MARC21/slim'}
-            try: 
-                records = tree.xpath('//mx:record', namespaces=nss)
-                print(f"got records {records}")
-            except:
-                print("did not get records")
+            records = tree.xpath('//mx:record', namespaces=nss)
             for record in records:
                 try:
                     identfield = record.xpath('//mx:controlfield[@tag="001"]', namespaces=nss)
+                    print(identfield)
                 except:
                     #no id??
+                    print("no identfield")
                     continue
                 if identfield:
                     ident = identfield[0].text
