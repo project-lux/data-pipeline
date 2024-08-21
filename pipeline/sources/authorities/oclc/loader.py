@@ -73,6 +73,7 @@ class FastLoader(ViafLoader):
         for f in members:
             if not f.endswith(".marcxml"):
                 continue
+            print(f"...loading {f}")
             facet = fh.open(f)
             tree = etree.parse(facet)
             try:
@@ -93,17 +94,16 @@ class FastLoader(ViafLoader):
                     ident = ident.split("fst")[-1]
                     if ident.startswith("0"):
                         ident = ident.lstrip('0')
-                data = etree.tostring(record, encoding='utf-8')
+                data = etree.tostring(record)
+                x += 1
+                done_x += 1
+                self.out_cache[ident] = {"xml": data}
 
-            x += 1
-            done_x += 1
-            self.out_cache[ident] = {"xml": data.decode('utf-8')}
-
-            if not done_x % 10000:
-                t = time.time() - start
-                xps = x/t
-                ttls = self.total / xps
-                print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
+                if not done_x % 10000:
+                    t = time.time() - start
+                    xps = x/t
+                    ttls = self.total / xps
+                    print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
         fh.close()
         self.out_cache.commit()
 
