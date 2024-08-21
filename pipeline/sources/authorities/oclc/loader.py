@@ -82,7 +82,7 @@ class FastLoader(ViafLoader):
                 pass
 
             nss = {'mx': 'http://www.loc.gov/MARC21/slim', 
-                   '':'http://www.w3.org/TR/xhtml1/strict'
+                   'default':'http://www.w3.org/TR/xhtml1/strict'
                   }
             records = tree.xpath('//mx:record', namespaces=nss)
             for record in records:
