@@ -73,8 +73,11 @@ class FastLoader(ViafLoader):
         for f in members:
             if not f.endswith(".marcxml"):
                 pass
-            facet = fh.open(f)
-
+            try:
+                facet = fh.open(f)
+                print("opened facet")
+            except:
+                print("could not open facet")
             tree = etree.parse(facet)
             try:
                 facet.close()
@@ -86,7 +89,6 @@ class FastLoader(ViafLoader):
             for record in records:
                 try:
                     identfield = record.xpath('//mx:controlfield[@tag="001"]', namespaces=nss)
-                    print("got identfield")
                 except:
                     #no id??
                     continue
@@ -99,7 +101,6 @@ class FastLoader(ViafLoader):
             x += 1
             done_x += 1
             new = {"xml": record}
-            print(f"-------got new {new}")
             self.out_cache[ident] = new
 
             if not done_x % 10000:
