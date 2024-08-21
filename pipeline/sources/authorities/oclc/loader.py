@@ -64,8 +64,8 @@ class FastLoader(ViafLoader):
 
         start = time.time()
         fh = zipfile.ZipFile(self.in_path)
-        print(self.in_path)
         members = fh.namelist()
+        print(members)
 
         x = 0
         done_x = 0
