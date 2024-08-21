@@ -71,7 +71,6 @@ class FastLoader(ViafLoader):
 
 
         for f in members:
-            print(f"...loading {f}")
             if not f.endswith(".marcxml"):
                 pass
             facet = fh.open(f)
@@ -86,10 +85,8 @@ class FastLoader(ViafLoader):
             for record in records:
                 try:
                     identfield = record.xpath('.//mx:controlfield[@tag="001"]', namespaces=nss)
-                    print(identfield)
                 except:
                     #no id??
-                    print("no identfield")
                     continue
                 if identfield:
                     ident = identfield[0].text
