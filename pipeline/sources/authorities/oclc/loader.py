@@ -74,18 +74,18 @@ class FastLoader(ViafLoader):
             if not f.endswith(".marcxml"):
                 pass
             facet = fh.open(f)
-            try:
-                tree = etree.parse(facet)
-                print("got tree")
-            except:
-                print("did not get tree")
+            tree = etree.parse(facet)
             try:
                 facet.close()
             except:
                 pass
 
-            nss = {'mx': 'http://www.loc.gov/MARC21/slim'} 
-            records = tree.xpath('//mx:record', namespaces=nss)
+            nss = {'mx': 'http://www.loc.gov/MARC21/slim'}
+            try: 
+                records = tree.xpath('//mx:record', namespaces=nss)
+                print(f"got records {records}")
+            except:
+                print("did not get records")
             for record in records:
                 try:
                     identfield = record.xpath('//mx:controlfield[@tag="001"]', namespaces=nss)
