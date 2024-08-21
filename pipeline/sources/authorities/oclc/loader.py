@@ -71,6 +71,7 @@ class FastLoader(ViafLoader):
 
 
         for f in members:
+            print(f"...loading {f}")
             if not f.endswith(".marcxml"):
                 pass
             facet = fh.open(f)
@@ -80,7 +81,9 @@ class FastLoader(ViafLoader):
             except:
                 pass
 
-            nss = {'mx': 'http://www.loc.gov/MARC21/slim'}
+            nss = {'mx': 'http://www.loc.gov/MARC21/slim', 
+                   'xmlns':'http://www.w3.org/TR/xhtml1/strict'
+                  }
             records = tree.xpath('//mx:record', namespaces=nss)
             for record in records:
                 try:
