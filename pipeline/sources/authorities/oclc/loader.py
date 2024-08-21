@@ -73,12 +73,12 @@ class FastLoader(ViafLoader):
         for f in members:
             if not f.endswith(".marcxml"):
                 pass
+            facet = fh.open(f)
             try:
-                facet = fh.open(f)
-                print("opened facet")
+                tree = etree.parse(facet)
+                print("got tree")
             except:
-                print("could not open facet")
-            tree = etree.parse(facet)
+                print("did not get tree")
             try:
                 facet.close()
             except:
