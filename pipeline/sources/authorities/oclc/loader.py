@@ -72,7 +72,7 @@ class FastLoader(ViafLoader):
 
         for f in members:
             if not f.endswith(".marcxml"):
-                pass
+                continue
             facet = fh.open(f)
             tree = etree.parse(facet)
             try:
