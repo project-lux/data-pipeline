@@ -94,10 +94,10 @@ class FastLoader(ViafLoader):
                     ident = ident.split("fst")[-1]
                     if ident.startswith("0"):
                         ident = ident.lstrip('0')
-                data = etree.tostring(record)
+                data = etree.tostring(record, encoding='utf-8')
                 x += 1
                 done_x += 1
-                self.out_cache[ident] = {"xml": data}
+                self.out_cache[ident] = {"xml": data.decode('utf-8')}
 
                 if not done_x % 10000:
                     t = time.time() - start
