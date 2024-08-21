@@ -64,7 +64,6 @@ class FastLoader(ViafLoader):
 
         start = time.time()
         fh = zipfile.ZipFile(self.in_path)
-        print(fh)
         members = fh.namelist()
 
         x = 0
@@ -72,7 +71,6 @@ class FastLoader(ViafLoader):
 
 
         for f in members:
-            print(f)
             if not f.endswith(".marcxml"):
                 pass
             facet = fh.open(f)
@@ -88,6 +86,7 @@ class FastLoader(ViafLoader):
             for record in records:
                 try:
                     identfield = record.xpath('//mx:controlfield[@tag="001"]', namespaces=nss)
+                    print("got identfield")
                 except:
                     #no id??
                     continue
@@ -100,6 +99,7 @@ class FastLoader(ViafLoader):
             x += 1
             done_x += 1
             new = {"xml": record}
+            print(f"-------got new {new}")
             self.out_cache[ident] = new
 
             if not done_x % 10000:
