@@ -64,6 +64,7 @@ class FastLoader(ViafLoader):
 
         start = time.time()
         fh = zipfile.ZipFile(self.in_path)
+        print(fh)
         members = fh.namelist()
 
         x = 0
@@ -71,6 +72,7 @@ class FastLoader(ViafLoader):
 
 
         for f in members:
+            print(f)
             if not f.endswith(".marcxml"):
                 pass
             facet = fh.open(f)
