@@ -65,7 +65,6 @@ class FastLoader(ViafLoader):
         start = time.time()
         fh = zipfile.ZipFile(self.in_path)
         members = fh.namelist()
-        print(members)
 
         x = 0
         done_x = 0
@@ -94,11 +93,11 @@ class FastLoader(ViafLoader):
                     ident = ident.split("fst")[-1]
                     if ident.startswith("0"):
                         ident = ident.lstrip('0')
+                data = etree.tostring(record, encoding='utf-8')
 
             x += 1
             done_x += 1
-            new = {"xml": record}
-            self.out_cache[ident] = new
+            self.out_cache[ident] = {"xml": data.decode('utf-8')}
 
             if not done_x % 10000:
                 t = time.time() - start
