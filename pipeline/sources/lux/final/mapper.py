@@ -403,21 +403,17 @@ class Cleaner(Mapper):
         if replacement:
             data[prop] = replacement
 
-    def ensure_timespans(self, et):
-        # ensure if begin_of_begin then end_of_end and vice versa
-        if "timespan" in et:
-            if "begin_of_the_begin" in et["timespan"] and "end_of_the_end" not in et["timespan"]:
-                et["timespan"]["end_of_the_end"] = "9999-12-31T23:59:59"
-            elif "end_of_the_end" in et["timespan"] and not "begin_of_the_begin" in et["timespan"]:
-                et["timespan"]["begin_of_the_begin"] = "-9999-01-01T00:00:00"
 
-        elif "part" in et:
-            for part in et["part"]:
-                if "timespan" in part:
-                    if "begin_of_the_begin" in part["timespan"] and "end_of_the_end" not in part["timespan"]:
-                        part["timespan"]["end_of_the_end"] = "9999-12-31T23:59:59"
-                    elif "end_of_the_end" in part["timespan"] and not "begin_of_the_begin" in part["timespan"]:
-                        part["timespan"]["begin_of_the_begin"] = "-9999-01-01T00:00:00"
+    def set_timespan_defaults(timespan):
+        if "begin_of_the_begin" in timespan and "end_of_the_end" not in timespan:
+            timespan["end_of_the_end"] = "9999-12-31T23:59:59"
+        elif "begin_of_the_begin" in timespan and "end_of_the_begin" not in timespan:
+            timespan["end_of_the_begin"] = timespan["begin_of_the_begin"]
+        elif "end_of_the_end" in timespan and "begin_of_the_begin" not in timespan:
+            timespan["begin_of_the_begin"] = "-9999-01-01T00:00:00"
+        elif "end_of_the_end" in timespan and "begin_of_the_end" not in timespan:
+            timespan["begin_of_the_end"] = timespan["end_of_the_end"]
+
 
     def check_for_metatypes(self, data):
         if "equivalent" in data:
@@ -519,10 +515,17 @@ class Cleaner(Mapper):
             if "subject_of" in data:
                 self.dedupe_webpages(data)
 
-        eventTypes = ["produced_by", "used_for", "created_by", "born", "died", "formed_by", "dissolved_by"]
+        eventTypes = ["produced_by", "used_for", "created_by", "born", "died", "formed_by", "dissolved_by","timespan"]
         for et in eventTypes:
             if et in data:
-                self.ensure_timespans(data[et])
+                if "timespan" in et and et != "timespan":
+                    self.set_timespan_defaults(et['timespan'])
+                elif "part" in et:
+                    for part in et['part']:
+                        if "timespan" in part:
+                            self.set_timespan_defaults(part['timespan'])
+                elif et == "timespan":
+                    self.set_timespan_defaults(et)
 
         ### Check names are sane
         okay = self.process_names(data)
