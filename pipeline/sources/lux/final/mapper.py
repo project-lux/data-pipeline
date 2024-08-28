@@ -28,6 +28,21 @@ class Cleaner(Mapper):
             fh.close()
             self.metatypes = json.loads(data)
 
+    def process_jsonpath_fixes(self, record):
+        if self.jsonpath_fixes:
+            equivs = [x.get("id", None) for x in record["data"].get("equivalent", [])]
+            for eq in self.jsonpath_fixes.keys():
+                fixes = self.jsonpath_fixes.get(eq, [])
+                for fix in fixes:
+                    p = fix["path"]  # now a parsed path
+                    op = fix["operation"]
+                    arg = fix.get("argument", None)
+                    if op == "DELETE":
+                        p.filter(lambda x: True, record["data"])
+                    elif op == "UPDATE" and arg:
+                        p.update(record["data"], arg)
+        return record
+
     def get_commons_license(self, img):
         # Can't store reidentified version as it would need a YUID
         # And YUIDs must be UUIDs - no way to look up fn->yuid
@@ -588,6 +603,8 @@ class Cleaner(Mapper):
                         break
                 if not okay:
                     data["part_of"].remove(parent)
+
+        rec = self.process_jsonpath_fixes(rec)
 
         data["@context"] = "https://linked.art/ns/v1/linked-art.json"
         return rec
