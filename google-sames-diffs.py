@@ -118,7 +118,11 @@ while cont:
     else:
         for row in values:
             try:
-                src, ident, equiv, path, op, arg = row
+                src, ident, equiv, path, op = row[:5]
+                if len(row) == 6:
+                    arg = row[5]
+                else:
+                    arg = ""
             except:
                 print(row)
                 cont = False
