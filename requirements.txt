@@ -4,6 +4,7 @@ cromulent>=0.16.8
 requests
 requests_toolbelt
 ujson
+jsonpath-ng
 SPARQLWrapper
 dateutils
 edtf

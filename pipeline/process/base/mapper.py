@@ -2,6 +2,8 @@ import os
 import ujson as json
 from cromulent import model, vocab
 
+from jsonpath_ng.ext import parse as parse_jsonpath
+
 
 model.ExternalResource._write_override = None
 # monkey patch in members_exemplified_by for Set and Group
@@ -127,6 +129,35 @@ class Mapper(object):
         self.debug = False
         self.acquirer = None
 
+        # This needs to be {ident: [list, of, fixes]}
+        # each fix: {"JSON_Path": "path", "Operation": "DELETE|UPDATE", "Replacement": "value?"}
+        self.jsonpath_fixes = {}
+
+        fn = os.path.join(self.configs.data_dir, f"jsonpath_fixes.json")
+        if os.path.exists(fn):
+            fh = open(fn)
+            data = json.load(fh)
+            fh.close()
+            for f in data:
+                if f["source"] == self.name:
+                    which = f["identifier"] if f["identifier"] else f["equivalent"]
+                    if not f[which]:
+                        print(f"{self.name} jsonpath has no identifier or equivalent: {f}")
+                        continue
+                    if not f["path"]:
+                        print(f"{self.name} jsonpath has no jsonpath: {f}")
+                        continue
+                    try:
+                        jpx = parse_jsonpath(f["path"])
+                    except:
+                        print(f"{self.name} jsonpath is not parsable: {f}")
+                        continue
+                    f["path"] = jpx
+                    try:
+                        self.jsonpath_fixes[which].append(f)
+                    except:
+                        self.jsonpath_fixes[which] = [f]
+
     def returns_multiple(self, record=None):
         return False
 
@@ -247,6 +278,20 @@ class Mapper(object):
                     record["data"]["equivalent"].remove(hsh[d])
         return record
 
+    def process_jsonpath_fixes(self, record):
+        if self.jsonpath_fixes:
+            ident = record["identifier"]
+            fixes = self.jsonpath_fixes.get(ident, [])
+            for fix in fixes:
+                p = fix["JSON_Path"]  # now a parsed path
+                op = fix["Operation"]
+                arg = fix.get("Replacement", None)
+                if op == "DELETE":
+                    p.filter(lambda x: True, record["data"])
+                elif op == "UPDATE" and arg:
+                    p.update(record["data"], arg)
+        return record
+
     def post_mapping(self, record, xformtype=None):
         record = self.fix_links(record)
         if record is None and self.debug:
@@ -257,6 +302,9 @@ class Mapper(object):
         record = self.trash_different_from(record)
         if record is None and self.debug:
             print(f"trash_different killed record")
+        record = self.process_jsonpath_fixes(record)
+        if record is None:
+            print(f"jsonpath_fixes trashed the record :(")
         return record
 
     def post_reconcile(self, record):
