@@ -141,7 +141,8 @@ class Mapper(object):
             for f in data:
                 if f["source"] == self.name:
                     which = "identifier" if f["identifier"] else "equivalent"
-                    if not f[which]:
+                    ident = f[which]
+                    if not ident:
                         print(f"{self.name} jsonpath has no identifier or equivalent: {f}")
                         continue
                     if not f["path"]:
@@ -154,9 +155,9 @@ class Mapper(object):
                         continue
                     f["path"] = jpx
                     try:
-                        self.jsonpath_fixes[which].append(f)
+                        self.jsonpath_fixes[ident].append(f)
                     except:
-                        self.jsonpath_fixes[which] = [f]
+                        self.jsonpath_fixes[ident] = [f]
 
     def returns_multiple(self, record=None):
         return False
