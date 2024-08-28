@@ -28,9 +28,10 @@ class Cleaner(Mapper):
             fh.close()
             self.metatypes = json.loads(data)
 
-    def process_jsonpath_fixes(self, record):
+        self.update_jsonpath_fixes(idmap)
+
+    def update_jsonpath_fixes(self, idmap):
         if self.jsonpath_fixes:
-            equivs = [x.get("id", None) for x in record["data"].get("equivalent", [])]
             for eq in self.jsonpath_fixes.keys():
                 fixes = self.jsonpath_fixes.get(eq, [])
                 for fix in fixes:
