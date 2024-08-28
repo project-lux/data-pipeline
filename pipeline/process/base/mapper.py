@@ -140,7 +140,7 @@ class Mapper(object):
             fh.close()
             for f in data:
                 if f["source"] == self.name:
-                    which = f["identifier"] if f["identifier"] else f["equivalent"]
+                    which = "identifier" if f["identifier"] else "equivalent"
                     if not f[which]:
                         print(f"{self.name} jsonpath has no identifier or equivalent: {f}")
                         continue
