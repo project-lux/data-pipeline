@@ -117,7 +117,11 @@ while cont:
         cont = False
     else:
         for row in values:
-            src, ident, equiv, path, op, arg = row
+            try:
+                src, ident, equiv, path, op, arg = row
+            except:
+                print(row)
+                cont = False
             fixes.append(
                 {
                     "source": src.strip(),
