@@ -284,9 +284,9 @@ class Mapper(object):
             ident = record["identifier"]
             fixes = self.jsonpath_fixes.get(ident, [])
             for fix in fixes:
-                p = fix["JSON_Path"]  # now a parsed path
-                op = fix["Operation"]
-                arg = fix.get("Replacement", None)
+                p = fix["path"]  # now a parsed path
+                op = fix["operation"]
+                arg = fix.get("argument", None)
                 if op == "DELETE":
                     p.filter(lambda x: True, record["data"])
                 elif op == "UPDATE" and arg:
