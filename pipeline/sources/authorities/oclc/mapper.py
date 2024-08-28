@@ -300,40 +300,191 @@ class FastMapper(Mapper):
         Mapper.__init__(self, config)
 
         self.nss = {
-            'rdf': "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-            'dct': "http://purl.org/dc/terms/",
-            'skos': "http://www.w3.org/2004/02/skos/core#",
-            'schema': "http://schema.org/",
-            'foaf': "http://xmlns.com/foaf/0.1/",
-            'rdfs': "http://www.w3.org/2000/01/rdf-schema#",
-            'void': "http://rdfs.org/ns/void#",
-            'dc': "http://purl.org/dc/elements/1.1/",
-            'owl': "http://www.w3.org/2002/07/owl#"
-        }
+            'mx': 'http://www.loc.gov/MARC21/slim'
+            }
 
-    def parse_xml(self, data):
-        try:
-            xml_string = data.get("value","")
-        except:
-            raise
-            return None
-        if xml_string:
-            root = etree.XML(xml_string)
-            return root
+        self.nameTypeMap = {
+            "148": model.Period,
+            "100": model.Person, 
+            "150": model.Type,
+            "155": model.Type,
+            "151": model.Place,
+            "110": model.Group,
+            "111": model.Activity,
+            "148": model.Period,
+            "147": model.Activity
+            }
+
+    def build_recs_and_reconcile(self, txt, rectype=""):
+        # reconrec returns URI
+
+        rec = {
+            "type": "",
+            "identified_by": [
+                {
+                    "type": "Name",
+                    "content": txt,
+                    "classified_as": [{"id": "http://vocab.getty.edu/aat/300404670"}],
+                }
+            ],
+        }
+        if rectype == "place":
+            rec["type"] = "Place"
+            reconrec = self.config["all_configs"].external['lcnaf']['reconciler'].reconcile(rec, reconcileType="name")
+        elif rectype == "concept":
+            rec["type"] = "Type"
+            reconrec = self.config["all_configs"].external["lcsh"]["reconciler"].reconcile(rec, reconcileType="name")
+        elif rectype == "group":
+            rec["type"] = "Group"
+            reconrec = self.config["all_configs"].external['lcnaf']['reconciler'].reconcile(rec, reconcileType="name")
+
+        return reconrec
+
+    def guess_type(self, root):
+        #148 (chronological): period
+        #100 (personal): person
+        #150 (topical), 155 (genre/form): concept
+        #151 (geographic): place
+        #110 (corporate): group
+        #111 (meeting) meetings, conferences (events)
+        #147 (event): events
+        #130 (title): return None
+        nss = self.nss
+        tags = ["148","100","150","151","155","110","111","147","130"]
+        for tag in tags:
+            if root.find(f".//datafield[@tag={tag}]", nss):
+                topCls = self.nameTypeMap.get(nameType, None)
+                return topCls
 
     def transform(self, record, rectype=None, reference=False):
-        nss = self.nss
-        data = record["data"]
+        rec = record["data"]
+        root = etree.fromstring(rec['xml'])
 
-        top = self.parse_xml(data)
-        if top is None:
-            return top
+        if root is None:
+            return root
 
-        for description in top.findall("rdf:Description",nss):
-            about = description.get(f'{{{nss["rdf"]}}}about')
-            identifier = description.find('dct:identifier', nss)
-            pref_label = description.find('skos:prefLabel', nss)
-            name = description.find('schema:name', nss)
+        topCls = self.guess_type(root)
+        if not topCls:
+            return None
+
+        ident = record["identifier"]
+        rec = topCls(ident=f"http://id.worldcat.org/fast/{ident}")
+
+
+        #personal
+
+        df100 = root.find(".//datafield[@tag='100']", nss)
+        primary = False
+        if df100:
+            subfields = {}
+            for s in df100.findall("mx:subfield",nss):
+                code = s.attrib("code")
+                text = s.text
+                if code in subfields:
+                    subfields[code].append(text)
+                else:
+                    subfields[code] = [text]
+            if "a" in subfields:
+                primary = True
+                rec.identified_by = vocab.PrimaryName(content=subfields['a'][0])                   
+            elif "d" in subfields:
+                dates = subfields['d'][0]
+                if "-" in dates:
+                    b,e = dates.split("-")
+                    try:
+                        bb, eb = make_datetime(bd)
+                    except:
+                        bb = None
+                    try:
+                        be, ee = make_datetime(dd)
+                    except:
+                        be = None
+                    if bb and be:
+                        birth = model.Birth()
+                        ts = model.TimeSpan()
+                        ts.begin_of_the_begin = bb
+                        ts.end_of_the_end = be
+                        birth.timespan = ts
+                        rec.born = birth
+                        birth.identified_by = vocab.DisplayName(content=b)
+                        death = model.Death()
+                        ts = model.TimeSpan()
+                        ts.begin_of_the_begin = be
+                        ts.end_of_the_end = ee
+                        death.timespan = ts
+                        rec.died = death
+                        death.identified_by = vocab.DisplayName(content=e)
+                elif len(dates) == 4:
+                    pass
+        okay = test_birth_death(rec)
+            if not okay:
+                try:
+                    rec.born = None
+                    rec.died = None
+                except:
+                    pass
+
+        df370 = root.xpath(".//mx:datafield[@tag='370']", namespaces=nss)
+        if df370:
+            subfields = {}
+            for d in df370:
+                for subfield in d.findall('mx:subfield', namespaces=nss):                   
+                    code = s.attrib("code")
+                    text = s.text
+                    if code in subfields:
+                        subfields[code].append(text)
+                    else:
+                        subfields[code] = [text]
+            if "a" in subfields:
+                for a in subfields['a']:
+                    bpid = self.build_recs_and_reconcile(a, "place")
+                    if bpid:
+                        try:
+                            src, ident = self.config["all_configs"].split_uri(bpid)
+                            where = src["mapper"].get_reference(ident)
+                        except:
+                            print(f"Failed to split URI: {bpid}")
+                            where = None
+                        if where and where.__class__ == model.Place:
+                            if not hasattr(rec, "born"):
+                                birth = model.Birth()
+                                top.born = birth
+                            birth.took_place_at = where
+            elif "b" in subfields:
+                for b in subfields['b']:
+                    rpid = self.build_recs_and_reconcile(b,"place")
+                    if rpid:
+                        try:
+                            src, ident = self.config["all_configs"].split_uri(rpid)
+                            where = src["mapper"].get_reference(ident)
+                        except:
+                            print(f"Failed to split URI: {rpid}")
+                            where = None
+                        if where and where.__class__ == model.Place:
+                            rec.residence = where
+            elif "e" in subfields:
+                for e in subfields['e']:
+                    plpid = self.build_recs_and_reconcile(e, "place")
+                    if plpid:
+                        try:
+                            src, ident = self.config["all_configs"].split_uri(plpid)
+                            where = src["mapper"].get_reference(ident)
+                        except:
+                            print(f"Failed to split URI: {plpid}")
+                            where = None
+                        if where and where.__class__ == model.Place:
+                            if not hasattr(rec,"carried_out"):
+                                active = vocab.Active()
+                                rec.carried_out = active
+                            active.took_place_at = where
+
+        df374 = root.xpath(".//mx:datafield[@tag='374']", namespaces=nss)
+        if df374:
+
+
+        #just hand off to class mappers because each record has specific class tags?
+
+
 
 
 
