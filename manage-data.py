@@ -39,6 +39,12 @@ if "--load" in sys.argv:
     if "--lcsh" in sys.argv or "--all" in sys.argv:
         cfgs.external["lcsh"]["datacache"].clear()
         cfgs.external["lcsh"]["loader"].load()
+    if "--geonames" in sys.argv or "--all" in sys.argv:
+        cfgs.external["geonames"]["datacache"].clear()
+        cfgs.external["geonames"]["loader"].load()
+    if "--ror" in sys.argv or "--all" in sys.argv:
+        cfgs.external["ror"]["datacache"].clear()
+        cfgs.external["ror"]["loader"].load()
 
     if "--viaf" in sys.argv or "--all" in sys.argv:
         my_slice = int(sys.argv[1])

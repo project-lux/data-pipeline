@@ -584,7 +584,9 @@ class LcnafMapper(LcMapper):
             txt = lbl.strip()
             if txt and "(" in txt:
                 txt = re.sub(r"^\(.*?\)\s*", "", txt)
-            if txt and (not bpid or bpid.startswith("_:")):
+            if not txt and bpid.startswith("_:"):
+                bpid = None
+            elif txt and (not bpid or bpid.startswith("_:")):
                 bpid = self.build_recs_and_reconcile(txt, "place")
             if bpid:
                 # bpid is full uri
@@ -655,7 +657,11 @@ class LcnafMapper(LcMapper):
             txt = lbl.strip()
             if txt and "(" in txt:
                 txt = re.sub(r"^\(.*?\)\s*", "", txt)
-            if txt and (not dpid or dpid.startswith("_:")):
+
+            if not txt and dpid.startswith("_:"):
+                # nothing to do
+                dpid = None
+            elif txt and (not dpid or dpid.startswith("_:")):
                 dpid = self.build_recs_and_reconcile(txt, "place")
             if dpid:
                 # dpid is full uri

@@ -28,6 +28,22 @@ class Cleaner(Mapper):
             fh.close()
             self.metatypes = json.loads(data)
 
+        self.update_jsonpath_fixes(idmap)
+
+    def update_jsonpath_fixes(self, idmap):
+        if self.jsonpath_fixes:
+            for eq in self.jsonpath_fixes.keys():
+                fixes = self.jsonpath_fixes.get(eq, [])
+                for fix in fixes:
+                    p = fix["path"]  # now a parsed path
+                    op = fix["operation"]
+                    arg = fix.get("argument", None)
+                    if op == "DELETE":
+                        p.filter(lambda x: True, record["data"])
+                    elif op == "UPDATE" and arg:
+                        p.update(record["data"], arg)
+        return record
+
     def get_commons_license(self, img):
         # Can't store reidentified version as it would need a YUID
         # And YUIDs must be UUIDs - no way to look up fn->yuid
@@ -194,7 +210,9 @@ class Cleaner(Mapper):
                 has_sort = False
                 primaryNameVals = []
                 for nm in nms:
-                    cxns = [x["id"] for x in nm.get("classified_as", [])]
+                    cxns = [x.get("id", None) for x in nm.get("classified_as", [])]
+                    if None in cxns:
+                        print(f" ---> {data['id']} has {nm['classified_as']} name cxns")
                     if primary in cxns and alternateName in cxns:
                         if primaryNameVals:
                             # make it alternate
@@ -231,7 +249,7 @@ class Cleaner(Mapper):
                         # FIXME: Any other heuristics here to make a better guess?
                         candidates = []
                         for nm in nms:
-                            cxns = [x["id"] for x in nm.get("classified_as", [])]
+                            cxns = [x.get("id", None) for x in nm.get("classified_as", [])]
                             if not cxns:
                                 candidates.insert(0, nm)
                             else:
@@ -258,7 +276,7 @@ class Cleaner(Mapper):
                         # Everything was bad :(
                         target = nms[0]
                         done = False
-                        cxns = [x["id"] for x in target.get("classified_as", [])]
+                        cxns = [x.get("id", None) for x in target.get("classified_as", [])]
                         for a in [alternateName, alternateTitle, translatedTitle]:
                             if a in cxns:
                                 # Gah. Overwrite. We need a primary name
@@ -272,6 +290,15 @@ class Cleaner(Mapper):
                         target = candidates[0]
                         if not "classified_as" in target:
                             target["classified_as"] = []
+                        else:
+                            # remove alternate if present
+                            remove = []
+                            for cx in target["classified_as"]:
+                                if "id" in cx and cx["id"] in [alternateName, alternateTitle]:
+                                    remove.append(cx)
+                            for r in remove:
+                                target["classified_as"].remove(r)
+
                         target["classified_as"].append(primaryType)
                     primaryNameVals = [target]
                     primary_name_langs[lang] = target
@@ -451,13 +478,16 @@ class Cleaner(Mapper):
 
     def normalize_url(self, url):
         parsed_url = urlparse(url)
-        scheme = parsed_url.scheme or 'http'
-        netloc = parsed_url.netloc.replace('www.', '')
-        path = parsed_url.path.rstrip('/')
-        return urlunparse((scheme, netloc, path, '', '', ''))
+        scheme = parsed_url.scheme or "http"
+        netloc = parsed_url.netloc.replace("www.", "")
+        path = parsed_url.path.rstrip("/")
+        return urlunparse((scheme, netloc, path, "", "", ""))
 
     def dedupe_webpages(self, data):
         webs = data["subject_of"]
+        if len(webs) < 2:
+            # Nothing to do
+            return
         aps = []
         ws = {}
         okay = []
@@ -485,9 +515,9 @@ class Cleaner(Mapper):
             for o in variations[:]:
                 variations.append(o.replace("//www.", "//", 1))
                 if o.endswith("/"):
-                    variations.append(o.rstrip('/'))
+                    variations.append(o.rstrip("/"))
                 else:
-                    variations.append(o + '/')
+                    variations.append(o + "/")
 
             # Check if any variation is already in the okay list
             for o in variations:
@@ -503,9 +533,9 @@ class Cleaner(Mapper):
             try:
                 block = ws[k]
                 subj.append(block)
-            except KeyError:
-                print(f"Could not find {k} in {ws} for {data['id']}")
-                pass
+            except:
+                print(f"\n ------- Could not find {k} in {ws} for {data['id']}")
+                # pass
 
         if subj:
             data["subject_of"] = subj
@@ -577,6 +607,8 @@ class Cleaner(Mapper):
                         break
                 if not okay:
                     data["part_of"].remove(parent)
+
+        rec = self.process_jsonpath_fixes(rec)
 
         data["@context"] = "https://linked.art/ns/v1/linked-art.json"
         return rec

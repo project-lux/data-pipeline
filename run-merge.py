@@ -15,30 +15,30 @@ import pstats
 from pstats import SortKey
 
 load_dotenv()
-basepath = os.getenv('LUX_BASEPATH', "")
+basepath = os.getenv("LUX_BASEPATH", "")
 cfgs = Config(basepath=basepath)
 idmap = cfgs.get_idmap()
 cfgs.cache_globals()
 cfgs.instantiate_all()
 
-fh = open(os.path.join(cfgs.data_dir, 'idmap_update_token.txt'))
+fh = open(os.path.join(cfgs.data_dir, "idmap_update_token.txt"))
 token = fh.read()
 fh.close()
 token = token.strip()
-if not token.startswith('__') or not token.endswith('__'):
+if not token.startswith("__") or not token.endswith("__"):
     print("Idmap Update Token is badly formed, should be 8 character date with leading/trailing __")
     raise ValueError("update token")
     sys.exit(0)
 else:
     idmap.update_token = token
 
-if '--profile' in sys.argv:
-    sys.argv.remove('--profile')
+if "--profile" in sys.argv:
+    sys.argv.remove("--profile")
     profiling = True
 else:
     profiling = False
-if '--norefs' in sys.argv:
-    sys.argv.remove('--norefs')
+if "--norefs" in sys.argv:
+    sys.argv.remove("--norefs")
     DO_REFERENCES = False
 else:
     DO_REFERENCES = True
@@ -48,9 +48,9 @@ NAME = None
 max_slice = -1
 my_slice = -1
 recids = []
-if '--all' in sys.argv:
-    to_do = list(cfgs.internal.items())      
-elif '--onlyrefs' in sys.argv:
+if "--all" in sys.argv:
+    to_do = list(cfgs.internal.items())
+elif "--onlyrefs" in sys.argv:
     to_do = []
 else:
     to_do = []
@@ -61,9 +61,9 @@ else:
         if f"--{src}" in sys.argv:
             to_do.append((src, scfg))
 
-while '--recid' in sys.argv:
-    idx = sys.argv.index('--recid')
-    recid = sys.argv[idx+1]
+while "--recid" in sys.argv:
+    idx = sys.argv.index("--recid")
+    recid = sys.argv[idx + 1]
     recids.append(recid)
     sys.argv.pop(idx)
     sys.argv.pop(idx)
@@ -76,16 +76,18 @@ if len(to_do) == 1:
     NAME = to_do[0][0]
 
 MAX_DISTANCE = cfgs.max_distance
-order = sorted([(x['namespace'], x.get('merge_order', -1)) for x in cfgs.external.values()], key=lambda x: x[1])
+order = sorted([(x["namespace"], x.get("merge_order", -1)) for x in cfgs.external.values()], key=lambda x: x[1])
 PREF_ORDER = [x[0] for x in order if x[1] >= 0]
 
 reider = Reidentifier(cfgs, idmap)
 ref_mgr = ReferenceManager(cfgs, idmap)
 merger = MergeHandler(cfgs, idmap, ref_mgr)
 
-merged_cache = cfgs.results['merged']['recordcache']
-merged_cache.config['overwrite'] = True
-final = cfgs.results['merged']['mapper']
+merged_cache = cfgs.results["merged"]["recordcache"]
+merged_cache.config["overwrite"] = True
+final = cfgs.results["merged"]["mapper"]
+final.update_jsonpath_fixes()  # This is only useful to do once idmap has stabilized
+
 
 # if merged is not empty, then only want to write to it if the record
 # hasn't already been written this build
@@ -103,7 +105,7 @@ if profiling:
 
 
 for src_name, src in to_do:
-    rcache = src['recordcache']
+    rcache = src["recordcache"]
 
     if not recids:
         if my_slice > -1:
@@ -120,53 +122,57 @@ for src_name, src in to_do:
             print(f"Couldn't find {src['name']} / {recid}")
             continue
         recuri = f"{src['namespace']}{recid}"
-        qrecid = cfgs.make_qua(recuri, rec['data']['type'])
+        qrecid = cfgs.make_qua(recuri, rec["data"]["type"])
         yuid = idmap[qrecid]
         if not yuid:
             print(f" !!! Couldn't find YUID for internal record: {qrecid}")
             continue
-        yuid = yuid.rsplit('/',1)[1]
+        yuid = yuid.rsplit("/", 1)[1]
         ins_time = merged_cache.metadata(yuid, "insert_time")
-        if ins_time is not None and ins_time['insert_time'] > start_time:
+        if ins_time is not None and ins_time["insert_time"] > start_time:
             # Already processed this record this build
             continue
-        elif not yuid in src['recordcache2']:
+        elif not yuid in src["recordcache2"]:
             rec2 = reider.reidentify(rec)
-            src['recordcache2'][rec2['yuid']] = rec2['data']
+            src["recordcache2"][rec2["yuid"]] = rec2["data"]
         else:
-            rec2 = src['recordcache2'][yuid]
+            rec2 = src["recordcache2"][yuid]
 
         if NAME is not None and ins_time is not None:
             # We're in merged previously
-            curr_name = merged_cache.metadata(yuid, "change")['change']
-            if curr_name in ['create', 'update']:
+            curr_name = merged_cache.metadata(yuid, "change")["change"]
+            if curr_name in ["create", "update"]:
                 curr_name = ""
         else:
             curr_name = ""
 
-        equivs = idmap[rec2['data']['id']]
+        equivs = idmap[rec2["data"]["id"]]
         if equivs:
-            if qrecid in equivs: equivs.remove(qrecid)
-            if recuri in equivs: equivs.remove(recuri)
-            if idmap.update_token in equivs: equivs.remove(idmap.update_token)
+            if qrecid in equivs:
+                equivs.remove(qrecid)
+            if recuri in equivs:
+                equivs.remove(recuri)
+            if idmap.update_token in equivs:
+                equivs.remove(idmap.update_token)
         else:
             equivs = []
-        sys.stdout.write('.');sys.stdout.flush()
+        sys.stdout.write(".")
+        sys.stdout.flush()
 
         rec3 = merger.merge(rec2, equivs)
         # Final tidy up after merges
         try:
-            rec3 = final.transform(rec3, rec3['data']['type'])
+            rec3 = final.transform(rec3, rec3["data"]["type"])
         except:
             print(f"*** Final transform raised exception for {rec2['identifier']}")
             raise
         # Store it
         if rec3 is not None:
             try:
-                del rec3['identifier']
+                del rec3["identifier"]
             except:
                 pass
-            merged_cache[rec3['yuid']] = rec3
+            merged_cache[rec3["yuid"]] = rec3
             if NAME:
                 if curr_name:
                     if NAME in curr_name:
@@ -193,26 +199,26 @@ if profiling:
 
 if DO_REFERENCES:
     item = 1
-    for (dist, ext_uri) in ref_mgr.iter_done_refs(my_slice, max_slice):
+    for dist, ext_uri in ref_mgr.iter_done_refs(my_slice, max_slice):
         uri = idmap[ext_uri]
         if not uri:
             print(f" *** No YUID for reference {ext_uri} from done_refs")
             continue
-        yuid = uri.rsplit('/',1)[-1]
+        yuid = uri.rsplit("/", 1)[-1]
         ins_time = merged_cache.metadata(yuid, "insert_time")
-        if ins_time is not None and ins_time['insert_time'] > start_time:
+        if ins_time is not None and ins_time["insert_time"] > start_time:
             # Already processed this record this build
             continue
         if NAME is not None and ins_time is not None:
             # We're in merged previously case
-            curr_name = merged_cache.metadata(yuid, "change")['change']
-            if curr_name in ['create', 'update']:
+            curr_name = merged_cache.metadata(yuid, "change")["change"]
+            if curr_name in ["create", "update"]:
                 curr_name = ""
         else:
             # No record in merged
             curr_name = ""
 
-        equivs = idmap[uri] 
+        equivs = idmap[uri]
         # get a base record
         rec2 = None
         stop = False
@@ -221,14 +227,14 @@ if DO_REFERENCES:
                 if pref in eq:
                     baseUri = eq
                     (src, recid) = cfgs.split_uri(baseUri)
-                    if recid in src['recordcache']:
-                        rec = src['recordcache'][recid]
+                    if recid in src["recordcache"]:
+                        rec = src["recordcache"][recid]
                         if rec is not None:
                             rec2 = reider.reidentify(rec)
                             if rec2:
                                 equivs.remove(baseUri)
-                                del rec2['identifier']
-                                src['recordcache2'][rec2['yuid']] = rec2
+                                del rec2["identifier"]
+                                src["recordcache2"][rec2["yuid"]] = rec2
                                 stop = True
                                 break
                             else:
@@ -238,23 +244,24 @@ if DO_REFERENCES:
 
         if rec2 is None:
             print(f" *** Could not find ANY record for {uri} in {equivs}")
-            #raise ValueError()
+            # raise ValueError()
         else:
             # print(f" ... Processing equivs for {recid}")
-            sys.stdout.write('+');sys.stdout.flush()
+            sys.stdout.write("+")
+            sys.stdout.flush()
             rec3 = merger.merge(rec2, equivs)
             # Final tidy up
             try:
-                rec3 = final.transform(rec3, rec3['data']['type'])
+                rec3 = final.transform(rec3, rec3["data"]["type"])
             except:
                 print(f"*** Final transform raised exception for {rec2['identifier']}")
             # Store it
             if rec3 is not None:
                 try:
-                    del rec3['identifier']
+                    del rec3["identifier"]
                 except:
                     pass
-                merged_cache[rec3['yuid']] = rec3
+                merged_cache[rec3["yuid"]] = rec3
                 if NAME:
                     if curr_name:
                         if NAME in curr_name:
@@ -270,8 +277,8 @@ if DO_REFERENCES:
                 print(f"*** Final transform returned None")
 
 # force all postgres connections to close
-poolman.put_all('localsocket')
+poolman.put_all("localsocket")
 
-fh = open(os.path.join(cfgs.log_dir, "flags", f"merge_is_done-{my_slice}.txt"), 'w')
-fh.write('1\n')
+fh = open(os.path.join(cfgs.log_dir, "flags", f"merge_is_done-{my_slice}.txt"), "w")
+fh.write("1\n")
 fh.close()

@@ -140,7 +140,7 @@ class ViafMapper(Mapper):
             val = n.xpath("./viaf:text/text()", namespaces=nss)
             srcs = n.xpath("./viaf:sources/viaf:s/text()", namespaces=nss)
             if val and val[0]:
-                val = val[0]
+                val = str(val[0])
                 if not primary and ("JPG" in srcs or "LC" in srcs or "LCSH" in srcs or "ULAN" in srcs):
                     primary = val
                     rec.identified_by = vocab.PrimaryName(content=primary)
@@ -222,7 +222,7 @@ class ViafMapper(Mapper):
                             ts.end_of_the_end = e
                             birth.timespan = ts
                             rec.born = birth
-                            birth.identified_by = vocab.DisplayName(content=bd)
+                            ts.identified_by = vocab.DisplayName(content=bd)
                 if deathdate and deathdate[0]:
                     dd = deathdate[0].strip()
                     if dd not in ["0", "2050", "9800"]:
@@ -237,7 +237,7 @@ class ViafMapper(Mapper):
                             ts.end_of_the_end = e
                             death.timespan = ts
                             rec.died = death
-                            death.identified_by = vocab.DisplayName(content=dd)
+                            ts.identified_by = vocab.DisplayName(content=dd)
             elif dateType == "flourished":
                 if birthdate and birthdate[0] and deathdate and deathdate[0]:
                     bd = birthdate[0].strip()

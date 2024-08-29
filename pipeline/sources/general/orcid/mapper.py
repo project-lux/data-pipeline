@@ -107,7 +107,7 @@ class OrcidMapper(Mapper):
             return None
 
         dom = self.get_dom(record)
-        if not dom:
+        if dom is None:
             return None
         rec = dom.xpath("/record:record", namespaces=self.nss)[0]
 
@@ -262,8 +262,8 @@ class OrcidMapper(Mapper):
                     empl,
                     "./common:organization/common:disambiguated-organization/common:disambiguated-organization-identifier",
                 )
-                if orgId and orgName:
-                    top.member_of = model.Group(ident=f"https://ringgold.com/{orgId}", label=orgName)
+                if orgId and orgName and orgId.startswith("http"):
+                    top.member_of = model.Group(ident=orgId, label=orgName)
 
             # Membership: member_of
             for memb in acts.xpath(
@@ -274,8 +274,8 @@ class OrcidMapper(Mapper):
                     memb,
                     "./common:organization/common:disambiguated-organization/common:disambiguated-organization-identifier",
                 )
-                if orgId and orgName:
-                    top.member_of = model.Group(ident=f"https://ringgold.com/{orgId}", label=orgName)
+                if orgId and orgName and orgId.startswith("http"):
+                    top.member_of = model.Group(ident=orgId, label=orgName)
 
             # Funding: ??? Can we link this to other data
             # for fund in acts.xpath('./activities:fundings/activities:group/funding:funding-summary', namespaces=self.nss):

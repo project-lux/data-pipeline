@@ -243,7 +243,6 @@ class MlMapper(Mapper):
                 techs = []
                 causes = []
 
-
                 if type(node) == dict:
                     node = [node]
                 for n in node:
@@ -270,7 +269,11 @@ class MlMapper(Mapper):
                                     typ = typ.lower()
                                 else:
                                     typ = "other"
-                                t = {"subject": me, "predicate": f"{luxns}{typ}Influenced{predClass}", "object": inf["id"]}
+                                t = {
+                                    "subject": me,
+                                    "predicate": f"{luxns}{typ}Influenced{predClass}",
+                                    "object": inf["id"],
+                                }
                                 ml["triples"].append({"triple": t})
                     if "part" in n:
                         for p in n["part"]:
@@ -280,6 +283,8 @@ class MlMapper(Mapper):
                                 places.extend([x["id"] for x in p["took_place_at"] if "id" in x])
                             if "technique" in p:
                                 techs.extend([x["id"] for x in p["technique"] if "id" in x])
+                            if "caused_by" in p:
+                                causes.extend([x["id"] for x in p["caused_by"] if "id" in x])
                             if "influenced_by" in p:
                                 for inf in p["influenced_by"]:
                                     if "id" in inf:
@@ -295,7 +300,11 @@ class MlMapper(Mapper):
                                             typ = typ.lower()
                                         else:
                                             typ = "other"
-                                        t = {"subject": me, "predicate": f"{luxns}{typ}Influenced{predClass}", "object": inf["id"]}
+                                        t = {
+                                            "subject": me,
+                                            "predicate": f"{luxns}{typ}Influenced{predClass}",
+                                            "object": inf["id"],
+                                        }
                                         ml["triples"].append({"triple": t})
                             if "attributed_by" in p:
                                 for aa in p["attributed_by"]:
@@ -331,7 +340,6 @@ class MlMapper(Mapper):
                 for c in causes:
                     t = {"subject": me, "predicate": f"{luxns}{cpred}", "object": c}
                     ml["triples"].append({"triple": t})
-
 
         # extracted data for indexes/facets
 
@@ -600,7 +608,6 @@ class MlMapper(Mapper):
                     if "id" in b:
                         t = {"subject": me, "predicate": f"{skosns}broader", "object": b["id"]}
                         ml["triples"].append({"triple": t})
-
 
         elif data["type"] == "Place":
             if "part_of" in data:

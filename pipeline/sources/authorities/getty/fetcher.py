@@ -28,6 +28,23 @@ class GettyFetcher(Fetcher):
             t = r["to"]["value"].replace("http://vocab.getty.edu/", "")
             self.redirects[f] = t
 
+        fn = os.path.join(config["all_configs"].data_dir, "unidentified_people_ulan.csv")
+        self.bad_ulan_people = {}
+        if os.path.exists(fn):
+            fh = open(fn)
+            data = fh.readlines()
+            fh.close()
+            for l in data:
+                if "http://vocab.getty.edu/ulan/" in l:
+                    l = l.replace("http://vocab.getty.edu/ulan/", "").strip()
+                    self.bad_ulan_people[l] = 1
+
+    def validate_identifier(self, identifier):
+        if identifier in self.bad_ulan_people:
+            return False
+        else:
+            return super().validate_identifier(identifier)
+
     def fetch(self, identifier):
         if not self.enabled:
             return None

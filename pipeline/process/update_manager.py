@@ -1,32 +1,35 @@
 import os
 import sys
 
-class UpdateManager(object):
 
+class UpdateManager(object):
     def __init__(self, configs, idmap):
         self.configs = configs
         self.idmap = idmap
-        self.internal_nss = [x['namespace'] for x in configs.internal.values()]
+        self.internal_nss = [x["namespace"] for x in configs.internal.values()]
         self.changed = []
 
     def process_change(self, config, change, ident, record, changeTime):
-        storage = config['datacache']
-        storage2 = config['recordcache']
-        overwrite = config.get('harvest_overwrite', True)
+        storage = config["datacache"]
+        storage2 = config["recordcache"]
+        overwrite = config.get("harvest_overwrite", True)
         idmap = self.idmap
 
-        if change == 'delete':
+        if change == "delete":
             rec = storage[ident]
             if rec:
-                uri = rec['data']['id']
-                cls = rec['data']['type']
+                uri = rec["data"]["id"]
+                cls = rec["data"]["type"]
                 quaUri = self.configs.make_qua(uri, cls)
                 del storage[ident]
-                if config['type'] == 'internal':
+                if config["type"] == "internal":
                     del storage2[ident]
                 else:
-                    del storage2[quaUri.rsplit('/', 1)[-1]]                   
+                    del storage2[quaUri.rsplit("/", 1)[-1]]
                 yuid = idmap[quaUri]
+                if not yuid:
+                    # already deleted
+                    return
                 all_ids = idmap[yuid]
                 del idmap[quaUri]
                 has_internal = False
@@ -42,7 +45,7 @@ class UpdateManager(object):
                     # without deleted record
                     pass
                 else:
-                    has_refs = False                        
+                    has_refs = False
                     # FIXME: find references from other records to this one
                     if has_refs:
                         # still need. Rebuild without deleted record
@@ -55,12 +58,11 @@ class UpdateManager(object):
             # upsert
             if record is not None and (overwrite or not ident in storage):
                 try:
-                    storage.set(record['data'], identifier=ident, record_time=changeTime, change=change)
+                    storage.set(record["data"], identifier=ident, record_time=changeTime, change=change)
                     self.changed.append((record, ident, config))
                 except:
                     print(f"Failed to process {ident}")
                     print(f"Got: {record['data']}")
-                    
 
     def harvest_all(self, store_only=False):
         self.changed = []
@@ -69,7 +71,7 @@ class UpdateManager(object):
         if not store_only:
             # This should do the same as run-integrated
             # Meaning it should be a function not a script
-            for (record, ident, source) in self.changed:
+            for record, ident, source in self.changed:
                 # FIXME: rebuild record
                 pass
 
@@ -86,19 +88,19 @@ class UpdateManager(object):
             # FIXME: rebuild
             pass
 
-    def harvest(self, config):      
-        storage = config['datacache']
-        harvester = config['harvester']
+    def harvest(self, config):
+        storage = config["datacache"]
+        harvester = config["harvester"]
         if harvester.last_harvest[:4] == "0001":
             harvester.last_harvest = storage.latest()
         print(f"Harvesting until {harvester.last_harvest}")
-        for (change, ident, record, changeTime) in harvester.crawl():
+        for change, ident, record, changeTime in harvester.crawl():
             self.process_change(config, change, ident, record, changeTime)
- 
+
     def harvest_from_list(self, config, mySlice=None, maxSlice=None):
-        harvester = config['harvester']
+        harvester = config["harvester"]
         harvester.fetcher.enabled = True
-        storage = config['datacache']
+        storage = config["datacache"]
         if storage is None:
             print(f"No datacache for {config['name']}? Can't harvest")
             return
@@ -107,7 +109,7 @@ class UpdateManager(object):
             print(f"No uri/change list to harvest for {config['name']}. Run get_record_list()")
             return
 
-        fh = open(fn, 'r')     
+        fh = open(fn, "r")
         x = 0
         l = True
         while l:
@@ -117,9 +119,9 @@ class UpdateManager(object):
                 x += 1
                 continue
             x += 1
-            (ident, dt) = l.split('\t')
+            (ident, dt) = l.split("\t")
             try:
-                tm = storage.metadata(ident, 'insert_time')['insert_time']
+                tm = storage.metadata(ident, "insert_time")["insert_time"]
             except TypeError:
                 # NoneType is not subscriptable
                 tm = None
@@ -132,23 +134,24 @@ class UpdateManager(object):
                     print(f"Got None for {ident}")
                     continue
             except:
-                sys.stdout.write("-");sys.stdout.flush()
+                sys.stdout.write("-")
+                sys.stdout.flush()
                 continue
             storage[ident] = itjs
-            sys.stdout.write('.');sys.stdout.flush()
+            sys.stdout.write(".")
+            sys.stdout.flush()
         fh.close()
-
 
     def get_record_list(self, config, until="0001-01-01T00:00:00"):
         # build the set of records that should be in the cache
         # from the activity streams
 
-        harvester = config['harvester']
+        harvester = config["harvester"]
         harvester.last_harvest = until
         print(f"Gathering all from stream until {until}")
         records = {}
         deleted = {}
-        for (change, ident, record, changeTime) in harvester.crawl(refsonly=True):
+        for change, ident, record, changeTime in harvester.crawl(refsonly=True):
             if ident in deleted:
                 # already seen a delete, ignore
                 pass
@@ -164,20 +167,15 @@ class UpdateManager(object):
 
         # Write URIs to all_{name}_uris.txt and deleted_{name}_uris.txt in temp dir
         recs = sorted(list(records.keys()))
-        fh = open(os.path.join(self.configs.temp_dir, f"all_{config['name']}_uris.txt"), 'w')
+        fh = open(os.path.join(self.configs.temp_dir, f"all_{config['name']}_uris.txt"), "w")
         for r in recs:
             fh.write(f"{r}\t{records[r]}\n")
         fh.close()
 
         recs = sorted(list(deleted.keys()))
-        fh = open(os.path.join(self.configs.temp_dir, f"deleted_{config['name']}_uris.txt"), 'w')
+        fh = open(os.path.join(self.configs.temp_dir, f"deleted_{config['name']}_uris.txt"), "w")
         for r in recs:
             fh.write(f"{r}\t{deleted[r]}\n")
         fh.close()
 
         return records, deleted
-
-
-
-
-
