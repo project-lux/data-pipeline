@@ -1,7 +1,7 @@
 from pipeline.process.reidentifier import Reidentifier
 from pipeline.process.base.mapper import Mapper
 from pipeline.process.utils.mapper_utils import test_birth_death
-from urllib.parse import quote
+from urllib.parse import quote, urlparse, urlunparse
 import ujson as json
 import os
 
@@ -87,6 +87,7 @@ class Cleaner(Mapper):
 
                 # Munge stupid wikimedia image URLs
                 if "commons.wikimedia.org/wiki/special:filepath" in apid.lower():
+                    wd_aps.append(apid.lower())
                     if apid.startswith("http:"):
                         apid = apid.replace("http://", "https://")
                     url, fn = apid.rsplit("/", 1)
@@ -475,6 +476,13 @@ class Cleaner(Mapper):
                                 }
                             )
 
+    def normalize_url(self, url):
+        parsed_url = urlparse(url)
+        scheme = parsed_url.scheme or "http"
+        netloc = parsed_url.netloc.replace("www.", "")
+        path = parsed_url.path.rstrip("/")
+        return urlunparse((scheme, netloc, path, "", "", ""))
+
     def dedupe_webpages(self, data):
         webs = data["subject_of"]
         if len(webs) < 2:
@@ -488,45 +496,39 @@ class Cleaner(Mapper):
             if "digitally_carried_by" in web:
                 for points in web["digitally_carried_by"]:
                     if "access_point" in points and "id" in points["access_point"][0]:
-                        ap = points["access_point"][0]["id"]
-                        aps.append(ap)
+                        aps.append(points["access_point"][0]["id"])
                         ws[ap] = web
 
         del data["subject_of"]
 
-        ### FIXME: this still doesn't work correctly
-        # Lots of triggers to the except block at line 504
-        # where it can't find the URL selected
-
         for a in aps:
-            http = a.replace("http://", "https://", 1)
-            https = a.replace("https://", "http://", 1)
-            opts = [a, http, https]
-            for o in opts[:]:
-                opts.append(o.replace("//www.", "//", 1))
-            for o in opts[:]:
-                if o[-1] == "/":
-                    opts.append(o[:-1])
-                else:
-                    opts.append(f"{o}/")
-
             found = False
-            for o in opts:
-                if o and o in okay:
+            normalized_a = self.normalize_url(a)
+            variations = [normalized_a]
+
+            # Create variations for comparison
+            if a.startswith("http://"):
+                variations.append(a.replace("http://", "https://", 1))
+            elif a.startswith("https://"):
+                variations.append(a.replace("https://", "http://", 1))
+
+            for o in variations[:]:
+                variations.append(o.replace("//www.", "//", 1))
+                if o.endswith("/"):
+                    variations.append(o.rstrip("/"))
+                else:
+                    variations.append(o + "/")
+
+            # Check if any variation is already in the okay list
+            for o in variations:
+                if o in okay:
                     found = True
                     break
+
             if not found:
-                https_found = False
-                for o in opts:
-                    if o and o.startswith("https://"):
-                        okay.append(o)
-                        https_found = True
-                        break
-                if not https_found:
-                    okay.append(a)
+                okay.append(normalized_a)
 
         subj = []
-        # okay should never be empty
         for k in okay:
             try:
                 block = ws[k]
@@ -534,6 +536,7 @@ class Cleaner(Mapper):
             except:
                 print(f"\n ------- Could not find {k} in {ws} for {data['id']}")
                 # pass
+
         if subj:
             data["subject_of"] = subj
 

@@ -15,7 +15,7 @@ class LcMapper(Mapper):
         self.type_map = {
             "madsrdf:Geographic": "Place",
             "madsrdf:Language": "Language",
-            "madsrdf:ConferenceName": "Group",
+            "madsrdf:ConferenceName": "Activity",
             "madsrdf:FamilyName": "Group",
             "madsrdf:CorporateName": "Group",
             "madsrdf:PersonalName": "Person",

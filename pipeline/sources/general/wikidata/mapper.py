@@ -412,13 +412,17 @@ class WdMapper(Mapper, WdConfigManager):
 
     def process_actor(self, data, top):
         # Relationship to Group: Member of P463, employer P108
-        # member_of
+        # member_of, unless Group is actually an Activity, then participant_in
         mbr = data.get("P463", None)
         if mbr:
             for grp in mbr:
-                top.member_of = model.Group(ident=self.expand_uri(grp))
+                ref = self.get_reference(grp)
+                if ref and ref.__class__ == model.Group:
+                    top.member_of = model.Group(ident=self.expand_uri(grp))
+                elif ref and ref.__class__ == model.Activity:
+                    top.participated_in = model.Activity(ident=self.expand_uri(grp))
+
         mbr = data.get("P108", None)
-        person = False
         # only add employer if employer is Group
         if mbr:
             for grp in mbr:
@@ -426,6 +430,13 @@ class WdMapper(Mapper, WdConfigManager):
                 if ref and ref.__class__ == model.Group:
                     top.member_of = ref
 
+        participant = data.get("P1344")
+        if participant:
+            for p in participant:
+                ref = self.get_reference(p)
+                if ref and ref.__class__ == model.Activity:
+                    top.participated_in = model.Activity(ident=self.expand_uri(p))
+                    
         # FIXME: classified_as or professional activity as below
         occupation = data.get("P106", None)
         if occupation:
