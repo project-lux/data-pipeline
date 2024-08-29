@@ -130,7 +130,7 @@ class Mapper(object):
         # each fix: {"JSON_Path": "path", "Operation": "DELETE|UPDATE", "Replacement": "value?"}
         self.jsonpath_fixes = {}
 
-        fn = os.path.join(self.configs.data_dir, f"jsonpath_fixes.json")
+        fn = os.path.join(self.configs.data_dir, f"xpath_fixes.json")
         if os.path.exists(fn):
             fh = open(fn)
             data = json.load(fh)
