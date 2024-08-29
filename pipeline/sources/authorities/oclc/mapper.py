@@ -140,7 +140,7 @@ class ViafMapper(Mapper):
             val = n.xpath("./viaf:text/text()", namespaces=nss)
             srcs = n.xpath("./viaf:sources/viaf:s/text()", namespaces=nss)
             if val and val[0]:
-                val = val[0]
+                val = str(val[0])
                 if not primary and ("JPG" in srcs or "LC" in srcs or "LCSH" in srcs or "ULAN" in srcs):
                     primary = val
                     rec.identified_by = vocab.PrimaryName(content=primary)
