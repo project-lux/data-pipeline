@@ -286,8 +286,10 @@ class DnbMapper(Mapper):
             typ = 'group'
         elif typ == "place":
             topcls = model.Place
+        elif typ == "event":
+            topcls = model.Event
         else:
-            print(f"Unknown @type in dnb {rec['@id']}: {typ}")
+            print(f"Unknown @type in dnb {data['@id']}: {typ}")
             return None
         return topcls
 
@@ -483,6 +485,9 @@ class DnbMapper(Mapper):
             for d in dep:
                 # Image is actually in @id
                 jpg = d['@id']
+                jpg = jpg.replace(" ", "_")
+                if "%20" in jpg:
+                    jpg = jpg.replace("%20","_")
                 do = vocab.DigitalImage(label=f"Digital Image of {pn}")
                 vi = model.VisualItem(label=f"Appearance of {pn}")
                 do.access_point = model.DigitalObject(ident=jpg)
