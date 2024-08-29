@@ -28,22 +28,6 @@ class Cleaner(Mapper):
             fh.close()
             self.metatypes = json.loads(data)
 
-        self.update_jsonpath_fixes(idmap)
-
-    def update_jsonpath_fixes(self, idmap):
-        if self.jsonpath_fixes:
-            for eq in self.jsonpath_fixes.keys():
-                fixes = self.jsonpath_fixes.get(eq, [])
-                for fix in fixes:
-                    p = fix["path"]  # now a parsed path
-                    op = fix["operation"]
-                    arg = fix.get("argument", None)
-                    if op == "DELETE":
-                        p.filter(lambda x: True, record["data"])
-                    elif op == "UPDATE" and arg:
-                        p.update(record["data"], arg)
-        return record
-
     def get_commons_license(self, img):
         # Can't store reidentified version as it would need a YUID
         # And YUIDs must be UUIDs - no way to look up fn->yuid

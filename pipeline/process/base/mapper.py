@@ -2,9 +2,6 @@ import os
 import ujson as json
 from cromulent import model, vocab
 
-from jsonpath_ng.ext import parse as parse_jsonpath
-
-
 model.ExternalResource._write_override = None
 # monkey patch in members_exemplified_by for Set and Group
 mebInfo = model.PropInfo("members_exemplified_by", "la:members_exemplified_by", model.CRMEntity, "", None, 1, 1)
