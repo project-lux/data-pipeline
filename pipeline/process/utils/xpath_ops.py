@@ -8,11 +8,8 @@ from lxml import etree
 
 
 def escape_xml(s):
-    s = s.replace("&", "&amp;")
-    s = s.replace('"', "&quot;")
-    s = s.replace("'", "&apos;")
-    s = s.replace("<", "&lt;")
-    s = s.replace(">", "&gt;")
+    s = s.replace("&", "&amp;").replace('"', "&quot;").replace("'", "&apos;")
+    s = s.replace("<", "&lt;").replace(">", "&gt;")
     return s
 
 
@@ -20,6 +17,7 @@ def fix(key):
     return key.replace("@", "__")
 
 
+# Doesn't need to preserve data type as we never reverse the operation
 def convert(what, output):
     if type(what) == dict:
         for k, v in what.items():
@@ -67,7 +65,8 @@ def xpath_on_record(what, xpath):
 
 def process_operation(what, xpath, operation, argument=None):
     paths = xpath_on_record(what, xpath)
-    paths.reverse()  # process from end to beginning to avoid indexes changing
+    # filters and relative paths are now resolved to absolute, index based paths
+    paths.reverse()  # process from end to beginning to avoid data changing relative to indexes
     for p in paths:
         bits = p[1:].split("/")
         path = []
@@ -83,23 +82,26 @@ def process_operation(what, xpath, operation, argument=None):
             path.append((key, idx))
 
         tgt = what
-        for p in path[:-1]:
-            if p[0] in tgt:
-                tgt = tgt[p[0]]
+        for tag, idx in path[:-1]:
+            if tag in tgt:
+                tgt = tgt[tag]
             if type(tgt) == list:
-                tgt = tgt[p[1]]
+                tgt = tgt[idx]
 
+        tag, idx = path[-1]
         if operation == "DELETE":
-            val = tgt[path[-1][0]]
+            val = tgt[tag]
             if type(val) == list:
-                del tgt[path[-1][0]][path[-1][1]]
+                del tgt[tag][idx]
                 # And if now empty, delete null value key
-                if tgt[path[-1][0]] == []:
-                    del tgt[path[-1][0]]
+                if tgt[tag] == []:
+                    del tgt[tag]
             else:
-                del tgt[path[-1][0]]
+                del tgt[tag]
         elif operation == "UPDATE":
-            tgt[path[-1][0]] = argument
+            tgt[tag] = argument
+        elif operation == "APPEND":
+            print(f"Got APPEND operation from fixes, and not yet implemented")
         else:
             print(f"Unknown operation: {operation}")
 

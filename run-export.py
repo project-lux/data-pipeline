@@ -12,18 +12,18 @@ import pstats
 from pstats import SortKey
 
 load_dotenv()
-basepath = os.getenv('LUX_BASEPATH', "")
+basepath = os.getenv("LUX_BASEPATH", "")
 cfgs = Config(basepath=basepath)
 idmap = cfgs.get_idmap()
 cfgs.cache_globals()
 cfgs.instantiate_all()
 
-merged = cfgs.results['merged']['recordcache']
-ml = cfgs.results['marklogic']['recordcache']
-mapper = cfgs.results['marklogic']['mapper']
+merged = cfgs.results["merged"]["recordcache"]
+ml = cfgs.results["marklogic"]["recordcache"]
+mapper = cfgs.results["marklogic"]["mapper"]
 
-if '--profile' in sys.argv:
-    sys.argv.remove('--profile')
+if "--profile" in sys.argv:
+    sys.argv.remove("--profile")
     profiling = True
 else:
     profiling = False
@@ -45,24 +45,25 @@ if profiling:
 if not os.path.exists(cfgs.exports_dir):
     os.mkdir(cfgs.exports_dir)
 
-fn = os.path.join(cfgs.exports_dir, f'export_full_{my_slice}.jsonl')
-outh = open(fn, 'w')
+fn = os.path.join(cfgs.exports_dir, f"export_full_{my_slice}.jsonl")
+outh = open(fn, "w")
 x = 0
 for rec in merged.iter_records_slice(my_slice, max_slice):
-    yuid = rec['yuid']
+    yuid = rec["yuid"]
     if not yuid in ml:
         try:
-            rec2 = mapper.transform(rec, rec['data']['type'])
+            rec2 = mapper.transform(rec, rec["data"]["type"])
         except Exception as e:
-            print(f"{yuid} errored in final mapper: {e}")
+            print(f"{yuid} errored in marklogic mapper: {e}")
             continue
         ml[yuid] = rec2
     else:
-        rec2 = ml[yuid]['data']
-    jstr = json.dumps(rec2, separators=(',',':'))
+        rec2 = ml[yuid]["data"]
+    jstr = json.dumps(rec2, separators=(",", ":"))
     outh.write(jstr)
-    outh.write('\n')
-    sys.stdout.write('.');sys.stdout.flush()
+    outh.write("\n")
+    sys.stdout.write(".")
+    sys.stdout.flush()
     x += 1
     if profiling and x >= 10000:
         break
@@ -80,8 +81,8 @@ if profiling:
     raise ValueError()
 
 # Explicitly force all postgres connections to close
-poolman.put_all('localsocket')
+poolman.put_all("localsocket")
 
-fh = open(os.path.join(cfgs.log_dir, "flags", f"export_is_done-{my_slice}.txt"), 'w')
-fh.write('1\n')
+fh = open(os.path.join(cfgs.log_dir, "flags", f"export_is_done-{my_slice}.txt"), "w")
+fh.write("1\n")
 fh.close()
