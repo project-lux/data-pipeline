@@ -298,7 +298,10 @@ class Mapper(object):
 
     def process_xpath_fixes(self, record):
         if self.xpath_fixes:
-            ident = record["identifier"]
+            if "identifier" in record:
+                ident = record["identifier"]
+            else:
+                ident = record["yuid"]
             fixes = self.xpath_fixes.get(ident, [])
             for fix in fixes:
                 p = fix["path"]  # now a parsed path
