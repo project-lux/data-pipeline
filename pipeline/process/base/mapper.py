@@ -1,6 +1,9 @@
 import os
 import ujson as json
 from cromulent import model, vocab
+from lxml import etree
+
+from pipeline.process.utils.xpath_ops import process_operation
 
 model.ExternalResource._write_override = None
 # monkey patch in members_exemplified_by for Set and Group
@@ -111,6 +114,7 @@ class Mapper(object):
 
         self.config = config
         self.configs = config["all_configs"]
+        idmap = self.configs.get_idmap()
         fn = os.path.join(self.configs.data_dir, "type_overrides.json")
         self.type_overrides = {}
         if os.path.exists(fn):
@@ -126,35 +130,51 @@ class Mapper(object):
         self.debug = False
         self.acquirer = None
 
-        # This needs to be {ident: [list, of, fixes]}
-        # each fix: {"JSON_Path": "path", "Operation": "DELETE|UPDATE", "Replacement": "value?"}
-        self.jsonpath_fixes = {}
-
+        self.xpath_fixes = {}
         fn = os.path.join(self.configs.data_dir, f"xpath_fixes.json")
         if os.path.exists(fn):
+            eg = etree.XML("<record/>")
             fh = open(fn)
             data = json.load(fh)
             fh.close()
             for f in data:
                 if f["source"] == self.name:
                     which = "identifier" if f["identifier"] else "equivalent"
-                    ident = f[which]
+                    if f["identifier"]:
+                        ident = f["identifier"]
+                    elif f["equivalent"]:
+                        equivs = f["equivalent"].split(" ")
+                        yuids = []
+                        for eq in equivs:
+                            try:
+                                qua = self.configs.make_qua(eq, f["class"])
+                                yuid = idmap[qua]
+                            except:
+                                yuid = None
+                            if not yuid:
+                                print(f"Failed to find record for equivalent: {qua}")
+                            else:
+                                yuids.append(yuid)
+                        if len(set(yuids)) != 1:
+                            print(f"Failed to find single YUID for {qua}: {yuids}")
+                        else:
+                            ident = yuids[0][-36:]
+
                     if not ident:
-                        print(f"{self.name} jsonpath has no identifier or equivalent: {f}")
+                        print(f"{self.name} xpath fix has no identifier or equivalent: {f}")
                         continue
                     if not f["path"]:
-                        print(f"{self.name} jsonpath has no jsonpath: {f}")
+                        print(f"{self.name} xpath fix has no xpath: {f}")
                         continue
                     try:
-                        jpx = parse_jsonpath(f["path"])
+                        eg.xpath(f["path"])
                     except:
-                        print(f"{self.name} jsonpath is not parsable: {f}")
+                        print(f"{self.name} xpath is not parsable: {f}")
                         continue
-                    f["path"] = jpx
                     try:
-                        self.jsonpath_fixes[ident].append(f)
+                        self.xpath_fixes[ident].append(f)
                     except:
-                        self.jsonpath_fixes[ident] = [f]
+                        self.xpath_fixes[ident] = [f]
 
     def returns_multiple(self, record=None):
         return False
@@ -276,18 +296,27 @@ class Mapper(object):
                     record["data"]["equivalent"].remove(hsh[d])
         return record
 
-    def process_jsonpath_fixes(self, record):
-        if self.jsonpath_fixes:
-            ident = record["identifier"]
-            fixes = self.jsonpath_fixes.get(ident, [])
+    def process_xpath_fixes(self, record):
+        if self.xpath_fixes:
+            if "identifier" in record:
+                ident = record["identifier"]
+            else:
+                ident = record["yuid"]
+            fixes = self.xpath_fixes.get(ident, [])
             for fix in fixes:
                 p = fix["path"]  # now a parsed path
                 op = fix["operation"]
                 arg = fix.get("argument", None)
-                if op == "DELETE":
-                    p.filter(lambda x: True, record["data"])
-                elif op == "UPDATE" and arg:
-                    p.update(record["data"], arg)
+                if arg is not None:
+                    if arg.startswith("{") and arg.endswith("}"):
+                        # parse from string to json
+                        arg = json.loads(arg)
+                    elif arg.startswith('"') and arg.endswith('"'):
+                        # strip quotes
+                        arg = arg[1:-1]
+                    elif arg.replace(".", "", 1).isnumeric() and p.endswith("/value"):
+                        arg = float(arg)
+                process_operation(record["data"], p, op, arg)
         return record
 
     def post_mapping(self, record, xformtype=None):
@@ -300,9 +329,9 @@ class Mapper(object):
         record = self.trash_different_from(record)
         if record is None and self.debug:
             print(f"trash_different killed record")
-        record = self.process_jsonpath_fixes(record)
+        record = self.process_xpath_fixes(record)
         if record is None:
-            print(f"jsonpath_fixes trashed the record :(")
+            print(f"xpath_fixes trashed the record :(")
         return record
 
     def post_reconcile(self, record):

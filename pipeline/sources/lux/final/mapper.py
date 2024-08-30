@@ -592,7 +592,7 @@ class Cleaner(Mapper):
                 if not okay:
                     data["part_of"].remove(parent)
 
-        rec = self.process_jsonpath_fixes(rec)
+        rec = self.process_xpath_fixes(rec)
 
         data["@context"] = "https://linked.art/ns/v1/linked-art.json"
         return rec

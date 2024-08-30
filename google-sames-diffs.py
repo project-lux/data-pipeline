@@ -107,7 +107,7 @@ with open(sfn, "w") as fh:
 fixes = []
 
 page = RANGE_START
-rng = f"A{page}:F{page+500}"
+rng = f"A{page}:G{page+500}"
 RANGE = f"Fixes!{rng}"
 cont = True
 while cont:
@@ -118,9 +118,9 @@ while cont:
     else:
         for row in values:
             try:
-                src, ident, equiv, path, op = row[:5]
-                if len(row) == 6:
-                    arg = row[5]
+                src, ident, clss, equiv, path, op = row[:6]
+                if len(row) == 7:
+                    arg = row[6]
                 else:
                     arg = ""
             except:
@@ -130,6 +130,7 @@ while cont:
                 {
                     "source": src.strip(),
                     "identifier": ident.strip(),
+                    "class": clss.strip(),
                     "equivalent": equiv.strip(),
                     "path": path.strip(),
                     "operation": op.strip(),
@@ -137,10 +138,10 @@ while cont:
                 }
             )
         page += 500
-        rng = f"A{page}:F{page+500}"
+        rng = f"A{page}:G{page+500}"
         RANGE = f"Fixes!{rng}"
 
-dfn = os.path.join(cfgs.data_dir, "jsonpath_fixes.json")
+dfn = os.path.join(cfgs.data_dir, "xpath_fixes.json")
 ofh = open(dfn, "w")
 ofh.write(json.dumps(fixes))
 ofh.close()

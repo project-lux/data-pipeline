@@ -46,12 +46,14 @@ class MlMapper(Mapper):
         # self.record_references = self.configs.instantiate_map('record_refs')['store']
 
     def _walk_node_ref(self, node, refs, all_refs, top=False, ignore=False):
-        if not top and "id" in node and node["id"].startswith(self.configs.internal_uri):
+        if not top and "id" in node and node["id"] is not None and node["id"].startswith(self.configs.internal_uri):
             # record node['id']
             if not node["id"] in all_refs:
                 all_refs.append(node["id"])
             if not ignore and not node["id"] in refs:
                 refs.append(node["id"])
+        elif not top and "id" in node and node["id"] is None:
+            print(f"ID is None?? {node}")
 
         if "type" in node and node["type"] == "TimeSpan":
             # Add integer seconds for properties
@@ -64,7 +66,13 @@ class MlMapper(Mapper):
                     except:
                         print(f"Could not get seconds for {val}")
 
-        if not top and "id" in node and node["id"].startswith(self.configs.internal_uri) and "classified_as" in node:
+        if (
+            not top
+            and "id" in node
+            and node["id"] is not None
+            and node["id"].startswith(self.configs.internal_uri)
+            and "classified_as" in node
+        ):
             # some other record has one or more classifications in this record
             # these will likely disappear if not captured
             t = node["id"]
@@ -523,16 +531,15 @@ class MlMapper(Mapper):
                     t = {"subject": me, "predicate": lPred, "object": l}
                     ml["triples"].append({"triple": t})
 
-        elif data['type'] == "LinguisticObject":
+        elif data["type"] == "LinguisticObject":
             whole = []
             if "part_of" in data:
-                for p in data['part_of']:
-                    parts = [x['id'] for x in data['part_of'] if 'id' in x]
+                for p in data["part_of"]:
+                    parts = [x["id"] for x in data["part_of"] if "id" in x]
                     whole.extend(parts)
             for w in whole:
                 t = {"subject": me, "predicate": f"{crmns}P106i_forms_part_of", "object": w}
                 ml["triples"].append({"triple": t})
-
 
         elif data["type"] == "VisualItem":
             if "about" in data:
