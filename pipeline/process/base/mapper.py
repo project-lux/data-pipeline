@@ -139,7 +139,23 @@ class Mapper(object):
             for f in data:
                 if f["source"] == self.name:
                     which = "identifier" if f["identifier"] else "equivalent"
-                    ident = f[which]
+                    if f["identifier"]:
+                        ident = f["identifier"]
+                    elif f["equivalent"]:
+                        equivs = f["equivalent"].split(" ")
+                        yuids = []
+                        for eq in equivs:
+                            qua = configs.make_qua(eq, f["class"])
+                            yuid = idmap[qua]
+                            if not yuid:
+                                print(f"Failed to find record for equivalent: {qua}")
+                            else:
+                                idents.append(yuid)
+                        if len(set(yuids)) != 1:
+                            print(f"Failed to find single YUID for {qua}: {yuids}")
+                        else:
+                            ident = yuids[0][-36:]
+
                     if not ident:
                         print(f"{self.name} xpath fix has no identifier or equivalent: {f}")
                         continue

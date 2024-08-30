@@ -130,6 +130,7 @@ while cont:
                 {
                     "source": src.strip(),
                     "identifier": ident.strip(),
+                    "class": clss.strip(),
                     "equivalent": equiv.strip(),
                     "path": path.strip(),
                     "operation": op.strip(),
