@@ -66,7 +66,13 @@ class MlMapper(Mapper):
                     except:
                         print(f"Could not get seconds for {val}")
 
-        if not top and "id" in node and node["id"].startswith(self.configs.internal_uri) and "classified_as" in node:
+        if (
+            not top
+            and "id" in node
+            and node["id"] is not None
+            and node["id"].startswith(self.configs.internal_uri)
+            and "classified_as" in node
+        ):
             # some other record has one or more classifications in this record
             # these will likely disappear if not captured
             t = node["id"]
