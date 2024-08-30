@@ -114,6 +114,7 @@ class Mapper(object):
 
         self.config = config
         self.configs = config["all_configs"]
+        idmap = self.configs.get_idmap()
         fn = os.path.join(self.configs.data_dir, "type_overrides.json")
         self.type_overrides = {}
         if os.path.exists(fn):
@@ -145,7 +146,7 @@ class Mapper(object):
                         equivs = f["equivalent"].split(" ")
                         yuids = []
                         for eq in equivs:
-                            qua = configs.make_qua(eq, f["class"])
+                            qua = self.configs.make_qua(eq, f["class"])
                             yuid = idmap[qua]
                             if not yuid:
                                 print(f"Failed to find record for equivalent: {qua}")
