@@ -28,7 +28,7 @@ def convert(what, output):
                 output.append(f"<{tag}>")
                 convert(item, output)
                 output.append(f"</{tag}>")
-    elif type(what) == str:
+    elif isinstance(what, str):
         output.append(escape_xml(what))
     elif type(what) in [int, float]:
         output.append(str(what))

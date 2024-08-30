@@ -306,9 +306,9 @@ class Mapper(object):
         record = self.trash_different_from(record)
         if record is None and self.debug:
             print(f"trash_different killed record")
-        record = self.process_jsonpath_fixes(record)
+        record = self.process_xpath_fixes(record)
         if record is None:
-            print(f"jsonpath_fixes trashed the record :(")
+            print(f"xpath_fixes trashed the record :(")
         return record
 
     def post_reconcile(self, record):
