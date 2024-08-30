@@ -146,12 +146,15 @@ class Mapper(object):
                         equivs = f["equivalent"].split(" ")
                         yuids = []
                         for eq in equivs:
-                            qua = self.configs.make_qua(eq, f["class"])
-                            yuid = idmap[qua]
+                            try:
+                                qua = self.configs.make_qua(eq, f["class"])
+                                yuid = idmap[qua]
+                            except:
+                                yuid = None
                             if not yuid:
                                 print(f"Failed to find record for equivalent: {qua}")
                             else:
-                                idents.append(yuid)
+                                yuids.append(yuid)
                         if len(set(yuids)) != 1:
                             print(f"Failed to find single YUID for {qua}: {yuids}")
                         else:
