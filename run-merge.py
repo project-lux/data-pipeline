@@ -217,6 +217,9 @@ if DO_REFERENCES:
             curr_name = ""
 
         equivs = idmap[uri]
+        if not equivs:
+            print(f"FAILED TO BUILD: {uri}")
+            continue
         # get a base record
         rec2 = None
         stop = False
