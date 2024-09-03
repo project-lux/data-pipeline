@@ -134,7 +134,7 @@ def check_datacache_times(cache):
     print(f"Checking {cache} timestamp")
 
     internal = False
-    if cache in ['ils','ipch','ycba','yuag','ypm']:
+    if cache in ['ils','ipch','ycba','yuag','ypm','pmc']:
         datacache = cfgs.internal[cache]['datacache']
         internal = True
     else:
