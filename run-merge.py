@@ -86,8 +86,6 @@ merger = MergeHandler(cfgs, idmap, ref_mgr)
 merged_cache = cfgs.results["merged"]["recordcache"]
 merged_cache.config["overwrite"] = True
 final = cfgs.results["merged"]["mapper"]
-final.update_jsonpath_fixes()  # This is only useful to do once idmap has stabilized
-
 
 # if merged is not empty, then only want to write to it if the record
 # hasn't already been written this build
