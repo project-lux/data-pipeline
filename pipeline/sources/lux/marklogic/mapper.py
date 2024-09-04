@@ -158,6 +158,10 @@ class MlMapper(Mapper):
 
         if "change" in record and record["change"]:
             sources = record["change"].split("|")
+            okay = ["ipch", "pmc", "ils", "yuag", "ycba", "ypm"]
+            for s in sources[:]:
+                if not s in okay:
+                    sources.remove(s)
             ml["admin"]["sources"] = sources
 
         facets = {}
