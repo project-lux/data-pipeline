@@ -289,8 +289,7 @@ class DnbMapper(Mapper):
         elif typ == "event":
             topcls = model.Event
         else:
-            print(f"Unknown @type in dnb {data['@id']}: {typ}")
-            return None
+            topcls = None
         return topcls
 
 #  rec:
@@ -430,10 +429,14 @@ class DnbMapper(Mapper):
             # lds.jsonld record
             return self.handle_lds(record, rectype)
 
-        if rectype == "" or rectype is None:
+        if rectype is None:
             topcls = self.guess_type(rec)
         else:
             topcls = getattr(model, rectype)
+
+        if not topcls:
+            return None 
+
         top = topcls(ident=rec['@id'])
 
         # names
