@@ -71,9 +71,10 @@ class DnbMapper(Mapper):
                 birth = model.Birth()
                 top.born = birth
 
-            pid = pob.get('@id', '')
+            pib = pob.get('@id', '')
             lbl = pob.get('preferredName', '')
-            birth.took_place_at = model.Place(ident=pid, label=lbl)                
+            if pib:
+                birth.took_place_at = model.Place(ident=pib, label=lbl)                
 
         death = None
         if 'dateOfDeath' in rec:
@@ -104,7 +105,8 @@ class DnbMapper(Mapper):
                 top.died = death
             pid = pod.get('@id', '')
             lbl = pod.get('preferredName', '')
-            death.took_place_at = model.Place(ident=pid, label=lbl) 
+            if pid:
+                death.took_place_at = model.Place(ident=pid, label=lbl) 
 
         active = None
         if 'periodOfActivity' in rec:
@@ -140,9 +142,10 @@ class DnbMapper(Mapper):
                 active = vocab.Active()
                 top.carried_out = active
             for p in poa:
-                pid = p.get('@id', '')
+                pia = p.get('@id', '')
                 lbl = p.get('preferredName', '')
-                active.took_place_at = model.Place(ident=pid, label=lbl)
+                if pia:
+                    active.took_place_at = model.Place(ident=pia, label=lbl)
 
         if 'gender' in rec:
             gdr = rec['gender']
@@ -153,10 +156,7 @@ class DnbMapper(Mapper):
                     top.classified_as = vocab.instances['male']
                 elif g['@id'] == self.female:
                     top.classified_as = vocab.instances['female']
-                else:
-                    print(f"unknown dnb gender: {g}")
-                    lbl = g.get('preferredName', '')                    
-                    top.classified_as = vocab.Gender(ident=g['@id'], label=lbl)
+                #DNB doesn't handle other genders
 
         if 'professionOrOccupation' in rec:
             occ = rec['professionOrOccupation']
@@ -165,7 +165,8 @@ class DnbMapper(Mapper):
             for o in occ:
                 oid = o.get("@id", "")
                 lbl = o.get('preferredName', '')
-                top.classified_as = vocab.Occupation(ident=oid, label=lbl)
+                if oid:
+                    top.classified_as = vocab.Occupation(ident=oid, label=lbl)
 
         if 'affiliation' in rec:
             aff = rec['affiliation']
@@ -174,7 +175,8 @@ class DnbMapper(Mapper):
             for a in aff:
                 aid = a.get('@id', '')
                 lbl = a.get('preferredName', '')
-                top.member_of = model.Group(ident=aid, label=lbl)
+                if aid:
+                    top.member_of = model.Group(ident=aid, label=lbl)
 
         okay = test_birth_death(top)
         if not okay:
