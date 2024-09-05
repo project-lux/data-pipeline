@@ -318,10 +318,17 @@ class YulMapper(Mapper):
                         "type": "Type",
                         "classified_as": [{"id": "http://vocab.getty.edu/aat/300418049", "type": "Type"}],
                     }
+                    lang = {
+                        "id": "http://vocab.getty.edu/aat/300388277",
+                        "type": "Language",
+                        "_label": "English",
+
+                    }
                     desc = {
                         "type": "LinguisticObject",
                         "content": info["desc"] + " (AI generated)",
                         "classified_as": [dt],
+                        "language": [lang],
                     }
                     try:
                         data["referred_to_by"].append(desc)
