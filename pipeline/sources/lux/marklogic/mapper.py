@@ -172,32 +172,32 @@ class MlMapper(Mapper):
         cxns = [x["id"] for x in data.get("classified_as", []) if "id" in x]
 
         if data["type"] in ["VisualItem", "LinguisticObject"]:
-            facets["uiType"] = "CollectionWork"
+            #facets["uiType"] = "CollectionWork"
             pfx = "work"
         elif data["type"] in ["HumanMadeObject", "DigitalObject"]:
-            facets["uiType"] = "CollectionItem"
+            #facets["uiType"] = "CollectionItem"
             pfx = "item"
         elif (self.globals["archives"] in cxns) and data["type"] == "Set":
-            facets["uiType"] = "CollectionWork"
+            #facets["uiType"] = "CollectionWork"
             pfx = "work"
         elif data["type"] in ["Person", "Group"]:
-            facets["uiType"] = "Agent"
+            #facets["uiType"] = "Agent"
             pfx = "agent"
         elif data["type"] == "Place":
-            facets["uiType"] = "Place"
+            #facets["uiType"] = "Place"
             pfx = "place"
         elif data["type"] in ["Type", "Language", "Material", "Currency", "MeasurementUnit", "Set"]:
             # Set here is Collection / Holdings. UI decision to put in with concepts
-            facets["uiType"] = "Concept"
+            #facets["uiType"] = "Concept"
             pfx = "concept"
         elif data["type"] in ["Activity", "Event", "Period"]:
-            facets["uiType"] = "Temporal"
+            #facets["uiType"] = "Temporal"
             pfx = "event"
         else:
             # Things that don't fall into the above categories
             # Probably due to bugs
             print(f"Failed to find a prefix for {data['type']}")
-            facets["uiType"] = "Other"
+            #facets["uiType"] = "Other"
 
         if data["type"] in type_map:
             for a in type_map[data["type"]]:
@@ -356,7 +356,7 @@ class MlMapper(Mapper):
         # extracted data for indexes/facets
 
         if cxns:
-            facets["classifiedAsId"] = cxns
+            #facets["classifiedAsId"] = cxns
             cxPred = f"{luxns}{pfx}ClassifiedAs"
             for c in cxns:
                 t = {"subject": me, "predicate": f"{crmns}P2_has_type", "object": c}
@@ -405,19 +405,19 @@ class MlMapper(Mapper):
                 t = {"subject": me, "predicate": f"{luxns}agentOccupation", "object": f}
                 ml["triples"].append({"triple": t})
 
-            facets["agentActivePlaceId"] = []
+            #facets["agentActivePlaceId"] = []
             if "carried_out" in data:
                 for co in data["carried_out"]:
                     cxns = [x["id"] for x in co.get("classified_as", []) if "id" in x]
                     if self.globals["active"] in cxns:
-                        if "took_place_at" in co:
-                            facets["agentActivePlaceId"].extend([y["id"] for y in co["took_place_at"] if "id" in y])
+                        # if "took_place_at" in co:
+                        #     facets["agentActivePlaceId"].extend([y["id"] for y in co["took_place_at"] if "id" in y])
                         for cx in cxns:
                             t = {"subject": me, "predicate": f"{luxns}typeOfProfessionalActivity", "object": cx}
                             ml["triples"].append({"triple": t})
 
         if data["type"] == "Person":
-            facets["personId"] = data["id"]
+            #facets["personId"] = data["id"]
             # Do person indexes here
             facets["genderId"] = [
                 x["id"]
@@ -428,25 +428,25 @@ class MlMapper(Mapper):
                 t = {"subject": me, "predicate": f"{luxns}agentGender", "object": f}
                 ml["triples"].append({"triple": t})
 
-            if "born" in data and "timespan" in data["born"]:
-                facets["agentBeginDate"] = data["born"]["timespan"].get("begin_of_the_begin", "")
-            if "died" in data and "timespan" in data["died"]:
-                facets["agentEndDate"] = data["died"]["timespan"].get("end_of_the_end", "")
+            # if "born" in data and "timespan" in data["born"]:
+            #     facets["agentBeginDate"] = data["born"]["timespan"].get("begin_of_the_begin", "")
+            # if "died" in data and "timespan" in data["died"]:
+            #     facets["agentEndDate"] = data["died"]["timespan"].get("end_of_the_end", "")
 
-        elif data["type"] == "Group":
-            facets["groupId"] = data["id"]
-            if "formed_by" in data and "timespan" in data["formed_by"]:
-                facets["agentBeginDate"] = data["formed_by"]["timespan"].get("begin_of_the_begin", "")
-            if "dissolved_by" in data and "timespan" in data["dissolved_by"]:
-                facets["agentEndDate"] = data["dissolved_by"]["timespan"].get("end_of_the_end", "")
+        # elif data["type"] == "Group":
+        #     facets["groupId"] = data["id"]
+        #     if "formed_by" in data and "timespan" in data["formed_by"]:
+        #         facets["agentBeginDate"] = data["formed_by"]["timespan"].get("begin_of_the_begin", "")
+        #     if "dissolved_by" in data and "timespan" in data["dissolved_by"]:
+        #         facets["agentEndDate"] = data["dissolved_by"]["timespan"].get("end_of_the_end", "")
 
-        elif data["type"] in ["HumanMadeObject", "DigitalObject", "LinguisticObject"]:
-            # Type of work / supertype
-            facets["superType"] = [
-                x["id"]
-                for x in data.get("classified_as", [])
-                if self.globals["typeOfWork"] in [y["id"] for y in x.get("classified_as", [])] and "id" in x
-            ]
+        # elif data["type"] in ["HumanMadeObject", "DigitalObject", "LinguisticObject"]:
+        #     # Type of work / supertype
+        #     facets["superType"] = [
+        #         x["id"]
+        #         for x in data.get("classified_as", [])
+        #         if self.globals["typeOfWork"] in [y["id"] for y in x.get("classified_as", [])] and "id" in x
+        #     ]
         elif data["type"] == "Set":
             if "used_for" in data:
                 for uf in data["used_for"]:
