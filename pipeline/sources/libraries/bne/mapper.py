@@ -23,7 +23,7 @@ class BneMapper(Mapper):
             # Entidad Corporativa (per https://datos.bne.es/def/index-es.html#C1006)
             topcls = model.Group
         else:
-            print(f"Unhandled BNE type {typ_uri}")
+            #unhandled type
             topcls = None
         return topcls
 
@@ -101,11 +101,16 @@ class BneMapper(Mapper):
         except:
             print(f"BNE record {record['identifier']} doesn't have @graph")
             return None
-        if not rectype:
+        if rectype:
+            topcls = getattr(model, rectype)
+        else:
             topcls = self.guess_type(rec)
+
+        if topcls:
             rectype = topcls.__name__
         else:
-            topcls = getattr(model, rectype)
+            return None
+
         top = topcls(ident=rec['@id'])
         # Per class specific stuff
         fn = getattr(self, f"handle_{rectype.lower()}", None)
@@ -158,10 +163,16 @@ class BneMapper(Mapper):
 
         dob = rec.get("P5010","")
         pob = rec.get("P50119","")
+        d = None
         if dob:
             ts = model.TimeSpan()
             birth = model.Birth()
-            begins = make_datetime(dob)
+            if type(dob) == list and len(dob) ==2:
+                b = dob[0]
+                d = dob[1]
+                begins = make_datetime(b)
+            else:
+                begins = make_datetime(dob)
             if begins:
                 ts.begin_of_the_begin = begins[0]
                 ts.end_of_the_end = begins[1]
@@ -173,8 +184,12 @@ class BneMapper(Mapper):
                 
         dod = rec.get("P5011", "")
         pod = rec.get("P50118","")
+        ends = None
         if dod:
             ends = make_datetime(dod)
+        elif d:
+            ends = make_datetime(d)
+        if ends:
             ts = model.TimeSpan()
             death = model.Death()
             if ends:
@@ -185,6 +200,7 @@ class BneMapper(Mapper):
                 ts.took_place_at = model.Place(label=pod)
             death.timespan = ts
             top.died = death
+
 
         gender = rec.get("P50116","")
         if gender:
