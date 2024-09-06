@@ -22,10 +22,17 @@ cfgs.instantiate_all()
 reconciler = Reconciler(cfgs, idmap , networkmap)
 
 uri = sys.argv[1]
-try:
+if "view" in uri:
+	print("You need to send the data version.")
+	sys.exit()
+
+try: 
 	rec = requests.get(uri).json()
 except:
 	print(f"Could not fetch uri {uri}")
+	sys.exit()
+
+
 
 typ = uri.rsplit("/",2)[-2]
 if typ == "concept":
