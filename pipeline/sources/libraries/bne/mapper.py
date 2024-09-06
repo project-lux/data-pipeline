@@ -166,9 +166,9 @@ class BneMapper(Mapper):
         if dob:
             ts = model.TimeSpan()
             birth = model.Birth()
-            begins = make_datetime(dob)
-            if type(begins) == list:
+            if type(dob) == list:
                 print(f"wacky begins in rec {rec}")
+            begins = make_datetime(dob)
             if begins:
                 ts.begin_of_the_begin = begins[0]
                 ts.end_of_the_end = begins[1]
