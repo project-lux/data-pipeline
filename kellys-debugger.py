@@ -23,8 +23,8 @@ reconciler = Reconciler(cfgs, idmap , networkmap)
 
 uri = sys.argv[1]
 if "view" in uri:
-	print("You need to send the data version.")
-	sys.exit()
+	print("You need to send the data version, but I'll fix it for you.")
+	uri = uri.replace("view","data")
 
 try: 
 	rec = requests.get(uri).json()
