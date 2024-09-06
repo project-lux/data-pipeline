@@ -101,12 +101,16 @@ class BneMapper(Mapper):
         except:
             print(f"BNE record {record['identifier']} doesn't have @graph")
             return None
-        if not rectype:
-            topcls = self.guess_type(rec)
-            if topcls:
-                rectype = topcls.__name__
-        else:
+        if rectype:
             topcls = getattr(model, rectype)
+        else:
+            topcls = self.guess_type(rec)
+
+        if topcls:
+            rectype = topcls.__name__
+        else:
+            return None
+
         top = topcls(ident=rec['@id'])
         # Per class specific stuff
         fn = getattr(self, f"handle_{rectype.lower()}", None)
