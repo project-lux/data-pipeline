@@ -5,12 +5,13 @@ import time
 import requests
 from dotenv import load_dotenv
 from pipeline.config import Config
+from pipeline.process.reconciler import Reconciler
 
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")
 cfgs = Config(basepath=basepath)
-cfgs.debug_reconciliation = True  # Ensure debug is on
+#cfgs.debug_reconciliation = True  # Ensure debug is on
 idmap = cfgs.get_idmap()
 networkmap = cfgs.instantiate_map("networkmap")["store"]
 cfgs.cache_globals()
@@ -18,6 +19,7 @@ cfgs.instantiate_all()
 
 
 #given a uri, get the equivalents, check them in the recordcache, spit out the primary names
+reconciler = Reconciler(cfgs, idmap , networkmap)
 
 uri = sys.argv[1]
 try:
@@ -48,12 +50,6 @@ if rec:
 				keyname = cachename + ": " + identqua
 				if cacherec:					
 					data = cacherec['data']
-					try:
-						cacheequivs = data['equivalent']
-					except:
-						print(f"Record {keyname} has no equivalents")
-						cacheequivs = None
-						continue
 					names = data['identified_by']
 					for n in names:
 						cont = n.get("content")
@@ -61,8 +57,16 @@ if rec:
 							recnames[keyname].append(cont)
 						else:
 							recnames[keyname] = [cont]
-					if cacheequivs:
-						for c in cacheequivs:
+					#reconcile cacherec
+					try:
+						reconrec = reconciler.reconcile(cacherec)
+					except:
+						print(f"Could not reconcile {ident}")
+						pass
+					if reconrec:
+						#copy of rec with all reconcilation done
+						reconlist = reconrec['equivalent']
+						for c in reconlist:
 							cid = c.get("id","")
 							if cid:
 								try:
