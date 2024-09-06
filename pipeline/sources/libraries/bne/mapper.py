@@ -184,6 +184,7 @@ class BneMapper(Mapper):
                 
         dod = rec.get("P5011", "")
         pod = rec.get("P50118","")
+        ends = None
         if dod:
             ends = make_datetime(dod)
         elif d:
