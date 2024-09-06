@@ -1,4 +1,4 @@
-from pipeline.process.base.mapper import Mapper
+exceptfrom pipeline.process.base.mapper import Mapper
 from pipeline.process.utils.mapper_utils import make_datetime, test_birth_death
 from cromulent import model, vocab
 
@@ -103,7 +103,8 @@ class BneMapper(Mapper):
             return None
         if not rectype:
             topcls = self.guess_type(rec)
-            rectype = topcls.__name__
+            if topcls:
+                rectype = topcls.__name__
         else:
             topcls = getattr(model, rectype)
         top = topcls(ident=rec['@id'])
