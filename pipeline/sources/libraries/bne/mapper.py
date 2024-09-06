@@ -166,9 +166,12 @@ class BneMapper(Mapper):
         if dob:
             ts = model.TimeSpan()
             birth = model.Birth()
-            if type(dob) == list:
-                print(f"wacky begins in rec {rec}")
-            begins = make_datetime(dob)
+            if type(dob) == list and len(dob) ==2:
+                b = dob[0]
+                d = dob[1]
+                begins = make_datetime(b)
+            else:
+                begins = make_datetime(dob)
             if begins:
                 ts.begin_of_the_begin = begins[0]
                 ts.end_of_the_end = begins[1]
@@ -182,6 +185,9 @@ class BneMapper(Mapper):
         pod = rec.get("P50118","")
         if dod:
             ends = make_datetime(dod)
+        elif d:
+            ends = make_datetime(d)
+        if ends:
             ts = model.TimeSpan()
             death = model.Death()
             if ends:
@@ -192,6 +198,7 @@ class BneMapper(Mapper):
                 ts.took_place_at = model.Place(label=pod)
             death.timespan = ts
             top.died = death
+
 
         gender = rec.get("P50116","")
         if gender:
