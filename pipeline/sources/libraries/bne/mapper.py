@@ -163,6 +163,7 @@ class BneMapper(Mapper):
 
         dob = rec.get("P5010","")
         pob = rec.get("P50119","")
+        d = None
         if dob:
             ts = model.TimeSpan()
             birth = model.Birth()
@@ -172,7 +173,6 @@ class BneMapper(Mapper):
                 begins = make_datetime(b)
             else:
                 begins = make_datetime(dob)
-                d = None
             if begins:
                 ts.begin_of_the_begin = begins[0]
                 ts.end_of_the_end = begins[1]
