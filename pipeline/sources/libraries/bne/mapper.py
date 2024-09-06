@@ -172,6 +172,7 @@ class BneMapper(Mapper):
                 begins = make_datetime(b)
             else:
                 begins = make_datetime(dob)
+                d = None
             if begins:
                 ts.begin_of_the_begin = begins[0]
                 ts.end_of_the_end = begins[1]
