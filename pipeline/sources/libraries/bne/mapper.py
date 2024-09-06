@@ -23,7 +23,7 @@ class BneMapper(Mapper):
             # Entidad Corporativa (per https://datos.bne.es/def/index-es.html#C1006)
             topcls = model.Group
         else:
-            print(f"Unhandled BNE type {typ_uri}")
+            #unhandled type
             topcls = None
         return topcls
 
@@ -167,6 +167,8 @@ class BneMapper(Mapper):
             ts = model.TimeSpan()
             birth = model.Birth()
             begins = make_datetime(dob)
+            if type(begins) == list:
+                print(f"wacky begins in rec {rec}")
             if begins:
                 ts.begin_of_the_begin = begins[0]
                 ts.end_of_the_end = begins[1]
