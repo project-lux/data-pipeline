@@ -45,7 +45,11 @@ if rec:
 				(src, identifier) = cfgs.split_uri(ident)
 				cache = src['recordcache']
 				cachename = src['name']
-				identqua = identifier + "##qua" + typ
+				srctype = src['type']
+				if src['type'] == "external":
+					identqua = identifier + "##qua" + typ
+				else:
+					identqua = identifier
 				cacherec = cache[identqua]
 				keyname = cachename + ": " + identqua
 				if cacherec:					
