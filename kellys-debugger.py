@@ -65,7 +65,7 @@ if rec:
 						pass
 					if reconrec:
 						#copy of rec with all reconcilation done
-						reconlist = reconrec['equivalent']
+						reconlist = reconrec['data']['equivalent']
 						for c in reconlist:
 							cid = c.get("id","")
 							if cid:
