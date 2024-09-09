@@ -407,12 +407,15 @@ class Cleaner(Mapper):
     def set_timespan_defaults(timespan):
         if "begin_of_the_begin" in timespan and "end_of_the_end" not in timespan:
             timespan["end_of_the_end"] = "9999-12-31T23:59:59"
-        elif "begin_of_the_begin" in timespan and "end_of_the_begin" not in timespan:
-            timespan["end_of_the_begin"] = timespan["begin_of_the_begin"]
         elif "end_of_the_end" in timespan and "begin_of_the_begin" not in timespan:
             timespan["begin_of_the_begin"] = "-9999-01-01T00:00:00"
-        elif "end_of_the_end" in timespan and "begin_of_the_end" not in timespan:
-            timespan["begin_of_the_end"] = timespan["end_of_the_end"]
+
+        if timespan == "timespan":
+            #it's an Event, Period or Activity
+            if "begin_of_the_begin" in timespan and "end_of_the_begin" not in timespan:
+                timespan["end_of_the_begin"] = timespan["begin_of_the_begin"]
+            if "end_of_the_end" in timespan and "begin_of_the_end" not in timespan:
+                timespan["begin_of_the_end"] = timespan["end_of_the_end"]
 
 
     def check_for_metatypes(self, data):
@@ -525,6 +528,7 @@ class Cleaner(Mapper):
                         if "timespan" in part:
                             self.set_timespan_defaults(part['timespan'])
                 elif et == "timespan":
+                    #it's an Event, Period or Activity
                     self.set_timespan_defaults(et)
 
         ### Check names are sane
