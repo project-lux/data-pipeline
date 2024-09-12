@@ -529,7 +529,7 @@ class Cleaner(Mapper):
         data = rec["data"]
 
         ### Deduplicate properties
-        propList = ["classified_as, represents, part_of, made_of, member_of"]
+        propList = ["classified_as", "represents", "part_of", "made_of", "member_of"]
         for p in propList:
             self.dedupe_properties(data, p)
 
