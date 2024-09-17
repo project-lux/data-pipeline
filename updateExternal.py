@@ -46,3 +46,5 @@ for src, cfg in to_do:
         # This plus force_rebuild avoids current caches and stores data
         # but doesn't map or post_map
         rec = acq.acquire(ident, dataonly=True, store=True)
+        sys.stdout.write(".")
+        sys.stdout.flush()
