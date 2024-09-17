@@ -86,7 +86,7 @@ try:
                 RANGE = f"{sn}!{rng}"
 
 except HttpError as err:
-    print(err)
+    print(f"Trapped error: {err}")
 
 # Now write the dicts to CSVs
 dfn = os.path.join(cfgs.data_dir, "differentFrom/google.csv")

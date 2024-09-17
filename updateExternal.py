@@ -39,7 +39,10 @@ for src, cfg in to_do:
     acq = cfg["acquirer"]
     acq.force_rebuild = True
     rc = cfg["recordcache"]
-    dc = cfg["datacache"]
+
+    ttl = rc.len_estimate()
+    ttl2 = ttl / max_slice
+    print("Refreshing {ttl2} records from {src} ({ttl} total across all processes)")
 
     for ident in rc.iter_keys_slice(my_slice, max_slice):
         ident = cfgs.split_qua(ident)[0]
