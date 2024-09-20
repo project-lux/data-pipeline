@@ -412,7 +412,7 @@ class MlMapper(Mapper):
                     if self.globals["active"] in cxns:
                         # if "took_place_at" in co:
                         #     facets["agentActivePlaceId"].extend([y["id"] for y in co["took_place_at"] if "id" in y])
-                        for cx in cxns:
+                        for cx in cxns and cx != self.globals['active']:
                             t = {"subject": me, "predicate": f"{luxns}typeOfProfessionalActivity", "object": cx}
                             ml["triples"].append({"triple": t})
 
