@@ -345,8 +345,8 @@ class YulMapper(Mapper):
 
         # Swap sort title AAT for sort value
         for ident in data.get("identified_by",[]):
-            if "classified_as" in i:
-                for cxn in i['classified_as']:
+            if "classified_as" in ident:
+                for cxn in ident['classified_as']:
                     if cxn['id'] == "https://vocab.getty.edu/aat/300451544":
                         cxn['id'] = "http://vocab.getty.edu/aat/300456575"
 
