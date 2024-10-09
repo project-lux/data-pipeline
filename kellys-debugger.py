@@ -54,8 +54,8 @@ if rec:
 				srctype = src['type']
 				if src['type'] == "external":
 					identqua = identifier + "##qua" + typ
-				# else:
-				# 	identqua = identifier
+				else:
+				 	identqua = None
 				cacherec = cache[identqua]
 				keyname = cachename + ": " + identqua
 				if cacherec:					
