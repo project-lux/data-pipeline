@@ -54,8 +54,8 @@ if rec:
 				srctype = src['type']
 				if src['type'] == "external":
 					identqua = identifier + "##qua" + typ
-				else:
-					identqua = identifier
+				# else:
+				# 	identqua = identifier
 				cacherec = cache[identqua]
 				keyname = cachename + ": " + identqua
 				if cacherec:					
@@ -107,7 +107,8 @@ for rec, names in recnames.items():
 	print(f"{names}\n")
 	if rec in recequivs:
 		eqv = recequivs[rec]
+		print("And says it is...\n")
 		for k in eqv:
-			print(f"And says it is {k}\n")
+			print(f"...{k}\n")
 
 
