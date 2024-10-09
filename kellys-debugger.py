@@ -68,7 +68,7 @@ if rec:
 								recnames[keyname].append(cont)
 							else:
 								recnames[keyname] = [cont]
-						equivs = cacherec.get("equivalent",[])
+						equivs = data.get("equivalent",[])
 						for e in equivs:
 							cid = e.get("id","")
 							try:
