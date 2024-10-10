@@ -69,8 +69,10 @@ if rec:
 								recnames[keyname].append(cont)
 							else:
 								recnames[keyname] = [cont]
-						equivs = data.get("equivalent",[])
-						if equivs is not []:
+						try:
+							equivs = data["equivalent"]
+						except:
+							print(f"found equivalent for {identqua}")
 							continue
 						# for e in equivs:
 						# 	cid = e.get("id","")
