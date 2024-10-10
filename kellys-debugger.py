@@ -54,7 +54,7 @@ if rec:
 				srctype = src['type']
 				if src['type'] == "external":
 					#identqua = identifier + "##qua" + typ
-					pass
+					continue
 				else:
 				 	identqua = identifier
 				if identqua:
