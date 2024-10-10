@@ -69,7 +69,9 @@ if rec:
 								recnames[keyname].append(cont)
 							else:
 								recnames[keyname] = [cont]
-						# equivs = data.get("equivalent",[])
+						equivs = data.get("equivalent",[])
+						if equivs is not []:
+							continue
 						# for e in equivs:
 						# 	cid = e.get("id","")
 						# 	try:
