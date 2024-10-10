@@ -70,25 +70,26 @@ if rec:
 							else:
 								recnames[keyname] = [cont]
 						equivs = data.get("equivalent",[])
-						for e in equivs:
-							cid = e.get("id","")
-							try:
-								(src, identifier) = cfgs.split_uri(cid)
-								cache = src['recordcache']
-								cachename = src['name']
-								identqua = identifier + "##qua" + typ
-								cacherec = cache[identqua]
-							except:
-								cacherec = None
-								print(f"could not split uri on {cid}")
-							if cacherec:
-								data = cacherec['data']
-								names = data['identified_by']
-								cont = names[0]['content']
-								if keyname not in recequivs:
-									recequivs[keyname] = [f"{cid}:{cont}"]
-								elif keyname in recequivs:
-									recequivs[keyname].append(f"{cid}:{cont}")
+						if equivs:
+							for e in equivs:
+								cid = e.get("id","")
+								try:
+									(src, identifier) = cfgs.split_uri(cid)
+									cache = src['recordcache']
+									cachename = src['name']
+									identqua = identifier + "##qua" + typ
+									cacherec = cache[identqua]
+								except:
+									cacherec = None
+									print(f"could not split uri on {cid}")
+								if cacherec:
+									data = cacherec['data']
+									names = data['identified_by']
+									cont = names[0]['content']
+									if keyname not in recequivs:
+										recequivs[keyname] = [f"{cid}:{cont}"]
+									elif keyname in recequivs:
+										recequivs[keyname].append(f"{cid}:{cont}")
 
 						#reconcile cacherec
 						# try:
@@ -130,11 +131,9 @@ for rec, names in recnames.items():
 	print(f"{names}\n")
 	if rec in recequivs:
 		eqv = recequivs[rec]
-		if eqv:
-			print("And says it is...\n")
-			for k in eqv:
-				print(f"...{k}\n")
-		else:
-			continue
+		print("And says it is...\n")
+		for k in eqv:
+			print(f"...{k}\n")
+
 
 
