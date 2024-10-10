@@ -130,10 +130,11 @@ for rec, names in recnames.items():
 	print(f"{names}\n")
 	if rec in recequivs:
 		eqv = recequivs[rec]
-		print("And says it is...\n")
-		for k in eqv:
-			print(f"...{k}\n")
-	else:
-		continue
+		if eqv:
+			print("And says it is...\n")
+			for k in eqv:
+				print(f"...{k}\n")
+		else:
+			continue
 
 
