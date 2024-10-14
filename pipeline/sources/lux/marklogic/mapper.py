@@ -535,12 +535,10 @@ class MlMapper(Mapper):
                     t = {"subject": me, "predicate": lPred, "object": l}
                     ml["triples"].append({"triple": t})
 
-        elif data["type"] == "LinguisticObject":
             whole = []
             if "part_of" in data:
-                for p in data["part_of"]:
-                    parts = [x["id"] for x in data["part_of"] if "id" in x]
-                    whole.extend(parts)
+                parts = [x["id"] for x in data["part_of"] if "id" in x]
+                whole.extend(parts)
             for w in whole:
                 t = {"subject": me, "predicate": f"{crmns}P106i_forms_part_of", "object": w}
                 ml["triples"].append({"triple": t})
