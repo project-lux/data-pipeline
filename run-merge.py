@@ -90,7 +90,6 @@ final = cfgs.results["merged"]["mapper"]
 # if merged is not empty, then only want to write to it if the record
 # hasn't already been written this build
 # OTOH, if merged starts off empty, it must have been this build
-merged_is_empty = merged_cache.len_estimate() < 10
 start_time = datetime.datetime.now()
 
 # merge only reads, so enable AAT memory cache
@@ -139,7 +138,7 @@ for src_name, src in to_do:
         if NAME is not None and ins_time is not None:
             # We're in merged previously
             curr_name = merged_cache.metadata(yuid, "change")["change"]
-            if curr_name in ["create", "update"]:
+            if curr_name.lower() in ["create", "update"]:
                 curr_name = ""
         else:
             curr_name = ""
