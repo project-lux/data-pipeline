@@ -25,13 +25,19 @@ class PmcMapper(Mapper):
 
         if "referred_to_by" in data:
             data["referred_to_by"] = [
-                r for r in data["referred_to_by"]
+                r
+                for r in data["referred_to_by"]
                 if not any(
-                    "id" in c and c["id"] in {"http://vocab.getty.edu/aat/300435438", "http://vocab.getty.edu/aat/300055458"}
+                    "id" in c
+                    and c["id"]
+                    in {
+                        "http://vocab.getty.edu/aat/300435438",
+                        "http://vocab.getty.edu/aat/300055863",
+                        "http://vocab.getty.edu/aat/300055458",
+                    }
                     for c in r.get("classified_as", [])
                 )
             ]
-
 
         self.fix_links(rec)
 
