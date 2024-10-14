@@ -337,12 +337,19 @@ class YulMapper(Mapper):
 
         # Swap MarcGT to AAT equivalents
         if "classified_as" in data:
-            class_as = []
             for cxns in data["classified_as"]:
                 if cxns["id"] == "http://id.loc.gov/vocabulary/marcgt/rea":
                     cxns["id"] = "http://vocab.getty.edu/aat/300265419"
                 elif cxns["id"] == "http://id.loc.gov/vocabulary/marcgt/pic":
                     cxns["id"] = "http://vocab.getty.edu/aat/300264388"
+
+        # Swap sort title AAT for sort value
+        for ident in data.get("identified_by",[]):
+            if "classified_as" in ident:
+                for cxn in ident['classified_as']:
+                    if cxn['id'] == "https://vocab.getty.edu/aat/300451544":
+                        cxn['id'] = "http://vocab.getty.edu/aat/300456575"
+
 
         # Add collection item flag
         # FIXME: This doesn't work for archives
