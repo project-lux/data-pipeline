@@ -366,7 +366,7 @@ class MlMapper(Mapper):
                 if pfx in ["agent", "place", "concept", "event"]:
                     t = {"subject": me, "predicate": f"{luxns}referenceClassifiedAs", "object": c}
                     ml["triples"].append({"triple": t})
-                elif data["type"] == "Set":
+                if data["type"] == "Set":
                     t = {"subject": me, "predicate": f"{luxns}setClassifiedAs", "object": c}
                     ml["triples"].append({"triple": t})
 
