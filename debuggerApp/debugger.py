@@ -46,79 +46,78 @@ def process_uri(uri, option1=False, option2=False):
 					(src, identifier) = cfgs.split_uri(ident)
 					cache = src['recordcache']
 					cachename = src['name']
-					srctype = src['type']
-					if src['type'] == "external" and option1:
-						continue
-					elif src['type'] == "external":
-						identqua = identifier + "##qua" + typ
+					if src['type'] == "external":
+						if option1:
+							continue
+						else:
+							identqua = identifier + "##qua" + typ
+					identqua = identifier
+					cacherec = cache[identqua]
+					if cacherec:
+						data = cacherec['data']
+						names = data['identified_by']
+						for n in names:
+							cont = n.get("content")
+							if ident in recnames:
+								recnames[ident].append(cont)
+							else:
+								recnames[ident] = [cont]
+						equivlst = data.get("equivalent",[])
+						if equivlst:
+							for v in equivs:
+								print(v)
+								cid = v.get("id","")
+								try:
+									(src, identifier) = cfgs.split_uri(cid)
+									cache1 = src['recordcache']
+									cachename1 = src['name']
+									identqua1 = identifier + "##qua" + typ
+									cacherec1 = cache1[identqua1]
+								except:
+									cacherec1 = None
+									output.append(f"Could not split uri on {cid}")
+								if cacherec1:
+									data1 = cacherec['data']
+									names1 = data['identified_by']
+									cont1 = names1[0]['content']
+									if identifier not in recequivs:
+										recequivs[identifier] = [f"{cid}:{cont1}"]
+									elif identifier in recequivs:
+										recequivs[identifier].append(f"{cid}:{cont1}")
+						else:
+							output.append(f"Record {ident} does not have any URI equivalents.")
 					else:
-					 	identqua = identifier
-					if identqua:
-						cacherec = cache[identqua]
-						keyname = cachename + ": " + identqua
-						if cacherec:
-							data = cacherec['data']
-							names = data['identified_by']
-							for n in names:
-								cont = n.get("content")
-								if keyname in recnames:
-									recnames[keyname].append(cont)
-								else:
-									recnames[keyname] = [cont]
-							equivlst = data.get("equivalent",[])
-							if equivlst:
-								for v in equivs:
-									print(v)
-									cid = v.get("id","")
+						output.append(f"Could not fetch {identifier} from cache.")
+					if option2:
+						#do name-based reconciliation
+						try:
+							reconrec = reconciler.reconcile(cacherec)
+						except:
+							output.append(f"Could not reconcile {ident}")
+							pass
+						if reconrec:
+							#copy of rec with all reconcilation done
+							reconlist = reconrec['data']['equivalent']
+							for c in reconlist:
+								cid = c.get("id","")
+								if cid:
 									try:
 										(src, identifier) = cfgs.split_uri(cid)
-										cache1 = src['recordcache']
-										cachename1 = src['name']
-										identqua1 = identifier + "##qua" + typ
-										cacherec1 = cache1[identqua1]
+										cache = src['recordcache']
+										cachename = src['name']
+										identqua = identifier + "##qua" + typ
+										cacherec = cache[identqua]
 									except:
-										cacherec1 = None
+										cacherec = None
 										output.append(f"could not split uri on {cid}")
-									if cacherec1:
-										data1 = cacherec['data']
-										names1 = data['identified_by']
-										cont1 = names1[0]['content']
+									if cacherec:
+										data = cacherec['data']
+										names = data['identified_by']
+										cont = names[0]['content']
 										if keyname not in recequivs:
-											recequivs[keyname] = [f"{cid}:{cont1}"]
+											recequivs[keyname] = [f"{cid}:{cont}"]
 										elif keyname in recequivs:
-											recequivs[keyname].append(f"{cid}:{cont1}")
-							else:
-								output.append(f"Record {ident} does not have any URI equivalents.")
-							if option2:
-								#do name-based reconciliation
-								try:
-									reconrec = reconciler.reconcile(cacherec)
-								except:
-									output.append(f"Could not reconcile {ident}")
-									pass
-								if reconrec:
-									#copy of rec with all reconcilation done
-									reconlist = reconrec['data']['equivalent']
-									for c in reconlist:
-										cid = c.get("id","")
-										if cid:
-											try:
-												(src, identifier) = cfgs.split_uri(cid)
-												cache = src['recordcache']
-												cachename = src['name']
-												identqua = identifier + "##qua" + typ
-												cacherec = cache[identqua]
-											except:
-												cacherec = None
-												output.append(f"could not split uri on {cid}")
-											if cacherec:
-												data = cacherec['data']
-												names = data['identified_by']
-												cont = names[0]['content']
-												if keyname not in recequivs:
-													recequivs[keyname] = [f"{cid}:{cont}"]
-												elif keyname in recequivs:
-													recequivs[keyname].append(f"{cid}:{cont}")
+											recequivs[keyname].append(f"{cid}:{cont}")
 
 	#recnames: key: each equivalent uri from original record: their PNs
 	#recequivs: key: each equivalent uri from original record: their equivalents uris + PN
