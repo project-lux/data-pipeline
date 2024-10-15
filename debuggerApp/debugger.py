@@ -121,7 +121,7 @@ def process_uri(uri, option1=False, option2=False):
 	#recnames: key: each equivalent uri from original record: their PNs
 	#recequivs: key: each equivalent uri from original record: their equivalents uris + PN
 		else:
-            return {"records": [], "error": f"No equivalents found for the original URI: {uri}"}
+			return {"records": [], "error": f"No equivalents found for the original URI: {uri}"}
 
 	for rec, names in recnames.items():
 		record_data = {
