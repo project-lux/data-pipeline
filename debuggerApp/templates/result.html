@@ -34,6 +34,10 @@
             color: #888;
             font-style: italic;
         }
+        .reconciliation-flag {
+            color: #d9534f;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -50,7 +54,12 @@
                         <p><strong>Equivalents:</strong></p>
                         <ul class="equivalents-list">
                             {% for equiv in record.equivalents %}
-                                <li><a href="{{ equiv.uri }}" target="_blank">{{ equiv.uri }}</a> : {{ equiv.names }}</li>
+                                <li>
+                                    <a href="{{ equiv.uri }}" target="_blank">{{ equiv.uri }}</a>: {{ equiv.name }}
+                                    {% if equiv.added_by_reconciliation %}
+                                        <span class="reconciliation-flag">(added via reconciliation)</span>
+                                    {% endif %}
+                                </li>
                             {% endfor %}
                         </ul>
                     {% else %}
