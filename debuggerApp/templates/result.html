@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>URI Result</title>
+  </head>
+  <body>
+    <h1>Result</h1>
+    {% if result.status == 'success' %}
+      <p>Title: {{ result.title }}</p>
+    {% else %}
+      <p>Error: {{ result.error }}</p>
+    {% endif %}
+    <a href="/">Go Back</a>
+  </body>
+</html>
