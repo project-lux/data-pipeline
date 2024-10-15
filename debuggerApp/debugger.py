@@ -20,13 +20,12 @@ reconciler = Reconciler(cfgs, idmap , networkmap)
 #given a uri, get the equivalents, check them in the recordcache, spit out the primary names
 
 def process_uri(uri, option1=False, option2=False):
-	output = []
+	results = []
 
 	try: 
 		rec = requests.get(uri).json()
 	except:
-		return (f"Failure: could not fetch uri {uri}")
-
+		return {"records": [], "error": f"Failure: could not fetch uri {uri}"}
 
 	typ = uri.rsplit("/",2)[-2]
 	if typ == "concept":
@@ -76,7 +75,7 @@ def process_uri(uri, option1=False, option2=False):
 									cacherec = cache[identqua]
 								except:
 									cacherec = None
-									output.append(f"Could not fetch {cid} from cache.")
+									continue
 								if cacherec:
 									data = cacherec['data']
 									names = data['identified_by']
@@ -85,16 +84,15 @@ def process_uri(uri, option1=False, option2=False):
 										recequivs[ident] = [f"{cid}:{cont}"]
 									elif ident in recequivs:
 										recequivs[ident].append(f"{cid}:{cont}")
-						elif not option2:
-							output.append(f"Record {ident} does not have any URI equivalents.")
-					else:
-						output.append(f"Could not fetch {ident} from cache.")
+                        if not equivlst and not option2:
+                            if ident not in recequivs:
+                                recequivs[ident] = []
+
 					if option2:
 						#do name-based reconciliation
 						try:
 							reconrec = reconciler.reconcile(cacherec)
 						except:
-							output.append(f"Could not reconcile {ident}")
 							reconrec = None
 						if reconrec:
 							#copy of rec with all reconcilation done
@@ -110,7 +108,7 @@ def process_uri(uri, option1=False, option2=False):
 										cacherec = cache[identqua]
 									except:
 										cacherec = None
-										output.append(f"could not split uri on {cid}")
+										continue
 									if cacherec:
 										data = cacherec['data']
 										names = data['identified_by']
@@ -123,17 +121,26 @@ def process_uri(uri, option1=False, option2=False):
 	#recnames: key: each equivalent uri from original record: their PNs
 	#recequivs: key: each equivalent uri from original record: their equivalents uris + PN
 		else:
-			return (f"No equivs in original uri: {uri}??")
+            return {"records": [], "error": f"No equivalents found for the original URI: {uri}"}
 
 	for rec, names in recnames.items():
+		record_data = {
+			"uri": rec,
+			"names": names,
+			"equivalents": []
+		}
 		if rec in recequivs:
-			output.append(f"Record {rec} is:\n {names}")
-			eqv = recequivs[rec]
-			output.append("And says it is...\n")
-			for k in eqv:
-				output.append(f"...{k}\n")
+			equivalents = recequivs[rec]
+			for equivs in equivalents:
+				parts = equiv.split(":")
+				if len(parts) == 2:
+					record_data["equivalents"].append({
+						"uri":parts[0],
+						"names":parts[1]
+						})
+		results.append(record_data)
 
-	return "\n".join(output)
+	return {"records":results}
 
 
 
