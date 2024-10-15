@@ -1,12 +1,59 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <title>Results</title>
-  </head>
-  <body>
-    <h1>Result</h1>
-    <pre>{{ result }}</pre>  <!-- Display the result in preformatted text -->
-    <a href="/">Go Back</a>
-  </body>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URI Result</title>
+    <!-- Include a CSS Framework (optional but recommended for better design) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.4/css/bulma.min.css">
+    <style>
+        body {
+            background-color: #f4f4f4;
+            font-family: 'Arial', sans-serif;
+        }
+        .container {
+            max-width: 800px;
+            margin: 50px auto;
+            background: white;
+            padding: 20px;
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+        pre {
+            background-color: #f8f8f8;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            font-size: 14px;
+            white-space: pre-wrap; /* Allow wrapping */
+            word-wrap: break-word;
+            overflow-x: auto;
+        }
+        a {
+            display: inline-block;
+            margin-top: 20px;
+            text-decoration: none;
+            color: #3273dc;
+            font-weight: bold;
+            transition: color 0.3s ease;
+        }
+        a:hover {
+            color: #275ab2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">Result</h1>
+        <!-- Display the result -->
+        <pre>{{ result }}</pre>
+        <a href="/" class="button is-link">Go Back</a>
+    </div>
+</body>
 </html>

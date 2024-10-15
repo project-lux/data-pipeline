@@ -84,7 +84,7 @@ def process_uri(uri, option1=False, option2=False):
 										recequivs[ident] = [f"{cid}:{cont}"]
 									elif ident in recequivs:
 										recequivs[ident].append(f"{cid}:{cont}")
-						else:
+						elif not option2:
 							output.append(f"Record {ident} does not have any URI equivalents.")
 					else:
 						output.append(f"Could not fetch {ident} from cache.")
