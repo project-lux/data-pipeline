@@ -52,8 +52,10 @@ def process_uri(uri, option1=False, option2=False):
 						else:
 							identqua = identifier + "##qua" + typ
 					identqua = identifier
+					print(identqua)
 					cacherec = cache[identqua]
 					if cacherec:
+						print(f"got cache rec for {identqua}")
 						data = cacherec['data']
 						names = data['identified_by']
 						for n in names:
