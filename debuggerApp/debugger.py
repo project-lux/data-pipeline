@@ -79,7 +79,7 @@ def process_uri(uri, option1=False, option2=False):
 								if cacherec:
 									data = cacherec['data']
 									names = data['identified_by']
-									cont = names1[0]['content']
+									cont = names[0]['content']
 									if ident not in recequivs:
 										recequivs[ident] = [f"{cid}:{cont}"]
 									elif ident in recequivs:
