@@ -94,7 +94,7 @@ def process_uri(uri, option1=False, option2=False):
 							reconrec = reconciler.reconcile(cacherec)
 						except:
 							output.append(f"Could not reconcile {ident}")
-							pass
+							reconrec = None
 						if reconrec:
 							#copy of rec with all reconcilation done
 							reconlist = reconrec['data']['equivalent']
