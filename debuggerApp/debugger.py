@@ -4,8 +4,12 @@ import json
 import time
 import requests
 from dotenv import load_dotenv
-from ..pipeline.config import Config
-from ..pipeline.process.reconciler import Reconciler
+
+# Add the path to the pipeline module
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+
+from pipeline.config import Config
+from pipeline.process.reconciler import Reconciler
 
 
 load_dotenv()
