@@ -67,27 +67,27 @@ def process_uri(uri, option1=False, option2=False):
 							for v in equivlst:
 								cid = v.get("id","")
 								try:
-									(src1, identifier1) = cfgs.split_uri(cid)
-									cache1 = src1['recordcache']
-									cachename1 = src1['name']
-									identqua1 = identifier + "##qua" + typ
-									cacherec1 = cache1[identqua1]
+									(src, identifier) = cfgs.split_uri(cid)
+									#these are all external
+									cache = src['recordcache']
+									cachename = src['name']
+									identqua = identifier + "##qua" + typ
+									cacherec = cache[identqua]
 								except:
-									cacherec1 = None
-									output.append(f"Could not split uri on {cid}")
-								if cacherec1:
-									print(f"got cacehrec1 for {identifier}")
-									data1 = cacherec['data']
-									names1 = data['identified_by']
-									cont1 = names1[0]['content']
-									if identifier not in recequivs:
-										recequivs[identifier] = [f"{cid}:{cont1}"]
-									elif identifier in recequivs:
-										recequivs[identifier].append(f"{cid}:{cont1}")
+									cacherec = None
+									output.append(f"Could not fetch {cid} from cache.")
+								if cacherec:
+									data = cacherec['data']
+									names = data['identified_by']
+									cont = names1[0]['content']
+									if ident not in recequivs:
+										recequivs[ident] = [f"{cid}:{cont}"]
+									elif ident in recequivs:
+										recequivs[ident].append(f"{cid}:{cont}")
 						else:
 							output.append(f"Record {ident} does not have any URI equivalents.")
 					else:
-						output.append(f"Could not fetch {identifier} from cache.")
+						output.append(f"Could not fetch {ident} from cache.")
 					if option2:
 						#do name-based reconciliation
 						try:
@@ -114,10 +114,10 @@ def process_uri(uri, option1=False, option2=False):
 										data = cacherec['data']
 										names = data['identified_by']
 										cont = names[0]['content']
-										if keyname not in recequivs:
-											recequivs[keyname] = [f"{cid}:{cont}"]
-										elif keyname in recequivs:
-											recequivs[keyname].append(f"{cid}:{cont}")
+										if ident not in recequivs:
+											recequivs[ident] = [f"{cid}:{cont}"]
+										elif ident in recequivs:
+											recequivs[ident].append(f"{cid}:{cont}")
 
 	#recnames: key: each equivalent uri from original record: their PNs
 	#recequivs: key: each equivalent uri from original record: their equivalents uris + PN
