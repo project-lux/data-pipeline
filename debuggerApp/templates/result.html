@@ -50,7 +50,7 @@
                         <p><strong>Equivalents:</strong></p>
                         <ul class="equivalents-list">
                             {% for equiv in record.equivalents %}
-                                <li><a href="{{ equiv.uri }}" target="_blank">{{ equiv.uri }}</a>: {{ equiv.name }}</li>
+                                <li><a href="{{ equiv.uri }}" target="_blank">{{ equiv.uri }}</a> : {{ equiv.names }}</li>
                             {% endfor %}
                         </ul>
                     {% else %}
