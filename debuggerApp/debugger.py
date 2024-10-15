@@ -52,10 +52,8 @@ def process_uri(uri, option1=False, option2=False):
 						else:
 							identqua = identifier + "##qua" + typ
 					identqua = identifier
-					print(identqua)
 					cacherec = cache[identqua]
 					if cacherec:
-						print(f"got cache rec for {identqua}")
 						data = cacherec['data']
 						names = data['identified_by']
 						for n in names:
@@ -66,12 +64,13 @@ def process_uri(uri, option1=False, option2=False):
 								recnames[ident] = [cont]
 						equivlst = data.get("equivalent",[])
 						if equivlst:
+							print(f"got equivlist from {identifier}")
 							for v in equivlst:
 								cid = v.get("id","")
 								try:
-									(src, identifier) = cfgs.split_uri(cid)
-									cache1 = src['recordcache']
-									cachename1 = src['name']
+									(src1, identifier1) = cfgs.split_uri(cid)
+									cache1 = src1['recordcache']
+									cachename1 = src1['name']
 									identqua1 = identifier + "##qua" + typ
 									cacherec1 = cache1[identqua1]
 								except:
