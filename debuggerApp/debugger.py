@@ -81,9 +81,17 @@ def process_uri(uri, option1=False, option2=False):
 									names = data['identified_by']
 									cont = names[0]['content']
 									if ident not in recequivs:
-										recequivs[ident] = [f"{cid}={cont}"]
+										recquivs[ident] = [{
+											"uri": cid,
+											"name": cont,
+											"added_by_reconciliation": False  
+										}]
 									elif ident in recequivs:
-										recequivs[ident].append(f"{cid}={cont}")
+										recquivs[ident].append({
+											"uri": cid,
+											"name": cont,
+											"added_by_reconciliation": False  
+										})
 						if not equivlst and not option2:
 							if ident not in recequivs:
 								recequivs[ident] = []
@@ -114,9 +122,17 @@ def process_uri(uri, option1=False, option2=False):
 										names = data['identified_by']
 										cont = names[0]['content']
 										if ident not in recequivs:
-											recequivs[ident] = [f"{cid}={cont}"]
+											recequivs[ident] = [{
+												"uri": cid,
+												"name": cont,
+												"added_by_reconciliation": True
+											}]
 										elif ident in recequivs:
-											recequivs[ident].append(f"{cid}={cont}")
+											recequivs[ident].append({
+												"uri": cid,
+												"name": cont,
+												"added_by_reconciliation": True
+											})
 
 	#recnames: key: each equivalent uri from original record: their PNs
 	#recequivs: key: each equivalent uri from original record: their equivalents uris + PN
@@ -132,12 +148,11 @@ def process_uri(uri, option1=False, option2=False):
 		if rec in recequivs:
 			equivalents = recequivs[rec]
 			for equivs in equivalents:
-				parts = equivs.split("=")
-				if len(parts) == 2:
-					record_data["equivalents"].append({
-						"uri":parts[0],
-						"names":parts[1]
-						})
+				record_data["equivalents"].append({
+					"uri": equiv["uri"]
+					"name": equiv["name"]
+					"added_by_reconciliation": equiv["added_by_reconciliation"]
+				})
 		results.append(record_data)
 
 	return {"records":results}
