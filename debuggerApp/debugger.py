@@ -84,9 +84,9 @@ def process_uri(uri, option1=False, option2=False):
 										recequivs[ident] = [f"{cid}:{cont}"]
 									elif ident in recequivs:
 										recequivs[ident].append(f"{cid}:{cont}")
-                        if not equivlst and not option2:
-                            if ident not in recequivs:
-                                recequivs[ident] = []
+						if not equivlst and not option2:
+							if ident not in recequivs:
+								recequivs[ident] = []
 
 					if option2:
 						#do name-based reconciliation
