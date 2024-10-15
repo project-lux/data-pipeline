@@ -19,7 +19,7 @@ reconciler = Reconciler(cfgs, idmap , networkmap)
 
 #given a uri, get the equivalents, check them in the recordcache, spit out the primary names
 
-def process_uri(uri, option1=False, option2=False, option3=False):
+def process_uri(uri, option1=False, option2=False):
 	output = []
 
 	try: 
@@ -54,7 +54,6 @@ def process_uri(uri, option1=False, option2=False, option3=False):
 					else:
 					 	identqua = identifier
 					if identqua:
-						print(identqua)
 						cacherec = cache[identqua]
 						keyname = cachename + ": " + identqua
 						if cacherec:
@@ -66,8 +65,6 @@ def process_uri(uri, option1=False, option2=False, option3=False):
 									recnames[keyname].append(cont)
 								else:
 									recnames[keyname] = [cont]
-							if option1:
-								#only process equivalents if present in records
 								equivlst = data.get("equivalent",[])
 								if equivlst:
 									for e in equivs:
@@ -89,6 +86,8 @@ def process_uri(uri, option1=False, option2=False, option3=False):
 												recequivs[keyname] = [f"{cid}:{cont}"]
 											elif keyname in recequivs:
 												recequivs[keyname].append(f"{cid}:{cont}")
+								else:
+									output.append(f"Record {ident} does not have any URI equivalents.")
 							if option2:
 								#do name-based reconciliation
 								try:
