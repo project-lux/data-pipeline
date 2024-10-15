@@ -14,11 +14,10 @@ def index():
         # Check the status of the checkboxes
         option1 = 'option1' in request.form
         option2 = 'option2' in request.form
-        option3 = 'option3' in request.form
 
 
         #call function to process URI
-        result = process_uri(uri, option1, option2, option3)
+        result = process_uri(uri, option1, option2)
 
         #pass result to template
         return render_template('result.html', result=result)
