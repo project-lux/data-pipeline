@@ -4,8 +4,8 @@ import json
 import time
 import requests
 from dotenv import load_dotenv
-from pipeline.config import Config
-from pipeline.process.reconciler import Reconciler
+from ..pipeline.config import Config
+from ..pipeline.process.reconciler import Reconciler
 
 
 load_dotenv()
@@ -24,8 +24,7 @@ def process_uri(uri):
 	try: 
 		rec = requests.get(uri).json()
 	except:
-		print(f"Could not fetch uri {uri}")
-		sys.exit()
+		return(f"Could not fetch uri {uri}")
 
 	typ = uri.rsplit("/",2)[-2]
 	if typ == "concept":
