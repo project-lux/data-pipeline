@@ -81,13 +81,13 @@ def process_uri(uri, option1=False, option2=False):
 									names = data['identified_by']
 									cont = names[0]['content']
 									if ident not in recequivs:
-										recquivs[ident] = [{
+										recequivs[ident] = [{
 											"uri": cid,
 											"name": cont,
 											"added_by_reconciliation": False  
 										}]
 									elif ident in recequivs:
-										recquivs[ident].append({
+										recequivs[ident].append({
 											"uri": cid,
 											"name": cont,
 											"added_by_reconciliation": False  
