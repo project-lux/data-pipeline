@@ -20,8 +20,6 @@ def index():
         #call function to process URI
         result = process_uri(uri, option1, option2, option3)
 
-        print(f"Result from process_uri: {result}")
-
         #pass result to template
         return render_template('result.html', result=result)
     return render_template("index.html")
