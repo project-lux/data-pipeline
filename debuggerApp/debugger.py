@@ -38,7 +38,6 @@ def process_uri(uri, option1=False, option2=False, option3=False):
 
 	if rec:
 		equivs = rec.get("equivalent",[])
-		print("got equivs")
 		if equivs:
 			for e in equivs:
 				ident = e.get("id","")
@@ -55,10 +54,10 @@ def process_uri(uri, option1=False, option2=False, option3=False):
 					else:
 					 	identqua = identifier
 					if identqua:
+						print(identqua)
 						cacherec = cache[identqua]
 						keyname = cachename + ": " + identqua
 						if cacherec:
-							print("got cache rec")					
 							data = cacherec['data']
 							names = data['identified_by']
 							for n in names:
