@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>URI Result</title>
+    <title>Results</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.4/css/bulma.min.css">
     <style>
         body {
@@ -42,7 +42,7 @@
 </head>
 <body>
     <div class="container">
-        <h1 class="title">Record Results</h1>
+        <h1 class="title">Results by LUX Record Equivalent</h1>
         <div id="results">
             {% for record in result.records %}
                 <div class="record">
@@ -57,7 +57,7 @@
                                 <li>
                                     <a href="{{ equiv.uri }}" target="_blank">{{ equiv.uri }}</a>: {{ equiv.name }}
                                     {% if equiv.added_by_reconciliation %}
-                                        <span class="reconciliation-flag">(added via reconciliation)</span>
+                                        <span class="reconciliation-flag">(added via name reconciliation)</span>
                                     {% endif %}
                                 </li>
                             {% endfor %}
