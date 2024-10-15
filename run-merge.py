@@ -129,11 +129,11 @@ for src_name, src in to_do:
         if ins_time is not None and ins_time["insert_time"] > start_time:
             # Already processed this record this build
             continue
-        elif not yuid in src["recordcache2"]:
+        else:
+            # Always reidentify in case the UUIDs have changed during
+            # subsequent reconcile phases
             rec2 = reider.reidentify(rec)
             src["recordcache2"][rec2["yuid"]] = rec2["data"]
-        else:
-            rec2 = src["recordcache2"][yuid]
 
         if NAME is not None and ins_time is not None:
             # We're in merged previously
