@@ -149,9 +149,9 @@ def process_uri(uri, option1=False, option2=False):
 			equivalents = recequivs[rec]
 			for equivs in equivalents:
 				record_data["equivalents"].append({
-					"uri": equiv["uri"],
-					"name": equiv["name"],
-					"added_by_reconciliation": equiv["added_by_reconciliation"]
+					"uri": equivs["uri"],
+					"name": equivs["name"],
+					"added_by_reconciliation": equivs["added_by_reconciliation"]
 				})
 		results.append(record_data)
 
