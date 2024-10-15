@@ -4,19 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>URI Result</title>
-    <!-- Include a CSS Framework (optional but recommended for better design) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.4/css/bulma.min.css">
     <style>
         body {
-            background-color: #f4f4f4;
+            background-color: #f9f9f9;
             font-family: 'Arial', sans-serif;
         }
         .container {
-            max-width: 800px;
+            max-width: 900px;
             margin: 50px auto;
             background: white;
-            padding: 20px;
+            padding: 30px;
             box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
             border-radius: 10px;
         }
@@ -25,35 +23,44 @@
             color: #333;
             margin-bottom: 20px;
         }
-        pre {
-            background-color: #f8f8f8;
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #ddd;
-            font-size: 14px;
-            white-space: pre-wrap; /* Allow wrapping */
-            word-wrap: break-word;
-            overflow-x: auto;
+        .record {
+            margin-bottom: 20px;
         }
-        a {
-            display: inline-block;
-            margin-top: 20px;
-            text-decoration: none;
-            color: #3273dc;
-            font-weight: bold;
-            transition: color 0.3s ease;
+        .equivalents-list {
+            list-style-type: disc;
+            margin-left: 20px;
         }
-        a:hover {
-            color: #275ab2;
+        .no-equivalents {
+            color: #888;
+            font-style: italic;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1 class="title">Result</h1>
-        <!-- Display the result -->
-        <pre>{{ result }}</pre>
+        <h1 class="title">Record Results</h1>
+        <div id="results">
+            {% for record in result.records %}
+                <div class="record">
+                    <strong>Record:</strong> <a href="{{ record.uri }}" target="_blank">{{ record.uri }}</a>
+                    {% if record.names %}
+                        <p><strong>Names:</strong> {{ record.names | join(', ') }}</p>
+                    {% endif %}
+                    {% if record.equivalents %}
+                        <p><strong>Equivalents:</strong></p>
+                        <ul class="equivalents-list">
+                            {% for equiv in record.equivalents %}
+                                <li><a href="{{ equiv.uri }}" target="_blank">{{ equiv.uri }}</a>: {{ equiv.name }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="no-equivalents">Does not have any URI equivalents.</p>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
         <a href="/" class="button is-link">Go Back</a>
     </div>
 </body>
 </html>
+
