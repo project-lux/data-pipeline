@@ -131,6 +131,7 @@ def process_uri(uri, option1=False, option2=False):
 		}
 		if rec in recequivs:
 			equivalents = recequivs[rec]
+			print(equivalents)
 			for equivs in equivalents:
 				parts = equivs.split(":")
 				if len(parts) == 2:
