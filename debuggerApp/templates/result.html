@@ -2,15 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <title>URI Result</title>
+    <title>Results</title>
   </head>
   <body>
     <h1>Result</h1>
-    {% if result.status == 'success' %}
-      <p>Title: {{ result.title }}</p>
-    {% else %}
-      <p>Error: {{ result.error }}</p>
-    {% endif %}
+    <pre>{{ result }}</pre>  <!-- Display the result in preformatted text -->
     <a href="/">Go Back</a>
   </body>
 </html>
