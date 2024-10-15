@@ -64,7 +64,6 @@ def process_uri(uri, option1=False, option2=False):
 								recnames[ident] = [cont]
 						equivlst = data.get("equivalent",[])
 						if equivlst:
-							print(f"got equivlist from {identifier}")
 							for v in equivlst:
 								cid = v.get("id","")
 								try:
@@ -77,6 +76,7 @@ def process_uri(uri, option1=False, option2=False):
 									cacherec1 = None
 									output.append(f"Could not split uri on {cid}")
 								if cacherec1:
+									print(f"got cacehrec1 for {identifier}")
 									data1 = cacherec['data']
 									names1 = data['identified_by']
 									cont1 = names1[0]['content']
