@@ -132,7 +132,7 @@ def process_uri(uri, option1=False, option2=False):
 		if rec in recequivs:
 			equivalents = recequivs[rec]
 			for equivs in equivalents:
-				parts = equiv.split(":")
+				parts = equivs.split(":")
 				if len(parts) == 2:
 					record_data["equivalents"].append({
 						"uri":parts[0],
