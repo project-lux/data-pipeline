@@ -64,8 +64,7 @@ def process_uri(uri, option1=False, option2=False):
 								recnames[ident] = [cont]
 						equivlst = data.get("equivalent",[])
 						if equivlst:
-							for v in equivs:
-								print(v)
+							for v in equivlst:
 								cid = v.get("id","")
 								try:
 									(src, identifier) = cfgs.split_uri(cid)
