@@ -236,7 +236,7 @@ class LcMapper(Mapper):
                     if "@id" in l:
                         lid = l['@id']
                     if txt and (not lid or lid.startswith("_:")):
-                        rlid = self.build_recs_and_reconcile(txt, type(top).__name__)
+                        rlid = self.build_recs_and_reconcile(txt, str(type(top).__name__))
                     elif not txt and lid.startswith("_:"):
                         rlid = None 
                     if rlid:
@@ -258,9 +258,8 @@ class LcMapper(Mapper):
                             txt = None
                     if "@id" in e:
                         eid = e['@id']
-                    print(type(top).__name__)
                     if txt and (not eid or eid.startswith("_:")):
-                        reid = self.build_recs_and_reconcile(txt, type(top).__name__)
+                        reid = self.build_recs_and_reconcile(txt, str(type(top).__name__))
                     elif not txt and eid.startswith("_:"):
                         reid = None 
                     if reid:
