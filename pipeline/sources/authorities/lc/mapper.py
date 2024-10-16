@@ -228,6 +228,7 @@ class LcMapper(Mapper):
             laters = []
             later = new.get("madsrdf:hasLaterEstablishedForm", [])
             if later:
+                print(top['id'])
                 if type(later) != list:
                     later = [later]
                 for l in later:
@@ -268,7 +269,6 @@ class LcMapper(Mapper):
                     elif not txt and eid.startswith("_:"):
                         reid = None 
                     if reid:
-                        print(reid)
                         earliers.append(reid)
                 ex.extend(earliers)
 
