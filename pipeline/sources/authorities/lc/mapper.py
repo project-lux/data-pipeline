@@ -249,7 +249,7 @@ class LcMapper(Mapper):
                 ex.extend(laters)
 
             earlier = new.get("madsrdf:hasEarlierEstablishedForm", [])
-            ealiers = []
+            earliers = []
             if earlier:
                 if type(earlier) != list:
                     earlier = [earlier]
