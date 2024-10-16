@@ -33,6 +33,8 @@ class LcMapper(Mapper):
 
     def build_recs_and_reconcile(self, txt, rectype=""):
         # reconrec returns URI
+        nafreconciler = self.config["all_configs"].external["lcnaf"]["reconciler"]
+        shreconciler = self.config["all_configs"].external["lcsh"]["reconciler"]
         rec = {
             "type": "",
             "identified_by": [
@@ -43,15 +45,18 @@ class LcMapper(Mapper):
                 }
             ],
         }
-        if rectype == "place":
+        if rectype == "Place":
             rec["type"] = "Place"
-            reconrec = self.config["reconciler"].reconcile(rec, reconcileType="name")
-        elif rectype == "concept":
+            reconrec = nafreconciler.reconcile(rec, reconcileType="name")
+        elif rectype == "Concept":
             rec["type"] = "Type"
-            reconrec = self.config["all_configs"].external["lcsh"]["reconciler"].reconcile(rec, reconcileType="name")
-        elif rectype == "group":
+            reconrec = shreconciler.reconcile(rec, reconcileType="name")
+        elif rectype == "Group":
             rec["type"] = "Group"
-            reconrec = self.config["reconciler"].reconcile(rec, reconcileType="name")
+            reconrec = nafreconciler.reconcile(rec, reconcileType="name")
+        elif rectype == "Person":
+            rec["type"] == "Person"
+            reconrec = nafreconciler.reconcile(rec, reconcileType="name")
 
         return reconrec
 
@@ -212,19 +217,54 @@ class LcMapper(Mapper):
         ex = new.get("madsrdf:hasExactExternalAuthority", [])
         if type(ex) != list:
             ex = [ex]
+
+
         if top.__class__ != model.Group:
+            laters = []
             later = new.get("madsrdf:hasLaterEstablishedForm", [])
             if later:
                 if type(later) != list:
                     later = [later]
-                print(later)
-                ex.extend(later)
+                for l in later:
+                    if "madsrdf:variantLabel" in l:
+                        if "@value" in l["madsrdf:variantLabel"]:
+                            txt = l['madsrdf:variantLabel']['@value']
+                            if "(" in txt:
+                                txt = re.sub(r"^\(.*?\)\s*", "", txt)
+                        else:
+                            txt = None 
+                    if "@id" in l:
+                        lid = l['@id']
+                    if txt and (not lid or lid.startswith("_:")):
+                        lid = self.build_recs_and_reconcile(txt, type(top).__name__)
+                    elif not txt and lid.startswith("_:"):
+                        lid = None 
+                    if lid:
+                        laters.append(lid)
+                ex.extend(laters)
+
             earlier = new.get("madsrdf:hasEarlierEstablishedForm", [])
+            ealiers = []
             if earlier:
                 if type(earlier) != list:
                     earlier = [earlier]
-                print(earlier)
-                ex.extend(earlier)
+                for e in earlier:
+                    if "madsrdf:variantLabel" in e:
+                        if "@value" in e["madsrdf:variantLabel"]:
+                            txt = e['madsrdf:variantLabel']['@value']
+                            if "(" in txt:
+                                txt = re.sub(r"^\(.*?\)\s*", "", txt)
+                        else:
+                            txt = None 
+                    if "@id" in e:
+                        eid = e['@id']
+                    if txt and (not eid or eid.startswith("_:")):
+                        eid = self.build_recs_and_reconcile(txt, type(top).__name__)
+                    elif not txt and eid.startswith("_:"):
+                        eid = None 
+                    if eid:
+                        earlier.append(eid)
+                ex.extend(earliers)
 
         # skos:closeMatch -- Only as a last resort
         close = new.get("madsrdf:hasCloseExternalAuthority", [])
@@ -589,7 +629,7 @@ class LcnafMapper(LcMapper):
             if not txt and bpid.startswith("_:"):
                 bpid = None
             elif txt and (not bpid or bpid.startswith("_:")):
-                bpid = self.build_recs_and_reconcile(txt, "place")
+                bpid = self.build_recs_and_reconcile(txt, "Place")
             if bpid:
                 # bpid is full uri
                 if "/rwo/" in bpid:
@@ -664,7 +704,7 @@ class LcnafMapper(LcMapper):
                 # nothing to do
                 dpid = None
             elif txt and (not dpid or dpid.startswith("_:")):
-                dpid = self.build_recs_and_reconcile(txt, "place")
+                dpid = self.build_recs_and_reconcile(txt, "Place")
             if dpid:
                 # dpid is full uri
                 if "/rwo/" in dpid:
@@ -707,7 +747,7 @@ class LcnafMapper(LcMapper):
                 if fid.startswith("_:"):
                     if al.startswith("("):
                         al = re.sub(r"^\(.*?\)\s*", "", al)
-                    fid = self.build_recs_and_reconcile(al, "concept")
+                    fid = self.build_recs_and_reconcile(al, "Concept")
                 if fid:
                     if "authorities/names" in fid:
                         continue
@@ -738,7 +778,7 @@ class LcnafMapper(LcMapper):
                 if oid.startswith("_:"):
                     if al.startswith("("):
                         al = re.sub(r"^\(.*?\)\s*", "", al)
-                    oid = self.build_recs_and_reconcile(al, "concept")
+                    oid = self.build_recs_and_reconcile(al, "Concept")
 
                 # Can this be /rwo/ ?
                 if oid and "names" in oid:
@@ -804,7 +844,7 @@ class LcnafMapper(LcMapper):
                 gid = o.get("@id", "")
 
                 if (gid == "" or gid.startswith("_")) and lbl:
-                    gid = self.build_recs_and_reconcile(lbl, "group")
+                    gid = self.build_recs_and_reconcile(lbl, "Group")
                 if gid:
                     fetchid = gid.rsplit("/", 1)[-1]
                     frec = self.get_reference(fetchid)
