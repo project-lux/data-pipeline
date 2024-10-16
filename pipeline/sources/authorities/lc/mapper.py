@@ -228,7 +228,7 @@ class LcMapper(Mapper):
             laters = []
             later = new.get("madsrdf:hasLaterEstablishedForm", [])
             if later:
-                print(top['id'])
+                print(later)
                 if type(later) != list:
                     later = [later]
                 for l in later:
