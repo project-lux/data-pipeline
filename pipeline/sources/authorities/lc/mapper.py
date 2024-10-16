@@ -60,6 +60,9 @@ class LcMapper(Mapper):
         elif rectype == "Type":
             rec["type"] = "Type"
             reconrec = shreconciler.reconcile(rec, reconcileType="name")
+        elif rectype == "Activity":
+            rec["type"] = "Activity"
+            reconrec = nafreconciler.reconcile(rec, reconcileType="name")
         else:
             reconrec = None
 
@@ -271,8 +274,7 @@ class LcMapper(Mapper):
                         eid = None
                     if eid.startswith("_:") and txt:
                         reid = self.build_recs_and_reconcile(txt, type(top).__name__)
-                        print(type(top).__name__)
-                        print(type(type(top).__name__))
+                        print(reid)
                     elif not txt and eid.startswith("_:"):
                         reid = None
                     else:
