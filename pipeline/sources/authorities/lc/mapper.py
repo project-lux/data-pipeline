@@ -242,10 +242,12 @@ class LcMapper(Mapper):
                         lid = l['@id']
                     else:
                         lid = None
-                    if txt and (not lid or lid.startswith("_:")):
+                    if lid.startswith("_:") and txt:
                         rlid = self.build_recs_and_reconcile(txt, type(top).__name__)
                     elif not txt and lid.startswith("_:"):
-                        rlid = None 
+                        rlid = None
+                    else:
+                        rlid = lid 
                     if rlid:
                         laters.append(rlid)
                 ex.extend(laters)
@@ -267,10 +269,12 @@ class LcMapper(Mapper):
                         eid = e['@id']
                     else:
                         eid = None
-                    if txt and (not eid or eid.startswith("_:")):
+                    if eid.startswith("_:") and txt:
                         reid = self.build_recs_and_reconcile(txt, type(top).__name__)
                     elif not txt and eid.startswith("_:"):
-                        reid = None 
+                        reid = None
+                    else:
+                        reid = eid 
                     if reid:
                         earliers.append(reid)
                 ex.extend(earliers)
