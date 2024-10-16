@@ -236,11 +236,11 @@ class LcMapper(Mapper):
                     if "@id" in l:
                         lid = l['@id']
                     if txt and (not lid or lid.startswith("_:")):
-                        lid = self.build_recs_and_reconcile(txt, type(top).__name__)
+                        rlid = self.build_recs_and_reconcile(txt, type(top).__name__)
                     elif not txt and lid.startswith("_:"):
-                        lid = None 
-                    if lid:
-                        laters.append(lid)
+                        rlid = None 
+                    if rlid:
+                        laters.append(rlid)
                 ex.extend(laters)
 
             earlier = new.get("madsrdf:hasEarlierEstablishedForm", [])
@@ -256,15 +256,15 @@ class LcMapper(Mapper):
                                 txt = re.sub(r"^\(.*?\)\s*", "", txt)
                         else:
                             txt = None
-                    print(txt) 
                     if "@id" in e:
                         eid = e['@id']
+                    print(type(top).__name__)
                     if txt and (not eid or eid.startswith("_:")):
-                        eid = self.build_recs_and_reconcile(txt, type(top).__name__)
+                        reid = self.build_recs_and_reconcile(txt, type(top).__name__)
                     elif not txt and eid.startswith("_:"):
-                        eid = None 
-                    if eid:
-                        earlier.append(eid)
+                        reid = None 
+                    if reid:
+                        earlier.append(reid)
                 ex.extend(earliers)
 
         # skos:closeMatch -- Only as a last resort
