@@ -268,6 +268,7 @@ class LcMapper(Mapper):
                     elif not txt and eid.startswith("_:"):
                         reid = None 
                     if reid:
+                        print(reid)
                         earliers.append(reid)
                 ex.extend(earliers)
 
