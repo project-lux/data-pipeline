@@ -235,15 +235,15 @@ class LcMapper(Mapper):
                     if "madsrdf:variantLabel" in l:
                         if "@value" in l["madsrdf:variantLabel"]:
                             txt = l['madsrdf:variantLabel']['@value']
-                            if "(" in txt:
-                                txt = re.sub(r"^\(.*?\)\s*", "", txt)
-                        else:
-                            txt = None 
+                    else:
+                        txt = None 
                     if "@id" in l:
                         lid = l['@id']
+                    else:
+                        lid = None
                     if txt and (not lid or lid.startswith("_:")):
                         rlid = self.build_recs_and_reconcile(txt, type(top).__name__)
-                    elif not txt and lid.startswith("_:"):
+                    elif not txt and (not lid or lid.startswith("_:")):
                         rlid = None 
                     if rlid:
                         laters.append(rlid)
@@ -258,15 +258,15 @@ class LcMapper(Mapper):
                     if "madsrdf:variantLabel" in e:
                         if "@value" in e["madsrdf:variantLabel"]:
                             txt = e['madsrdf:variantLabel']['@value']
-                            if "(" in txt:
-                                txt = re.sub(r"^\(.*?\)\s*", "", txt)
-                        else:
-                            txt = None
+                    else:
+                        txt = None
                     if "@id" in e:
                         eid = e['@id']
+                    else:
+                        eid = None
                     if txt and (not eid or eid.startswith("_:")):
                         reid = self.build_recs_and_reconcile(txt, type(top).__name__)
-                    elif not txt and eid.startswith("_:"):
+                    elif not txt and (not eid or eid.startswith("_:")):
                         reid = None 
                     if reid:
                         earliers.append(reid)
