@@ -228,37 +228,14 @@ class LcMapper(Mapper):
 
 
         if top.__class__ != model.Group:
-            laters = []
             later = new.get("madsrdf:hasLaterEstablishedForm", [])
             if later:
                 if type(later) != list:
                     later = [later]
-                for l in later:
-                    if "madsrdf:variantLabel" in l:
-                        if "@value" in l["madsrdf:variantLabel"]:
-                            txt = l['madsrdf:variantLabel']['@value']
-                        else:
-                            txt = e['madsrdf:variantLabel']
-                    else:
-                        txt = None 
-                    if "@id" in l:
-                        lid = l['@id']
-                    else:
-                        lid = None
-                    if lid.startswith("_:") and txt:
-                        rlid = self.build_recs_and_reconcile(txt, type(top).__name__)
-                    elif not txt and lid.startswith("_:"):
-                        rlid = None
-                    else:
-                        rlid = lid
-                    if rlid:
-                        laters.append(rlid)
                 ex.extend(laters)
-
             earlier = new.get("madsrdf:hasEarlierEstablishedForm", [])
             earliers = []
             if earlier:
-                print(earlier)
                 if type(earlier) != list:
                     earlier = [earlier]
                 for e in earlier:
