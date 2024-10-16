@@ -57,6 +57,11 @@ class LcMapper(Mapper):
         elif rectype == "Person":
             rec["type"] == "Person"
             reconrec = nafreconciler.reconcile(rec, reconcileType="name")
+        elif rectype == "Type":
+            rec["type"] = "Type"
+            reconrec = shreconciler.reconcile(rec, reconcileType="name")
+        else:
+            reconrec = None
 
         return reconrec
 
@@ -236,7 +241,7 @@ class LcMapper(Mapper):
                     if "@id" in l:
                         lid = l['@id']
                     if txt and (not lid or lid.startswith("_:")):
-                        rlid = self.build_recs_and_reconcile(txt, str(type(top).__name__))
+                        rlid = self.build_recs_and_reconcile(txt, type(top).__name__)
                     elif not txt and lid.startswith("_:"):
                         rlid = None 
                     if rlid:
@@ -258,10 +263,8 @@ class LcMapper(Mapper):
                             txt = None
                     if "@id" in e:
                         eid = e['@id']
-                    print(str(type(top).__name__))
-                    print(type(type(top).__name__))
                     if txt and (not eid or eid.startswith("_:")):
-                        reid = self.build_recs_and_reconcile(txt, str(type(top).__name__))
+                        reid = self.build_recs_and_reconcile(txt, type(top).__name__)
                     elif not txt and eid.startswith("_:"):
                         reid = None 
                     if reid:
