@@ -271,7 +271,8 @@ class LcMapper(Mapper):
                         eid = None
                     if eid.startswith("_:") and txt:
                         reid = self.build_recs_and_reconcile(txt, type(top).__name__)
-                        print(reid)
+                        print(type(top).__name__)
+                        print(type(type(top).__name__))
                     elif not txt and eid.startswith("_:"):
                         reid = None
                     else:
