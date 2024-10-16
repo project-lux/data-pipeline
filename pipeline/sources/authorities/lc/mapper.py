@@ -257,6 +257,8 @@ class LcMapper(Mapper):
                     if "madsrdf:variantLabel" in e:
                         if "@value" in e["madsrdf:variantLabel"]:
                             txt = e['madsrdf:variantLabel']['@value']
+                        else:
+                            print(e)
                     else:
                         txt = None
                     if "@id" in e:
