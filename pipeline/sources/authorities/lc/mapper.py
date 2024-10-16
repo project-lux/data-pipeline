@@ -260,7 +260,6 @@ class LcMapper(Mapper):
             if earlier:
                 if type(earlier) != list:
                     earlier = [earlier]
-                print(earlier)
                 for e in earlier:
                     if "madsrdf:variantLabel" in e:
                         if "@value" in e["madsrdf:variantLabel"]:
@@ -274,6 +273,7 @@ class LcMapper(Mapper):
                     else:
                         eid = None
                     if eid.startswith("_:") and txt:
+                        print(type(top).__name__)
                         reid = self.build_recs_and_reconcile(txt, type(top).__name__)
                     elif not txt and eid.startswith("_:"):
                         reid = None
