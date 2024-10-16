@@ -257,6 +257,7 @@ class LcMapper(Mapper):
             if earlier:
                 if type(earlier) != list:
                     earlier = [earlier]
+                print(earlier)
                 for e in earlier:
                     if "madsrdf:variantLabel" in e:
                         if "@value" in e["madsrdf:variantLabel"]:
