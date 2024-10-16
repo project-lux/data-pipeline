@@ -268,7 +268,7 @@ class LcMapper(Mapper):
                     elif not txt and eid.startswith("_:"):
                         reid = None 
                     if reid:
-                        earlier.append(reid)
+                        earliers.append(reid)
                 ex.extend(earliers)
 
         # skos:closeMatch -- Only as a last resort
