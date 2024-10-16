@@ -31,6 +31,30 @@ class LcMapper(Mapper):
 
         self.ignore_types = ["madsrdf:DeprecatedAuthority", "madsrdf:NameTitle"]
 
+    def build_recs_and_reconcile(self, txt, rectype=""):
+        # reconrec returns URI
+        rec = {
+            "type": "",
+            "identified_by": [
+                {
+                    "type": "Name",
+                    "content": txt,
+                    "classified_as": [{"id": "http://vocab.getty.edu/aat/300404670"}],
+                }
+            ],
+        }
+        if rectype == "place":
+            rec["type"] = "Place"
+            reconrec = self.config["reconciler"].reconcile(rec, reconcileType="name")
+        elif rectype == "concept":
+            rec["type"] = "Type"
+            reconrec = self.config["all_configs"].external["lcsh"]["reconciler"].reconcile(rec, reconcileType="name")
+        elif rectype == "group":
+            rec["type"] = "Group"
+            reconrec = self.config["reconciler"].reconcile(rec, reconcileType="name")
+
+        return reconrec
+
     def fix_identifier(self, identifier):
         if identifier == "@@LMI-SPECIAL-TERM@@":
             return None
@@ -193,11 +217,13 @@ class LcMapper(Mapper):
             if later:
                 if type(later) != list:
                     later = [later]
+                print(later)
                 ex.extend(later)
             earlier = new.get("madsrdf:hasEarlierEstablishedForm", [])
             if earlier:
                 if type(earlier) != list:
                     earlier = [earlier]
+                print(earlier)
                 ex.extend(earlier)
 
         # skos:closeMatch -- Only as a last resort
@@ -403,30 +429,6 @@ class LcnafMapper(LcMapper):
         else:
             self.parenthetical_places = {}
 
-    def build_recs_and_reconcile(self, txt, rectype=""):
-        # reconrec returns URI
-
-        rec = {
-            "type": "",
-            "identified_by": [
-                {
-                    "type": "Name",
-                    "content": txt,
-                    "classified_as": [{"id": "http://vocab.getty.edu/aat/300404670"}],
-                }
-            ],
-        }
-        if rectype == "place":
-            rec["type"] = "Place"
-            reconrec = self.config["reconciler"].reconcile(rec, reconcileType="name")
-        elif rectype == "concept":
-            rec["type"] = "Type"
-            reconrec = self.config["all_configs"].external["lcsh"]["reconciler"].reconcile(rec, reconcileType="name")
-        elif rectype == "group":
-            rec["type"] = "Group"
-            reconrec = self.config["reconciler"].reconcile(rec, reconcileType="name")
-
-        return reconrec
 
     def transform(self, record, rectype=None, reference=False):
         try:
