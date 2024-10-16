@@ -246,7 +246,6 @@ class LcMapper(Mapper):
                     else:
                         lid = None
                     if lid.startswith("_:") and txt:
-                        print(lid)
                         rlid = self.build_recs_and_reconcile(txt, type(top).__name__)
                     elif not txt and lid.startswith("_:"):
                         rlid = None
@@ -259,6 +258,7 @@ class LcMapper(Mapper):
             earlier = new.get("madsrdf:hasEarlierEstablishedForm", [])
             earliers = []
             if earlier:
+                print(earlier)
                 if type(earlier) != list:
                     earlier = [earlier]
                 for e in earlier:
