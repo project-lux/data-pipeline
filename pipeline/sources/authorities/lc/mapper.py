@@ -244,7 +244,7 @@ class LcMapper(Mapper):
                         lid = None
                     if txt and (not lid or lid.startswith("_:")):
                         rlid = self.build_recs_and_reconcile(txt, type(top).__name__)
-                    elif not txt and (not lid or lid.startswith("_:")):
+                    elif not txt and lid.startswith("_:"):
                         rlid = None 
                     if rlid:
                         laters.append(rlid)
@@ -269,7 +269,7 @@ class LcMapper(Mapper):
                         eid = None
                     if txt and (not eid or eid.startswith("_:")):
                         reid = self.build_recs_and_reconcile(txt, type(top).__name__)
-                    elif not txt and (not eid or eid.startswith("_:")):
+                    elif not txt and eid.startswith("_:"):
                         reid = None 
                     if reid:
                         earliers.append(reid)
