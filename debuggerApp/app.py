@@ -21,7 +21,7 @@ gidfn = os.path.join(cfgs.data_dir, 'google_sheet_id.txt')
 fh = open(gidfn)
 SPREADSHEET_ID = fh.read().strip()
 fh.close()
-RANGE_NAME = 'Sheet1!A:B'
+RANGE_NAME = 'Different From!A:B'
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
