@@ -23,6 +23,7 @@ gidfn = os.path.join(cfgs.data_dir, 'google_sheet_id.txt')
 fh = open(gidfn)
 SPREADSHEET_ID = fh.read().strip()
 fh.close()
+RANGE_NAME = 'Sheet1!A:B'
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
 
@@ -68,12 +69,26 @@ def index():
 
 @app.route('/add_to_sheet', methods=['POST'])
 def add_to_sheet():
-    record_equivalent_pairs = request.form.getlist('record_equivalent_pairs')
-
-    # Process each selected pair
+    record_equivalent_pairs = request.form.getlist('record_equivalent_pairs')  # Get selected pairs
+    
+    # Prepare the data to append
+    values = []
     for pair in record_equivalent_pairs:
-        record_uri, equivalent_uri = pair.split(",")
-        sheet.append_row([record_uri, equivalent_uri]) 
+        record_uri, equivalent_uri = pair.split(",")  # Split the pair into Record and Equivalent
+        values.append([record_uri, equivalent_uri])  # Append as a list of lists
+
+    # Create the request body
+    body = {
+        'values': values
+    }
+
+    # Call the Sheets API to append the data
+    result = service.spreadsheets().values().append(
+        spreadsheetId=SPREADSHEET_ID,
+        range=RANGE_NAME,
+        valueInputOption="RAW",
+        body=body
+    ).execute()
 
     return "Selected pairs added to Google Sheet!"
 
