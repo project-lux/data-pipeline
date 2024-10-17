@@ -80,7 +80,7 @@ try:
                     elif not uribf:
                         print(f"Failed to canonicalize {urib}")
                     else:
-                        my_map.append([uriaf, uriab])
+                        my_map.append([uriaf, uribf])
                 page += 500
                 rng = f"A{page}:B{page+500}"
                 RANGE = f"{sn}!{rng}"
