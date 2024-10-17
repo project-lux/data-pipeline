@@ -30,14 +30,9 @@
             padding: 0; /* No padding */
             text-align: center; /* Center-align the message */
         }
-        .small-button {
+        .button {
             display: block;
-            width: fit-content; 
-            font-size: 1.2em; 
-            padding: 5px 10px; 
-            margin: 20px auto; 
-            height: auto;
-            line-height: 1;
+            margin: 20px auto;
         }
     </style>
 </head>
@@ -48,8 +43,7 @@
         <!-- Success message without background or highlight -->
         <p class="message">{{ success_message }}</p>
 
-        <!-- Smaller "Go Back" button -->
-        <a href="/" class="button is-link small-button">Go Back</a>
+        <a href="/" class="button is-link">Go Back</a>
     </div>
 </body>
 </html>
