@@ -88,11 +88,13 @@ class GlobalIndexLoader(LmdbIndexLoader):
                 else:
                     # NOTE: This doesn't have class
                     try:
-                        updates[a].append(b)
+                        if not b in updates[a]:
+                            updates[a].append(b)
                     except:
                         updates[a] = [b]
                     try:
-                        updates[b].append(a)
+                        if not a in updates[b]:
+                            updates[b].append(a)
                     except:
                         updates[b] = [a]
 
