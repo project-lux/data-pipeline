@@ -88,7 +88,7 @@ def add_to_sheet():
         body=body
     ).execute()
 
-    return "Selected pairs added to Google Sheet!"
+    return render_template("add_to_sheet.html", success_message="Your records have been successfully added.")
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", debug=True, port=8080)
