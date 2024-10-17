@@ -8,6 +8,7 @@ from debugger import process_uri
 
 from dotenv import load_dotenv
 from pipeline.config import Config
+import os
 
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
