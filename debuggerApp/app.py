@@ -68,14 +68,14 @@ def index():
 
 @app.route('/add_to_sheet', methods=['POST'])
 def add_to_sheet():
-    equivalents_A = request.form.getlist('equivalent_A')
-    equivalents_B = request.form.getlist('equivalent_B')
+    record_uri = request.form.get('record_uri')  # Get the "Record" (Column A)
+    equivalents = request.form.getlist('equivalents')  # Get selected equivalents (Column B)
 
-    # Assuming that pairs of A and B are to be added to the sheet
-    for equiv_A, equiv_B in zip(equivalents_A, equivalents_B):
-        sheet.append_row([equiv_A, equiv_B])  # Add the pair to columns A and B
+    # Add each Record and equivalent pair to the Google Sheet
+    for equivalent in equivalents:
+        sheet.append_row([record_uri, equivalent])  # Add the Record and equivalent as a pair in columns A and B
 
-    return "Selected equivalent pairs added to Google Sheet!"
+    return "Selected records added to Google Sheet!"
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", debug=True, port=8080)

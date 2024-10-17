@@ -47,7 +47,7 @@
     <div class="container">
         <h1 class="title">Results by LUX Record Equivalent</h1>
         
-        <!-- Form to submit selected equivalent pairs to Google Sheets -->
+        <!-- Form to submit selected Record and equivalents to Google Sheets -->
         <form method="POST" action="/add_to_sheet">
             <div id="results">
                 {% for record in result.records %}
@@ -59,18 +59,23 @@
                         {% if record.equivalents %}
                             <p><strong>Equivalents:</strong></p>
                             <ul class="equivalents-list">
+                                <li>
+                                    <!-- Checkbox for Record (Column A) -->
+                                    <label>
+                                        <input type="checkbox" name="record_uri" value="{{ record.uri }}">
+                                        Add Record to Column A: <a href="{{ record.uri }}" target="_blank">{{ record.uri }}</a>
+                                    </label>
+                                </li>
+
+                                <!-- Checkboxes for each equivalent (Column B) -->
                                 {% for equiv in record.equivalents %}
                                     <li>
                                         <label>
-                                            <input type="checkbox" name="equivalent_A" value="{{ equiv.uri }}">
-                                            Equivalent A: <a href="{{ equiv.uri }}" target="_blank">{{ equiv.uri }}</a>: {{ equiv.name }}
+                                            <input type="checkbox" name="equivalents" value="{{ equiv.uri }}">
+                                            Add Equivalent to Column B: <a href="{{ equiv.uri }}" target="_blank">{{ equiv.uri }}</a>: {{ equiv.name }}
                                             {% if equiv.added_by_reconciliation %}
                                                 <span class="reconciliation-flag">(added via name reconciliation)</span>
                                             {% endif %}
-                                        </label>
-                                        <label>
-                                            <input type="checkbox" name="equivalent_B" value="{{ equiv.uri }}">
-                                            Equivalent B: <a href="{{ equiv.uri }}" target="_blank">{{ equiv.uri }}</a>: {{ equiv.name }}
                                         </label>
                                     </li>
                                 {% endfor %}
