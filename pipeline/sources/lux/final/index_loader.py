@@ -1,22 +1,21 @@
-
 import os
 import sys
 import csv
 from pipeline.process.base.index_loader import LmdbIndexLoader, TabLmdb
 
+
 class GlobalIndexLoader(LmdbIndexLoader):
-
     def get_storage(self):
-        mapExp = self.config.get('mapSizeExponent', 30)
+        mapExp = self.config.get("mapSizeExponent", 30)
 
-        diff_path = self.config.get('differentDbPath', None)
+        diff_path = self.config.get("differentDbPath", None)
         if diff_path:
-            index = TabLmdb.open(diff_path, 'c', map_size=2**mapExp, readahead=False, writemap=True)
+            index = TabLmdb.open(diff_path, "c", map_size=2**mapExp, readahead=False, writemap=True)
         else:
             index = None
 
         if self.inverse_path:
-            eqindex = TabLmdb.open(self.inverse_path, 'c', map_size=2**mapExp, readahead=False, writemap=True)
+            eqindex = TabLmdb.open(self.inverse_path, "c", map_size=2**mapExp, readahead=False, writemap=True)
         else:
             eqindex = None
         return (index, eqindex)
@@ -29,7 +28,6 @@ class GlobalIndexLoader(LmdbIndexLoader):
             diffindex.clear()
         else:
             print(f"Unknown index to clear {which}; should be equivs or diffs")
-
 
     def set(self, idx, key, vals):
         if type(vals) != list:
@@ -47,7 +45,6 @@ class GlobalIndexLoader(LmdbIndexLoader):
         vals.append(val)
         idx[key] = vals
 
-
     def load(self, filename, which="equivs"):
         (diffindex, eqindex) = self.get_storage()
 
@@ -57,7 +54,7 @@ class GlobalIndexLoader(LmdbIndexLoader):
         elif not os.path.exists(filename):
             print(f"{filename} does not exist to load")
             return None
-        elif not which in ['equivs', 'diffs']:
+        elif not which in ["equivs", "diffs"]:
             print(f"{which} is not equivs or diffs")
             return None
 
@@ -68,20 +65,20 @@ class GlobalIndexLoader(LmdbIndexLoader):
             rdr = csv.reader(csvfh, delimiter=",")
             x = 0
             for row in rdr:
-                if not row[0].startswith('http') or not row[1].startswith('http'):
+                if not row[0].startswith("http") or not row[1].startswith("http"):
                     continue
-                (a,b) = row[:2]
+                (a, b) = row[:2]
 
-                if a.startswith('https://lux.collections.yale.edu/data/'):
-                    # Don't do this! 
+                if a.startswith("https://lux.collections.yale.edu/data/"):
+                    # Don't do this!
                     raise ValueError(f"File {csvfn} has LUX URI: {a}")
-                else:                
+                else:
                     a2 = self.configs.canonicalize(a)
 
-                if b.startswith('https://lux.collections.yale.edu/data/'):
-                    # Don't do this! 
+                if b.startswith("https://lux.collections.yale.edu/data/"):
+                    # Don't do this!
                     raise ValueError(f"File {csvfn} has LUX URI: {b}")
-                else:                
+                else:
                     b2 = self.configs.canonicalize(b)
 
                 if a2 is None:
@@ -99,6 +96,7 @@ class GlobalIndexLoader(LmdbIndexLoader):
                     except:
                         updates[b] = [a]
 
+        print(updates)
         if updates:
             if which == "equivs":
                 eqindex.update(updates)
