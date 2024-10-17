@@ -27,8 +27,11 @@
             margin-bottom: 20px;
         }
         .equivalents-list {
-            list-style-type: disc;
-            margin-left: 20px;
+            list-style-type: none;
+            margin-left: 0;
+        }
+        .equivalents-list li {
+            margin-bottom: 10px;
         }
         .no-equivalents {
             color: #888;
@@ -43,33 +46,44 @@
 <body>
     <div class="container">
         <h1 class="title">Results by LUX Record Equivalent</h1>
-        <div id="results">
-            {% for record in result.records %}
-                <div class="record">
-                    <strong>Record:</strong> <a href="{{ record.uri }}" target="_blank">{{ record.uri }}</a>
-                    {% if record.names %}
-                        <p><strong>Names:</strong> {{ record.names | join(', ') }}</p>
-                    {% endif %}
-                    {% if record.equivalents %}
-                        <p><strong>Equivalents:</strong></p>
-                        <ul class="equivalents-list">
-                            {% for equiv in record.equivalents %}
-                                <li>
-                                    <a href="{{ equiv.uri }}" target="_blank">{{ equiv.uri }}</a>: {{ equiv.name }}
-                                    {% if equiv.added_by_reconciliation %}
-                                        <span class="reconciliation-flag">(added via name reconciliation)</span>
-                                    {% endif %}
-                                </li>
-                            {% endfor %}
-                        </ul>
-                    {% else %}
-                        <p class="no-equivalents">Does not have any URI equivalents.</p>
-                    {% endif %}
-                </div>
-            {% endfor %}
-        </div>
+        
+        <!-- Form to submit selected equivalent pairs to Google Sheets -->
+        <form method="POST" action="/add_to_sheet">
+            <div id="results">
+                {% for record in result.records %}
+                    <div class="record">
+                        <strong>Record:</strong> <a href="{{ record.uri }}" target="_blank">{{ record.uri }}</a>
+                        {% if record.names %}
+                            <p><strong>Names:</strong> {{ record.names | join(', ') }}</p>
+                        {% endif %}
+                        {% if record.equivalents %}
+                            <p><strong>Equivalents:</strong></p>
+                            <ul class="equivalents-list">
+                                {% for equiv in record.equivalents %}
+                                    <li>
+                                        <label>
+                                            <input type="checkbox" name="equivalent_A" value="{{ equiv.uri }}">
+                                            Equivalent A: <a href="{{ equiv.uri }}" target="_blank">{{ equiv.uri }}</a>: {{ equiv.name }}
+                                            {% if equiv.added_by_reconciliation %}
+                                                <span class="reconciliation-flag">(added via name reconciliation)</span>
+                                            {% endif %}
+                                        </label>
+                                        <label>
+                                            <input type="checkbox" name="equivalent_B" value="{{ equiv.uri }}">
+                                            Equivalent B: <a href="{{ equiv.uri }}" target="_blank">{{ equiv.uri }}</a>: {{ equiv.name }}
+                                        </label>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p class="no-equivalents">Does not have any URI equivalents.</p>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+            <button class="button is-link" type="submit">Add to Google Sheet</button>
+        </form>
         <a href="/" class="button is-link">Go Back</a>
     </div>
 </body>
 </html>
-
