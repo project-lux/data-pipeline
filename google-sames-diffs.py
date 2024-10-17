@@ -28,9 +28,9 @@ fh = open(gidfn)
 SPREADSHEET_ID = fh.read().strip()
 fh.close()
 
-diff_map = {}
-same_map = {}
-SHEET_NAMES = [["Different From", diff_map], ["Same As", same_map]]
+diffs = []
+sames = []
+SHEET_NAMES = [["Different From", diffs], ["Same As", sames]]
 RANGE_START = 2
 
 creds = None
@@ -80,7 +80,7 @@ try:
                     elif not uribf:
                         print(f"Failed to canonicalize {urib}")
                     else:
-                        my_map[uriaf] = uribf
+                        my_map.append([uriaf, uriab])
                 page += 500
                 rng = f"A{page}:B{page+500}"
                 RANGE = f"{sn}!{rng}"
@@ -92,12 +92,12 @@ except HttpError as err:
 dfn = os.path.join(cfgs.data_dir, "differentFrom/google.csv")
 with open(dfn, "w") as fh:
     writer = csv.writer(fh)
-    for r in diff_map.items():
+    for r in diffs:
         writer.writerow(r)
 sfn = os.path.join(cfgs.data_dir, "sameAs/google.csv")
 with open(sfn, "w") as fh:
     writer = csv.writer(fh)
-    for r in same_map.items():
+    for r in sames:
         writer.writerow(r)
 
 # Later we'll call load-csv-map2.py on them
