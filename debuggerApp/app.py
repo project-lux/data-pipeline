@@ -25,7 +25,7 @@ SPREADSHEET_ID = fh.read().strip()
 fh.close()
 RANGE_NAME = 'Sheet1!A:B'
 
-SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly']
+SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
 tokfn = os.path.join(cfgs.data_dir, 'token.json')
 credfn = os.path.join(cfgs.data_dir, 'credentials.json')
