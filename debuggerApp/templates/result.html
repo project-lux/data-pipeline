@@ -59,23 +59,16 @@
                         {% if record.equivalents %}
                             <p><strong>Equivalents:</strong></p>
                             <ul class="equivalents-list">
-                                <li>
-                                    <!-- Checkbox for Record (Column A) -->
-                                    <label>
-                                        <input type="checkbox" name="record_uri" value="{{ record.uri }}">
-                                        Add Record to Column A: <a href="{{ record.uri }}" target="_blank">{{ record.uri }}</a>
-                                    </label>
-                                </li>
-
-                                <!-- Checkboxes for each equivalent (Column B) -->
                                 {% for equiv in record.equivalents %}
                                     <li>
+                                        <a href="{{ equiv.uri }}" target="_blank">{{ equiv.uri }}</a>: {{ equiv.name }}
+                                        {% if equiv.added_by_reconciliation %}
+                                            <span class="reconciliation-flag">(added via name reconciliation)</span>
+                                        {% endif %}
+                                        <!-- Checkbox to add the pair (Record and Equivalent) -->
                                         <label>
-                                            <input type="checkbox" name="equivalents" value="{{ equiv.uri }}">
-                                            Add Equivalent to Column B: <a href="{{ equiv.uri }}" target="_blank">{{ equiv.uri }}</a>: {{ equiv.name }}
-                                            {% if equiv.added_by_reconciliation %}
-                                                <span class="reconciliation-flag">(added via name reconciliation)</span>
-                                            {% endif %}
+                                            <input type="checkbox" name="record_equivalent_pairs" value="{{ record.uri }},{{ equiv.uri }}">
+                                            Add this pair to Google Sheet
                                         </label>
                                     </li>
                                 {% endfor %}
