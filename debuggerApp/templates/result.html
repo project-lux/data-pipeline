@@ -41,6 +41,9 @@
             color: #d9534f;
             font-weight: bold;
         }
+        .button.go-back {
+            margin-top: 20px;
+        }
     </style>
 </head>
 <body>
@@ -66,10 +69,12 @@
                                             <span class="reconciliation-flag">(added via name reconciliation)</span>
                                         {% endif %}
                                         <!-- Checkbox to add the pair (Record and Equivalent) -->
-                                        <label>
-                                            <input type="checkbox" name="record_equivalent_pairs" value="{{ record.uri }},{{ equiv.uri }}">
-                                            Add this pair to Google Sheet
-                                        </label>
+                                        <div>
+                                            <label>
+                                                <input type="checkbox" name="record_equivalent_pairs" value="{{ record.uri }},{{ equiv.uri }}">
+                                                <strong>Add this equivalent & record to Different From Sheet </strong>
+                                            </label>
+                                        </div>  
                                     </li>
                                 {% endfor %}
                             </ul>
@@ -81,7 +86,7 @@
             </div>
             <button class="button is-link" type="submit">Add to Google Sheet</button>
         </form>
-        <a href="/" class="button is-link">Go Back</a>
+        <a href="/" class="button is-link go-back">Go Back</a>
     </div>
 </body>
 </html>
