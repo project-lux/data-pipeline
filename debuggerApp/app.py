@@ -25,7 +25,7 @@ RANGE_NAME = 'Sheet1!A:B'
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
-tokfn = os.path.join(cfgs.data_dir, 'token.json')
+tokfn = os.path.join(cfgs.data_dir, 'token-timestamps.json')
 credfn = os.path.join(cfgs.data_dir, 'credentials.json')
 if os.path.exists(tokfn):
     creds = Credentials.from_authorized_user_file(tokfn, SCOPES)
