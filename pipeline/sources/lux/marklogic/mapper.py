@@ -278,7 +278,10 @@ class MlMapper(Mapper):
                                     elif typ in ["Period", "Event", "Activity"]:
                                         # FIXME: this should be event
                                         typ = "activity"
-                                    typ = typ.lower()
+                                    elif typ in ["LinguisticObject","Set"]:
+                                        typ = "work"
+                                    elif typ == "HumanMadeObject":
+                                        typ = "object"
                                 else:
                                     typ = "other"
                                 t = {
@@ -309,7 +312,10 @@ class MlMapper(Mapper):
                                             elif typ in ["Period", "Event", "Activity"]:
                                                 # FIXME: this should be event
                                                 typ = "activity"
-                                            typ = typ.lower()
+                                            elif typ in ["LinguisticObject","Set"]:
+                                                typ = "work"
+                                            elif typ == "HumanMadeObject":
+                                                typ = "object"
                                         else:
                                             typ = "other"
                                         t = {
