@@ -8,7 +8,7 @@ class WmMapper(Mapper):
 
     def __init__(self, config):
         Mapper.__init__(self, config)
-        self.licenses = config.get('allowed_licenses', ['pd', 'cc0', 'cc-by-sa-4.0', 'cc-by-4.0'])
+        self.licenses = config.get('allowed_licenses', ['pd', 'cc0', 'cc-by-sa-4.0', 'cc-by-4.0', 'cc-by-sa-3.0', 'cc-by-3.0'])
 
     def transform(self, record, rectype, reference=False):
 
