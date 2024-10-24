@@ -603,10 +603,8 @@ class WdMapper(Mapper, WdConfigManager):
                 death.classified_as = model.Type(ident=self.expand_uri(dt))
 
         nationality = data.get("P27", None)
-        for qid, aat in self.nat_map.items():
-            if qid == nationality:
-                print("matches")
-                top.classified_as = vocab.Nationality(ident=aat)
+        if nationality in self.nat_map:
+            top.classified_as = vocab.Nationality(ident=self.nat_map[nationality])
 
         # FIXME: Need to map country of origin to nationality as classification
         # Reconcile Place.P1549 with AAT?
