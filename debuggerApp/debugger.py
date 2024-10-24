@@ -78,7 +78,11 @@ def process_uri(uri, option1=False, option2=False):
 									continue
 								if cacherec:
 									data = cacherec['data']
-									names = data['identified_by']
+									try:
+										names = data['identified_by']
+									except:
+										print(f"failed to get names from {cid}")
+										continue
 									cont = names[0]['content']
 									if ident not in recequivs:
 										recequivs[ident] = [{
