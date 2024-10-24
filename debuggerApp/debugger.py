@@ -81,7 +81,7 @@ def process_uri(uri, option1=False, option2=False):
 									try:
 										names = data['identified_by']
 									except:
-										print(f"failed to get names from {cid}")
+										names = None
 										continue
 									cont = names[0]['content']
 									if ident not in recequivs:
