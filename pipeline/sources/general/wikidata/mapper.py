@@ -43,6 +43,27 @@ class WdMapper(Mapper, WdConfigManager):
             "P3430": "https://snaccooperative.org/ark:/99166/{ident}",
         }
 
+        self.nat_map = {
+            "Q30": "http://vocab.getty.edu/aat/300107956",
+            "Q142": "http://vocab.getty.edu/aat/300111188",
+            "Q183": "http://vocab.getty.edu/aat/300111192",
+            "Q17": "http://vocab.getty.edu/aat/300018519",
+            "Q145": "http://vocab.getty.edu/aat/300111159",
+            "Q29": "http://vocab.getty.edu/aat/300111215",
+            "Q38": "http://vocab.getty.edu/aat/300111198",
+            "Q15180": "http://vocab.getty.edu/aat/300111276",
+            "Q9903": "http://vocab.getty.edu/aat/300018322",
+            "Q36": "http://vocab.getty.edu/aat/300111204",
+            "Q34": "http://vocab.getty.edu/aat/300111218",
+            "Q16": "http://vocab.getty.edu/aat/300107962",
+            "Q252": "http://vocab.getty.edu/aat/300018704",
+            "Q29999": "http://vocab.getty.edu/aat/300111175",
+            "Q155": "http://vocab.getty.edu/aat/300107967",
+            "Q159": "http://vocab.getty.edu/aat/300111276",
+            "Q174193": "http://vocab.getty.edu/aat/300111159",
+            "Q668": "http://vocab.getty.edu/aat/300018863",
+        } #covers ~3 mil out of 5.3 total across WD records in use
+
         #'P830': 'eol',
         #'P6944': 'bionomia',
         #'P213': 'isni',
@@ -582,6 +603,11 @@ class WdMapper(Mapper, WdConfigManager):
                 death.classified_as = model.Type(ident=self.expand_uri(dt))
 
         nationality = data.get("P27", None)
+        if nationality:
+            for qid, aat in self.nat_map.items():
+                if qid == nationality:
+                    top.classified_as = vocab.Nationality(ident=aat)
+
         # FIXME: Need to map country of origin to nationality as classification
         # Reconcile Place.P1549 with AAT?
         # 1549 is just a lang-string :(
