@@ -181,7 +181,7 @@ class LmdbReconciler(Reconciler):
         if reconcileType in ["all", "name"]:
             # Get name from Record
             vals = self.extract_names(rec)
-            vals = dict(sorted(vals.items(), key=lambda item: item[1], -len(item[0])))
+            vals = dict(sorted(vals.items(), key=lambda item: (item[1], -len(item[0]))))
             for val in vals.keys():
                 if val in self.name_index:
                     try:
