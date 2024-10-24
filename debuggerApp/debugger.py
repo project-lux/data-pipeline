@@ -55,7 +55,12 @@ def process_uri(uri, option1=False, option2=False):
 					cacherec = cache[identqua]
 					if cacherec:
 						data = cacherec['data']
-						names = data['identified_by']
+						try:
+							names = data['identified_by']
+						except:
+							names = None
+							print(f"could not fetch names from {ident}")
+							continue
 						for n in names:
 							cont = n.get("content")
 							if ident in recnames:
@@ -82,6 +87,7 @@ def process_uri(uri, option1=False, option2=False):
 										names = data['identified_by']
 									except:
 										names = None
+										print(f"could not fetch names from {cid}")
 										continue
 									cont = names[0]['content']
 									if ident not in recequivs:
