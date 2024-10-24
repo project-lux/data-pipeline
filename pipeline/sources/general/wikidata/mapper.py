@@ -604,6 +604,7 @@ class WdMapper(Mapper, WdConfigManager):
 
         nationality = data.get("P27", None)
         if nationality:
+            print(nationality)
             for qid, aat in self.nat_map.items():
                 if qid == nationality:
                     top.classified_as = vocab.Nationality(ident=aat)
