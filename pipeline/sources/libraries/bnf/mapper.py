@@ -36,6 +36,8 @@ class BnfXmlMapper(Mapper):
         nss = self.nss
         if '<?xml' in xml:
             xml = bytes(xml, 'utf-8')
+        else:
+            print("xml failure")
         try:
             dom = etree.XML(xml)
         except:
