@@ -13,19 +13,18 @@ class BnfXmlFetcher(Fetcher):
 
         url = self.make_fetch_uri(identifier)
 
-        try:
-            resp = requests.get(url, headers=self.headers, timeout=self.timeout)
-        except:
-            return None
-            print("failed to fetch")
-        if resp.history:
-            base = resp.history[-1].url
-            if not base.endswith('/'):
-                # something went wrong
-                return None
-            url = base + "rdf.xml"
-        else:
-            return None
+        # try:
+        #     resp = requests.get(url, headers=self.headers, timeout=self.timeout)
+        # except:
+        #     return None
+        # if resp.history:
+        #     base = resp.history[-1].url
+        #     if not base.endswith('/'):
+        #         # something went wrong
+        #         return None
+        #     url = base + "rdf.xml"
+        # else:
+        #     return None
 
         try:
             resp = requests.get(url, headers=self.headers, 
