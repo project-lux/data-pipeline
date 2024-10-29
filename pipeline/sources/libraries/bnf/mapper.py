@@ -215,12 +215,12 @@ class BnfXmlMapper(Mapper):
         if len(common) != 1:
             # uhoh
             return None
+            print("failed at common")
         else:
             common = common[0]
 
         try:
             pref = common.xpath('./skos:prefLabel/text()', namespaces=nss)[0]
-            print(f"pref is {pref}")
         except:
             pref = None
 
