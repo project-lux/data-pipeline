@@ -36,8 +36,6 @@ class BnfXmlMapper(Mapper):
         nss = self.nss
         if '<?xml' in xml:
             xml = bytes(xml, 'utf-8')
-        else:
-            print("xml failure")
         try:
             dom = etree.XML(xml)
         except:
@@ -224,6 +222,7 @@ class BnfXmlMapper(Mapper):
             pref = common.xpath('./skos:prefLabel/text()', namespaces=nss)[0]
         except:
             pref = None
+            print("can't find pref")
 
         close = common.xpath('./skos:closeMatch/@rdf:resource', namespaces=nss)
         alts = common.xpath('./skos:altLabel/text()', namespaces=nss)
