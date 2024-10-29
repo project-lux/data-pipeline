@@ -17,6 +17,7 @@ class BnfXmlFetcher(Fetcher):
             resp = requests.get(url, headers=self.headers, timeout=self.timeout)
         except:
             return None
+            print("failed to fetch")
         if resp.history:
             base = resp.history[-1].url
             if not base.endswith('/'):

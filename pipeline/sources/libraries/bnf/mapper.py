@@ -215,7 +215,6 @@ class BnfXmlMapper(Mapper):
         if len(common) != 1:
             # uhoh
             return None
-            print("failed at common")
         else:
             common = common[0]
 
@@ -270,6 +269,7 @@ class BnfXmlMapper(Mapper):
             rec = self.parse_xml(xml)
             if rec is None:
                 return rec
+            print(rec)
         except Exception as e:
             return None 
 
