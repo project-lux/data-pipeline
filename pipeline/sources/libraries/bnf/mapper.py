@@ -220,9 +220,9 @@ class BnfXmlMapper(Mapper):
 
         try:
             pref = common.xpath('./skos:prefLabel/text()', namespaces=nss)[0]
+            print(f"pref is {pref}")
         except:
             pref = None
-            print("can't find pref")
 
         close = common.xpath('./skos:closeMatch/@rdf:resource', namespaces=nss)
         alts = common.xpath('./skos:altLabel/text()', namespaces=nss)
