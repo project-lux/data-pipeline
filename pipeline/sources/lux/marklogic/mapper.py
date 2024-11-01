@@ -117,6 +117,41 @@ class MlMapper(Mapper):
                 part["content"] = clncont
                 part["_content_html"] = content
 
+    def get_pfx(self, data):
+
+        cxns = [x["id"] for x in data.get("classified_as", []) if "id" in x]
+
+        if data["type"] in ["VisualItem", "LinguisticObject"]:
+            # facets["uiType"] = "CollectionWork"
+            prefix = "work"
+        elif data["type"] in ["HumanMadeObject", "DigitalObject"]:
+            # facets["uiType"] = "CollectionItem"
+            prefix = "item"
+        elif (self.globals["archives"] in cxns) and data["type"] == "Set":
+            # facets["uiType"] = "CollectionWork"
+            prefix = "work"
+        elif data["type"] in ["Person", "Group"]:
+            # facets["uiType"] = "Agent"
+            prefix = "agent"
+        elif data["type"] == "Place":
+            # facets["uiType"] = "Place"
+            prefix = "place"
+        elif data["type"] in ["Type", "Language", "Material", "Currency", "MeasurementUnit", "Set"]:
+            # Set here is Collection / Holdings. UI decision to put in with concepts
+            # facets["uiType"] = "Concept"
+            prefix = "concept"
+        elif data["type"] in ["Activity", "Event", "Period"]:
+            # facets["uiType"] = "Temporal"
+            prefix = "event"
+        else:
+            # Things that don't fall into the above categories
+            # Probably due to bugs
+            print(f"Failed to find a prefix for {data['type']}")
+            prefix = "other"
+            # facets["uiType"] = "Other"
+
+        return prefix
+
     def transform(self, record, rectype=None, reference=False):
         ## XXX FIXME to config
         luxns = "https://lux.collections.yale.edu/ns/"
@@ -145,6 +180,7 @@ class MlMapper(Mapper):
 
         data = record["data"]
         me = data["id"]
+        pfx = self.get_pfx(data)
 
         # strip html from content, move to _content_html
         for part in data.get("referred_to_by", []):
@@ -168,36 +204,6 @@ class MlMapper(Mapper):
         # Add in triples for ML
 
         facets["dataType"] = data["type"]
-        pfx = "other"
-        cxns = [x["id"] for x in data.get("classified_as", []) if "id" in x]
-
-        if data["type"] in ["VisualItem", "LinguisticObject"]:
-            # facets["uiType"] = "CollectionWork"
-            pfx = "work"
-        elif data["type"] in ["HumanMadeObject", "DigitalObject"]:
-            # facets["uiType"] = "CollectionItem"
-            pfx = "item"
-        elif (self.globals["archives"] in cxns) and data["type"] == "Set":
-            # facets["uiType"] = "CollectionWork"
-            pfx = "work"
-        elif data["type"] in ["Person", "Group"]:
-            # facets["uiType"] = "Agent"
-            pfx = "agent"
-        elif data["type"] == "Place":
-            # facets["uiType"] = "Place"
-            pfx = "place"
-        elif data["type"] in ["Type", "Language", "Material", "Currency", "MeasurementUnit", "Set"]:
-            # Set here is Collection / Holdings. UI decision to put in with concepts
-            # facets["uiType"] = "Concept"
-            pfx = "concept"
-        elif data["type"] in ["Activity", "Event", "Period"]:
-            # facets["uiType"] = "Temporal"
-            pfx = "event"
-        else:
-            # Things that don't fall into the above categories
-            # Probably due to bugs
-            print(f"Failed to find a prefix for {data['type']}")
-            # facets["uiType"] = "Other"
 
         if data["type"] in type_map:
             for a in type_map[data["type"]]:
