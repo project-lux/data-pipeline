@@ -117,6 +117,39 @@ class MlMapper(Mapper):
                 part["content"] = clncont
                 part["_content_html"] = content
 
+    def get_pfx(self, typ, archive=False):
+
+        if typ in ["VisualItem", "LinguisticObject"]:
+            # facets["uiType"] = "CollectionWork"
+            prefix = "work"
+        elif typ in ["HumanMadeObject", "DigitalObject"]:
+            # facets["uiType"] = "CollectionItem"
+            prefix = "item"
+        elif archive and typ == "Set":
+            # facets["uiType"] = "CollectionWork"
+            prefix = "work"
+        elif typ in ["Person", "Group"]:
+            # facets["uiType"] = "Agent"
+            prefix = "agent"
+        elif typ == "Place":
+            # facets["uiType"] = "Place"
+            prefix = "place"
+        elif typ in ["Type", "Language", "Material", "Currency", "MeasurementUnit", "Set"]:
+            # Set here is Collection / Holdings. UI decision to put in with concepts
+            # facets["uiType"] = "Concept"
+            prefix = "concept"
+        elif typ in ["Activity", "Event", "Period"]:
+            # facets["uiType"] = "Temporal"
+            prefix = "event"
+        else:
+            # Things that don't fall into the above categories
+            # Probably due to bugs
+            print(f"Failed to find a prefix for {typ}")
+            prefix = "other"
+            # facets["uiType"] = "Other"
+
+        return prefix
+
     def transform(self, record, rectype=None, reference=False):
         ## XXX FIXME to config
         luxns = "https://lux.collections.yale.edu/ns/"
@@ -146,6 +179,10 @@ class MlMapper(Mapper):
         data = record["data"]
         me = data["id"]
 
+        cxns = [x["id"] for x in data.get("classified_as", []) if "id" in x]
+        pfx = self.get_pfx(data['type'], archive=self.globals["archives"] in cxns)
+
+
         # strip html from content, move to _content_html
         for part in data.get("referred_to_by", []):
             self.do_bs_html(part)
@@ -168,36 +205,6 @@ class MlMapper(Mapper):
         # Add in triples for ML
 
         facets["dataType"] = data["type"]
-        pfx = "other"
-        cxns = [x["id"] for x in data.get("classified_as", []) if "id" in x]
-
-        if data["type"] in ["VisualItem", "LinguisticObject"]:
-            # facets["uiType"] = "CollectionWork"
-            pfx = "work"
-        elif data["type"] in ["HumanMadeObject", "DigitalObject"]:
-            # facets["uiType"] = "CollectionItem"
-            pfx = "item"
-        elif (self.globals["archives"] in cxns) and data["type"] == "Set":
-            # facets["uiType"] = "CollectionWork"
-            pfx = "work"
-        elif data["type"] in ["Person", "Group"]:
-            # facets["uiType"] = "Agent"
-            pfx = "agent"
-        elif data["type"] == "Place":
-            # facets["uiType"] = "Place"
-            pfx = "place"
-        elif data["type"] in ["Type", "Language", "Material", "Currency", "MeasurementUnit", "Set"]:
-            # Set here is Collection / Holdings. UI decision to put in with concepts
-            # facets["uiType"] = "Concept"
-            pfx = "concept"
-        elif data["type"] in ["Activity", "Event", "Period"]:
-            # facets["uiType"] = "Temporal"
-            pfx = "event"
-        else:
-            # Things that don't fall into the above categories
-            # Probably due to bugs
-            print(f"Failed to find a prefix for {data['type']}")
-            # facets["uiType"] = "Other"
 
         if data["type"] in type_map:
             for a in type_map[data["type"]]:
@@ -270,20 +277,12 @@ class MlMapper(Mapper):
                         for inf in n["influenced_by"]:
                             if "id" in inf:
                                 if "type" in inf:
-                                    typ = inf["type"]
-                                    if typ in ["Type", "Language", "Material", "Currency", "MeasurementUnit"]:
-                                        typ = "concept"
-                                    elif typ in ["Person", "Group"]:
-                                        typ = "agent"
-                                    elif typ in ["Period", "Event", "Activity"]:
-                                        # FIXME: this should be event
-                                        typ = "activity"
-                                    typ = typ.lower()
+                                    infpfx = self.get_pfx(inf['type'])
                                 else:
-                                    typ = "other"
+                                    infpfx = "other"
                                 t = {
                                     "subject": me,
-                                    "predicate": f"{luxns}{typ}Influenced{predClass}",
+                                    "predicate": f"{luxns}{infpfx}Influenced{predClass}",
                                     "object": inf["id"],
                                 }
                                 ml["triples"].append({"triple": t})
@@ -301,20 +300,12 @@ class MlMapper(Mapper):
                                 for inf in p["influenced_by"]:
                                     if "id" in inf:
                                         if "type" in inf:
-                                            typ = inf["type"]
-                                            if typ in ["Type", "Language", "Material", "Currency", "MeasurementUnit"]:
-                                                typ = "concept"
-                                            elif typ in ["Person", "Group"]:
-                                                typ = "agent"
-                                            elif typ in ["Period", "Event", "Activity"]:
-                                                # FIXME: this should be event
-                                                typ = "activity"
-                                            typ = typ.lower()
+                                            infpfx = self.get_pfx(inf['type'])
                                         else:
-                                            typ = "other"
+                                            infpfx = "other"
                                         t = {
                                             "subject": me,
-                                            "predicate": f"{luxns}{typ}Influenced{predClass}",
+                                            "predicate": f"{luxns}{infpfx}Influenced{predClass}",
                                             "object": inf["id"],
                                         }
                                         ml["triples"].append({"triple": t})
@@ -509,19 +500,10 @@ class MlMapper(Mapper):
                         ml["triples"].append({"triple": t})
                         # add target specific triples
                         if "type" in a:
-                            typ = a["type"]
-                            if typ in ["Type", "Language", "Material", "Currency", "MeasurementUnit"]:
-                                typ = "concept"
-                            elif typ in ["Person", "Group"]:
-                                typ = "agent"
-                            elif typ in ["LinguisticObject", "VisualItem"]:
-                                typ = "work"
-                            elif typ in ["DigitalObject", "HumanMadeObject"]:
-                                typ = "object"
-                            typ = typ.lower()
-                            t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{typ}", "object": a["id"]}
+                            apfx = self.get_pfx(a["type"])
+                            t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{apfx}", "object": a["id"]}
                             ml["triples"].append({"triple": t})
-                            t = {"subject": me, "predicate": f"{luxns}about_{typ}", "object": a["id"]}
+                            t = {"subject": me, "predicate": f"{luxns}about_{apfx}", "object": a["id"]}
                             ml["triples"].append({"triple": t})
 
             if "language" in data:
@@ -551,19 +533,10 @@ class MlMapper(Mapper):
                         t = {"subject": me, "predicate": f"{crmns}P129_is_about", "object": a["id"]}
                         ml["triples"].append({"triple": t})
                         if "type" in a:
-                            typ = a["type"]
-                            if typ in ["Type", "Language", "Material", "Currency", "MeasurementUnit"]:
-                                typ = "concept"
-                            elif typ in ["Person", "Group"]:
-                                typ = "agent"
-                            elif typ in ["LinguisticObject", "VisualItem"]:
-                                typ = "work"
-                            elif typ in ["DigitalObject", "HumanMadeObject"]:
-                                typ = "object"
-                            typ = typ.lower()
-                            t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{typ}", "object": a["id"]}
+                            apfx = self.get_pfx(a["type"])
+                            t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{ayp}", "object": a["id"]}
                             ml["triples"].append({"triple": t})
-                            t = {"subject": me, "predicate": f"{luxns}about_{typ}", "object": a["id"]}
+                            t = {"subject": me, "predicate": f"{luxns}about_{atyp}", "object": a["id"]}
                             ml["triples"].append({"triple": t})
 
             if "represents" in data:
@@ -574,19 +547,10 @@ class MlMapper(Mapper):
                         t = {"subject": me, "predicate": f"{crmns}P138_represents", "object": r["id"]}
                         ml["triples"].append({"triple": t})
                         if "type" in r:
-                            typ = r["type"]
-                            if typ in ["Type", "Language", "Material", "Currency", "MeasurementUnit"]:
-                                typ = "concept"
-                            elif typ in ["Person", "Group"]:
-                                typ = "agent"
-                            elif typ in ["LinguisticObject", "VisualItem"]:
-                                typ = "work"
-                            elif typ in ["DigitalObject", "HumanMadeObject"]:
-                                typ = "object"
-                            typ = typ.lower()
-                            t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{typ}", "object": r["id"]}
+                            rpfx = self.get_pfx(r["type"])
+                            t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{rtyp}", "object": r["id"]}
                             ml["triples"].append({"triple": t})
-                            t = {"subject": me, "predicate": f"{luxns}depicts_{typ}", "object": r["id"]}
+                            t = {"subject": me, "predicate": f"{luxns}depicts_{rtyp}", "object": r["id"]}
                             ml["triples"].append({"triple": t})
 
         elif pfx == "event":
