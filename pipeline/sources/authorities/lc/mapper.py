@@ -258,7 +258,7 @@ class LcMapper(Mapper):
                         reid = eid 
                     if reid:
                         earliers.append(reid)
-                        print(f"Earlier form reconciled for {new["@id"]}")
+                        print(f"Earlier form reconciled for {new['@id']}")
                 ex.extend(earliers)
 
         # skos:closeMatch -- Only as a last resort
