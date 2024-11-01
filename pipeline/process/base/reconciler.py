@@ -40,23 +40,49 @@ class Reconciler(object):
         return [x["id"] for x in equivs if "id" in x]
 
     def extract_names(self, rec):
-        aat_primaryName = self.configs.external["aat"]["namespace"] + self.configs.globals_cfg["primaryName"]
+        ns = self.configs.external["aat"]["namespace"]
+        gbls = self.configs.globals_cfg
+        aat_primaryName = ns + glbs["primaryName"]
+
+        check_langs = {
+            ns + gbls["lang_en"]: 1, #820,063
+            ns + gbls["lang_fr"]: 2, #308,196
+            ns + gbls["lang_nl"]: 3, #307,119
+            ns + gbls["lang_de"]: 4, #304,000
+            ns + gbls["lang_es"]: 5, #259,160
+            ns + gbls["lang_ar"]: 6, #184,612
+            ns + "300389115": 7, #172,184
+            ns + gbls["lang_zh"]: 8 #148,055
+        }
+
+
         # FIXME: These should be globals!
         aat_firstName = "http://vocab.getty.edu/aat/300404651"
         aat_middleName = "http://vocab.getty.edu/aat/300404654"
         aat_lastName = "http://vocab.getty.edu/aat/300404652"
 
-        vals = []
+        vals = {}
         typ = rec["type"]
         nms = rec.get("identified_by", [])
         for nm in nms:
+            langs = nm.get("language",[])
+            langids = [lg.get("id", None) for lg in langs]
+            if None in langids:
+                print(f"  None in Name language: {rec['id']}")
+
             cxns = nm.get("classified_as", [])
             cxnids = [cx.get("id", None) for cx in cxns]
             if None in cxnids:
                 print(f"  None in Name classifications: {rec['id']}")
+
             if aat_primaryName in cxnids and "content" in nm:
-                val = nm["content"].lower().strip()
-                vals.append(val)
+                for lang_id, num in check_langs.items():
+                    if lang_id in langids:
+                        val = nm["content"].lower().strip()
+                        vals[val] = num
+                    else:
+                        vals[val] = 1
+
 
                 if typ == "Person":
                     if "part" in nm:
@@ -76,14 +102,14 @@ class Reconciler(object):
                                 last = part["content"].lower().strip()
 
                         if last and first and middle:
-                            vals.append(f"{last}, {first} {middle}")
+                            vals[f"{last}, {first} {middle}"] = 1
                             break
                         elif last and first:
-                            vals.append(f"{last}, {first}")
+                            vals[f"{last}, {first}"] = 1
                 elif typ == "Place" and "--" in val:
                     val1, val2 = val.split("--", 1)
-                    vals.append(f"{val2} ({val1})")
-                    vals.append(f"{val1} ({val2})")
+                    vals[f"{val2} ({val1})"] = 1
+                    vals[f"{val1} ({val2})"] = 1
 
         if typ == "Person":
             birth = get_year_from_timespan(rec.get("born", {}))
@@ -91,11 +117,11 @@ class Reconciler(object):
             if birth or death:
                 for v in vals[:]:
                     if birth and not birth in v:
-                        vals.append(f"{v}, {birth}-")
+                        vals[f"{v}, {birth}-"] = 1
                     if death and not death in v:
-                        vals.append(f"{v}, -{death}")
+                        vals[f"{v}, -{death}"] = 1
                     if birth and death and not birth in v and not death in v:
-                        vals.append(f"{v}, {birth}-{death}")
+                        vals[f"{v}, {birth}-{death}"] = 1
 
             # FIXME Out of pipeline:
             # subst out b. if after two ,s and followed by numbers
@@ -154,13 +180,13 @@ class LmdbReconciler(Reconciler):
         if reconcileType in ["all", "name"]:
             # Get name from Record
             vals = self.extract_names(rec)
-            vals.sort(key=len, reverse=True)
-            for val in vals:
-                if val in self.name_index:
+            vals = dict(sorted(vals.items(), key=lambda item: (item[1], -len(item[0]))))
+            for nm, num in vals.items():
+                if nm in self.name_index:
                     try:
-                        (k, typ) = self.name_index[val]
+                        (k, typ) = self.name_index[nm]
                     except:
-                        k = self.name_index[val]
+                        k = self.name_index[nm]
                         typ = None
                     if typ is not None and my_type == typ:
                         if self.debug:
@@ -171,9 +197,11 @@ class LmdbReconciler(Reconciler):
                                 except:
                                     self.debug_graph[rec["id"]] = [(f"{self.namespace}{k}", "nm")]
                         try:
-                            matches[k].append(val)
+                            matches[k].append(nm)
+                            if num > 1:
+                                print(f"!!!Base reconciler matched a non-English name: {nm}, with lang value {num}")
                         except:
-                            matches[k] = [val]
+                            matches[k] = [nm]
                         break
 
         if reconcileType in ["all", "uri"]:
