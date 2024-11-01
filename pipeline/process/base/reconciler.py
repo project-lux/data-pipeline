@@ -80,7 +80,6 @@ class Reconciler(object):
                     if lang_id in langids:
                         val = nm["content"].lower().strip()
                         vals[val] = num
-                        break
                     else:
                         vals[val] = 1
 
@@ -182,12 +181,12 @@ class LmdbReconciler(Reconciler):
             # Get name from Record
             vals = self.extract_names(rec)
             vals = dict(sorted(vals.items(), key=lambda item: (item[1], -len(item[0]))))
-            for val in vals.keys():
-                if val in self.name_index:
+            for nm, num in vals.items():
+                if nm in self.name_index:
                     try:
-                        (k, typ) = self.name_index[val]
+                        (k, typ) = self.name_index[nm]
                     except:
-                        k = self.name_index[val]
+                        k = self.name_index[nm]
                         typ = None
                     if typ is not None and my_type == typ:
                         if self.debug:
@@ -198,9 +197,11 @@ class LmdbReconciler(Reconciler):
                                 except:
                                     self.debug_graph[rec["id"]] = [(f"{self.namespace}{k}", "nm")]
                         try:
-                            matches[k].append(val)
+                            matches[k].append(nm)
+                            if num > 1:
+                                print(f"!!!Base reconciler matched a non-English name: {nm}, with lang value {num}")
                         except:
-                            matches[k] = [val]
+                            matches[k] = [nm]
                         break
 
         if reconcileType in ["all", "uri"]:
