@@ -277,12 +277,12 @@ class MlMapper(Mapper):
                         for inf in n["influenced_by"]:
                             if "id" in inf:
                                 if "type" in inf:
-                                    pfx = self.get_pfx(inf['type'])
+                                    infpfx = self.get_pfx(inf['type'])
                                 else:
-                                    pfx = "other"
+                                    infpfx = "other"
                                 t = {
                                     "subject": me,
-                                    "predicate": f"{luxns}{pfx}Influenced{predClass}",
+                                    "predicate": f"{luxns}{infpfx}Influenced{predClass}",
                                     "object": inf["id"],
                                 }
                                 ml["triples"].append({"triple": t})
@@ -300,12 +300,12 @@ class MlMapper(Mapper):
                                 for inf in p["influenced_by"]:
                                     if "id" in inf:
                                         if "type" in inf:
-                                            pfx = self.get_pfx(inf['type'])
+                                            infpfx = self.get_pfx(inf['type'])
                                         else:
-                                            pfx = "other"
+                                            infpfx = "other"
                                         t = {
                                             "subject": me,
-                                            "predicate": f"{luxns}{pfx}Influenced{predClass}",
+                                            "predicate": f"{luxns}{infpfx}Influenced{predClass}",
                                             "object": inf["id"],
                                         }
                                         ml["triples"].append({"triple": t})
@@ -500,19 +500,10 @@ class MlMapper(Mapper):
                         ml["triples"].append({"triple": t})
                         # add target specific triples
                         if "type" in a:
-                            typ = a["type"]
-                            if typ in ["Type", "Language", "Material", "Currency", "MeasurementUnit"]:
-                                typ = "concept"
-                            elif typ in ["Person", "Group"]:
-                                typ = "agent"
-                            elif typ in ["LinguisticObject", "VisualItem"]:
-                                typ = "work"
-                            elif typ in ["DigitalObject", "HumanMadeObject"]:
-                                typ = "object"
-                            typ = typ.lower()
-                            t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{typ}", "object": a["id"]}
+                            apfx = self.get_pfx(a["type"])
+                            t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{apfx}", "object": a["id"]}
                             ml["triples"].append({"triple": t})
-                            t = {"subject": me, "predicate": f"{luxns}about_{typ}", "object": a["id"]}
+                            t = {"subject": me, "predicate": f"{luxns}about_{apfx}", "object": a["id"]}
                             ml["triples"].append({"triple": t})
 
             if "language" in data:
@@ -542,19 +533,10 @@ class MlMapper(Mapper):
                         t = {"subject": me, "predicate": f"{crmns}P129_is_about", "object": a["id"]}
                         ml["triples"].append({"triple": t})
                         if "type" in a:
-                            typ = a["type"]
-                            if typ in ["Type", "Language", "Material", "Currency", "MeasurementUnit"]:
-                                typ = "concept"
-                            elif typ in ["Person", "Group"]:
-                                typ = "agent"
-                            elif typ in ["LinguisticObject", "VisualItem"]:
-                                typ = "work"
-                            elif typ in ["DigitalObject", "HumanMadeObject"]:
-                                typ = "object"
-                            typ = typ.lower()
-                            t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{typ}", "object": a["id"]}
+                            apfx = self.get_pfx(a["type"])
+                            t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{ayp}", "object": a["id"]}
                             ml["triples"].append({"triple": t})
-                            t = {"subject": me, "predicate": f"{luxns}about_{typ}", "object": a["id"]}
+                            t = {"subject": me, "predicate": f"{luxns}about_{atyp}", "object": a["id"]}
                             ml["triples"].append({"triple": t})
 
             if "represents" in data:
@@ -565,19 +547,10 @@ class MlMapper(Mapper):
                         t = {"subject": me, "predicate": f"{crmns}P138_represents", "object": r["id"]}
                         ml["triples"].append({"triple": t})
                         if "type" in r:
-                            typ = r["type"]
-                            if typ in ["Type", "Language", "Material", "Currency", "MeasurementUnit"]:
-                                typ = "concept"
-                            elif typ in ["Person", "Group"]:
-                                typ = "agent"
-                            elif typ in ["LinguisticObject", "VisualItem"]:
-                                typ = "work"
-                            elif typ in ["DigitalObject", "HumanMadeObject"]:
-                                typ = "object"
-                            typ = typ.lower()
-                            t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{typ}", "object": r["id"]}
+                            rpfx = self.get_pfx(r["type"])
+                            t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{rtyp}", "object": r["id"]}
                             ml["triples"].append({"triple": t})
-                            t = {"subject": me, "predicate": f"{luxns}depicts_{typ}", "object": r["id"]}
+                            t = {"subject": me, "predicate": f"{luxns}depicts_{rtyp}", "object": r["id"]}
                             ml["triples"].append({"triple": t})
 
         elif pfx == "event":
