@@ -437,11 +437,14 @@ class WdMapper(Mapper, WdConfigManager):
         mbr = data.get("P463", None)
         if mbr:
             for grp in mbr:
+                print(grp)
                 ref = self.get_reference(grp)
                 if ref and ref.__class__ == model.Group:
                     top.member_of = model.Group(ident=self.expand_uri(grp))
                 elif ref and ref.__class__ == model.Activity:
                     top.participated_in = model.Activity(ident=self.expand_uri(grp))
+                elif ref:
+                    print(f"got ref {ref}")
 
         mbr = data.get("P108", None)
         # only add employer if employer is Group
