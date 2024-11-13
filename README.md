@@ -14,42 +14,60 @@
 
 ### Pipeline Components:
 
-* Config: Configuration as JSON records in a Cache.
-* Collector: Recursively collects identifiers for a given record.
-* Merger: Merges two Linked Art records representing the same entity together.
-* Reidentifier: Recursively external rewrite URIs in a record to internal identifiers, given an IdMap.
-* Sources/\*/Fetcher: Fetches identified record from external source to a Cache.
-* Sources/\*/Mapper: Maps from external source into Linked Art.
-* Sources/\*/Reconciler: Determine if the entity in the given record is described in the external source.
-* Sources/\*/Loader: Load a dump of the data into the data cache.
-* Sources/\*/IndexLoader: Create an inverted index to reconcile records against this dataset.
-* MarkLogic: Transformation from Linked Art into MarkLogic internal format.
+* config: Configuration of the pipeline, as JSON records in a cache.
+* process/Collector: Recursively collects identifiers for a given record.
+* process/Reconciler: Reconcile records
+* process/Merger: Merges two Linked Art records representing the same entity together.
+* process/Reidentifier: Recursively external rewrite URIs in a record to internal identifiers, given an IdMap.
+* process/ReferenceManager: Manages inter-record connections
+* process/UpdateManager: Manages harvesting and updates to caches
+* sources/\*/Acquirer: Wraps Fetcher and Mapper to acquire a record either from the network or a cache
+* sources/\*/Fetcher: Fetches identified record from external source to a Cache.
+* sources/\*/Harvester: Retrieve multiple records via IIIF Change Discovery or OAI-PMH
+* sources/\*/Mapper: Maps from source format into Linked Art, or from Linked Art to discovery layer format (Marklogic, QLever)
+* sources/\*/Reconciler: Determine if the entity in the given record is described in the external source.
+* sources/\*/Loader: Load a dump of the data into the data cache.
+* sources/\*/IndexLoader: Create an inverted index to reconcile records against this dataset.
+* storage/MarkLogic: Marklogic storage of data
+* storage/Cache: Data caches (Postgresql, file system)
+* storage/Idmap: Key/value store API (Redis, file system, in-memory)
+
 
 ## External Sources: Implementation Status
 
-| Source          | Fetch | Map | Reconcile | Load | IdxLoad |
-| --------------- | ----- | --- | --------- | ---- | ------- |
-| AAT             |   ✅  |  ✅ |   N/A     | N/A  | -       | 
-| DNB             |   ✅  |  ✅ |     -     |  ✅  | -       | 
-| FAST            |   ✅  |  -  |     -     |  -   | -       | 
-| Geonames        |   ✅  |  ✅ |     -     | N/A  | -       | 
-| LCNAF           |   ✅  |  ✅ |     -     |  -   | -       | 
-| LCSH            |   ✅  |  ✅ |     -     |  ✅  | ✅      | 
-| TGN             |   ✅  |  ✅ |     -     | N/A  | -       | 
-| ULAN            |   ✅  |  ✅ |     -     | N/A  | -       | 
-| VIAF            |   ✅  |  ✅ |     -     |  -   | -       | 
-| Who's on First  |   ✅  |  ✅ |     -     | N/A  | -       | 
-| Wikidata        |   ✅  |  ✅ |     ✅    |  ✅  | ✅      | 
-| Japan NL        |   ✅  |  ✅ |     -     | N/A  | -       |
+| Source          | Fetch | Map | Name Reconcile | Load | IdxLoad |
+| --------------- | ----- | --- | -------------- | ---- | ------- |
+| AAT             |   ✅  |  ✅ |    ✅         | N/A | -       | 
+| DNB             |   ✅  |  ✅ |     -         |  ✅ | -       | 
+| FAST            |   ✅  |  -  |     -          |  -   | -      | 
+| Geonames        |   ✅  |  ✅ |     -          | ✅  | -      | 
+| LCNAF           |   ✅  |  ✅ |     ✅        |  ✅ | -       | 
+| LCSH            |   ✅  |  ✅ |     ✅        |  ✅ | ✅      | 
+| TGN             |   ✅  |  ✅ |     -         | N/A  | -       | 
+| ULAN            |   ✅  |  ✅ |     ✅        | N/A  | -       | 
+| VIAF            |   ✅  |  ✅ |     -         |  ✅  | -       | 
+| Who's on First  |   ✅  |  ✅ |     -         | N/A  | -       | 
+| Wikidata        |   ✅  |  ✅ |     -         |  ✅  | ✅     | 
+| Japan NL        |   ✅  |  ✅ |     -         | N/A  | -       |
+| BNF             |   ✅  |  ✅ |     -         | N/A  | -       |
+| GBIF            |   ✅  |  ✅ |     -         | N/A  | -       |
+| ORCID           |   ✅  |  ✅ |     -         | N/A  | -       |
+| ROR             |   ✅  |  ✅ |     -         | N/A  | -       |
+| Wikimedia API   |   ✅  |  ✅ |     -         | N/A  | -       |
+| DNB             |   ✅  |  ✅ |     -         | N/A  | -       |
+| BNE             |   ✅  |  ✅ |     -         | N/A  | -       |
+| Nomenclature    |   -   |  -  |     -          | -    | -      |
+| Getty Museum    |   -   |  -  |     -          | -    | -      |
+| Homosaurus      |   -   |  -  |     -          | -    | -      |
+| Nomisma         |   -   |  -  |     -          | -    | -      |
+| SNAC            |   -   |  -  |     -          | -    | -      |
 
-✅ = Seems to work ; - = Not started ; N/A = Can't be done
 
-* AAT, TGN, ULAN: Dump files are NTriples based. More effort to reconstruct than it would be worth. 
-* Geonames: Dump file is CSV without all the information (e.g. no language of names)
-* WOF: Dump file is a 33Gb sqlite db... if it was useful, we could just use it as the cache
-* LCNAF: Doesn't have the real world object data which we want, useful for reconciliation though
-* VIAF: Too much data for not enough value
-* FAST: Just not implemented yet (needs to process MARC/XML)
+✅ = Done ; - = Not started ; N/A = Can't/Won't be done
+
+* AAT, TGN, ULAN: Dump files are NTriples based. More effort to reconstruct than it would be worth. Instead we can use IIIF Change Discovery to synchronize.
+* WOF: Dump file is a 33Gb sqlite db... we just use it as the cache directly
+* FAST: Not implemented yet (needs to process MARC/XML)
 
 ### Fetching external source dump files
 
