@@ -31,6 +31,43 @@ class LcMapper(Mapper):
 
         self.ignore_types = ["madsrdf:DeprecatedAuthority", "madsrdf:NameTitle"]
 
+    def build_recs_and_reconcile(self, txt, rectype=""):
+        # reconrec returns URI
+        nafreconciler = self.config["all_configs"].external["lcnaf"]["reconciler"]
+        shreconciler = self.config["all_configs"].external["lcsh"]["reconciler"]
+        rec = {
+            "type": "",
+            "identified_by": [
+                {
+                    "type": "Name",
+                    "content": txt,
+                    "classified_as": [{"id": "http://vocab.getty.edu/aat/300404670"}],
+                }
+            ],
+        }
+        if rectype == "Place":
+            rec["type"] = "Place"
+            reconrec = nafreconciler.reconcile(rec, reconcileType="name")
+        elif rectype == "Concept":
+            rec["type"] = "Type"
+            reconrec = shreconciler.reconcile(rec, reconcileType="name")
+        elif rectype == "Group":
+            rec["type"] = "Group"
+            reconrec = nafreconciler.reconcile(rec, reconcileType="name")
+        elif rectype == "Person":
+            rec["type"] == "Person"
+            reconrec = nafreconciler.reconcile(rec, reconcileType="name")
+        elif rectype == "Type":
+            rec["type"] = "Type"
+            reconrec = shreconciler.reconcile(rec, reconcileType="name")
+        elif rectype == "Activity":
+            rec["type"] = "Activity"
+            reconrec = nafreconciler.reconcile(rec, reconcileType="name")
+        else:
+            reconrec = None
+
+        return reconrec
+
     def fix_identifier(self, identifier):
         if identifier == "@@LMI-SPECIAL-TERM@@":
             return None
@@ -188,17 +225,41 @@ class LcMapper(Mapper):
         ex = new.get("madsrdf:hasExactExternalAuthority", [])
         if type(ex) != list:
             ex = [ex]
+
+
         if top.__class__ != model.Group:
             later = new.get("madsrdf:hasLaterEstablishedForm", [])
             if later:
                 if type(later) != list:
                     later = [later]
-                ex.extend(later)
+                ex.extend(laters)
             earlier = new.get("madsrdf:hasEarlierEstablishedForm", [])
+            earliers = []
             if earlier:
                 if type(earlier) != list:
                     earlier = [earlier]
-                ex.extend(earlier)
+                for e in earlier:
+                    if "madsrdf:variantLabel" in e:
+                        if "@value" in e["madsrdf:variantLabel"]:
+                            txt = e['madsrdf:variantLabel']['@value']
+                        else:
+                            txt = e['madsrdf:variantLabel']
+                    else:
+                        txt = None
+                    if "@id" in e:
+                        eid = e['@id']
+                    else:
+                        eid = None
+                    if eid.startswith("_:") and txt:
+                        reid = self.build_recs_and_reconcile(txt, type(top).__name__)
+                    elif not txt and eid.startswith("_:"):
+                        reid = None
+                    else:
+                        reid = eid 
+                    if reid:
+                        earliers.append(reid)
+                        print(f"Earlier form reconciled for {new['@id']}")
+                ex.extend(earliers)
 
         # skos:closeMatch -- Only as a last resort
         close = new.get("madsrdf:hasCloseExternalAuthority", [])
@@ -403,30 +464,6 @@ class LcnafMapper(LcMapper):
         else:
             self.parenthetical_places = {}
 
-    def build_recs_and_reconcile(self, txt, rectype=""):
-        # reconrec returns URI
-
-        rec = {
-            "type": "",
-            "identified_by": [
-                {
-                    "type": "Name",
-                    "content": txt,
-                    "classified_as": [{"id": "http://vocab.getty.edu/aat/300404670"}],
-                }
-            ],
-        }
-        if rectype == "place":
-            rec["type"] = "Place"
-            reconrec = self.config["reconciler"].reconcile(rec, reconcileType="name")
-        elif rectype == "concept":
-            rec["type"] = "Type"
-            reconrec = self.config["all_configs"].external["lcsh"]["reconciler"].reconcile(rec, reconcileType="name")
-        elif rectype == "group":
-            rec["type"] = "Group"
-            reconrec = self.config["reconciler"].reconcile(rec, reconcileType="name")
-
-        return reconrec
 
     def transform(self, record, rectype=None, reference=False):
         try:
@@ -587,7 +624,7 @@ class LcnafMapper(LcMapper):
             if not txt and bpid.startswith("_:"):
                 bpid = None
             elif txt and (not bpid or bpid.startswith("_:")):
-                bpid = self.build_recs_and_reconcile(txt, "place")
+                bpid = self.build_recs_and_reconcile(txt, "Place")
             if bpid:
                 # bpid is full uri
                 if "/rwo/" in bpid:
@@ -662,7 +699,7 @@ class LcnafMapper(LcMapper):
                 # nothing to do
                 dpid = None
             elif txt and (not dpid or dpid.startswith("_:")):
-                dpid = self.build_recs_and_reconcile(txt, "place")
+                dpid = self.build_recs_and_reconcile(txt, "Place")
             if dpid:
                 # dpid is full uri
                 if "/rwo/" in dpid:
@@ -705,7 +742,7 @@ class LcnafMapper(LcMapper):
                 if fid.startswith("_:"):
                     if al.startswith("("):
                         al = re.sub(r"^\(.*?\)\s*", "", al)
-                    fid = self.build_recs_and_reconcile(al, "concept")
+                    fid = self.build_recs_and_reconcile(al, "Concept")
                 if fid:
                     if "authorities/names" in fid:
                         continue
@@ -736,7 +773,7 @@ class LcnafMapper(LcMapper):
                 if oid.startswith("_:"):
                     if al.startswith("("):
                         al = re.sub(r"^\(.*?\)\s*", "", al)
-                    oid = self.build_recs_and_reconcile(al, "concept")
+                    oid = self.build_recs_and_reconcile(al, "Concept")
 
                 # Can this be /rwo/ ?
                 if oid and "names" in oid:
@@ -802,7 +839,7 @@ class LcnafMapper(LcMapper):
                 gid = o.get("@id", "")
 
                 if (gid == "" or gid.startswith("_")) and lbl:
-                    gid = self.build_recs_and_reconcile(lbl, "group")
+                    gid = self.build_recs_and_reconcile(lbl, "Group")
                 if gid:
                     fetchid = gid.rsplit("/", 1)[-1]
                     frec = self.get_reference(fetchid)
