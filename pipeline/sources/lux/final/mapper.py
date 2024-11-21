@@ -121,20 +121,30 @@ class Cleaner(Mapper):
 
     def process_names(self, data):
         primary = self.globals["primaryName"]  # 300404670
-        sortName = self.globals["sortName"]  # 300404672
+        sortName = self.globals["sortName"]  # 300451544
         primaryType = {
             "id": primary,
             "type": "Type",
             "_label": "Primary Name",
             "equivalent": [
-                {"id": "http://vocab.getty.edu/aat/300404670", "type": "Type", "_label": "Final: Primary Name"}
+                {
+                    "id": "http://vocab.getty.edu/aat/300404670",
+                    "type": "Type",
+                    "_label": "Final: Primary Name",
+                }
             ],
         }
         sortType = {
             "id": sortName,
             "type": "Type",
             "_label": "Sort Name",
-            "equivalent": [{"id": "http://vocab.getty.edu/aat/300451544", "type": "Type", "_label": "Final: Sort Title"}],
+            "equivalent": [
+                {
+                    "id": "http://vocab.getty.edu/aat/300451544",
+                    "type": "Type",
+                    "_label": "Final: Sort Title",
+                }
+            ],
         }
 
         alternateName = self.globals["alternateName"]  # 300264273
@@ -167,7 +177,9 @@ class Cleaner(Mapper):
             for nm in data["identified_by"]:
                 if nm["type"] == "Name":
                     # FIXME: Test for 'language': [{'type': 'Language', '_label': 'und'}]
-                    langs = [x.get("id", None) for x in nm.get("language", [{"id": None}])]
+                    langs = [
+                        x.get("id", None) for x in nm.get("language", [{"id": None}])
+                    ]
                     val = nm.get("content", "")
                     val = val.strip()
                     if not val:
@@ -233,7 +245,9 @@ class Cleaner(Mapper):
                         # FIXME: Any other heuristics here to make a better guess?
                         candidates = []
                         for nm in nms:
-                            cxns = [x.get("id", None) for x in nm.get("classified_as", [])]
+                            cxns = [
+                                x.get("id", None) for x in nm.get("classified_as", [])
+                            ]
                             if not cxns:
                                 candidates.insert(0, nm)
                             else:
@@ -241,7 +255,11 @@ class Cleaner(Mapper):
                                     candidates = [nm]
                                     break
                                 alt = False
-                                for a in [alternateName, alternateTitle, translatedTitle]:
+                                for a in [
+                                    alternateName,
+                                    alternateTitle,
+                                    translatedTitle,
+                                ]:
                                     if a in cxns:
                                         # Don't add explicit alternates
                                         alt = True
@@ -260,7 +278,9 @@ class Cleaner(Mapper):
                         # Everything was bad :(
                         target = nms[0]
                         done = False
-                        cxns = [x.get("id", None) for x in target.get("classified_as", [])]
+                        cxns = [
+                            x.get("id", None) for x in target.get("classified_as", [])
+                        ]
                         for a in [alternateName, alternateTitle, translatedTitle]:
                             if a in cxns:
                                 # Gah. Overwrite. We need a primary name
@@ -278,7 +298,10 @@ class Cleaner(Mapper):
                             # remove alternate if present
                             remove = []
                             for cx in target["classified_as"]:
-                                if "id" in cx and cx["id"] in [alternateName, alternateTitle]:
+                                if "id" in cx and cx["id"] in [
+                                    alternateName,
+                                    alternateTitle,
+                                ]:
                                     remove.append(cx)
                             for r in remove:
                                 target["classified_as"].remove(r)
@@ -353,21 +376,42 @@ class Cleaner(Mapper):
                 if "classified_as" in target:
                     target["classified_as"].append(sortType)
 
-        if (not "identified_by" in data or not data["identified_by"]) and "_label" in data and data["_label"]:
+        if (
+            (not "identified_by" in data or not data["identified_by"])
+            and "_label" in data
+            and data["_label"]
+        ):
             # copy label to name
-            data["identified_by"] = [{"type": "Name", "content": data["_label"], "classified_as": [primaryType]}]
-        elif not "identified_by" in data and data["type"] == "DigitalObject" and len(data.keys()) == 4:
+            data["identified_by"] = [
+                {
+                    "type": "Name",
+                    "content": data["_label"],
+                    "classified_as": [primaryType],
+                }
+            ]
+        elif (
+            not "identified_by" in data
+            and data["type"] == "DigitalObject"
+            and len(data.keys()) == 4
+        ):
             # bad record ... just a pointer to some other URI (id, type, _label, equivalent)
             return None
         elif (
             not "identified_by" in data
             or not data["identified_by"]
-            or (len(data["identified_by"]) == 1 and not data["identified_by"][0].get("content", ""))
+            or (
+                len(data["identified_by"]) == 1
+                and not data["identified_by"][0].get("content", "")
+            )
         ):
             # Uh oh :(
             print(f"record with no names: {data}")
             data["identified_by"] = [
-                {"type": "Name", "classified_as": [primaryType], "content": f"Unnamed {data['type']}"}
+                {
+                    "type": "Name",
+                    "classified_as": [primaryType],
+                    "content": f"Unnamed {data['type']}",
+                }
             ]
 
         # Now sort names
@@ -416,7 +460,7 @@ class Cleaner(Mapper):
             data[prop] = replacement
 
     def set_timespan_defaults(self, timespan, event=False):
-        #timespan is json block
+        # timespan is json block
         if "begin_of_the_begin" in timespan and "end_of_the_end" not in timespan:
             timespan["end_of_the_end"] = "9999-12-31T23:59:59"
         elif "end_of_the_end" in timespan and not "begin_of_the_begin" in timespan:
@@ -453,7 +497,13 @@ class Cleaner(Mapper):
                                     "id": mdy,
                                     "type": "Type",
                                     "_label": "Metatype",
-                                    "equivalent": [{"id": aat, "type": "Type", "_label": "Metatype"}],
+                                    "equivalent": [
+                                        {
+                                            "id": aat,
+                                            "type": "Type",
+                                            "_label": "Metatype",
+                                        }
+                                    ],
                                 }
                             )
 
@@ -534,17 +584,26 @@ class Cleaner(Mapper):
             if "subject_of" in data:
                 self.dedupe_webpages(data)
 
-        eventTypes = ["produced_by", "used_for", "created_by", "born", "died", "formed_by", "dissolved_by","timespan"]
+        eventTypes = [
+            "produced_by",
+            "used_for",
+            "created_by",
+            "born",
+            "died",
+            "formed_by",
+            "dissolved_by",
+            "timespan",
+        ]
         for et in eventTypes:
             if et in data:
                 if "timespan" in data[et]:
-                    self.set_timespan_defaults(data[et]['timespan'])
+                    self.set_timespan_defaults(data[et]["timespan"])
                 elif "part" in data[et]:
-                    for part in data[et]['part']:
+                    for part in data[et]["part"]:
                         if "timespan" in part:
-                            self.set_timespan_defaults(part['timespan'])
+                            self.set_timespan_defaults(part["timespan"])
                 elif et == "timespan":
-                    #it's an Event, Period or Activity
+                    # it's an Event, Period or Activity
                     self.set_timespan_defaults(data[et], event=True)
 
         ### Check names are sane
