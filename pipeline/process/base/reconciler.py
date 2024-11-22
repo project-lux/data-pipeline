@@ -77,6 +77,7 @@ class Reconciler(object):
                 print(f"  None in Name classifications: {rec['id']}")
 
             if aat_primaryName in cxnids and "content" in nm:
+                val = nm["content"]
                 for lang_id, num in check_langs.items():
                     if lang_id in langids:
                         val = nm["content"].lower().strip()
