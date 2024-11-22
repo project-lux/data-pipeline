@@ -27,6 +27,7 @@ class AatReconciler(LmdbReconciler):
             langs = nm.get("language", [])
             if aat_primaryName in [cx["id"] for cx in cxns] and "content" in nm:
                 # primary name with value
+                val = nm["content"]
                 langids = [lng["id"] for lng in langs]
                 for lang_id, num in check_langs.items():
                     if lang_id in langids:
