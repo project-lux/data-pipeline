@@ -21,11 +21,11 @@ class Reconciler(object):
         self.collector = Collector(config, idmap, networkmap)
         try:
             self.min_equivs = config.reconcile_min_equivs
-        except:
+        except Exception:
             self.min_equivs = 3
         try:
             self.filter_internal = config.reconcile_filter_internal_equivs
-        except:
+        except Exception:
             self.filter_internal = False
 
         # source-rec-uri: [(added-rec-uri, 'eq|uri|nm')]
@@ -52,7 +52,7 @@ class Reconciler(object):
                 if eq["id"] != record["data"]["id"]:
                     try:
                         self.debug_graph[record["data"]["id"]].append((eq["id"], "eq"))
-                    except:
+                    except Exception:
                         self.debug_graph[record["data"]["id"]] = [(eq["id"], "eq")]
 
         if self.debug:
@@ -84,7 +84,7 @@ class Reconciler(object):
                     if self.debug:
                         print("    (uris)")
                     self.reconcile_uris(record)
-        except:
+        except Exception:
             print(f"\nERROR --- reconciliation errored for {record['identifier']}")
             raise
         return record
@@ -103,7 +103,9 @@ class Reconciler(object):
                     if self.debug:
                         print("      (collecting)")
                     self.collector.collect(record)
-                    cr_equivs = set([x["id"] for x in record["data"].get("equivalent", [])])
+                    cr_equivs = set(
+                        [x["id"] for x in record["data"].get("equivalent", [])]
+                    )
                     if self.debug:
                         print(f"cr_equivs: {cr_equivs}")
                     if self.debug:
@@ -111,12 +113,14 @@ class Reconciler(object):
                         for k, v in lg.items():
                             try:
                                 self.debug_graph[k].extend(v)
-                            except:
+                            except Exception:
                                 self.debug_graph[k] = v
                         self.collector.debug_graph = {}
 
         except Exception as e:
-            print(f"\nERROR: Reconciling broke for {record['source']}/{record['identifier']}: {e}")
+            print(
+                f"\nERROR: Reconciling broke for {record['source']}/{record['identifier']}: {e}"
+            )
             raise
         return record
 
@@ -175,14 +179,18 @@ class Reconciler(object):
                     for nid in newids:
                         if not nid in ids:
                             if self.debug:
-                                print(f" --- reconciler {r} / {reconcileType} found {nid} for {record['data']['id']}")
+                                print(
+                                    f" --- reconciler {r} / {reconcileType} found {nid} for {record['data']['id']}"
+                                )
                             # Test distinct to avoid adding bad
                             diffs = self.global_reconciler.reconcile(nid, "diffs")
                             okay_to_add = True
                             for d in diffs:
                                 if d in ids:
                                     if self.debug:
-                                        print(f"Found two distinct entities: {d} and {nid} in {record['data']['id']}")
+                                        print(
+                                            f"Found two distinct entities: {d} and {nid} in {record['data']['id']}"
+                                        )
                                     okay_to_add = False
                             if okay_to_add:
                                 ids.append(nid)
@@ -197,6 +205,8 @@ class Reconciler(object):
                     if not i in curr:
                         if self.debug:
                             print(f"Adding {i} to record")
-                        record["data"]["equivalent"].append({"id": i, "type": t, "_label": lbl})
+                        record["data"]["equivalent"].append(
+                            {"id": i, "type": t, "_label": lbl}
+                        )
                         new_equivs = True
         return record

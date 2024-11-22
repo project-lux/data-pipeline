@@ -14,15 +14,18 @@ class Reconciler(object):
 
     def should_reconcile(self, rec, reconcileType="all"):
         if "data" in rec:
-            rec = rec["data"]
+            data = rec["data"]
         if self.name_index is None and reconcileType == "name":
             return False
         elif self.id_index is None and reconcileType == "uri":
             return False
-        elif not "identified_by" in rec and reconcileType == "name":
+        elif "identified_by" not in data and reconcileType == "name":
             # record without a name should never happen ... but ...
             return False
-        elif not "equivalent" in rec and reconcileType == "uri":
+        elif "equivalent" not in data and reconcileType == "uri":
+            return False
+        elif "source" in rec and rec["source"] == self.config["name"]:
+            # Don't reconcile against self
             return False
         elif (
             self.name_index is None and self.id_index is None and reconcileType == "all"
@@ -117,11 +120,11 @@ class Reconciler(object):
             death = get_year_from_timespan(rec.get("died", {}))
             if birth or death:
                 for v in vals.keys():
-                    if birth and not birth in v:
+                    if birth and birth not in v:
                         vals[f"{v}, {birth}-"] = 1
-                    if death and not death in v:
+                    if death and death not in v:
                         vals[f"{v}, -{death}"] = 1
-                    if birth and death and not birth in v and not death in v:
+                    if birth and death and birth not in v and death not in v:
                         vals[f"{v}, {birth}-{death}"] = 1
 
             # FIXME Out of pipeline:
@@ -152,14 +155,14 @@ class LmdbReconciler(Reconciler):
                 self.name_index = TabLmdb.open(fn, "r", readahead=False, writemap=True)
             else:
                 self.name_index = None
-        except:
+        except Exception:
             self.name_index = None
         try:
             if fn2:
                 self.id_index = TabLmdb.open(fn2, "r", readahead=False, writemap=True)
             else:
                 self.id_index = None
-        except:
+        except Exception:
             self.id_index = None
 
     def get_keys_like(self, which, key):
