@@ -24,7 +24,9 @@ class Reconciler(object):
             return False
         elif not "equivalent" in rec and reconcileType == "uri":
             return False
-        elif self.name_index is None and self.id_index is None and reconcileType == "all":
+        elif (
+            self.name_index is None and self.id_index is None and reconcileType == "all"
+        ):
             return False
         return True
 
@@ -42,19 +44,18 @@ class Reconciler(object):
     def extract_names(self, rec):
         ns = self.configs.external["aat"]["namespace"]
         gbls = self.configs.globals_cfg
-        aat_primaryName = ns + glbs["primaryName"]
+        aat_primaryName = ns + gbls["primaryName"]
 
         check_langs = {
-            ns + gbls["lang_en"]: 1, #820,063
-            ns + gbls["lang_fr"]: 2, #308,196
-            ns + gbls["lang_nl"]: 3, #307,119
-            ns + gbls["lang_de"]: 4, #304,000
-            ns + gbls["lang_es"]: 5, #259,160
-            ns + gbls["lang_ar"]: 6, #184,612
-            ns + "300389115": 7, #172,184
-            ns + gbls["lang_zh"]: 8 #148,055
+            ns + gbls["lang_en"]: 1,  # 820,063
+            ns + gbls["lang_fr"]: 2,  # 308,196
+            ns + gbls["lang_nl"]: 3,  # 307,119
+            ns + gbls["lang_de"]: 4,  # 304,000
+            ns + gbls["lang_es"]: 5,  # 259,160
+            ns + gbls["lang_ar"]: 6,  # 184,612
+            ns + "300389115": 7,  # 172,184
+            ns + gbls["lang_zh"]: 8,  # 148,055
         }
-
 
         # FIXME: These should be globals!
         aat_firstName = "http://vocab.getty.edu/aat/300404651"
@@ -65,7 +66,7 @@ class Reconciler(object):
         typ = rec["type"]
         nms = rec.get("identified_by", [])
         for nm in nms:
-            langs = nm.get("language",[])
+            langs = nm.get("language", [])
             langids = [lg.get("id", None) for lg in langs]
             if None in langids:
                 print(f"  None in Name language: {rec['id']}")
@@ -81,8 +82,7 @@ class Reconciler(object):
                         val = nm["content"].lower().strip()
                         vals[val] = num
                     else:
-                        vals[val] = 1
-
+                        vals[val] = 3
 
                 if typ == "Person":
                     if "part" in nm:
@@ -185,7 +185,7 @@ class LmdbReconciler(Reconciler):
                 if nm in self.name_index:
                     try:
                         (k, typ) = self.name_index[nm]
-                    except:
+                    except Exception:
                         k = self.name_index[nm]
                         typ = None
                     if typ is not None and my_type == typ:
@@ -193,14 +193,20 @@ class LmdbReconciler(Reconciler):
                             recid = rec.get("id", "")
                             if recid:
                                 try:
-                                    self.debug_graph[rec["id"]].append((f"{self.namespace}{k}", "nm"))
-                                except:
-                                    self.debug_graph[rec["id"]] = [(f"{self.namespace}{k}", "nm")]
+                                    self.debug_graph[rec["id"]].append(
+                                        (f"{self.namespace}{k}", "nm")
+                                    )
+                                except Exception:
+                                    self.debug_graph[rec["id"]] = [
+                                        (f"{self.namespace}{k}", "nm")
+                                    ]
                         try:
                             matches[k].append(nm)
                             if num > 1:
-                                print(f"!!!Base reconciler matched a non-English name: {nm}, with lang value {num}")
-                        except:
+                                print(
+                                    f"!!!Base reconciler matched a non-English name: {nm}, with lang value {num}"
+                                )
+                        except Exception:
                             matches[k] = [nm]
                         break
 
@@ -209,15 +215,19 @@ class LmdbReconciler(Reconciler):
                 if e in self.id_index:
                     (uri, typ) = self.id_index[e]
                     if my_type != typ and self.debug:
-                        print(f"cross-type match: record has {my_type} and external has {typ}")
+                        print(
+                            f"cross-type match: record has {my_type} and external has {typ}"
+                        )
                     try:
                         matches[uri].append(e)
-                    except:
+                    except Exception:
                         matches[uri] = [e]
                     if self.debug:
                         try:
-                            self.debug_graph[e].append((f"{self.namespace}{uri}", "uri"))
-                        except:
+                            self.debug_graph[e].append(
+                                (f"{self.namespace}{uri}", "uri")
+                            )
+                        except Exception:
                             self.debug_graph[e] = [(f"{self.namespace}{uri}", "uri")]
 
         if len(matches) == 1:
@@ -253,7 +263,7 @@ class SqliteReconciler(Reconciler):
                 self.id_index = SqliteDict(fn2, autocommit=False, flag="r")
             else:
                 self.id_index = None
-        except:
+        except Exception:
             # Can't get a lock, set to None
             self.id_index = None
 
@@ -271,7 +281,7 @@ class SqliteReconciler(Reconciler):
 
     def reconcile(self, rec, reconcileType="all"):
         # Match by primary name
-        if not reconcileType in ["all", "name", "uri"]:
+        if reconcileType not in ["all", "name", "uri"]:
             return None
         if not self.should_reconcile(rec, reconcileType):
             return None
@@ -284,18 +294,19 @@ class SqliteReconciler(Reconciler):
         if reconcileType in ["all", "name"]:
             # Get name from Record
             vals = self.extract_names(rec)
-            vals.sort(key=len, reverse=True)
+            vals = sorted(vals.items(), key=lambda item: (item[1], -len(item[0])))
+            vals = [x[0] for x in vals]
             for val in vals:
                 if val in self.name_index:
                     try:
                         (k, typ) = self.name_index[val]
-                    except:
+                    except Exception:
                         k = self.name_index[val]
                         typ = None
                     if typ is not None and my_type == typ:
                         try:
                             matches[k].append(val)
-                        except:
+                        except Exception:
                             matches[k] = [val]
                         break
 
@@ -305,7 +316,9 @@ class SqliteReconciler(Reconciler):
                     (uri, typ) = self.id_index[e]
                     if my_type != typ:
                         if self.debug:
-                            print(f"cross-type match: record has {my_type} and external has {typ}")
+                            print(
+                                f"cross-type match: record has {my_type} and external has {typ}"
+                            )
                     try:
                         matches[uri].append(e)
                     except:

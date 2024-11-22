@@ -1,22 +1,21 @@
-
 import sys
 import time
 from sqlitedict import SqliteDict
 from pipeline.storage.idmap.lmdb import TabLmdb
 
-class IndexLoader(object):
 
+class IndexLoader(object):
     def __init__(self, config):
         self.config = config
-        self.configs = config['all_configs']
-        self.in_cache = config['datacache']
-        self.namespace = config['namespace']
+        self.configs = config["all_configs"]
+        self.in_cache = config["datacache"]
+        self.namespace = config["namespace"]
         self.in_path = config.get("reconcileDumpPath", None)
-        self.out_path = config.get('reconcileDbPath', None)
-        self.inverse_path = config.get('inverseEquivDbPath', None)
-        self.reconciler = config.get('reconciler', None)
-        self.acquirer = config.get('acquirer', None)
-        self.mapper = config.get('mapper', None)
+        self.out_path = config.get("reconcileDbPath", None)
+        self.inverse_path = config.get("inverseEquivDbPath", None)
+        self.reconciler = config.get("reconciler", None)
+        self.acquirer = config.get("acquirer", None)
+        self.mapper = config.get("mapper", None)
 
     def extract_names(self, rec):
         return self.reconciler.extract_names(rec)
@@ -25,7 +24,7 @@ class IndexLoader(object):
         return self.reconciler.extract_uris(rec)
 
     def acquire_record(self, rec):
-        recid = rec['identifier']
+        recid = rec["identifier"]
         res = self.acquirer.acquire(recid, store=False)
         return res
 
@@ -37,11 +36,11 @@ class IndexLoader(object):
             return None
 
         if self.reconciler is None:
-            self.reconciler = self.config['reconciler']
+            self.reconciler = self.config["reconciler"]
         if self.mapper is None:
-            self.mapper = self.config['mapper']
+            self.mapper = self.config["mapper"]
         if self.acquirer is None:
-            self.acquirer = self.config['acquirer']
+            self.acquirer = self.config["acquirer"]
 
         # Clear all current entries
         if index is not None:
@@ -54,39 +53,43 @@ class IndexLoader(object):
         start = time.time()
         all_names = {}
         all_uris = {}
-        print('starting...')
+        print("starting...")
         for rec in self.in_cache.iter_records():
             res = self.acquire_record(rec)
             if res is None:
                 # Mapper might kill it, might not exist, etc
                 # sys.stdout.write('X');sys.stdout.flush()
                 continue
-            recid = rec['identifier']
+            recid = rec["identifier"]
             try:
-                typ = res['data']['type']
-            except:
-                typ = self.mapper.guess_type(res['data'])
+                typ = res["data"]["type"]
+            except Exception:
+                typ = self.mapper.guess_type(res["data"])
 
             if recid and typ:
                 if index is not None:
-                    names = self.extract_names(res['data'])
-                    for nm in names:
+                    names = self.extract_names(res["data"])
+                    for nm in names.keys():
                         # sys.stdout.write('n');sys.stdout.flush()
                         if nm:
                             if len(nm) < 500:
                                 all_names[nm.lower()] = [recid, typ]
                             else:
-                                print(f"Dropping name as too long ({len(nm)}>500):\n\t{nm}")
+                                print(
+                                    f"Dropping name as too long ({len(nm)}>500):\n\t{nm}"
+                                )
                 if eqindex is not None:
-                    eqs = self.extract_uris(res['data'])
+                    eqs = self.extract_uris(res["data"])
                     for eq in eqs:
                         if eq:
                             all_uris[eq] = [recid, typ]
 
             n += 1
             if not n % 100000:
-                durn = time.time()-start
-                print(f"{n} of {ttl} in {int(durn)} = {n/durn}/sec -> {ttl/(n/durn)} secs")
+                durn = time.time() - start
+                print(
+                    f"{n} of {ttl} in {int(durn)} = {n/durn}/sec -> {ttl/(n/durn)} secs"
+                )
                 sys.stdout.flush()
 
         if index is not None and all_names:
@@ -100,24 +103,31 @@ class IndexLoader(object):
             durn = time.time() - start
             print(f"uris insert time: {int(durn)} = {len(all_names)/durn}/sec")
 
-class LmdbIndexLoader(IndexLoader):
 
+class LmdbIndexLoader(IndexLoader):
     def get_storage(self):
-        mapExp = self.config.get('mapSizeExponent', 30)
+        mapExp = self.config.get("mapSizeExponent", 30)
         # n = remove and recreate
         if self.out_path:
-            index = TabLmdb.open(self.out_path, 'c', map_size=2**mapExp, readahead=False, writemap=True)
+            index = TabLmdb.open(
+                self.out_path, "c", map_size=2**mapExp, readahead=False, writemap=True
+            )
         else:
             index = None
         if self.inverse_path:
-            eqindex = TabLmdb.open(self.inverse_path, 'c', map_size=2**mapExp, readahead=False, writemap=True)
+            eqindex = TabLmdb.open(
+                self.inverse_path,
+                "c",
+                map_size=2**mapExp,
+                readahead=False,
+                writemap=True,
+            )
         else:
             eqindex = None
         return (index, eqindex)
 
 
 class SqliteIndexLoader(IndexLoader):
-
     def get_storage(self):
         if out_path:
             index = SqliteDict(out_path, autocommit=False)
