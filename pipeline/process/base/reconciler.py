@@ -116,7 +116,7 @@ class Reconciler(object):
             birth = get_year_from_timespan(rec.get("born", {}))
             death = get_year_from_timespan(rec.get("died", {}))
             if birth or death:
-                for v in vals[:]:
+                for v in vals.keys():
                     if birth and not birth in v:
                         vals[f"{v}, {birth}-"] = 1
                     if death and not death in v:
