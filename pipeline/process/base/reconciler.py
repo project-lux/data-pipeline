@@ -91,7 +91,7 @@ class Reconciler(object):
                 if typ == "Person":
                     if "part" in nm:
                         parts = nm["part"]
-                        if not type(parts) == list:
+                        if not isinstance(parts, list):
                             parts = [parts]
                         first = ""
                         middle = ""
