@@ -186,6 +186,8 @@ class LmdbReconciler(Reconciler):
             vals = self.extract_names(rec)
             vals = dict(sorted(vals.items(), key=lambda item: (item[1], -len(item[0]))))
             for nm, num in vals.items():
+                if self.debug:
+                    print(f" names: {vals}")
                 if nm in self.name_index:
                     try:
                         (k, typ) = self.name_index[nm]
