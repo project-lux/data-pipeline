@@ -170,14 +170,14 @@ class Reconciler(object):
                             else:
                                 self.debug_graph[k] = v
                         r.debug_graph = {}
-                except:
+                except Exception:
                     print(r)
                     raise
                 if newids:
                     if not type(newids) in [list, set]:
                         newids = [newids]
                     for nid in newids:
-                        if not nid in ids:
+                        if nid not in ids:
                             if self.debug:
                                 print(
                                     f" --- reconciler {r} / {reconcileType} found {nid} for {record['data']['id']}"

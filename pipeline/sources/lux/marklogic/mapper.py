@@ -46,7 +46,12 @@ class MlMapper(Mapper):
         # self.record_references = self.configs.instantiate_map('record_refs')['store']
 
     def _walk_node_ref(self, node, refs, all_refs, top=False, ignore=False):
-        if not top and "id" in node and node["id"] is not None and node["id"].startswith(self.configs.internal_uri):
+        if (
+            not top
+            and "id" in node
+            and node["id"] is not None
+            and node["id"].startswith(self.configs.internal_uri)
+        ):
             # record node['id']
             if not node["id"] in all_refs:
                 all_refs.append(node["id"])
@@ -57,7 +62,12 @@ class MlMapper(Mapper):
 
         if "type" in node and node["type"] == "TimeSpan":
             # Add integer seconds for properties
-            for p in ["begin_of_the_begin", "begin_of_the_end", "end_of_the_begin", "end_of_the_end"]:
+            for p in [
+                "begin_of_the_begin",
+                "begin_of_the_end",
+                "end_of_the_begin",
+                "end_of_the_end",
+            ]:
                 if p in node:
                     val = node[p]
                     try:
@@ -118,7 +128,6 @@ class MlMapper(Mapper):
                 part["_content_html"] = content
 
     def get_pfx(self, typ, archive=False):
-
         if typ in ["VisualItem", "LinguisticObject"]:
             # facets["uiType"] = "CollectionWork"
             prefix = "work"
@@ -134,7 +143,14 @@ class MlMapper(Mapper):
         elif typ == "Place":
             # facets["uiType"] = "Place"
             prefix = "place"
-        elif typ in ["Type", "Language", "Material", "Currency", "MeasurementUnit", "Set"]:
+        elif typ in [
+            "Type",
+            "Language",
+            "Material",
+            "Currency",
+            "MeasurementUnit",
+            "Set",
+        ]:
             # Set here is Collection / Holdings. UI decision to put in with concepts
             # facets["uiType"] = "Concept"
             prefix = "concept"
@@ -180,8 +196,7 @@ class MlMapper(Mapper):
         me = data["id"]
 
         cxns = [x["id"] for x in data.get("classified_as", []) if "id" in x]
-        pfx = self.get_pfx(data['type'], archive=self.globals["archives"] in cxns)
-
+        pfx = self.get_pfx(data["type"], archive=self.globals["archives"] in cxns)
 
         # strip html from content, move to _content_html
         for part in data.get("referred_to_by", []):
@@ -230,7 +245,11 @@ class MlMapper(Mapper):
         isMFHD = False
         if "identified_by" in data:
             for i in data["identified_by"]:
-                if i["type"] == "Identifier" and "content" in i and i["content"].startswith("ils:yul:mfhd:"):
+                if (
+                    i["type"] == "Identifier"
+                    and "content" in i
+                    and i["content"].startswith("ils:yul:mfhd:")
+                ):
                     isMFHD = True
                     break
 
@@ -266,9 +285,13 @@ class MlMapper(Mapper):
                     node = [node]
                 for n in node:
                     if "carried_out_by" in n:
-                        agents.extend([x["id"] for x in n["carried_out_by"] if "id" in x])
+                        agents.extend(
+                            [x["id"] for x in n["carried_out_by"] if "id" in x]
+                        )
                     if "took_place_at" in n:
-                        places.extend([x["id"] for x in n["took_place_at"] if "id" in x])
+                        places.extend(
+                            [x["id"] for x in n["took_place_at"] if "id" in x]
+                        )
                     if "technique" in n:
                         techs.extend([x["id"] for x in n["technique"] if "id" in x])
                     if "caused_by" in n:
@@ -277,7 +300,7 @@ class MlMapper(Mapper):
                         for inf in n["influenced_by"]:
                             if "id" in inf:
                                 if "type" in inf:
-                                    infpfx = self.get_pfx(inf['type'])
+                                    infpfx = self.get_pfx(inf["type"])
                                 else:
                                     infpfx = "other"
                                 t = {
@@ -289,18 +312,26 @@ class MlMapper(Mapper):
                     if "part" in n:
                         for p in n["part"]:
                             if "carried_out_by" in p:
-                                agents.extend([x["id"] for x in p["carried_out_by"] if "id" in x])
+                                agents.extend(
+                                    [x["id"] for x in p["carried_out_by"] if "id" in x]
+                                )
                             if "took_place_at" in p:
-                                places.extend([x["id"] for x in p["took_place_at"] if "id" in x])
+                                places.extend(
+                                    [x["id"] for x in p["took_place_at"] if "id" in x]
+                                )
                             if "technique" in p:
-                                techs.extend([x["id"] for x in p["technique"] if "id" in x])
+                                techs.extend(
+                                    [x["id"] for x in p["technique"] if "id" in x]
+                                )
                             if "caused_by" in p:
-                                causes.extend([x["id"] for x in p["caused_by"] if "id" in x])
+                                causes.extend(
+                                    [x["id"] for x in p["caused_by"] if "id" in x]
+                                )
                             if "influenced_by" in p:
                                 for inf in p["influenced_by"]:
                                     if "id" in inf:
                                         if "type" in inf:
-                                            infpfx = self.get_pfx(inf['type'])
+                                            infpfx = self.get_pfx(inf["type"])
                                         else:
                                             infpfx = "other"
                                         t = {
@@ -314,22 +345,58 @@ class MlMapper(Mapper):
                                     if "assigned" in aa:
                                         for p2 in aa["assigned"]:
                                             if "carried_out_by" in p2:
-                                                agents.extend([x["id"] for x in p2["carried_out_by"] if "id" in x])
+                                                agents.extend(
+                                                    [
+                                                        x["id"]
+                                                        for x in p2["carried_out_by"]
+                                                        if "id" in x
+                                                    ]
+                                                )
                                             if "took_place_at" in p2:
-                                                places.extend([x["id"] for x in p2["took_place_at"] if "id" in x])
+                                                places.extend(
+                                                    [
+                                                        x["id"]
+                                                        for x in p2["took_place_at"]
+                                                        if "id" in x
+                                                    ]
+                                                )
                                             if "technique" in p2:
-                                                techs.extend([x["id"] for x in p2["technique"] if "id" in x])
+                                                techs.extend(
+                                                    [
+                                                        x["id"]
+                                                        for x in p2["technique"]
+                                                        if "id" in x
+                                                    ]
+                                                )
 
                     if "attributed_by" in n:
                         for p in n["attributed_by"]:
                             if "assigned" in p:
                                 for p2 in p["assigned"]:
                                     if "carried_out_by" in p2:
-                                        agents.extend([x["id"] for x in p2["carried_out_by"] if "id" in x])
+                                        agents.extend(
+                                            [
+                                                x["id"]
+                                                for x in p2["carried_out_by"]
+                                                if "id" in x
+                                            ]
+                                        )
                                     if "took_place_at" in p2:
-                                        places.extend([x["id"] for x in p2["took_place_at"] if "id" in x])
+                                        places.extend(
+                                            [
+                                                x["id"]
+                                                for x in p2["took_place_at"]
+                                                if "id" in x
+                                            ]
+                                        )
                                     if "technique" in p2:
-                                        techs.extend([x["id"] for x in p2["technique"] if "id" in x])
+                                        techs.extend(
+                                            [
+                                                x["id"]
+                                                for x in p2["technique"]
+                                                if "id" in x
+                                            ]
+                                        )
 
                 for a in agents:
                     t = {"subject": me, "predicate": f"{luxns}{apred}", "object": a}
@@ -355,10 +422,18 @@ class MlMapper(Mapper):
                 t = {"subject": me, "predicate": cxPred, "object": c}
                 ml["triples"].append({"triple": t})
                 if pfx in ["agent", "place", "concept", "event"]:
-                    t = {"subject": me, "predicate": f"{luxns}referenceClassifiedAs", "object": c}
+                    t = {
+                        "subject": me,
+                        "predicate": f"{luxns}referenceClassifiedAs",
+                        "object": c,
+                    }
                     ml["triples"].append({"triple": t})
                 if data["type"] == "Set":
-                    t = {"subject": me, "predicate": f"{luxns}setClassifiedAs", "object": c}
+                    t = {
+                        "subject": me,
+                        "predicate": f"{luxns}setClassifiedAs",
+                        "object": c,
+                    }
                     ml["triples"].append({"triple": t})
 
         if "member_of" in data:
@@ -374,23 +449,35 @@ class MlMapper(Mapper):
         if "equivalent" in data:
             for eq in data["equivalent"]:
                 if "id" in eq:
-                    t = {"subject": me, "predicate": f"{lans}equivalent", "object": eq["id"]}
+                    t = {
+                        "subject": me,
+                        "predicate": f"{lans}equivalent",
+                        "object": eq["id"],
+                    }
                     ml["triples"].append({"triple": t})
 
         if pfx == "agent":
             facets["nationalityId"] = [
                 x["id"]
                 for x in data.get("classified_as", [])
-                if self.globals["nationality"] in [y["id"] for y in x.get("classified_as", [])] and "id" in x
+                if self.globals["nationality"]
+                in [y["id"] for y in x.get("classified_as", [])]
+                and "id" in x
             ]
             for f in facets["nationalityId"]:
-                t = {"subject": me, "predicate": f"{luxns}agentNationality", "object": f}
+                t = {
+                    "subject": me,
+                    "predicate": f"{luxns}agentNationality",
+                    "object": f,
+                }
                 ml["triples"].append({"triple": t})
 
             facets["occupationId"] = [
                 x["id"]
                 for x in data.get("classified_as", [])
-                if self.globals["occupation"] in [y["id"] for y in x.get("classified_as", [])] and "id" in x
+                if self.globals["occupation"]
+                in [y["id"] for y in x.get("classified_as", [])]
+                and "id" in x
             ]
             for f in facets["occupationId"]:
                 t = {"subject": me, "predicate": f"{luxns}agentOccupation", "object": f}
@@ -403,7 +490,11 @@ class MlMapper(Mapper):
                     if self.globals["active"] in cxns:
                         for cx in cxns:
                             if cx != self.globals["active"]:
-                                t = {"subject": me, "predicate": f"{luxns}typeOfProfessionalActivity", "object": cx}
+                                t = {
+                                    "subject": me,
+                                    "predicate": f"{luxns}typeOfProfessionalActivity",
+                                    "object": cx,
+                                }
                                 ml["triples"].append({"triple": t})
 
         if data["type"] == "Person":
@@ -412,7 +503,9 @@ class MlMapper(Mapper):
             facets["genderId"] = [
                 x["id"]
                 for x in data.get("classified_as", [])
-                if self.globals["gender"] in [y["id"] for y in x.get("classified_as", [])] and "id" in x
+                if self.globals["gender"]
+                in [y["id"] for y in x.get("classified_as", [])]
+                and "id" in x
             ]
             for f in facets["genderId"]:
                 t = {"subject": me, "predicate": f"{luxns}agentGender", "object": f}
@@ -441,69 +534,129 @@ class MlMapper(Mapper):
             if "used_for" in data:
                 for uf in data["used_for"]:
                     if "id" in uf:
-                        t = {"subject": me, "predicate": f"{crmns}P16i_was_used_for", "object": uf["id"]}
+                        t = {
+                            "subject": me,
+                            "predicate": f"{crmns}P16i_was_used_for",
+                            "object": uf["id"],
+                        }
                         ml["triples"].append({"triple": t})
                     elif "classified_as" in uf and "carried_out_by" in uf:
                         for c in uf["classified_as"]:
                             if "id" in c and c["id"] == self.globals["curation"]:
                                 for who in uf["carried_out_by"]:
                                     if "id" in who:
-                                        t = {"subject": me, "predicate": f"{luxns}agentOfCuration", "object": who["id"]}
+                                        t = {
+                                            "subject": me,
+                                            "predicate": f"{luxns}agentOfCuration",
+                                            "object": who["id"],
+                                        }
                                         ml["triples"].append({"triple": t})
 
         if data["type"] == "HumanMadeObject":
             if "carries" in data:
                 for c in data["carries"]:
                     if "id" in c:
-                        t = {"subject": me, "predicate": f"{luxns}carries_or_shows", "object": c["id"]}
+                        t = {
+                            "subject": me,
+                            "predicate": f"{luxns}carries_or_shows",
+                            "object": c["id"],
+                        }
                         ml["triples"].append({"triple": t})
-                        t = {"subject": me, "predicate": f"{crmns}P128_carries", "object": c["id"]}
+                        t = {
+                            "subject": me,
+                            "predicate": f"{crmns}P128_carries",
+                            "object": c["id"],
+                        }
                         ml["triples"].append({"triple": t})
 
             if "shows" in data:
                 for s in data["shows"]:
                     if "id" in s:
-                        t = {"subject": me, "predicate": f"{luxns}carries_or_shows", "object": s["id"]}
+                        t = {
+                            "subject": me,
+                            "predicate": f"{luxns}carries_or_shows",
+                            "object": s["id"],
+                        }
                         ml["triples"].append({"triple": t})
-                        t = {"subject": me, "predicate": f"{crmns}P65_shows_visual_item", "object": s["id"]}
+                        t = {
+                            "subject": me,
+                            "predicate": f"{crmns}P65_shows_visual_item",
+                            "object": s["id"],
+                        }
                         ml["triples"].append({"triple": t})
             if "made_of" in data:
                 for m in data["made_of"]:
                     if "id" in m:
-                        t = {"subject": me, "predicate": f"{crmns}P45_consists_of", "object": m["id"]}
+                        t = {
+                            "subject": me,
+                            "predicate": f"{crmns}P45_consists_of",
+                            "object": m["id"],
+                        }
                         ml["triples"].append({"triple": t})
 
         elif data["type"] == "DigitalObject":
             if "digitally_carries" in data:
                 for c in data["digitally_carries"]:
                     if "id" in c:
-                        t = {"subject": me, "predicate": f"{luxns}carries_or_shows", "object": c["id"]}
+                        t = {
+                            "subject": me,
+                            "predicate": f"{luxns}carries_or_shows",
+                            "object": c["id"],
+                        }
                         ml["triples"].append({"triple": t})
-                        t = {"subject": me, "predicate": f"{lans}digitally_carries", "object": c["id"]}
+                        t = {
+                            "subject": me,
+                            "predicate": f"{lans}digitally_carries",
+                            "object": c["id"],
+                        }
                         ml["triples"].append({"triple": t})
 
             if "digitally_shows" in data:
                 for s in data["digitally_shows"]:
                     if "id" in s:
-                        t = {"subject": me, "predicate": f"{luxns}carries_or_shows", "object": s["id"]}
+                        t = {
+                            "subject": me,
+                            "predicate": f"{luxns}carries_or_shows",
+                            "object": s["id"],
+                        }
                         ml["triples"].append({"triple": t})
-                        t = {"subject": me, "predicate": f"{lans}digitally_shows", "object": s["id"]}
+                        t = {
+                            "subject": me,
+                            "predicate": f"{lans}digitally_shows",
+                            "object": s["id"],
+                        }
                         ml["triples"].append({"triple": t})
 
         elif data["type"] in ["LinguisticObject", "Set"]:
             if "about" in data:
                 for a in data["about"]:
                     if "id" in a:
-                        t = {"subject": me, "predicate": f"{luxns}about_or_depicts", "object": a["id"]}
+                        t = {
+                            "subject": me,
+                            "predicate": f"{luxns}about_or_depicts",
+                            "object": a["id"],
+                        }
                         ml["triples"].append({"triple": t})
-                        t = {"subject": me, "predicate": f"{crmns}P129_is_about", "object": a["id"]}
+                        t = {
+                            "subject": me,
+                            "predicate": f"{crmns}P129_is_about",
+                            "object": a["id"],
+                        }
                         ml["triples"].append({"triple": t})
                         # add target specific triples
                         if "type" in a:
                             apfx = self.get_pfx(a["type"])
-                            t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{apfx}", "object": a["id"]}
+                            t = {
+                                "subject": me,
+                                "predicate": f"{luxns}about_or_depicts_{apfx}",
+                                "object": a["id"],
+                            }
                             ml["triples"].append({"triple": t})
-                            t = {"subject": me, "predicate": f"{luxns}about_{apfx}", "object": a["id"]}
+                            t = {
+                                "subject": me,
+                                "predicate": f"{luxns}about_{apfx}",
+                                "object": a["id"],
+                            }
                             ml["triples"].append({"triple": t})
 
             if "language" in data:
@@ -511,7 +664,11 @@ class MlMapper(Mapper):
                 langs = [x["id"] for x in data.get("language", []) if "id" in x]
                 lPred = f"{luxns}{pfx}Language"
                 for l in langs:
-                    t = {"subject": me, "predicate": f"{crmns}P72_has_language", "object": l}
+                    t = {
+                        "subject": me,
+                        "predicate": f"{crmns}P72_has_language",
+                        "object": l,
+                    }
                     ml["triples"].append({"triple": t})
                     t = {"subject": me, "predicate": lPred, "object": l}
                     ml["triples"].append({"triple": t})
@@ -521,36 +678,72 @@ class MlMapper(Mapper):
                 parts = [x["id"] for x in data["part_of"] if "id" in x]
                 whole.extend(parts)
             for w in whole:
-                t = {"subject": me, "predicate": f"{crmns}P106i_forms_part_of", "object": w}
+                t = {
+                    "subject": me,
+                    "predicate": f"{crmns}P106i_forms_part_of",
+                    "object": w,
+                }
                 ml["triples"].append({"triple": t})
 
         elif data["type"] == "VisualItem":
             if "about" in data:
                 for a in data["about"]:
                     if "id" in a:
-                        t = {"subject": me, "predicate": f"{luxns}about_or_depicts", "object": a["id"]}
+                        t = {
+                            "subject": me,
+                            "predicate": f"{luxns}about_or_depicts",
+                            "object": a["id"],
+                        }
                         ml["triples"].append({"triple": t})
-                        t = {"subject": me, "predicate": f"{crmns}P129_is_about", "object": a["id"]}
+                        t = {
+                            "subject": me,
+                            "predicate": f"{crmns}P129_is_about",
+                            "object": a["id"],
+                        }
                         ml["triples"].append({"triple": t})
                         if "type" in a:
                             apfx = self.get_pfx(a["type"])
-                            t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{ayp}", "object": a["id"]}
+                            t = {
+                                "subject": me,
+                                "predicate": f"{luxns}about_or_depicts_{apfx}",
+                                "object": a["id"],
+                            }
                             ml["triples"].append({"triple": t})
-                            t = {"subject": me, "predicate": f"{luxns}about_{atyp}", "object": a["id"]}
+                            t = {
+                                "subject": me,
+                                "predicate": f"{luxns}about_{apfx}",
+                                "object": a["id"],
+                            }
                             ml["triples"].append({"triple": t})
 
             if "represents" in data:
                 for r in data["represents"]:
                     if "id" in r:
-                        t = {"subject": me, "predicate": f"{luxns}about_or_depicts", "object": r["id"]}
+                        t = {
+                            "subject": me,
+                            "predicate": f"{luxns}about_or_depicts",
+                            "object": r["id"],
+                        }
                         ml["triples"].append({"triple": t})
-                        t = {"subject": me, "predicate": f"{crmns}P138_represents", "object": r["id"]}
+                        t = {
+                            "subject": me,
+                            "predicate": f"{crmns}P138_represents",
+                            "object": r["id"],
+                        }
                         ml["triples"].append({"triple": t})
                         if "type" in r:
                             rpfx = self.get_pfx(r["type"])
-                            t = {"subject": me, "predicate": f"{luxns}about_or_depicts_{rtyp}", "object": r["id"]}
+                            t = {
+                                "subject": me,
+                                "predicate": f"{luxns}about_or_depicts_{rpfx}",
+                                "object": r["id"],
+                            }
                             ml["triples"].append({"triple": t})
-                            t = {"subject": me, "predicate": f"{luxns}depicts_{rtyp}", "object": r["id"]}
+                            t = {
+                                "subject": me,
+                                "predicate": f"{luxns}depicts_{rpfx}",
+                                "object": r["id"],
+                            }
                             ml["triples"].append({"triple": t})
 
         elif pfx == "event":
@@ -570,7 +763,11 @@ class MlMapper(Mapper):
             if "used_specific_object" in data:
                 for uso in data["used_specific_object"]:
                     if "id" in uso:
-                        t = {"subject": me, "predicate": f"{crmns}P16_used_specific_object", "object": uso["id"]}
+                        t = {
+                            "subject": me,
+                            "predicate": f"{crmns}P16_used_specific_object",
+                            "object": uso["id"],
+                        }
                         ml["triples"].append({"triple": t})
 
         elif pfx == "concept":
@@ -578,14 +775,22 @@ class MlMapper(Mapper):
             if "broader" in data:
                 for b in data["broader"]:
                     if "id" in b:
-                        t = {"subject": me, "predicate": f"{skosns}broader", "object": b["id"]}
+                        t = {
+                            "subject": me,
+                            "predicate": f"{skosns}broader",
+                            "object": b["id"],
+                        }
                         ml["triples"].append({"triple": t})
 
         elif data["type"] == "Place":
             if "part_of" in data:
                 for p in data["part_of"]:
                     if "id" in p:
-                        t = {"subject": me, "predicate": f"{crmns}P89_falls_within", "object": p["id"]}
+                        t = {
+                            "subject": me,
+                            "predicate": f"{crmns}P89_falls_within",
+                            "object": p["id"],
+                        }
                         ml["triples"].append({"triple": t})
 
         # Add in inter-record shortcut triples
@@ -646,11 +851,21 @@ class MlMapper(Mapper):
                                         ap = apo.get("id", "")
                                         if (
                                             ap
-                                            and not ap.startswith("https://search.library.yale.edu/")
-                                            and not ap.startswith("https://collections.britishart.yale.edu/")
-                                            and not ap.startswith("https://artgallery.yale.edu/")
-                                            and not ap.startswith("https://collections.peabody.yale.edu/")
-                                            and not ap.startswith("https://archives.yale.edu/")
+                                            and not ap.startswith(
+                                                "https://search.library.yale.edu/"
+                                            )
+                                            and not ap.startswith(
+                                                "https://collections.britishart.yale.edu/"
+                                            )
+                                            and not ap.startswith(
+                                                "https://artgallery.yale.edu/"
+                                            )
+                                            and not ap.startswith(
+                                                "https://collections.peabody.yale.edu/"
+                                            )
+                                            and not ap.startswith(
+                                                "https://archives.yale.edu/"
+                                            )
                                         ):
                                             facets["isOnline"] = 1
 
@@ -661,7 +876,10 @@ class MlMapper(Mapper):
                 for r in data["subject_to"]:
                     if "classified_as" in r:
                         for c in r["classified_as"]:
-                            if "id" in c and "creativecommons.org/publicdomain" in c["id"]:
+                            if (
+                                "id" in c
+                                and "creativecommons.org/publicdomain" in c["id"]
+                            ):
                                 facets["isPublicDomain"] = 1
 
         ml["indexedProperties"] = facets
