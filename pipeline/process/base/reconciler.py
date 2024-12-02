@@ -51,13 +51,13 @@ class Reconciler(object):
 
         check_langs = {
             ns + gbls["lang_en"]: 1,  # 820,063
-            ns + gbls["lang_fr"]: 2,  # 308,196
-            ns + gbls["lang_nl"]: 3,  # 307,119
-            ns + gbls["lang_de"]: 4,  # 304,000
-            ns + gbls["lang_es"]: 5,  # 259,160
-            ns + gbls["lang_ar"]: 6,  # 184,612
-            ns + "300389115": 7,  # 172,184
-            ns + gbls["lang_zh"]: 8,  # 148,055
+            ns + gbls["lang_fr"]: 3,  # 308,196
+            ns + gbls["lang_nl"]: 4,  # 307,119
+            ns + gbls["lang_de"]: 5,  # 304,000
+            ns + gbls["lang_es"]: 6,  # 259,160
+            ns + gbls["lang_ar"]: 7,  # 184,612
+            ns + "300389115": 8,  # 172,184
+            ns + gbls["lang_zh"]: 9,  # 148,055
         }
 
         # FIXME: These should be globals!
@@ -80,13 +80,12 @@ class Reconciler(object):
                 print(f"  None in Name classifications: {rec['id']}")
 
             if aat_primaryName in cxnids and "content" in nm:
-                val = nm["content"]
+                val = nm["content"].lower().strip()
                 for lang_id, num in check_langs.items():
                     if lang_id in langids:
-                        val = nm["content"].lower().strip()
                         vals[val] = num
                     else:
-                        vals[val] = 3
+                        vals[val] = 2
 
                 if typ == "Person":
                     if "part" in nm:
