@@ -81,6 +81,8 @@ def process_operation(what, xpath, operation, argument=None):
                 idx = 0
             path.append((key, idx))
 
+        print(f"Path being processed: {path}")
+
         tgt = what
         for tag, idx in path[:-1]:
             if tag in tgt:
@@ -99,6 +101,9 @@ def process_operation(what, xpath, operation, argument=None):
             else:
                 del tgt[tag]
         elif operation == "UPDATE":
+            print(f"Target before update: {tgt}")
+            print(f"Updating tag: {tag} with argument: {argument}")
+
             tgt[tag] = argument
         elif operation == "APPEND":
             print(f"Got APPEND operation from fixes, and not yet implemented")
