@@ -451,7 +451,7 @@ class WdMapper(Mapper, WdConfigManager):
                 if ref and ref.__class__ == model.Group:
                     top.member_of = ref
 
-        participant = data.get("P1344")
+        participant = data.get("P1344", None)
         if participant:
             for p in participant:
                 ref = self.get_reference(p)
@@ -523,13 +523,14 @@ class WdMapper(Mapper, WdConfigManager):
         gender = data.get("P21", None)
         if not type(gender) == list:
             gender = [gender]
-        for g in gender:
-            if g in self.gender_map:
-                top.classified_as = self.gender_map[g]
-            else:
-                # FIXME: logging
-                # print(f"Unknown wikidata gender: {g}")
-                pass
+        if gender:
+            for g in gender:
+                if g in self.gender_map:
+                    top.classified_as = self.gender_map[g]
+                else:
+                    # FIXME: logging
+                    # print(f"Unknown wikidata gender: {g}")
+                    pass
 
         bdate = data.get("P569", None)
         if bdate:
@@ -936,8 +937,9 @@ class WdMapper(Mapper, WdConfigManager):
 
         mats = data.get("P186", [])
         # materials
-        for m in mats:
-            top.made_of = model.Material(ident=self.expand_uri(m))
+        if mats:
+            for m in mats:
+                top.made_of = model.Material(ident=self.expand_uri(m))
 
         width = data.get("P2049", None)
         height = data.get("P2048", None)
@@ -1019,12 +1021,14 @@ class WdMapper(Mapper, WdConfigManager):
         if author or cre_place or cre_date:
             cre = model.Creation()
             top.created_by = cre
-            for a in author:
-                ref = self.get_reference(a)
-                if ref and ref.__class__ in [model.Person, model.Group]:
-                    cre.carried_out_by = ref
-            for p in cre_place:
-                cre.took_place_at = model.Place(ident=self.expand_uri(p))
+            if author:
+                for a in author:
+                    ref = self.get_reference(a)
+                    if ref and ref.__class__ in [model.Person, model.Group]:
+                        cre.carried_out_by = ref
+            if cre_place:
+                for p in cre_place:
+                    cre.took_place_at = model.Place(ident=self.expand_uri(p))
             if cre_date:
                 bdate, precision = self.clean_date(cre_date)
                 try:
@@ -1044,12 +1048,14 @@ class WdMapper(Mapper, WdConfigManager):
         if publisher or pub_place or pub_date:
             pub = vocab.Publishing()
             top.used_for = pub
-            for p in publisher:
-                ref = self.get_reference(p)
-                if ref and ref.__class__ in [model.Group, model.Person]:
-                    pub.carried_out_by = ref
-            for p in pub_place:
-                pub.took_place_at = model.Place(ident=self.expand_uri(p))
+            if publisher:
+                for p in publisher:
+                    ref = self.get_reference(p)
+                    if ref and ref.__class__ in [model.Group, model.Person]:
+                        pub.carried_out_by = ref
+            if pub_place:
+                for p in pub_place:
+                    pub.took_place_at = model.Place(ident=self.expand_uri(p))
             if pub_date:
                 bdate, precision = self.clean_date(pub_date)
                 try:
@@ -1075,8 +1081,9 @@ class WdMapper(Mapper, WdConfigManager):
 
     def process_linguisticobject(self, data, top):
         lang = data.get("P407", [])
-        for l in lang:
-            top.language = model.Language(ident=self.expand_uri(l))
+        if lang:
+            for l in lang:
+                top.language = model.Language(ident=self.expand_uri(l))
 
         self.process_work(data, top)
         self.process_imageref(data, top)
@@ -1116,15 +1123,17 @@ class WdMapper(Mapper, WdConfigManager):
         participant = data.get("P710",[])
         chairperson = data.get("P488",[])
         participants = participant + chairperson
-        for p in participants:
-            pref = self.get_reference(p)
-            if pref and pref.__class__ in [model.Group, model.Person]:
-                top.participant = pref
+        if participants:
+            for p in participants:
+                pref = self.get_reference(p)
+                if pref and pref.__class__ in [model.Group, model.Person]:
+                    top.participant = pref
 
         #P361 part_of
         broader = data.get("P361",[])
-        for b in broader:
-            top.part_of = model.Activity(ident=self.expand_uri(b))
+        if broader:
+            for b in broader:
+                top.part_of = model.Activity(ident=self.expand_uri(b))
 
 
         country = data.get("P17",[])
@@ -1132,8 +1141,9 @@ class WdMapper(Mapper, WdConfigManager):
         venue = data.get("P2293",[])
         
         places = country + location + venue
-        for p in places:
-            top.took_place_at = model.Place(ident=self.expand_uri(p))
+        if places:
+            for p in places:
+                top.took_place_at = model.Place(ident=self.expand_uri(p))
 
         self.process_imageref(data, top)
 
