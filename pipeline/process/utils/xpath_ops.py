@@ -115,4 +115,8 @@ if __name__ == "__main__":
     js = resp.json()
     del js["_links"]
     xml_representation = dicttoxml(js)
-    print(xml_representation)
+    #print(xml_representation)
+    xpath_query = "/referred_to_by[./classified_as/id='http://vocab.getty.edu/aat/300435316']/content"
+    matching_paths = xpath_on_record(js, xpath_query)
+    print(matching_paths)
+
