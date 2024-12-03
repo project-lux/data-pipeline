@@ -114,3 +114,5 @@ if __name__ == "__main__":
     resp = requests.get("https://lux.collections.yale.edu/data/person/280f4fa4-bb4a-4a87-85e6-b3295e348f0e")
     js = resp.json()
     del js["_links"]
+    xml_representation = dicttoxml(js)
+    print(xml_representation)
