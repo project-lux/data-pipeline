@@ -111,6 +111,6 @@ def process_operation(what, xpath, operation, argument=None):
 if __name__ == "__main__":
     import requests
 
-    resp = requests.get("https://lux.collections.yale.edu/data/object/436afada-ac05-455e-922a-2a99dfb040b2")
+    resp = requests.get("https://lux.collections.yale.edu/data/person/280f4fa4-bb4a-4a87-85e6-b3295e348f0e")
     js = resp.json()
     del js["_links"]
