@@ -65,9 +65,11 @@ def xpath_on_record(what, xpath):
 
 def process_operation(what, xpath, operation, argument=None):
     paths = xpath_on_record(what, xpath)
+    print(f"Matching paths: {paths}")
     # filters and relative paths are now resolved to absolute, index based paths
     paths.reverse()  # process from end to beginning to avoid data changing relative to indexes
     for p in paths:
+        print(f"Processing path: {p}")
         bits = p[1:].split("/")
         path = []
         for bit in bits:
@@ -80,8 +82,6 @@ def process_operation(what, xpath, operation, argument=None):
                 key = bit
                 idx = 0
             path.append((key, idx))
-
-        print(f"Path being processed: {path}")
 
         tgt = what
         for tag, idx in path[:-1]:
