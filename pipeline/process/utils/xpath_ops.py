@@ -113,11 +113,11 @@ def process_operation(what, xpath, operation, argument=None):
     return what
 
 
-if __name__ == "__main__":
-    import requests
+# if __name__ == "__main__":
+#     import requests
 
-    resp = requests.get("https://lux.collections.yale.edu/data/person/280f4fa4-bb4a-4a87-85e6-b3295e348f0e")
-    js = resp.json()
-    del js["_links"]
+#     resp = requests.get("https://lux.collections.yale.edu/data/person/280f4fa4-bb4a-4a87-85e6-b3295e348f0e")
+#     js = resp.json()
+#     del js["_links"]
 
 
