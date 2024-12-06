@@ -53,7 +53,7 @@ class PmhHarvester(Harvester):
 		self.metadataPrefix = config.get('pmhMetadataPrefix', 'oai_dc')
 		self.namespaces = {"oai": "http://www.openarchives.org/OAI/2.0/"}
 		# https://photoarchive.paul-mellon-centre.ac.uk/apis/oai/pmh/v2
-		# https://snd.gu.se/oai-pmh
+		# https://snd.gu.se/oai-pm h
 
 	def make_pmh_uri(self, verb, token=None):
 		if token is None:
