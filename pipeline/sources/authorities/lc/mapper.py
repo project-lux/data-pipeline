@@ -32,9 +32,21 @@ class LcMapper(Mapper):
         self.ignore_types = ["madsrdf:DeprecatedAuthority", "madsrdf:NameTitle"]
 
     def build_recs_and_reconcile(self, txt, rectype=""):
-        # reconrec returns URI
+        """
+        Builds a record and reconciles it based on the provided type.
+
+        Args:
+            txt (str): The textual content to reconcile.
+            rectype (str): The type of the record (e.g., Place, Concept, Person).
+
+        Returns:
+            URI or None: The reconciled record's URI, or None if reconciliation fails.
+        """
+        # Fetch the appropriate reconcilers
         nafreconciler = self.config["all_configs"].external["lcnaf"]["reconciler"]
         shreconciler = self.config["all_configs"].external["lcsh"]["reconciler"]
+
+        # Base record structure
         rec = {
             "type": "",
             "identified_by": [
@@ -45,28 +57,28 @@ class LcMapper(Mapper):
                 }
             ],
         }
-        if rectype == "Place":
-            rec["type"] = "Place"
-            reconrec = nafreconciler.reconcile(rec, reconcileType="name")
-        elif rectype == "Concept":
-            rec["type"] = "Type"
-            reconrec = shreconciler.reconcile(rec, reconcileType="name")
-        elif rectype == "Group":
-            rec["type"] = "Group"
-            reconrec = nafreconciler.reconcile(rec, reconcileType="name")
-        elif rectype == "Person":
-            rec["type"] = "Person"
-            reconrec = nafreconciler.reconcile(rec, reconcileType="name")
-        elif rectype == "Type":
-            rec["type"] = "Type"
-            reconrec = shreconciler.reconcile(rec, reconcileType="name")
-        elif rectype == "Activity":
-            rec["type"] = "Activity"
-            reconrec = nafreconciler.reconcile(rec, reconcileType="name")
+
+        # Map rectype to reconciler and record type
+        reconcilers = {
+            "Place": (nafreconciler, "Place"),
+            "Concept": (shreconciler, "Type"),
+            "Group": (nafreconciler, "Group"),
+            "Person": (nafreconciler, "Person"),
+            "Type": (shreconciler, "Type"),
+            "Activity": (nafreconciler, "Activity"),
+        }
+
+        if rectype in reconcilers:
+            reconciler, rec_type = reconcilers[rectype]
+            rec["type"] = rec_type
+            reconrec = reconciler.reconcile(rec, reconcileType="name")
         else:
+            # Handle invalid rectype
+            print(f"Warning: Unrecognized rectype '{rectype}'")
             reconrec = None
 
         return reconrec
+
 
     def fix_identifier(self, identifier):
         if identifier == "@@LMI-SPECIAL-TERM@@":
