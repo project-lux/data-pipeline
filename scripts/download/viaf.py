@@ -24,12 +24,11 @@ The script consists of three main functions:
      error message if no valid URL is found.
 
 ## Example usage:
-url=$(python3 scripts/download/viaf.py)
+url=$(python scripts/download/viaf.py)
 curl -O "$url"
 """
 
 import re
-import requests
 from bs4 import BeautifulSoup
 from utils import fetch_webpage
 import sys
