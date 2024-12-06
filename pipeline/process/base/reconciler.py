@@ -34,7 +34,7 @@ class Reconciler(object):
                 return False
             if "equivalent" not in data:
                 return False
-        elif reconcileType == "all" and seld.name_index is None and self.id_index is None:
+        elif reconcileType == "all" and self.name_index is None and self.id_index is None:
             return False
 
         if rec.get("source") and rec["source"] == self.config["name"]:
@@ -183,8 +183,6 @@ class LmdbReconciler(Reconciler):
         if not reconcileType in ["all", "name", "uri"]:
             return None
         if not self.should_reconcile(rec, reconcileType):
-            print(f"rec at line 178 is {rec}")
-            print(f"reconcileType at line 179 is {reconcileType}")
             return None
         if "data" in rec:
             rec = rec["data"]
