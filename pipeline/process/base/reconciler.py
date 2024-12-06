@@ -13,24 +13,34 @@ class Reconciler(object):
         self.debug_graph = {}
 
     def should_reconcile(self, rec, reconcileType="all"):
-        if "data" in rec:
-            data = rec["data"]
-        if self.name_index is None and reconcileType == "name":
+        """
+        Determines whether a record should be reconciled based on the type of reconciliation.
+
+        Args:
+            rec (dict): The record to evaluate for reconciliation.
+            reconcileType (str): The type of reconciliation ("name", "uri", or "all").
+
+        Returns:
+            bool: True if the record should be reconciled, False otherwise.
+        """
+        data = rec.get("data",rec)
+        if reconcileType == "name":
+            if self.name_index is None:
+                return False
+            if "identified_by" not in data:
+                return False  # Records without names should not be reconciled
+        elif reconcileType == "uri":
+            if self.id_index is None:
+                return False
+            if "equivalent" not in data:
+                return False
+        elif reconcileType == "all" and self.name_index is None and self.id_index is None:
             return False
-        elif self.id_index is None and reconcileType == "uri":
-            return False
-        elif "identified_by" not in data and reconcileType == "name":
-            # record without a name should never happen ... but ...
-            return False
-        elif "equivalent" not in data and reconcileType == "uri":
-            return False
-        elif "source" in rec and rec["source"] == self.config["name"]:
+
+        if rec.get("source") and rec["source"] == self.config["name"]:
             # Don't reconcile against self
             return False
-        elif (
-            self.name_index is None and self.id_index is None and reconcileType == "all"
-        ):
-            return False
+
         return True
 
     def reconcile(self, record, reconcileType="all"):
