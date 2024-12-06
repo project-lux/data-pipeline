@@ -236,29 +236,22 @@ class LcMapper(Mapper):
             earlier = new.get("madsrdf:hasEarlierEstablishedForm", [])
             earliers = []
             if earlier:
-                if type(earlier) != list:
+                if not isinstance(earlier, list):
                     earlier = [earlier]
+
                 for e in earlier:
-                    if "madsrdf:variantLabel" in e:
-                        if "@value" in e["madsrdf:variantLabel"]:
-                            txt = e['madsrdf:variantLabel']['@value']
-                        else:
-                            txt = e['madsrdf:variantLabel']
+                    txt = e.get("madsrdf:variantLabel", {}).get("@value", e.get("madsrdf:variantLabel"))
+                    eid = e.get("@id")
+
+                    reid = None 
+                    if eid and eid.startswith("_:"):
+                        if txt:
+                            reid = self.build_recs_and_reconcile(txt, type(top).__name__)
+                            print(f"Earlier form reconciled for {new['@id']}")
                     else:
-                        txt = None
-                    if "@id" in e:
-                        eid = e['@id']
-                    else:
-                        eid = None
-                    if eid.startswith("_:") and txt:
-                        reid = self.build_recs_and_reconcile(txt, type(top).__name__)
-                    elif not txt and eid.startswith("_:"):
-                        reid = None
-                    else:
-                        reid = eid 
+                        reid = eid
                     if reid:
                         earliers.append(reid)
-                        print(f"Earlier form reconciled for {new['@id']}")
                 ex.extend(earliers)
 
         # skos:closeMatch -- Only as a last resort
