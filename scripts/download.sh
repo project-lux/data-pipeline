@@ -1,16 +1,17 @@
 #!/bin/bash
-
-# This script downloads the latest VIAF data file.
+# This script downloads data files from various sources.
 #
-# It first uses a Python script to fetch and parse the VIAF data page to get the URL
-# of the latest data file (in the format viaf-NNNNNNNN-clusters.xml.gz).
-# Then it downloads that file using curl.
+# For each source, it uses a Python script to fetch and parse the source's data page
+# to get the URL of the latest data file. Then it downloads that file using curl.
 #
-# The Python script will exit with status 1 if it fails to fetch the URL or if no
-# valid file URL is found. Otherwise it prints just the URL to stdout.
+# Currently supported sources:
+# - viaf: Downloads VIAF clusters data file (viaf-NNNNNNNN-clusters.xml.gz)
+#
+# The Python scripts will exit with status 1 if they fail to fetch the URL or if no
+# valid file URL is found. Otherwise they print just the URL to stdout.
 
 # Example usage:
-# sudo bash scripts/download.sh  --source=viaf
+# sudo bash scripts/download.sh --source=viaf
 
 source=""
 
