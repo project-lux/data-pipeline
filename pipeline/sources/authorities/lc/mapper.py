@@ -56,21 +56,26 @@ class LcMapper(Mapper):
                     "classified_as": [{"id": "http://vocab.getty.edu/aat/300404670"}],
                 }
             ],
+            "source": ""
         }
 
         # Map rectype to reconciler and record type
         reconcilers = {
-            "Place": (nafreconciler, "Place"),
-            "Concept": (shreconciler, "Type"),
-            "Group": (nafreconciler, "Group"),
-            "Person": (nafreconciler, "Person"),
-            "Type": (shreconciler, "Type"),
-            "Activity": (nafreconciler, "Activity"),
+            "Place": nafreconciler,
+            "Concept": shreconciler,
+            "Group": nafreconciler,
+            "Person": nafreconciler, 
+            "Type": shreconciler,
+            "Activity": nafreconciler
         }
 
         if rectype in reconcilers:
-            reconciler, rec_type = reconcilers[rectype]
-            rec["type"] = rec_type
+            reconciler = reconcilers[rectype]
+            rec["type"] = rectype
+            if rectype in ["Place","Group","Person","Ativity"]:
+                rec["source"] = "lcnaf"
+            else:
+                rec["source"] = "lcsh"
             reconrec = reconciler.reconcile(rec, reconcileType="name")
         else:
             # Handle invalid rectype
