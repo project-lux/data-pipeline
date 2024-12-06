@@ -13,6 +13,8 @@ class Reconciler(object):
         self.debug_graph = {}
 
     def should_reconcile(self, rec, reconcileType="all"):
+        print(f"Debug: rec={rec}, reconcileType={reconcileType}")
+        print(f"Debug: data={data}") 
         if "data" in rec:
             data = rec["data"]
         if self.name_index is None and reconcileType == "name":
