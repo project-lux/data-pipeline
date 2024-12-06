@@ -238,22 +238,21 @@ class LcMapper(Mapper):
             if earlier:
                 if not isinstance(earlier, list):
                     earlier = [earlier]
-                    print(f"Earlier is {earlier}")
                 for e in earlier:
                     print(f"----Type of E is {type(e)}\n")
-                #     txt = e.get("madsrdf:variantLabel", {}).get("@value", e.get("madsrdf:variantLabel"))
-                #     eid = e.get("@id")
+                    txt = e.get("madsrdf:variantLabel", {}).get("@value", e.get("madsrdf:variantLabel"))
+                    eid = e.get("@id")
 
-                #     reid = None 
-                #     if eid and eid.startswith("_:"):
-                #         if txt:
-                #             reid = self.build_recs_and_reconcile(txt, type(top).__name__)
-                #             print(f"Earlier form reconciled for {new['@id']}")
-                #     else:
-                #         reid = eid
-                #     if reid:
-                #         earliers.append(reid)
-                # ex.extend(earliers)
+                    reid = None 
+                    if eid and eid.startswith("_:"):
+                        if txt:
+                            reid = self.build_recs_and_reconcile(txt, type(top).__name__)
+                            print(f"Earlier form reconciled for {new['@id']}")
+                    else:
+                        reid = eid
+                    if reid:
+                        earliers.append(reid)
+                ex.extend(earliers)
 
         # skos:closeMatch -- Only as a last resort
         close = new.get("madsrdf:hasCloseExternalAuthority", [])
