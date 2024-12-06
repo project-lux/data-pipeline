@@ -55,7 +55,7 @@ class LcMapper(Mapper):
             rec["type"] = "Group"
             reconrec = nafreconciler.reconcile(rec, reconcileType="name")
         elif rectype == "Person":
-            rec["type"] == "Person"
+            rec["type"] = "Person"
             reconrec = nafreconciler.reconcile(rec, reconcileType="name")
         elif rectype == "Type":
             rec["type"] = "Type"
