@@ -239,8 +239,8 @@ class LcMapper(Mapper):
                 if not isinstance(earlier, list):
                     earlier = [earlier]
                 for e in earlier:
-                    print(f"----Type of E is {type(e)}\n")
-                    txt = e.get("madsrdf:variantLabel", {}).get("@value", e.get("madsrdf:variantLabel"))
+                    txt = e.get("madsrdf:variantLabel")
+                    txt = txt.get("@value") if isinstance(txt, dict) else txt
                     eid = e.get("@id")
 
                     reid = None 
