@@ -240,7 +240,7 @@ class LcMapper(Mapper):
                     earlier = [earlier]
                     print(f"Earlier is {earlier}")
                 for e in earlier:
-                    print(f"----E is {e}\n")
+                    print(f"----Type of E is {type(e)}\n")
                 #     txt = e.get("madsrdf:variantLabel", {}).get("@value", e.get("madsrdf:variantLabel"))
                 #     eid = e.get("@id")
 
