@@ -8,24 +8,12 @@ from pipeline.sources.utils import fetch_webpage
 
 def main():
     """
-    This script is designed to fetch the VIAF data page, extract the first `resource` URL
-    that matches the specific pattern:
-    `https://viaf.org/viaf/data/viaf-NNNNNNNN-clusters.xml.gz`, where `NNNNNNNN` represents
-    a variable numeric identifier, and print the URL.
+    This script is designed to combine the utility function fetch_webpage with the VIAF parser 
+    to return the download URL to the download.sh script.
 
-    The script consists of two main functions:
-
-    1. **parse_viaf(html_content):**
-    - Parses the fetched HTML content using `BeautifulSoup`.
-    - Searches within the `<article class="data-files">` section for `<dl>` elements with
-        a `resource` attribute.
-    - Validates that the `resource` attribute matches the required URL pattern using
-        regular expressions.
-    - Returns the first matching URL or `None` if no match is found.
-
-    2. **main():**
+    **main():**
     - Uses the imported fetch_webpage function to fetch the webpage.
-    - Then calls the parse_viaf function  to parse the webpage.
+    - Calls the imported parse_viaf function to parse the webpage.
     - Prints the first valid `resource` URL matching the pattern or an appropriate
         error message if no valid URL is found.
     - Returns the valid url.
