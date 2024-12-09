@@ -4,13 +4,9 @@ that matches the specific pattern:
 `https://viaf.org/viaf/data/viaf-NNNNNNNN-clusters.xml.gz`, where `NNNNNNNN` represents
 a variable numeric identifier, and print the URL.
 
-The script consists of three main functions:
+The script consists of two main functions:
 
-1. **fetch_webpage(url):**
-   - Fetches the HTML content of the specified URL using the `requests` library.
-   - Includes error handling to manage network-related issues.
-
-2. **parse_file_url(html_content):**
+1. **parse_viaf(html_content):**
    - Parses the fetched HTML content using `BeautifulSoup`.
    - Searches within the `<article class="data-files">` section for `<dl>` elements with
      a `resource` attribute.
@@ -18,10 +14,12 @@ The script consists of three main functions:
      regular expressions.
    - Returns the first matching URL or `None` if no match is found.
 
-3. **main():**
-   - Combines the above two functions to fetch and parse the webpage.
+2. **main():**
+   - Uses the imported fetch_webpage function to fetch the webpage.
+   - Then calls the parse_viaf function  to parse the webpage.
    - Prints the first valid `resource` URL matching the pattern or an appropriate
      error message if no valid URL is found.
+   - Returns the valid url.
 
 ## Example usage:
 url=$(python scripts/download/viaf.py)
@@ -64,7 +62,6 @@ def main():
     if html_content:
         file_url = parse_viaf(html_content)
         if file_url:
-            # Just output the URL without any additional text
             print(file_url)
             return file_url
         else:
