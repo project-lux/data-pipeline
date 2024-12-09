@@ -8,7 +8,7 @@ from pipeline.sources.utils import fetch_webpage
 
 def main():
     """
-    This script is designed to combine the utility function fetch_webpage with the VIAF parser 
+    This script is combines the utility function `fetch_webpage` with the VIAF `parser` 
     to return the download URL to the download.sh script.
 
     **main():**
