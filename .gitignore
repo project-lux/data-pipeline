@@ -6,6 +6,8 @@ __pycache__/
 # C extensions
 *.so
 
+notes.md
+
 # Mac system files
 .DS_Store
 .AppleDouble
