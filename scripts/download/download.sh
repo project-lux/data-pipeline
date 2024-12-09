@@ -35,14 +35,28 @@ if [ -z "$source" ]; then
 fi
 
 case "$source" in
-    "viaf")
-        url=$(python scripts/download/sources/$source.py)
-        echo "Downloading '$source' data from $url"
-        curl -O "$url"
+    "viaf"|"dnb")
+        urls=$(python scripts/download/sources/$source.py)
+        if [ $? -ne 0 ]; then
+            echo "Error: Failed to fetch URLs for '$source'"
+            exit 1
+        fi
+        
+        # Parse JSON array using jq for both sources
+        echo "$urls" | jq -r '.[]' | while read -r url; do
+            if [ ! -z "$url" ]; then
+                echo "Downloading '$source' data from $url"
+                curl -O "$url"
+                if [ $? -ne 0 ]; then
+                    echo "Error: Failed to download from $url"
+                    exit 1
+                fi
+            fi
+        done
         ;;
     *)
         echo "Error: Unknown source '$source'"
-        echo "Supported sources: viaf"
-
+        echo "Supported sources: viaf, dnb"
+        exit 1
         ;;
 esac

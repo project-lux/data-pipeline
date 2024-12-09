@@ -1,5 +1,6 @@
 import sys
 import os
+import json
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 
 from pipeline.sources.viaf.parser import parse_viaf
@@ -14,9 +15,7 @@ def main():
     **main():**
     - Uses the imported fetch_webpage function to fetch the webpage.
     - Calls the imported parse_viaf function to parse the webpage.
-    - Prints the first valid `resource` URL matching the pattern or an appropriate
-        error message if no valid URL is found.
-    - Returns the valid url.
+    - Returns the URL as a JSON string or exits with an error message.
 
     ## Example usage:
     url=$(python scripts/download/viaf.py)
@@ -27,7 +26,9 @@ def main():
     if html_content:
         file_url = parse_viaf(html_content)
         if file_url:
-            return file_url
+            urls = [file_url]  # Wrap single URL in a list
+            print(json.dumps(urls))
+            return urls
         else:
             # Use stderr for error messages
             print("No valid file URL found.", file=sys.stderr)

@@ -24,13 +24,15 @@ Error Handling:
 
 
 import sys
+import json
 
 def main():
-
-    return ["https://data.dnb.de/opendata/authorities-gnd-sachbegriff_lds.jsonld.gz", 
+    urls = ["https://data.dnb.de/opendata/authorities-gnd-sachbegriff_lds.jsonld.gz", 
             "https://data.dnb.de/opendata/authorities-gnd_entityfacts.jsonld.gz",
             "https://data.dnb.de/opendata/mapping-authorities-gnd-lcsh-ram_lds.jsonld.gz"
     ]
+    print(json.dumps(urls))
+    return urls
 
 if __name__ == "__main__":
     try:
