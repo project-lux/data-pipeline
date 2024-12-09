@@ -36,13 +36,13 @@ fi
 
 case "$source" in
     "viaf")
-        url=$(python scripts/sources/$source.py)
+        url=$(python scripts/download/sources/$source.py)
         echo "Downloading '$source' data from $url"
         curl -O "$url"
         ;;
     *)
         echo "Error: Unknown source '$source'"
         echo "Supported sources: viaf"
-        exit 1
+
         ;;
 esac
