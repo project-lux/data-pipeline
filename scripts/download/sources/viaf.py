@@ -27,7 +27,6 @@ def main():
     if html_content:
         file_url = parse_viaf(html_content)
         if file_url:
-            print(file_url)
             return file_url
         else:
             # Use stderr for error messages
