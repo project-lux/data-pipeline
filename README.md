@@ -2,7 +2,7 @@
 
 ## Architecture
 
-![architecture diagram](docs/architecture2.png)
+![architecture diagram](docs/images/architecture2.png)
 
 
 ## Pipeline Components
