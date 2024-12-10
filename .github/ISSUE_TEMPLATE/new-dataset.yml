@@ -1,0 +1,120 @@
+name: New Dataset Integration
+description: Propose integration of a new dataset or data source
+title: "[Dataset]: "
+labels: ["dataset", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to propose and document integration of a new dataset or data source.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority Level
+      description: How important is this dataset integration?
+      options:
+        - Critical
+        - High
+        - Medium
+        - Low
+    validations:
+      required: true
+
+  - type: input
+    id: dataset-name
+    attributes:
+      label: Dataset Name
+      description: Name of the dataset or data source
+      placeholder: "e.g., DBpedia, Wikidata"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the dataset and its potential value
+      placeholder: |
+        What is this dataset?
+        What unique information does it provide?
+        How will it enhance our existing data?
+    validations:
+      required: true
+
+  - type: textarea
+    id: data-access
+    attributes:
+      label: Data Access Method
+      description: How can we access this data? Include example URLs and any API endpoints
+      placeholder: |
+        Base URL:
+        API Endpoints:
+        Example URLs:
+        Access Requirements:
+    validations:
+      required: true
+
+  - type: textarea
+    id: data-format
+    attributes:
+      label: Data Format
+      description: Describe the format of the data and include example
+      placeholder: |
+        Format (JSON-LD, RDF, etc):
+        Example Data Structure:
+        ```json
+        {
+          "example": "structure"
+        }
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: entity-matching
+    attributes:
+      label: Entity Matching
+      description: How will we match entities from this dataset to our existing data?
+      placeholder: |
+        - Matching fields/properties
+        - URI patterns
+        - Reconciliation process
+    validations:
+      required: true
+
+  - type: textarea
+    id: technical-requirements
+    attributes:
+      label: Technical Requirements
+      description: What needs to be built to integrate this dataset?
+      placeholder: |
+        - [ ] Create new harvester
+        - [ ] Implement URI reconciliation
+        - [ ] Add data mapping
+    validations:
+      required: true
+
+  - type: textarea
+    id: known-limitations
+    attributes:
+      label: Known Limitations
+      description: Document any known issues or limitations with this dataset
+      placeholder: |
+        - Data quality concerns
+        - Coverage gaps
+        - Technical constraints
+
+  - type: textarea
+    id: example-integration
+    attributes:
+      label: Example Integration
+      description: Provide a concrete example of how the integration would work
+      placeholder: |
+        Starting URL:
+        Integration Steps:
+        1. ...
+        2. ...
+        Final Result:
+    validations:
+      required: true
