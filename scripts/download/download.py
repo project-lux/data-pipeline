@@ -14,6 +14,13 @@ import threading
 from dataclasses import dataclass
 from queue import Queue
 import time
+import json
+
+
+base_download_config = Path(__file__).parent.parent.parent / 'configs' / 'base_download.json'
+
+with open(base_download_config, 'r') as f:
+    base_download_config = json.load(f)
 
 @dataclass
 class DownloadInfo:
@@ -24,9 +31,13 @@ class DownloadInfo:
     status: str = "pending"  # pending, downloading, completed, error
 
 class DownloadManager:
-    def __init__(self, urls: List[str]):
-        self.downloads = {url: DownloadInfo(url=url, filename=url.split('/')[-1]) 
-                         for url in urls}
+    def __init__(self, urls: List[str], download_paths: dict):
+        self.downloads = {
+            url: DownloadInfo(
+                url=url, 
+                filename=str(download_paths[url])
+            ) for url in urls
+        }
         self.progress_bars = {}
         self.status_thread = None
         self.should_stop = False
@@ -97,12 +108,57 @@ class DownloadManager:
         return all(results)
 
 def get_available_sources() -> List[str]:
-    """Get all available source modules from the sources directory"""
-    sources_dir = Path(__file__).parent / 'sources'
+    """Get all available sources from the configs directory"""
+    configs_dir = Path(__file__).parent.parent.parent / 'configs'
     return [
-        f.stem for f in sources_dir.glob('*.py')
-        if f.stem != '__init__'
+        f.stem for f in configs_dir.glob('*.json')
+        if f.stem != 'base_download'  # exclude the base config
     ]
+
+def ensure_download_dirs(base_config: dict, source_config: dict) -> Path:
+    """Create and return the download directory for a source"""
+    # Get base download directory
+    base_dir = Path(base_config.get('dump_file_dir', 'data'))
+    
+    # Get source subdirectory
+    subdir = source_config.get('dump_file_subdir')
+    if not subdir:
+        return base_dir
+    
+    # Create full path
+    full_path = base_dir / subdir
+    full_path.mkdir(parents=True, exist_ok=True)
+    
+    return full_path
+
+def get_urls_from_script(source: str, download_dir: Path) -> List[str]:
+    """Execute a script to get URLs for a source"""
+    # First check in the sources directory
+    sources_script_path = Path(__file__).parent / 'sources' / f"{source}.py"
+    # Then check in the current directory (legacy support)
+    current_script_path = Path(__file__).parent / f"{source}.py"
+    
+    script_path = sources_script_path if sources_script_path.exists() else current_script_path
+    if not script_path.exists():
+        return []
+    
+    try:
+        result = subprocess.run([sys.executable, str(script_path)], 
+                              capture_output=True, 
+                              text=True, 
+                              check=True)
+        try:
+            # Try to parse as JSON first
+            urls = json.loads(result.stdout.strip())
+            if isinstance(urls, list):
+                return [url for url in urls if url]
+        except json.JSONDecodeError:
+            # Fall back to newline-separated format
+            urls = result.stdout.strip().split('\n')
+            return [url for url in urls if url]  # Filter out empty lines
+    except subprocess.CalledProcessError as e:
+        print(f"Warning: Failed to run {script_path.name}: {e}")
+        return []
 
 def main():
     available_sources = get_available_sources()
@@ -129,16 +185,47 @@ def main():
             sys.exit(1)
     
     all_urls = []
+    download_paths = {}  # Map of URLs to their download paths
+    
     # Collect URLs from all specified sources
     for source in sources_to_process:
         try:
-            module_path = f'scripts.download.sources.{source}'
-            source_module = __import__(module_path, fromlist=['main'])
-            urls = source_module.main()
+            # Load the source's config file
+            config_path = Path(__file__).parent.parent.parent / 'configs' / f'{source}.json'
+            source_config = {}
+            if config_path.exists():
+                with open(config_path, 'r') as f:
+                    source_config = json.load(f)
+            
+            # Create download directory
+            download_dir = ensure_download_dirs(base_download_config, source_config)
+            
+            urls = []
+            
+            # Try to get URLs from associated script first
+            script_urls = get_urls_from_script(source, download_dir)
+            if script_urls:
+                urls.extend(script_urls)
+            
+            # If config exists, add URLs from it
+            if source_config:
+                # Add URLs from remote_dump_files
+                if 'remote_dump_files' in source_config:
+                    urls.extend(source_config['remote_dump_files'])
+                
+                # Add URL from remoteDumpFile if it exists and isn't already included
+                if 'remoteDumpFile' in source_config and source_config['remoteDumpFile'] not in urls:
+                    urls.append(source_config['remoteDumpFile'])
+
+            # Map URLs to their download paths
+            for url in urls:
+                filename = url.split('/')[-1]
+                download_paths[url] = download_dir / filename
+            
             if urls:
                 all_urls.extend(urls)
             else:
-                print(f"Warning: No URLs returned from {source}")
+                print(f"Warning: No URLs found in config or script for {source}")
         except Exception as e:
             print(f"Error: Failed to fetch URLs for '{source}': {e}")
             sys.exit(1)
@@ -147,8 +234,8 @@ def main():
         print("No URLs to download from any source")
         sys.exit(1)
     
-    # Use download manager for all collected URLs
-    manager = DownloadManager(all_urls)
+    # Modify DownloadManager to use the correct paths
+    manager = DownloadManager(all_urls, download_paths)
     if not manager.download_all():
         sys.exit(1)
 

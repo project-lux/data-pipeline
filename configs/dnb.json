@@ -1,0 +1,27 @@
+{
+    "name": "dnb",
+    "type": "external",
+    "namespace": "https://d-nb.info/gnd/",
+    "matches": ["d-nb.info/gnd/", "hub.culturegraph.org/entityfacts/", 
+		"d-nb.info/standards/vocab/gnd/"],
+    "fetch": "https://hub.culturegraph.org/entityfacts/{identifier}",
+    "wikidata_property": ["P227"],
+    "merge_order": 31,
+    
+    "fetcherClass": "sources.libraries.dnb.fetcher.DnbFetcher",
+    "mapperClass": "sources.libraries.dnb.mapper.DnbMapper",
+    "loaderClass": "sources.libraries.dnb.loader.DnbLoader",
+
+    "cycleBreakPath": "dnb_cycle_breaks.json",
+
+    "dumpFilePath": "dnb/authorities-gnd_entityfacts.jsonld.gz",
+    "remoteDumpFile": "https://data.dnb.de/opendata/authorities_entityfacts.jsonld.gz",
+
+
+    "dump_file_subdir": "dnb",
+    "remote_dump_files": [
+        "https://data.dnb.de/opendata/authorities-gnd-sachbegriff_lds.jsonld.gz",
+        "https://data.dnb.de/opendata/authorities-gnd_entityfacts.jsonld.gz",
+        "https://data.dnb.de/opendata/mapping-authorities-gnd-lcsh-ram_lds.jsonld.gz"
+    ]
+}
