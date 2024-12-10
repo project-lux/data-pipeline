@@ -24,6 +24,19 @@ with open(base_download_config, 'r') as f:
 
 @dataclass
 class DownloadInfo:
+    """Information about a file download.
+
+    Attributes:
+        url (str): The URL to download from
+        filename (str): Local path where file will be saved
+        total_size (int): Total size of file in bytes, 0 if unknown
+        downloaded_size (int): Number of bytes downloaded so far
+        status (str): Current status of download - one of:
+            "pending": Download not yet started
+            "downloading": Download in progress 
+            "completed": Download finished successfully
+            "error": Download failed
+    """
     url: str
     filename: str
     total_size: int = 0
@@ -31,6 +44,28 @@ class DownloadInfo:
     status: str = "pending"  # pending, downloading, completed, error
 
 class DownloadManager:
+    """Manages concurrent downloads of multiple files with progress tracking.
+
+    The DownloadManager class handles downloading multiple files simultaneously while
+    displaying progress bars for each download. It tracks the status and progress of
+    each download and provides a clean interface for initiating and monitoring downloads.
+
+    Attributes:
+        downloads (dict): Maps URLs to DownloadInfo objects tracking download state
+        progress_bars (dict): Maps URLs to tqdm progress bars
+        status_thread (Thread): Thread that updates progress displays
+        should_stop (bool): Flag to stop the status display thread
+
+    Example:
+        urls = ["http://example.com/file1.gz", "http://example.com/file2.gz"]
+        paths = {
+            "http://example.com/file1.gz": "downloads/file1.gz",
+            "http://example.com/file2.gz": "downloads/file2.gz"
+        }
+        manager = DownloadManager(urls, paths)
+        manager.start_status_display()
+        # Downloads will show progress bars
+    """
     def __init__(self, urls: List[str], download_paths: dict):
         self.downloads = {
             url: DownloadInfo(
@@ -108,6 +143,17 @@ class DownloadManager:
         return all(results)
 
 def get_available_sources() -> List[str]:
+    """
+    Get all available sources from the configs directory.
+
+    Returns:
+        List[str]: A list of source names (config filenames without .json extension),
+                  excluding the base_download config.
+
+    This function scans the configs directory for JSON files and returns their names
+    as available sources. Each JSON file represents a data source configuration.
+    The base_download.json file is excluded as it contains common configuration.
+    """
     """Get all available sources from the configs directory"""
     configs_dir = Path(__file__).parent.parent.parent / 'configs'
     return [
@@ -116,6 +162,22 @@ def get_available_sources() -> List[str]:
     ]
 
 def ensure_download_dirs(base_config: dict, source_config: dict) -> Path:
+    """
+    Create and return the download directory for a source.
+
+    Args:
+        base_config (dict): Base configuration containing dump_file_dir setting
+        source_config (dict): Source-specific configuration containing dump_file_subdir setting
+
+    Returns:
+        Path: Path object representing the download directory for the source
+
+    This function creates the necessary directory structure for downloading source files:
+    - Uses base_config['dump_file_dir'] as the root directory (defaults to 'data')
+    - If source_config specifies a dump_file_subdir, creates that subdirectory
+    - Creates any missing parent directories
+    - Returns the full path to use for downloads
+    """
     """Create and return the download directory for a source"""
     # Get base download directory
     base_dir = Path(base_config.get('dump_file_dir', 'data'))
@@ -132,7 +194,23 @@ def ensure_download_dirs(base_config: dict, source_config: dict) -> Path:
     return full_path
 
 def get_urls_from_script(source: str, download_dir: Path) -> List[str]:
-    """Execute a script to get URLs for a source"""
+    """Execute a script to get URLs for a source.
+
+    Args:
+        source (str): Name of the source to get URLs for
+        download_dir (Path): Directory where downloads should be saved
+
+    Returns:
+        List[str]: List of URLs to download from the source. Empty list if script fails or doesn't exist.
+
+    This function looks for and executes a Python script for the given source, either in the sources
+    subdirectory or in the current directory (for legacy support). The script is expected to output
+    either a JSON array of URLs or newline-separated URLs to stdout.
+
+    The script path is checked in:
+    1. scripts/download/sources/{source}.py
+    2. scripts/download/{source}.py (legacy)
+    """
     # First check in the sources directory
     sources_script_path = Path(__file__).parent / 'sources' / f"{source}.py"
     # Then check in the current directory (legacy support)
@@ -161,6 +239,29 @@ def get_urls_from_script(source: str, download_dir: Path) -> List[str]:
         return []
 
 def main():
+    """Main entry point for the download script.
+
+    This script downloads data files from various sources specified via command line arguments.
+    It supports downloading from multiple sources at once using comma-separated values or 'all'
+    to download from all available sources.
+
+    For each source:
+    1. Checks for and loads source-specific config file from configs/{source}.json
+    2. Creates download directory based on base and source configs
+    3. Gets download URLs either from:
+       - Associated Python script in sources/{source}.py
+       - remote_dump_files list in source config
+    4. Downloads files from all collected URLs
+
+    Command line arguments:
+        --source: Source(s) to download from. Can be:
+                 - Single source name (e.g. "viaf")
+                 - Comma-separated list (e.g. "viaf,dnb") 
+                 - "all" to download from all available sources
+
+    Returns:
+        None. Exits with status 1 on error.
+    """
     available_sources = get_available_sources()
     
     parser = argparse.ArgumentParser(description='Download data files from various sources')
