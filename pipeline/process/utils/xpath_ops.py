@@ -46,6 +46,7 @@ def dicttoxml(what):
 
 def xpath_on_record(what, xpath):
     xml = dicttoxml(what)
+    print(f"Generated XML: {xml}")
     try:
         dom = etree.XML(xml)
     except:
