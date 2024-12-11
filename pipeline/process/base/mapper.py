@@ -161,9 +161,7 @@ class Mapper(object):
                             ident = yuids[0][-36:]
 
                     if not ident:
-                        print(f"----Skipping entry due to missing identifier or unresolved equivalent: {f}")
-
-                        #print(f"{self.name} xpath fix has no identifier or equivalent: {f}")
+                        print(f"{self.name} xpath fix has no identifier or equivalent: {f}")
                         continue
                     if not f["path"]:
                         print(f"{self.name} xpath fix has no xpath: {f}")
@@ -177,7 +175,6 @@ class Mapper(object):
                         self.xpath_fixes[ident].append(f)
                     except:
                         self.xpath_fixes[ident] = [f]
-        print(self.xpath_fixes)
 
     def returns_multiple(self, record=None):
         return False
