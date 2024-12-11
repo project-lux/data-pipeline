@@ -161,7 +161,9 @@ class Mapper(object):
                             ident = yuids[0][-36:]
 
                     if not ident:
-                        print(f"{self.name} xpath fix has no identifier or equivalent: {f}")
+                        print(f"----Skipping entry due to missing identifier or unresolved equivalent: {f}")
+
+                        #print(f"{self.name} xpath fix has no identifier or equivalent: {f}")
                         continue
                     if not f["path"]:
                         print(f"{self.name} xpath fix has no xpath: {f}")
