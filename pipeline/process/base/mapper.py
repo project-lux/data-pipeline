@@ -175,6 +175,7 @@ class Mapper(object):
                         self.xpath_fixes[ident].append(f)
                     except:
                         self.xpath_fixes[ident] = [f]
+        print(self.xpath_fixes)
 
     def returns_multiple(self, record=None):
         return False
