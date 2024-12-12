@@ -1,6 +1,6 @@
 from pipeline.process.utils.mapper_utils import get_year_from_timespan
 from sqlitedict import SqliteDict
-from pipeline.storage.idmap.lmdb import 
+from pipeline.storage.idmap.lmdb import TabLmdb
 import re 
 
 
