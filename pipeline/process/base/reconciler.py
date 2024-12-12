@@ -1,6 +1,7 @@
 from pipeline.process.utils.mapper_utils import get_year_from_timespan
 from sqlitedict import SqliteDict
-from pipeline.storage.idmap.lmdb import TabLmdb
+from pipeline.storage.idmap.lmdb import 
+import re 
 
 
 # Abstract class definition, useless without actual data
@@ -54,6 +55,9 @@ class Reconciler(object):
         equivs = rec.get("equivalent", [])
         return [x["id"] for x in equivs if "id" in x]
 
+    def clean_names(self, name):
+        return re.sub(r'[\u200f\u202e\u200e]', '', name).lower().strip()
+
     def extract_names(self, rec):
         ns = self.configs.external["aat"]["namespace"]
         gbls = self.configs.globals_cfg
@@ -90,7 +94,7 @@ class Reconciler(object):
                 print(f"  None in Name classifications: {rec['id']}")
 
             if aat_primaryName in cxnids and "content" in nm:
-                val = nm["content"].lower().strip()
+                val = self.clean_names(nm['content'])
                 for lang_id, num in check_langs.items():
                     if lang_id in langids:
                         vals[val] = num
@@ -108,11 +112,11 @@ class Reconciler(object):
                         for part in parts:
                             cxns = part.get("classified_as", [])
                             if aat_firstName in [cx["id"] for cx in cxns]:
-                                first = part["content"].lower().strip()
+                                first = self.clean_names(part['content'])
                             elif aat_middleName in [cx["id"] for cx in cxns]:
-                                middle = part["content"].lower().strip()
+                                middle = self.clean_names(part['content'])
                             elif aat_lastName in [cx["id"] for cx in cxns]:
-                                last = part["content"].lower().strip()
+                                last = self.clean_names(part['content'])
 
                         if last and first and middle:
                             vals[f"{last}, {first} {middle}"] = 1
