@@ -1,5 +1,3 @@
 {
-    "dump_file_subdir": "viaf",
-    "update_style": "check",
-    "update_interval": 14
+    "dump_file_subdir": "viaf"
 }

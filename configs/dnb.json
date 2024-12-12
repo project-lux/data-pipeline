@@ -23,7 +23,5 @@
         "https://data.dnb.de/opendata/authorities-gnd-sachbegriff_lds.jsonld.gz",
         "https://data.dnb.de/opendata/authorities-gnd_entityfacts.jsonld.gz",
         "https://data.dnb.de/opendata/mapping-authorities-gnd-lcsh-ram_lds.jsonld.gz"
-    ],
-    "update_style": "regular",
-    "update_interval": 14
+    ]
 }

@@ -2,5 +2,7 @@
     "dump_file_dir": "data",
     "direct_url_sources": [
         "dnb"
-    ]
+    ],
+    "update_style": "daily",
+    "update_interval": 14
 }
