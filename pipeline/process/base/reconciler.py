@@ -56,7 +56,7 @@ class Reconciler(object):
         return [x["id"] for x in equivs if "id" in x]
 
     def clean_names(self, name):
-        return re.sub(r'[\u200f\u202e\u200e]', '', name).lower().strip()
+        return re.sub(r'[\u200b-\u200f\u202a-\u202e]', '', name).lower().strip()
 
     def extract_names(self, rec):
         ns = self.configs.external["aat"]["namespace"]
