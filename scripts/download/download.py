@@ -143,25 +143,6 @@ class DownloadManager:
         self.status_thread.join()
         return all(results)
 
-# def get_available_sources() -> List[str]:
-#     """
-#     Get all available sources from the configs directory.
-
-#     Returns:
-#         List[str]: A list of source names (config filenames without .json extension),
-#                   excluding the base_download config.
-
-#     This function scans the configs directory for JSON files and returns their names
-#     as available sources. Each JSON file represents a data source configuration.
-#     The base_download.json file is excluded as it contains common configuration.
-#     """
-#     """Get all available sources from the configs directory"""
-#     configs_dir = Path(__file__).parent.parent.parent / 'configs'
-#     return [
-#         f.stem for f in configs_dir.glob('*.json')
-#         if f.stem != 'base_download'  # exclude the base config
-#     ]
-
 def ensure_download_dirs(base_config: dict, source_config: dict) -> Path:
     """
     Create and return the download directory for a source.
@@ -193,51 +174,6 @@ def ensure_download_dirs(base_config: dict, source_config: dict) -> Path:
     full_path.mkdir(parents=True, exist_ok=True)
     
     return full_path
-
-# def get_urls_from_script(source: str, download_dir: Path) -> List[str]:
-#     """Execute a script to get URLs for a source.
-
-#     Args:
-#         source (str): Name of the source to get URLs for
-#         download_dir (Path): Directory where downloads should be saved
-
-#     Returns:
-#         List[str]: List of URLs to download from the source. Empty list if script fails or doesn't exist.
-
-#     This function looks for and executes a Python script for the given source, either in the sources
-#     subdirectory or in the current directory (for legacy support). The script is expected to output
-#     either a JSON array of URLs or newline-separated URLs to stdout.
-
-#     The script path is checked in:
-#     1. scripts/download/sources/{source}.py
-#     2. scripts/download/{source}.py (legacy)
-#     """
-#     # First check in the sources directory
-#     sources_script_path = Path(__file__).parent / 'sources' / f"{source}.py"
-#     # Then check in the current directory (legacy support)
-#     current_script_path = Path(__file__).parent / f"{source}.py"
-    
-#     script_path = sources_script_path if sources_script_path.exists() else current_script_path
-#     if not script_path.exists():
-#         return []
-    
-#     try:
-#         result = subprocess.run([sys.executable, str(script_path)], 
-#                               capture_output=True, 
-#                               text=True, 
-#                               check=True)
-#         try:
-#             # Try to parse as JSON first
-#             urls = json.loads(result.stdout.strip())
-#             if isinstance(urls, list):
-#                 return [url for url in urls if url]
-#         except json.JSONDecodeError:
-#             # Fall back to newline-separated format
-#             urls = result.stdout.strip().split('\n')
-#             return [url for url in urls if url]  # Filter out empty lines
-#     except subprocess.CalledProcessError as e:
-#         print(f"Warning: Failed to run {script_path.name}: {e}")
-#         return []
 
 def main():
     """Main entry point for the download script.
@@ -305,9 +241,10 @@ def main():
             urls = []
             
             # Try to get URLs from associated script first
-            script_urls = get_urls_from_script(source, download_dir)
-            if script_urls:
-                urls.extend(script_urls)
+            if not source_config.get("remote_dump_files"):
+                script_urls = get_urls_from_script(source, download_dir)
+                if script_urls:
+                    urls.extend(script_urls)
             
             # If config exists, add URLs from it
             if source_config:
