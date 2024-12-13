@@ -32,9 +32,21 @@ class LcMapper(Mapper):
         self.ignore_types = ["madsrdf:DeprecatedAuthority", "madsrdf:NameTitle"]
 
     def build_recs_and_reconcile(self, txt, rectype=""):
-        # reconrec returns URI
+        """
+        Builds a record and reconciles it based on the provided type.
+
+        Args:
+            txt (str): The textual content to reconcile.
+            rectype (str): The type of the record (e.g., Place, Concept, Person).
+
+        Returns:
+            URI or None: The reconciled record's URI, or None if reconciliation fails.
+        """
+        # Fetch the appropriate reconcilers
         nafreconciler = self.config["all_configs"].external["lcnaf"]["reconciler"]
         shreconciler = self.config["all_configs"].external["lcsh"]["reconciler"]
+
+        # Base record structure
         rec = {
             "type": "",
             "identified_by": [
@@ -44,29 +56,34 @@ class LcMapper(Mapper):
                     "classified_as": [{"id": "http://vocab.getty.edu/aat/300404670"}],
                 }
             ],
+            "source": ""
         }
-        if rectype == "Place":
-            rec["type"] = "Place"
-            reconrec = nafreconciler.reconcile(rec, reconcileType="name")
-        elif rectype == "Concept":
-            rec["type"] = "Type"
-            reconrec = shreconciler.reconcile(rec, reconcileType="name")
-        elif rectype == "Group":
-            rec["type"] = "Group"
-            reconrec = nafreconciler.reconcile(rec, reconcileType="name")
-        elif rectype == "Person":
-            rec["type"] == "Person"
-            reconrec = nafreconciler.reconcile(rec, reconcileType="name")
-        elif rectype == "Type":
-            rec["type"] = "Type"
-            reconrec = shreconciler.reconcile(rec, reconcileType="name")
-        elif rectype == "Activity":
-            rec["type"] = "Activity"
-            reconrec = nafreconciler.reconcile(rec, reconcileType="name")
+
+        # Map rectype to reconciler and record type
+        reconcilers = {
+            "Place": nafreconciler,
+            "Concept": shreconciler,
+            "Group": nafreconciler,
+            "Person": nafreconciler, 
+            "Type": shreconciler,
+            "Activity": nafreconciler
+        }
+
+        if rectype in reconcilers:
+            reconciler = reconcilers[rectype]
+            rec["type"] = rectype
+            if rectype in ["Place","Group","Person","Ativity"]:
+                rec["source"] = "lcnaf"
+            else:
+                rec["source"] = "lcsh"
+            reconrec = reconciler.reconcile(rec, reconcileType="name")
         else:
+            # Handle invalid rectype
+            print(f"Warning: Unrecognized rectype '{rectype}'")
             reconrec = None
 
         return reconrec
+
 
     def fix_identifier(self, identifier):
         if identifier == "@@LMI-SPECIAL-TERM@@":
@@ -236,29 +253,22 @@ class LcMapper(Mapper):
             earlier = new.get("madsrdf:hasEarlierEstablishedForm", [])
             earliers = []
             if earlier:
-                if type(earlier) != list:
+                if not isinstance(earlier, list):
                     earlier = [earlier]
                 for e in earlier:
-                    if "madsrdf:variantLabel" in e:
-                        if "@value" in e["madsrdf:variantLabel"]:
-                            txt = e['madsrdf:variantLabel']['@value']
-                        else:
-                            txt = e['madsrdf:variantLabel']
+                    txt = e.get("madsrdf:variantLabel")
+                    txt = txt.get("@value") if isinstance(txt, dict) else txt
+                    eid = e.get("@id")
+
+                    reid = None 
+                    if eid and eid.startswith("_:"):
+                        if txt:
+                            reid = self.build_recs_and_reconcile(txt, type(top).__name__)
+                            print(f"Earlier form reconciled for {new['@id']}")
                     else:
-                        txt = None
-                    if "@id" in e:
-                        eid = e['@id']
-                    else:
-                        eid = None
-                    if eid.startswith("_:") and txt:
-                        reid = self.build_recs_and_reconcile(txt, type(top).__name__)
-                    elif not txt and eid.startswith("_:"):
-                        reid = None
-                    else:
-                        reid = eid 
+                        reid = eid
                     if reid:
                         earliers.append(reid)
-                        print(f"Earlier form reconciled for {new['@id']}")
                 ex.extend(earliers)
 
         # skos:closeMatch -- Only as a last resort

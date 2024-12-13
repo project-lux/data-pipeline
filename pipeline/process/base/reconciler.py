@@ -1,6 +1,7 @@
 from pipeline.process.utils.mapper_utils import get_year_from_timespan
 from sqlitedict import SqliteDict
 from pipeline.storage.idmap.lmdb import TabLmdb
+import re 
 
 
 # Abstract class definition, useless without actual data
@@ -13,24 +14,34 @@ class Reconciler(object):
         self.debug_graph = {}
 
     def should_reconcile(self, rec, reconcileType="all"):
-        if "data" in rec:
-            data = rec["data"]
-        if self.name_index is None and reconcileType == "name":
+        """
+        Determines whether a record should be reconciled based on the type of reconciliation.
+
+        Args:
+            rec (dict): The record to evaluate for reconciliation.
+            reconcileType (str): The type of reconciliation ("name", "uri", or "all").
+
+        Returns:
+            bool: True if the record should be reconciled, False otherwise.
+        """
+        data = rec.get("data",rec)
+        if reconcileType == "name":
+            if self.name_index is None:
+                return False
+            if "identified_by" not in data:
+                return False  # Records without names should not be reconciled
+        elif reconcileType == "uri":
+            if self.id_index is None:
+                return False
+            if "equivalent" not in data:
+                return False
+        elif reconcileType == "all" and self.name_index is None and self.id_index is None:
             return False
-        elif self.id_index is None and reconcileType == "uri":
-            return False
-        elif "identified_by" not in data and reconcileType == "name":
-            # record without a name should never happen ... but ...
-            return False
-        elif "equivalent" not in data and reconcileType == "uri":
-            return False
-        elif "source" in rec and rec["source"] == self.config["name"]:
+
+        if rec.get("source") and rec["source"] == self.config["name"]:
             # Don't reconcile against self
             return False
-        elif (
-            self.name_index is None and self.id_index is None and reconcileType == "all"
-        ):
-            return False
+
         return True
 
     def reconcile(self, record, reconcileType="all"):
@@ -43,6 +54,9 @@ class Reconciler(object):
     def extract_uris(self, rec):
         equivs = rec.get("equivalent", [])
         return [x["id"] for x in equivs if "id" in x]
+
+    def clean_names(self, name):
+        return re.sub(r'[\u200b-\u200f\u202a-\u202e]', '', name).lower().strip()
 
     def extract_names(self, rec):
         ns = self.configs.external["aat"]["namespace"]
@@ -80,7 +94,7 @@ class Reconciler(object):
                 print(f"  None in Name classifications: {rec['id']}")
 
             if aat_primaryName in cxnids and "content" in nm:
-                val = nm["content"].lower().strip()
+                val = self.clean_names(nm['content'])
                 for lang_id, num in check_langs.items():
                     if lang_id in langids:
                         vals[val] = num
@@ -98,11 +112,11 @@ class Reconciler(object):
                         for part in parts:
                             cxns = part.get("classified_as", [])
                             if aat_firstName in [cx["id"] for cx in cxns]:
-                                first = part["content"].lower().strip()
+                                first = self.clean_names(part['content'])
                             elif aat_middleName in [cx["id"] for cx in cxns]:
-                                middle = part["content"].lower().strip()
+                                middle = self.clean_names(part['content'])
                             elif aat_lastName in [cx["id"] for cx in cxns]:
-                                last = part["content"].lower().strip()
+                                last = self.clean_names(part['content'])
 
                         if last and first and middle:
                             vals[f"{last}, {first} {middle}"] = 1
