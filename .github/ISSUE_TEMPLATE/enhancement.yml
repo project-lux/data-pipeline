@@ -1,0 +1,85 @@
+name: Enhancement Request
+description: Propose a new feature or improvement
+title: "[Enhancement]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to propose this enhancement!
+  
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority Level
+      description: How important is this enhancement?
+      options:
+        - Critical
+        - High
+        - Medium
+        - Low
+    validations:
+      required: true
+
+  - type: textarea
+    id: background
+    attributes:
+      label: Background
+      description: Provide context for why this enhancement is needed
+      placeholder: |
+        Example: We may want to organize our data source configurations into a dedicated config folder...
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Detailed description of the proposed enhancement
+      placeholder: |
+        What needs to be created/changed?
+        What components will this affect?
+    validations:
+      required: true
+
+  - type: textarea
+    id: changes-required
+    attributes:
+      label: Changes Required
+      description: List the specific changes that need to be made
+      placeholder: |
+        1. Create a new directory
+        2. Move existing configurations
+        3. Update structure
+    validations:
+      required: true
+
+  - type: textarea
+    id: example
+    attributes:
+      label: Example
+      description: Provide an example of the proposed change (if applicable)
+      placeholder: Include code snippets, configuration examples, etc.
+      render: json
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Tasks
+      description: Break down the implementation into specific tasks
+      placeholder: |
+        - [ ] Task 1
+        - [ ] Task 2
+        - [ ] Task 3
+      value: |-
+        - [ ] Task 1
+        - [ ] Task 2
+        - [ ] Task 3
+
+
+  - type: input
+    id: related-issues
+    attributes:
+      label: Related Issues
+      description: Link any related issues (comma-separated)
+      placeholder: "#123, #456"
