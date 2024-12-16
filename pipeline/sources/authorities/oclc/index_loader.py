@@ -28,35 +28,34 @@ class ViafIndexLoader(LmdbIndexLoader):
             fns = os.path.join(self.configs.temp_dir, f"viaf_equivs_*.csv")
             os.system(f"sort {fns} > {outfn}")
 
-        fh = open(outfn)
-        l = fh.readline()
-        n = 1
-        start = time.time()
-        updates = {}
-        while l:
-            l = l.strip()
-            # l = l.decode("utf-8")
-            ident, viaf = l.split("\t")
-
-            if ":" in ident:
-                (pfx, ident) = ident.split(":")
-                ident = ident.replace(" ", "")
-                if pfx in viaf_prefixes:
-                    if pfx == "LC":
-                        # test for sh vs n
-                        if ident[0] == "s":
-                            pfx = "LCSH"
-                    p = viaf_prefixes[pfx]
-                    updates[f"{p}:{ident}"] = f"{viaf}"
+        with open(outfn) as fh:
             l = fh.readline()
-            n += 1
-            if not n % 100000:
-                durn = time.time() - start
-                nps = n / durn
-                ttld = total / nps
-                print(f"Read: {n} / {total} in {durn} = {nps} ==> {ttld} secs")
+            n = 1
+            start = time.time()
+            updates = {}
+            while l:
+                l = l.strip()
+                # l = l.decode("utf-8")
+                ident, viaf = l.split("\t")
 
-        fh.close()
+                if ":" in ident:
+                    (pfx, ident) = ident.split(":")
+                    ident = ident.replace(" ", "")
+                    if pfx in viaf_prefixes:
+                        if pfx == "LC":
+                            # test for sh vs n
+                            if ident[0] == "s":
+                                pfx = "LCSH"
+                        p = viaf_prefixes[pfx]
+                        updates[f"{p}:{ident}"] = f"{viaf}"
+                l = fh.readline()
+                n += 1
+                if not n % 100000:
+                    durn = time.time() - start
+                    nps = n / durn
+                    ttld = total / nps
+                    print(f"Read: {n} / {total} in {durn} = {nps} ==> {ttld} secs")
+
         start = time.time()
         eqindex.update(updates)
         end = time.time()

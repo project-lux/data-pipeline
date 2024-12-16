@@ -22,66 +22,66 @@ class ViafLoader(Loader):
         return None
 
     def load(self, slicen=None, maxSlice=None):
-        fh = gzip.open(self.in_path)
-        efh = open(os.path.join(self.configs.temp_dir, f"viaf_equivs_{slicen}.csv"), "w")
-        mapper = self.config["mapper"]
-        wdm = mapper.wikidata_config["mapper"]
-        nss = mapper.nss
+        with gzip.open(self.in_path, "rt") as fh, \
+            open(os.path.join(self.configs.temp_dir, f"viaf_equivs_{slicen}.csv"), "w") as efh:
 
-        xstart = time.time()
-        start = time.time()
+            mapper = self.config["mapper"]
+            wdm = mapper.wikidata_config["mapper"]
+            nss = mapper.nss
 
-        x = 0
-        done_x = 0
-        l = 1
-        while l:
-            l = fh.readline()
-            if not l:
-                break
-            if maxSlice is not None and x % maxSlice - slicen != 0:
-                x += 1
-                continue
+            xstart = time.time()
+            start = time.time()
 
-            l = l.decode("utf-8")
-            what, xml = l.split("\t")
-            x += 1
-            done_x += 1
-            new = {"xml": xml}
-            self.out_cache[what] = new
-
-            # Need to extract links to index
-            top = mapper.parse_xml(xml)
-            equivs = top.xpath("./viaf:sources/viaf:source/text()", namespaces=nss)
-            for eq in equivs:
-                (which, val) = eq.split("|")
-                if which == "LC" and val[0] == "s":
-                    which = "LCSH"
-                elif which in ["DNB", "BNF"]:
-                    # processed via @nsid above for now
+            x = 0
+            done_x = 0
+            l = 1
+            while l:
+                l = fh.readline()
+                if not l:
+                    break
+                if maxSlice is not None and x % maxSlice - slicen != 0:
+                    x += 1
                     continue
-                elif which == "FAST":
-                    val = val.replace("fst", "")
-                if which in mapper.viaf_prefixes:
-                    val = val.replace(" ", "")  # eg sometimes LC is "n  123456" and should be n123456
-                    # Only include Wikidata references from VIAF if they guess to the right class
-                    if which == "WKP":
-                        wdeq = wdm.get_reference(val)
-                        nameType = top.xpath("./viaf:nameType/text()", namespaces=nss)[0]
-                        topCls = mapper.nameTypeMap.get(nameType, None)
 
-                        if wdeq is not None and wdeq.type == topCls.__name__:
+                l = l.decode("utf-8")
+                what, xml = l.split("\t")
+                x += 1
+                done_x += 1
+                new = {"xml": xml}
+                self.out_cache[what] = new
+
+                # Need to extract links to index
+                top = mapper.parse_xml(xml)
+                equivs = top.xpath("./viaf:sources/viaf:source/text()", namespaces=nss)
+                for eq in equivs:
+                    (which, val) = eq.split("|")
+                    if which == "LC" and val[0] == "s":
+                        which = "LCSH"
+                    elif which in ["DNB", "BNF"]:
+                        # processed via @nsid above for now
+                        continue
+                    elif which == "FAST":
+                        val = val.replace("fst", "")
+                    if which in mapper.viaf_prefixes:
+                        val = val.replace(" ", "")  # eg sometimes LC is "n  123456" and should be n123456
+                        # Only include Wikidata references from VIAF if they guess to the right class
+                        if which == "WKP":
+                            wdeq = wdm.get_reference(val)
+                            nameType = top.xpath("./viaf:nameType/text()", namespaces=nss)[0]
+                            topCls = mapper.nameTypeMap.get(nameType, None)
+
+                            if wdeq is not None and wdeq.type == topCls.__name__:
+                                efh.write(f"{which}:{val}\t{what}\n")
+                        else:
                             efh.write(f"{which}:{val}\t{what}\n")
-                    else:
-                        efh.write(f"{which}:{val}\t{what}\n")
 
-            if not done_x % 10000:
-                efh.flush()
-                t = time.time() - start
-                xps = x / t
-                ttls = self.total / xps
-                print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-        fh.close()
-        efh.close()
+                if not done_x % 10000:
+                    efh.flush()
+                    t = time.time() - start
+                    xps = x / t
+                    ttls = self.total / xps
+                    print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
+
         self.out_cache.commit()
 
 
@@ -91,46 +91,39 @@ class FastLoader(ViafLoader):
 
     def load(self):
         start = time.time()
-        fh = zipfile.ZipFile(self.in_path)
-        members = fh.namelist()
+        with zipfile.ZipFile(self.in_path) as fh:
+            members = fh.namelist()
 
-        x = 0
-        done_x = 0
-
-        for f in members:
-            if not f.endswith(".marcxml"):
-                pass
-            facet = fh.open(f)
-
-            tree = etree.parse(facet)
-            try:
-                facet.close()
-            except:
-                pass
-
-            nss = {"mx": "http://www.loc.gov/MARC21/slim"}
-            records = tree.xpath("//mx:record", namespaces=nss)
-            for record in records:
-                try:
-                    identfield = record.xpath('//mx:controlfield[@tag="001"]', namespaces=nss)
-                except:
-                    # no id??
+            x = 0
+            done_x = 0
+            
+            for f in members:
+                if not f.endswith(".marcxml"):
                     continue
-                if identfield:
-                    ident = identfield[0].text
-                    ident = ident.split("fst")[-1]
-                    if ident.startswith("0"):
-                        ident = ident.lstrip("0")
+                with fh.open(f) as facet:
+                    tree = etree.parse(facet)
+                    nss = {"mx": "http://www.loc.gov/MARC21/slim"}
+                    records = tree.xpath("//mx:record", namespaces=nss)
+                    for record in records:
+                        try:
+                            identfield = record.xpath('//mx:controlfield[@tag="001"]', namespaces=nss)
+                        except:
+                            # no id??
+                            continue
+                        if identfield:
+                            ident = identfield[0].text
+                            ident = ident.split("fst")[-1]
+                            if ident.startswith("0"):
+                                ident = ident.lstrip("0")
 
-            x += 1
-            done_x += 1
-            new = {"xml": record}
-            self.out_cache[ident] = new
+                    x += 1
+                    done_x += 1
+                    new = {"xml": record}
+                    self.out_cache[ident] = new
 
-            if not done_x % 10000:
-                t = time.time() - start
-                xps = x / t
-                ttls = self.total / xps
-                print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-        fh.close()
+                    if not done_x % 10000:
+                        t = time.time() - start
+                        xps = x / t
+                        ttls = self.total / xps
+                        print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
         self.out_cache.commit()

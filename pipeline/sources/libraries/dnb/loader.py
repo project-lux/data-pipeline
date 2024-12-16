@@ -35,10 +35,9 @@ class DnbLoader(Loader):
 
     def load_sachbegriff(self):
         if os.path.exists(self.subject_path):
-            fh = open(self.subject_path)
+            with open(self.subject_path) as fh:
             # has *weird* json format
-            data = fh.read()
-            fh.close()
+                data = fh.read()
             js = json.loads(data)
             del data
         else:
@@ -66,42 +65,41 @@ class DnbLoader(Loader):
 
         # And now load the entityfacts
 
-        fh = gzip.open(self.in_path)
-        start = time.time()
-        x = 0 
-        done_x = 0
-        l = 1
-        while l:
-            l = fh.readline()
-            if not l:
-                break
-            l = l.decode("utf-8")
-            if l[0] in ['[', ',']:
-                l = l[1:]
-            elif l[-1] == ']':
-                l = l[:-1]            
-            l = l.strip()
+        with gzip.open(self.in_path) as fh:
+            start = time.time()
+            x = 0 
+            done_x = 0
+            l = 1
+            while l:
+                l = fh.readline()
+                if not l:
+                    break
+                l = l.decode("utf-8")
+                if l[0] in ['[', ',']:
+                    l = l[1:]
+                elif l[-1] == ']':
+                    l = l[:-1]            
+                l = l.strip()
 
-            # Find id and check if already exists before processing JSON
-            what = self.get_identifier_raw(l)
+                # Find id and check if already exists before processing JSON
+                what = self.get_identifier_raw(l)
 
-            if what in self.out_cache:
-                done_x += 1
-                if not done_x % 10000:
-                    print(f"Skipping past {done_x} {time.time() - start}")
-                continue
-            x += 1
-            try:
-                js = json.loads(l)
-            except:
-                print(f"Failed to parse json from record {x}: {l}")
-                raise
-                continue
-            self.out_cache[what] = js
-            if not x % 10000:
-                t = time.time() - start
-                xps = x/t
-                ttls = self.total / xps
-                print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-        fh.close()
+                if what in self.out_cache:
+                    done_x += 1
+                    if not done_x % 10000:
+                        print(f"Skipping past {done_x} {time.time() - start}")
+                    continue
+                x += 1
+                try:
+                    js = json.loads(l)
+                except:
+                    print(f"Failed to parse json from record {x}: {l}")
+                    raise
+                    continue
+                self.out_cache[what] = js
+                if not x % 10000:
+                    t = time.time() - start
+                    xps = x/t
+                    ttls = self.total / xps
+                    print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
         self.out_cache.commit()

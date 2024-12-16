@@ -37,60 +37,59 @@ class WdLoader(WdFetcher, WdConfigManager, Loader):
         # ensure we have the dump file
         # self.fetch_dump()
 
-        fh = gzip.open(self.in_path)
-        fh.readline() # chomp initial [
-        x = 0 
-        l = 1
-        done_x = 0
+        with gzip.open(self.in_path, "rt") as fh, \
+            open(os.path.join(self.configs.temp_dir, f'wd_equivs_{slicen}.csv'), 'w') as efh, \
+            open(os.path.join(self.configs.temp_dir, f'wd_diffs_{slicen}.csv'), 'w') as dfh:
 
-        efh = open(os.path.join(self.configs.temp_dir, f'wd_equivs_{slicen}.csv'), 'w')
-        dfh = open(os.path.join(self.configs.temp_dir, f'wd_diffs_{slicen}.csv'), 'w')
 
-        self.out_cache.start_bulk()
-        start = time.time()
-        while l:
-            l = fh.readline()
-            if not l:
-                break
-            if maxSlice is not None and x % maxSlice - slicen != 0:
+            fh.readline() # chomp initial [
+            x = 0 
+            l = 1
+            done_x = 0
+
+            self.out_cache.start_bulk()
+            start = time.time()
+            while l:
+                l = fh.readline()
+                if not l:
+                    break
+                if maxSlice is not None and x % maxSlice - slicen != 0:
+                    x += 1
+                    continue
+
                 x += 1
-                continue
+                if self.filter_line(l):
+                    continue
+                done_x += 1
+                l = l.decode('utf-8').strip()
+                what = self.get_identifier_raw(l)
+                if l.endswith(','):
+                    js = json.loads(l[:-1])
+                else:
+                    js = json.loads(l)
 
-            x += 1
-            if self.filter_line(l):
-                continue
-            done_x += 1
-            l = l.decode('utf-8').strip()
-            what = self.get_identifier_raw(l)
-            if l.endswith(','):
-                js = json.loads(l[:-1])
-            else:
-                js = json.loads(l)
+                try:
+                    new = self.post_process_json(js, what)
+                except:
+                    print(f"Failed to process {l}")
+                    raise
+                    continue
+                self.out_cache.set_bulk(new, identifier=what)
 
-            try:
-                new = self.post_process_json(js, what)
-            except:
-                print(f"Failed to process {l}")
-                raise
-                continue
-            self.out_cache.set_bulk(new, identifier=what)
+                # Create intermediate files for indexing
+                sames, diffs = self.process_equivs({'data':new})
+                for sx,sy in sames:
+                    efh.write(f'{sx},{sy}\n')
+                for dx,dy in diffs:
+                    dfh.write(f'{dx},{dy}\n')
 
-            # Create intermediate files for indexing
-            sames, diffs = self.process_equivs({'data':new})
-            for sx,sy in sames:
-                efh.write(f'{sx},{sy}\n')
-            for dx,dy in diffs:
-                dfh.write(f'{dx},{dy}\n')
+                if not done_x % 10000:
+                    t = time.time() - start
+                    xps = x/t
+                    ttls = self.total / xps
+                    print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
+                    self.out_cache.end_bulk()
+                    self.out_cache.start_bulk()
 
-            if not done_x % 10000:
-                t = time.time() - start
-                xps = x/t
-                ttls = self.total / xps
-                print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-                self.out_cache.end_bulk()
-                self.out_cache.start_bulk()
-        fh.close()
-        efh.close()
-        dfh.close()
         self.out_cache.end_bulk()
         self.out_cache.commit()
