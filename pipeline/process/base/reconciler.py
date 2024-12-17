@@ -93,17 +93,25 @@ class Reconciler(object):
             if None in cxnids:
                 print(f"  None in Name classifications: {rec['id']}")
 
+
+            # Desired result: lowest numbered language that matches
+            # or 2 if no language
             if aat_primaryName in cxnids and "content" in nm:
                 val = self.clean_names(nm['content'])
-                matched = False
-                for lang_id, num in check_langs.items():
-                    if lang_id in langids:
-                        vals[val] = num
-                        matched = True
-                        break
-                        
-                if not matched:
+                if not langs:
+                    # primary name, no language = 2
                     vals[val] = 2
+                else:
+                    # This relies on the check_langs dict being processed in order
+                    matched = False
+                    for lang_id, num in check_langs.items():
+                        if lang_id in langids:
+                            vals[val] = num
+                            matched = True
+                            break
+                    if not matched:
+                        # base is 1, and 2 is skipped so len()+2 for next one
+                        vals[val] = len(check_langs)+2
 
                 if typ == "Person":
                     if "part" in nm:
