@@ -95,11 +95,15 @@ class Reconciler(object):
 
             if aat_primaryName in cxnids and "content" in nm:
                 val = self.clean_names(nm['content'])
+                matched = False
                 for lang_id, num in check_langs.items():
                     if lang_id in langids:
                         vals[val] = num
-                    else:
-                        vals[val] = 2
+                        matched = True
+                        break
+                        
+                if not matched:
+                    vals[val] = 2
 
                 if typ == "Person":
                     if "part" in nm:
