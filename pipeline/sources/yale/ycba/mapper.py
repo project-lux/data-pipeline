@@ -94,6 +94,11 @@ class YcbaMapper(Mapper):
             shp = shape(geojs)
             data["defined_by"] = shp.wkt
 
+        if data["type"] == "HumanMadeObject" and "equivalent" in data:
+            data["equivalent"] = [uri for uri in data["equivalent"] if "wikidata.org" not in uri.get("id", "")]
+            if not data["equivalent"]:
+                del data["equivalent"]
+
         self.fix_links(rec)
 
         return rec
