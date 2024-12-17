@@ -17,9 +17,8 @@ class ReferenceManager(object):
             self.internal_uris.append(c["namespace"])
 
         # XXX FIXME: This should be a CSV or sane JSON
-        fh = open(os.path.join(configs.data_dir, "replacements.json"))
-        data = fh.read()
-        fh.close()
+        with open(os.path.join(configs.data_dir, "replacements.json")) as fh:
+            data = fh.read()
         js = json.loads(data)
         getty_redirects = {}
         res = js["results"]["bindings"]
@@ -36,48 +35,45 @@ class ReferenceManager(object):
             fn = f"metatypes-{my_slice}.json"
         else:
             fn = f"metatypes-single.json"
-        fh = open(fn, "w")
-        fh.write(json.dumps(self.metatypes_seen))
-        fh.close()
+        with open(fn, "w") as fh:
+            fh.write(json.dumps(self.metatypes_seen))
 
     def write_done_refs(self):
         # step through all entries in done_refs and write URI
         # to a file, if distance <= MAX_DISTANCE
         maxd = self.configs.max_distance
-        fh = open("reference_uris.txt", "w")
-        x = 0
-        for k in self.done_refs.iter_keys():
-            x += 1
-            if not x % 100000:
-                print(x)
-            if k["dist"] <= maxd:
-                fh.write(f"{k['dist']}|{k.pkey}\n")
-        fh.close()
+        with open("reference_uris.txt", "w") as fh:
+            x = 0
+            for k in self.done_refs.iter_keys():
+                x += 1
+                if not x % 100000:
+                    print(x)
+                if k["dist"] <= maxd:
+                    fh.write(f"{k['dist']}|{k.pkey}\n")
 
     def iter_done_refs(self, my_slice, max_slice):
-        fh = open("reference_uris.txt", "r")
-        if my_slice < 0 or max_slice < 0:
-            # just read the whole file
-            line = fh.readline()
-            line = line.strip()
-            line = line.split("|")
-            while line:
-                yield line
+        with open("reference_uris.txt", "r") as fh:
+            if my_slice < 0 or max_slice < 0:
+                # just read the whole file
                 line = fh.readline()
                 line = line.strip()
-                if line:
-                    line = line.split("|")
-        else:
-            okay = True
-            while okay:
-                uri = [fh.readline() for x in range(max_slice)][my_slice]
-                uri = uri.strip()
-                if not uri:
-                    okay = False
-                else:
-                    uri = uri.split("|")
-                    yield uri
-        fh.close()
+                line = line.split("|")
+                while line:
+                    yield line
+                    line = fh.readline()
+                    line = line.strip()
+                    if line:
+                        line = line.split("|")
+            else:
+                okay = True
+                while okay:
+                    uri = [fh.readline() for x in range(max_slice)][my_slice]
+                    uri = uri.strip()
+                    if not uri:
+                        okay = False
+                    else:
+                        uri = uri.split("|")
+                        yield uri
 
     def pop_ref(self):
         return self.all_refs.popitem()
