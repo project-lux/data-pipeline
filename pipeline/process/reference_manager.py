@@ -57,13 +57,13 @@ class ReferenceManager(object):
                 # just read the whole file
                 line = fh.readline()
                 line = line.strip()
-                line = line.split("|")
+                line = line.split("|", 1)
                 while line:
                     yield line
                     line = fh.readline()
                     line = line.strip()
                     if line:
-                        line = line.split("|")
+                        line = line.split("|", 1)
             else:
                 okay = True
                 while okay:
@@ -72,7 +72,7 @@ class ReferenceManager(object):
                     if not uri:
                         okay = False
                     else:
-                        uri = uri.split("|")
+                        uri = uri.split("|", 1)
                         yield uri
 
     def pop_ref(self):
