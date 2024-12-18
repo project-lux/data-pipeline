@@ -49,6 +49,5 @@ class GettyHarvester2(ASHarvester):
             pass
         jstr = json.dumps(self.uris)
         fn = os.path.join(self.config['all_configs'].data_dir, f'getty_{self.prefix}_uris.json')
-        fh = open(fn, 'w')
-        fh.write(jstr)
-        fh.close()
+        with open(fn, 'w') as fh:
+            fh.write(jstr)

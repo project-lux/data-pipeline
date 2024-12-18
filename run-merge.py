@@ -21,9 +21,8 @@ idmap = cfgs.get_idmap()
 cfgs.cache_globals()
 cfgs.instantiate_all()
 
-fh = open(os.path.join(cfgs.data_dir, "idmap_update_token.txt"))
-token = fh.read()
-fh.close()
+with open(os.path.join(cfgs.data_dir, "idmap_update_token.txt")) as fh:
+    token = fh.read()
 token = token.strip()
 if not token.startswith("__") or not token.endswith("__"):
     print("Idmap Update Token is badly formed, should be 8 character date with leading/trailing __")
@@ -279,6 +278,5 @@ if DO_REFERENCES:
 # force all postgres connections to close
 poolman.put_all("localsocket")
 
-fh = open(os.path.join(cfgs.log_dir, "flags", f"merge_is_done-{my_slice}.txt"), "w")
-fh.write("1\n")
-fh.close()
+with open(os.path.join(cfgs.log_dir, "flags", f"merge_is_done-{my_slice}.txt"), "w") as fh:
+    fh.write("1\n")

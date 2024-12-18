@@ -170,130 +170,124 @@ with open("lib_places2.tsv") as fh:
 print("Reading in past results...")
 results = {}
 if os.path.exists("results.jsonl"):
-    fh = open("results.jsonl")
-    for l in fh.readlines():
-        jss = json.loads(l)
-        results[jss["child_id"][0]] = jss
-    fh.close()
-else:
-    fh = open("results.jsonl", "w")
-    fh.close()
-
-outfh = open("results.jsonl", "a")
+    with open("results.jsonl")
+        for l in fh.readlines():
+            jss = json.loads(l)
+            results[jss["child_id"][0]] = jss
 
 print("Starting...")
-
+with open("results.jsonl", "a") as outfh:
 ### TODO: Should test all parents separately with prompt_1 first
 
-for r in rows:
-    (identifier, child, pid, parent) = r[:4]
-    if identifier in results:
-        continue
-
-    print(f" ---- {child} part_of {parent} ----")
-    fields = {}
-
-    works = get_works(identifier)
-
-    fields["P1"] = child
-    fields["P2"] = parent
-    partxt = make_prompt(parent_text, fields)
-    if partxt:
-        fields["PARENT"] = partxt
-    else:
-        fields["PARENT"] = ""
-
-    bookts = []
-    for book_id, book_text in works:
-        fields["BOOK"] = book_text
-        bookt = make_prompt(book_text, fields)
-        bookts.append(bookt)
-    booktss = "\n".join(bookts)
-    if booktss:
-        fields["FULLBOOK"] = booktss
-    else:
-        fields["FULLBOOK"] = ""
-
-    prompt = make_prompt(prompt_1, fields)
-    sys.stdout.write("1...")
-    sys.stdout.flush()
-    answer = generate(prompt)
-    ajs = to_json(answer)
-
-    if ajs:
-        if not "okay" in ajs:
-            # very bad response
-            print(f"PROMPT 1 FAILED: {ajs}")
-            continue
-        if ajs["okay"] in ["X", "?"]:
-            # Not a place or not confident, write to disk, we're done
-            write_to_disk(ajs, identifier, child, pid, parent, works)
+    for r in rows:
+        (identifier, child, pid, parent) = r[:4]
+        if identifier in results:
             continue
 
-        # We are a place, keep going
-        if "name" in ajs:
-            fields["SPELL"] = ajs["name"]
-            sptxt = make_prompt(spelling_text, fields)
-            fields["SPELLING"] = sptxt
+        print(f" ---- {child} part_of {parent} ----")
+        fields = {}
+
+        works = get_works(identifier)
+
+        fields["P1"] = child
+        fields["P2"] = parent
+        partxt = make_prompt(parent_text, fields)
+        if partxt:
+            fields["PARENT"] = partxt
         else:
-            sptxt = ""
+            fields["PARENT"] = ""
 
-        prompt = make_prompt(prompt_2, fields)
-        sys.stdout.write("2...")
+        bookts = []
+        for book_id, book_text in works:
+            fields["BOOK"] = book_text
+            bookt = make_prompt(book_text, fields)
+            bookts.append(bookt)
+        booktss = "\n".join(bookts)
+        if booktss:
+            fields["FULLBOOK"] = booktss
+        else:
+            fields["FULLBOOK"] = ""
+
+        prompt = make_prompt(prompt_1, fields)
+        sys.stdout.write("1...")
         sys.stdout.flush()
         answer = generate(prompt)
-        ajs2 = to_json(answer)
+        ajs = to_json(answer)
 
-        if ajs2:
-            if not "parent" in ajs2:
-                print(f"PROMPT 2 FAILED: {ajs2}")
-                ajs["PROMPT2"] = "BAD JSON"
+        if ajs:
+            if not "okay" in ajs:
+                # very bad response
+                print(f"PROMPT 1 FAILED: {ajs}")
+                continue
+            if ajs["okay"] in ["X", "?"]:
+                # Not a place or not confident, write to disk, we're done
+                write_to_disk(ajs, identifier, child, pid, parent, works)
+                continue
+
+            # We are a place, keep going
+            if "name" in ajs:
+                fields["SPELL"] = ajs["name"]
+                sptxt = make_prompt(spelling_text, fields)
+                fields["SPELLING"] = sptxt
             else:
-                ajs["parent"] = ajs2["parent"]
-                if ajs["parent"] in ["?", "N", "reversed"]:
-                    # Not confident, not parent, or backwards: don't continue
-                    pass
+                sptxt = ""
+
+            prompt = make_prompt(prompt_2, fields)
+            sys.stdout.write("2...")
+            sys.stdout.flush()
+            answer = generate(prompt)
+            ajs2 = to_json(answer)
+
+            if ajs2:
+                if not "parent" in ajs2:
+                    print(f"PROMPT 2 FAILED: {ajs2}")
+                    ajs["PROMPT2"] = "BAD JSON"
                 else:
-                    # Proceed to prompt 3 to get more info
-                    prompt = make_prompt(prompt_3, fields)
-                    sys.stdout.write("3...")
-                    sys.stdout.flush()
-                    answer = generate(prompt)
-                    ajs3 = to_json(answer)
-                    if ajs3:
-                        if "description" in ajs3:
-                            ajs["description"] = ajs3["description"]
-                        if "wp" in ajs3 and ajs3["wp"].startswith("http"):
-                            ajs["wp"] = ajs3["wp"]
-                            try:
-                                wpname = ajs["wp"].rsplit("/", 1)[-1]
-                                lang = ajs["wp"].replace("https://", "")
-                                lang = lang.replace("http://", "")  # just in case
-                                lang = lang.split(".")[0]
-                                resp = requests.get(wmuri.replace("{PAGENAME}", wpname).replace("{LANG}", lang))
-                                js = resp.json()
-                                ajs["wp_wd"] = js
-
-                                ###
-                                ### TODO
-                                ###
-                                # Now we should retrieve the JSON for the WD and test
-                                # Is it likely a place?
-                                # Is it a WM disambiguation page?
-                                # If parent is a country, and it has a country field, are they likely the same?
-                                # (etc)
-                                # If the WD fails, rerun prompt_3 with gemini-1.5-pro
-
-                            except:
-                                pass
+                    ajs["parent"] = ajs2["parent"]
+                    if ajs["parent"] in ["?", "N", "reversed"]:
+                        # Not confident, not parent, or backwards: don't continue
+                        pass
                     else:
-                        print(f"PROMPT 3 FAILED: No reponse")
-                        ajs["PROMPT3"] = "NO RESPONSE"
-        else:
-            print(f"PROMPT 2 FAILED: No response")
-            ajs["PROMPT2"] = "NO RESPONSE"
-    else:
-        print(f"PROMPT 1 FAILED: No Response")
-        continue
+                        # Proceed to prompt 3 to get more info
+                        prompt = make_prompt(prompt_3, fields)
+                        sys.stdout.write("3...")
+                        sys.stdout.flush()
+                        answer = generate(prompt)
+                        ajs3 = to_json(answer)
+                        if ajs3:
+                            if "description" in ajs3:
+                                ajs["description"] = ajs3["description"]
+                            if "wp" in ajs3 and ajs3["wp"].startswith("http"):
+                                ajs["wp"] = ajs3["wp"]
+                                try:
+                                    wpname = ajs["wp"].rsplit("/", 1)[-1]
+                                    lang = ajs["wp"].replace("https://", "")
+                                    lang = lang.replace("http://", "")  # just in case
+                                    lang = lang.split(".")[0]
+                                    resp = requests.get(wmuri.replace("{PAGENAME}", wpname).replace("{LANG}", lang))
+                                    js = resp.json()
+                                    ajs["wp_wd"] = js
 
-    write_to_disk(ajs, identifier, child, pid, parent, works)
+                                    ###
+                                    ### TODO
+                                    ###
+                                    # Now we should retrieve the JSON for the WD and test
+                                    # Is it likely a place?
+                                    # Is it a WM disambiguation page?
+                                    # If parent is a country, and it has a country field, are they likely the same?
+                                    # (etc)
+                                    # If the WD fails, rerun prompt_3 with gemini-1.5-pro
+
+                                except:
+                                    pass
+                        else:
+                            print(f"PROMPT 3 FAILED: No reponse")
+                            ajs["PROMPT3"] = "NO RESPONSE"
+            else:
+                print(f"PROMPT 2 FAILED: No response")
+                ajs["PROMPT2"] = "NO RESPONSE"
+        else:
+            print(f"PROMPT 1 FAILED: No Response")
+            continue
+
+        write_to_disk(ajs, identifier, child, pid, parent, works)
