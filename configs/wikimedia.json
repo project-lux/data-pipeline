@@ -1,0 +1,11 @@
+{
+    "name": "wikimedia",
+    "type": "external",
+    "namespace": "http://commons.wikimedia.org/",
+    "matches": ["commons.wikimedia.org"],
+    "fetch": "https://en.wikipedia.org/w/api.php?action=query&prop=imageinfo&iiprop=extmetadata&titles=File:{identifier}&format=json",
+
+    "fetcherClass": "sources.general.wikimedia.fetcher.WmFetcher",
+    "mapperClass": "sources.general.wikimedia.mapper.WmMapper",
+    "totalRecords": 43000000
+}

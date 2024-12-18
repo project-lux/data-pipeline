@@ -1,0 +1,16 @@
+{
+    "name": "ror",
+    "type": "external",
+    "namespace": "https://ror.org/",
+    "matches": ["/ror.org/"],
+    "fetch": "https://api.ror.org/organizations/{identifier}",
+    "wikidata_property": ["P6782"],
+    "merge_order": 99,
+    "dumpFilePath": "ror/v1.36-2023-11-08-ror-data.json",
+    
+    "loaderClass": "sources.general.ror.loader.RorLoader",
+    "mapperClass": "sources.general.ror.mapper.RorMapper",
+
+
+    "dump_file_subdir": "ror"
+}

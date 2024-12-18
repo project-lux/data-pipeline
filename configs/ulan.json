@@ -1,0 +1,17 @@
+{
+    "name": "ulan",
+    "type": "external",
+    "namespace": "http://vocab.getty.edu/ulan/",
+    "matches": ["vocab.getty.edu/ulan/"],
+    "fetch": "https://vocab.getty.edu/ulan/{identifier}.jsonld",
+    "activitystreams": ["https://data.getty.edu/vocab/activity-stream"],
+    "wikidata_property": ["P245"],
+    "merge_order": 11,
+    
+    "harvesterClass": "sources.authorities.getty.harvester.GettyHarvester",
+    "mapperClass": "sources.authorities.getty.mapper.UlanMapper",
+    "indexLoaderClass": "process.base.index_loader.LmdbIndexLoader",
+    "reconcilerClass": "sources.authorities.getty.reconciler.UlanReconciler",
+    
+    "reconcileDbPath": "label_to_ulan.lmdb"    
+}

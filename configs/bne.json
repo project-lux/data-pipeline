@@ -1,0 +1,24 @@
+{
+    "name": "bne",
+    "type": "external",
+    "namespace": "https://datos.bne.es/resource/",
+    "matches": ["datos.bne.es/resource/"],
+    "fetch": "https://datos.bne.es/resource/{identifier}.jsonld",
+    "wikidata_property": ["P950"],
+    "merge_order": 100,
+    
+    "fetcherClass": "process.base.fetcher.Fetcher",
+    "mapperClass": "sources.libraries.bne.mapper.BneMapper",
+    "cycleBreakPath": "bne_cycle_breaks.json",
+
+    "dump_file_subdir": "bne",
+    "remote_dump_files": [
+        "https://www.bne.es/media/datosgob/catalogo-autoridades/entidad/entidad-JSON.zip",
+        "https://www.bne.es/media/datosgob/catalogo-autoridades/materia/materia-JSON.zip",
+        "https://www.bne.es/media/datosgob/catalogo-autoridades/geografico/geografico-JSON.zip",
+        "https://www.bne.es/media/datosgob/catalogo-autoridades/persona/persona-JSON.zip"
+
+    ]
+
+
+}

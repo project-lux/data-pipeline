@@ -1,0 +1,18 @@
+{
+    "name": "lcdgt",
+    "type": "external",
+    "namespace": "http://id.loc.gov/authorities/demographicTerms/",
+    "matches": ["id.loc.gov/authorities/demographicTerms/"],
+    "fetch": "http://id.loc.gov/authorities/demographicTerms/{identifier}.json",
+    "merge_order": 25,
+    
+    "fetcherClass": "sources.authorities.lc.fetcher.LcdgtFetcher",
+    "mapperClass": "sources.authorities.lc.mapper.LcnafMapper",
+
+    "totalRecords": 1830,
+
+    "dump_file_subdir": "lcdgt",
+    "remote_dump_files": [
+        "http://id.loc.gov/download/authorities/demographicTerms.madsrdf.jsonld.gz"
+    ]
+}

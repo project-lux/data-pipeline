@@ -1,0 +1,19 @@
+{
+    "name": "aat",
+    "type": "external",
+    "namespace": "http://vocab.getty.edu/aat/",
+    "matches": ["vocab.getty.edu/aat/"],
+    "fetch": "https://vocab.getty.edu/aat/{identifier}.jsonld",
+    "activitystreams": ["https://data.getty.edu/vocab/activity-stream"],
+    "wikidata_property": ["P1014"],
+    "merge_order": 10,
+    
+    "harvesterClass": "sources.authorities.getty.harvester.GettyHarvester",
+    "mapperClass": "sources.authorities.getty.mapper.AatMapper",
+    "indexLoaderClass": "process.base.index_loader.LmdbIndexLoader",
+    "reconcilerClass": "sources.authorities.getty.reconciler.AatReconciler",
+    
+    "reconcileDbPath": "label_to_aat.lmdb",
+    "cycleBreakPath": "aat_cycle_breaks.json"
+    
+}

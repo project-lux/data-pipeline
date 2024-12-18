@@ -1,0 +1,24 @@
+{
+	"name": "fast",
+	"type": "external",
+	"namespace": "https://id.worldcat.org/fast/",
+	"matches": ["id.worldcat.org/fast/"],
+	"fetch": "https://id.worldcat.org/fast/{identifier}.rdf.xml",
+        "wikidata_property": ["P2163"],
+        "merge_order": 75,
+	"totalRecords":1800000,
+    
+	"fetcherClass": "sources.authorities.oclc.fetcher.ViafFetcher",
+	"mapperClass": "sources.authorities.oclc.mapper.ViafMapper",
+	"loaderClass": "sources.authorities.oclc.loader.FastLoader",
+
+    "inverseEquivDbPath": "",        
+	"reconcileDumpPath": "",
+    "dumpFilePath": "fast/FASTAll.marcxml.zip",
+
+    "dump_file_subdir": "fast",
+    "remote_dump_files": [
+    	"https://researchworks.oclc.org/researchdata/fast/FASTAll.marcxml.zip"       
+    ]
+
+}

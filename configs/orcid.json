@@ -1,0 +1,20 @@
+{
+    "name": "orcid",
+    "type": "external",
+    "namespace": "https://orcid.org/",
+    "matches": ["/orcid.org/"],
+    "fetch": "http://orcid.org/{identifier}",
+    "wikidata_property": ["P496"],
+    "merge_order": 102,
+
+    "dumpFilePath": "orcid/orcid-summaries.tar.gz",
+    
+    "loaderClass": "sources.general.orcid.loader.OrcidLoader",
+    "mapperClass": "sources.general.orcid.mapper.OrcidMapper",
+
+
+    "dump_file_subdir": "orcid",
+    "remote_dump_files": [
+        "https://orcid.figshare.com/ndownloader/files/49560102"
+    ]
+}

@@ -1,0 +1,21 @@
+{
+    "name": "bnf",
+    "type": "external",
+    "namespace": "https://data.bnf.fr/ark:/12148/",
+    "matches": ["data.bnf.fr/ark:/12148/"],
+    "fetch": "https://data.bnf.fr/ark:/12148/{identifier}",
+    "merge_order": 30,
+    
+    "fetcherClass": "sources.libraries.bnf.fetcher.BnfXmlFetcher",
+    "mapperClass": "sources.libraries.bnf.mapper.BnfXmlMapper",
+    "cycleBreakPath": "bnf_cycle_breaks.json",
+
+    "dump_file_subdir": "bnf",
+    "remote_dump_files": [
+        "https://transfert.bnf.fr/link/c26ba50e-17c4-46fe-b6d8-8c2ad393f40e",
+        "https://transfert.bnf.fr/link/c412f451-2bf2-45a7-b76b-a11d563c2a8a",
+        "https://transfert.bnf.fr/link/2a2b3690-f642-4644-8615-9b50b59c84d9",
+        "https://transfert.bnf.fr/link/86ea06b4-2590-4d1c-8e1e-126eff24b535"
+        
+    ]
+}
