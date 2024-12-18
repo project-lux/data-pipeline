@@ -123,6 +123,7 @@ while cont:
                 else:
                     arg = ""
             except:
+                print("FAILED to split row from Google Sheet")
                 print(row)
                 cont = False
             fixes.append(
