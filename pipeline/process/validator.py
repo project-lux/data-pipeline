@@ -42,7 +42,7 @@ class Validator(object):
                 ("core.json", schema)])
 
         for (k,v) in self.schema_map.items():
-            with open(os.path.join(sdir, f"{v}.json"))
+            with open(os.path.join(sdir, f"{v}.json")):
                 schema = json.load(fh)
             vldr = Draft202012Validator(schema, registry=registry)
             self.schema_map[k] = vldr
