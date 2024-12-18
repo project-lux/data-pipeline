@@ -164,9 +164,8 @@ if "--new-token" in sys.argv:
     else:
         tok = f"{stok}__"
     fn = os.path.join(cfgs.data_dir, "idmap_update_token.txt")
-    fh = open(fn, "w")
-    fh.write(f"{tok}\n")
-    fh.close()
+    with open(fn, "w") as fh:
+        fh.write(f"{tok}\n")
     print(f"New update token: {tok}")
 
 
@@ -269,10 +268,9 @@ if "--test-ils-idmap" in sys.argv:
             durn = int(time.time() - start)
             print(f"{x}/{ttl} = {x/durn}/sec = {ttl/(x/durn)}")
             print(f"    Found old: {len(old)} = {int(len(old)/x*100)}% = {int(len(old)/x*ttl)} to go")
-    fh = open("old_ils_idmap.txt", "w")
-    for o in old:
-        fh.write(f"{o}\n")
-    fh.close()
+    with open("old_ils_idmap.txt", "w") as fh:
+        for o in old:
+            fh.write(f"{o}\n")
 
 if "--clean-ils-idmap" in sys.argv:
     keep = [
@@ -281,29 +279,28 @@ if "--clean-ils-idmap" in sys.argv:
         "8197d709-73ce-4074-bf3a-aa5daf4c07c7",
         "adfd0ca5-84ed-4fa7-b564-3728cb89eabb",
     ]
-    fh = open("old_ils_idmap.sort.txt")
-    for l in fh.readlines():
-        l = l.strip()
-        cont = False
-        for k in keep:
-            if k in l:
-                cont = True
-                break
-        if cont:
-            continue
-        try:
-            yuid = idmap[l]
-        except:
-            continue
-        if yuid is not None:
-            res = idmap[yuid]
-            del idmap[l]
-            if len(res) == 2:
-                res.remove(l)
-                tok = res.pop()
-                if tok.startswith("__"):
-                    idmap._remove(yuid, tok)
-    fh.close()
+    with open("old_ils_idmap.sort.txt") as fh:
+        for l in fh.readlines():
+            l = l.strip()
+            cont = False
+            for k in keep:
+                if k in l:
+                    cont = True
+                    break
+            if cont:
+                continue
+            try:
+                yuid = idmap[l]
+            except:
+                continue
+            if yuid is not None:
+                res = idmap[yuid]
+                del idmap[l]
+                if len(res) == 2:
+                    res.remove(l)
+                    tok = res.pop()
+                    if tok.startswith("__"):
+                        idmap._remove(yuid, tok)
 
 
 ### CLEAR DATABASES

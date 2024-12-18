@@ -108,9 +108,8 @@ class Mapper(object):
         self.cycle_breaks = {}
         # Read from file
         if "cycleBreakPath" in config and os.path.exists(config["cycleBreakPath"]):
-            fh = open(config["cycleBreakPath"])
-            self.cycle_breaks = json.load(fh)
-            fh.close()
+            with open(config["cycleBreakPath"]) as fh:
+                self.cycle_breaks = json.load(fh)
 
         self.config = config
         self.configs = config["all_configs"]
@@ -118,9 +117,8 @@ class Mapper(object):
         fn = os.path.join(self.configs.data_dir, "type_overrides.json")
         self.type_overrides = {}
         if os.path.exists(fn):
-            fh = open(fn)
-            self.type_overrides = json.load(fh)
-            fh.close()
+            with open(fn) as fh:
+                self.type_overrides = json.load(fh)
 
         # Mapping might need preferred URI for source
         self.namespace = config["namespace"]
@@ -134,9 +132,8 @@ class Mapper(object):
         fn = os.path.join(self.configs.data_dir, f"xpath_fixes.json")
         if os.path.exists(fn):
             eg = etree.XML("<record/>")
-            fh = open(fn)
-            data = json.load(fh)
-            fh.close()
+            with open(fn) as fh:
+                data = json.load(fh)
             for f in data:
                 if f["source"] == self.name:
                     which = "identifier" if f["identifier"] else "equivalent"
