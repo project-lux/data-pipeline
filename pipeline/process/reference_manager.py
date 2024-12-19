@@ -47,7 +47,11 @@ class ReferenceManager(object):
             for k in self.done_refs.iter_keys():
                 x += 1
                 if not x % 100000:
+                    fh.flush()
                     print(x)
+                if k['dist'] == None:
+                    print("Got distance of 'None' from done_refs")
+                    continue
                 if k["dist"] <= maxd:
                     fh.write(f"{k['dist']}|{k.pkey}\n")
 

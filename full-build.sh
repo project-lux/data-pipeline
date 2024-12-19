@@ -55,8 +55,9 @@ sleep 30
 
 ### Export referenced URIs
 echo "Exporting Referenced URIs to file"
+rm reference_uris.txt
 python ./manage-data.py --write-refs
-sleep 10
+sleep 20
 
 
 ### Merge Phase
@@ -134,9 +135,9 @@ sleep 30
 
 ### Export referenced URIs
 echo "Exporting Referenced URIs to file"
+rm reference_uris.txt
 python ./manage-data.py --write-refs
-sleep 10
-
+sleep 20
 
 ### Merge Phase
 #
