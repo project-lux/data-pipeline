@@ -27,7 +27,6 @@ class Validator(object):
             'Set': 'set',
             'LinguisticObject': 'text',
             'Type': 'concept',
-            'Activity': 'provenance',
             'Event': 'event'
         }        
 
@@ -47,6 +46,7 @@ class Validator(object):
             vldr = Draft202012Validator(schema, registry=registry)
             self.schema_map[k] = vldr
         self.schema_map['Period'] = self.schema_map['Event']
+        self.schema_map['Activity'] = self.schema_map['Event']
         self.schema_map['Material'] = self.schema_map['Type']
         self.schema_map['Currency'] = self.schema_map['Type']
         self.schema_map['Language'] = self.schema_map['Type']

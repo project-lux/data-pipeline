@@ -125,28 +125,34 @@ if "--reload" in sys.argv:
 ### VALIDATION
 if "--validate" in sys.argv:
     ignore_matches = []
-    rc = cfgs.internal["ils"]["recordcache"]
+    to_do = []
+    for src, cfg in cfgs.internal.items():
+        if f"--{src}" in sys.argv:
+            to_do.append((src, cfg))
+
     v = cfgs.validator
-    for rec in rc.iter_records():
-        sys.stdout.write(".")
-        sys.stdout.flush()
-        errs = v.validate(rec)
-        if errs:
-            filtered = []
-            for error in errs:
-                done = False
-                for im in ignore_matches:
-                    if im in error.message:
-                        done = True
-                if not done:
-                    filtered.append(error)
-            if filtered:
-                print(f"\n{rec['identifier']}")
-                for error in filtered:
-                    print(f"  /{'/'.join([str(x) for x in error.absolute_path])} --> {error.message} ")
-        else:
-            # print(f"{rec['identifier']}: Valid")
-            pass
+    for (src, cfg) in to_do:
+        rc = cfg["recordcache"]
+        for rec in rc.iter_records():
+            sys.stdout.write(".")
+            sys.stdout.flush()
+            errs = v.validate(rec)
+            if errs:
+                filtered = []
+                for error in errs:
+                    done = False
+                    for im in ignore_matches:
+                        if im in error.message:
+                            done = True
+                    if not done:
+                        filtered.append(error)
+                if filtered:
+                    print(f"\n{rec['identifier']}")
+                    for error in filtered:
+                        print(f"  /{'/'.join([str(x) for x in error.absolute_path])} --> {error.message} ")
+            else:
+                # print(f"{rec['identifier']}: Valid")
+                pass
 
 ### WRITE NEW IDMAP TOKEN
 
