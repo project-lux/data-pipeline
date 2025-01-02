@@ -255,7 +255,21 @@ class ReferenceManager(object):
                     print("Checking for outdated equivalents")
                 if existing:
                     for x in existing.copy():
-                        if not x in qequivs and not x.startswith("__"):
+                        if x.startswith("__"):  # Skip update tokens
+                            continue
+                        
+                        # Check if it's an internal URI
+                        is_internal = False
+                        for i in self.internal_uris:
+                            if x.startswith(i):
+                                is_internal = True
+                                break
+                        if is_internal:
+                            continue
+
+                        # Strip ##qua suffix for comparison
+                        base_uri = x.split("##")[0]
+                        if not base_uri in cr_equivs:
                             existing.remove(x)
                             try:
                                 del self.idmap[x]
