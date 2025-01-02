@@ -26,8 +26,10 @@ class ReferenceManager(object):
             f = r["from"]["value"]
             t = r["to"]["value"]
             getty_redirects[f] = t
-        self.redirects = getty_redirects
+        self.redirects = getty_redirects    
         self.ref_cache = {}
+
+        self.processed_yuids = set()  # Memory-efficient tracking
 
     def write_metatypes(self, my_slice):
         # write out our slice of metatypes
@@ -243,24 +245,18 @@ class ReferenceManager(object):
             has_update = self.idmap.has_update_token(uu)
         else:
             has_update = False
-        rebuild = not has_update
 
-        # Ensure that previous bad reconciliations are undone
-        # But only the first time we see this uuid
-        if uu and rebuild:
-            if self.debug:
-                print("No update token!")
-            self.idmap.add_update_token(uu)
-            updated_token = True
-            if existing:
-                # replace existing with equivs if no or old update token
-                to_delete = []
-                for x in existing.copy():
-                    if not x in qequivs:
-                        if self.debug:
-                            print(f"Removing {x} not in new equivs")
-                        existing.remove(x)
-                        if not x.startswith("__"):
+        if uu:
+            if uu not in self.processed_yuids:
+                if self.debug:
+                    print(f"First time processing {uu} this run")
+                self.processed_yuids.add(uu)
+                if self.debug:
+                    print("Checking for outdated equivalents")
+                if existing:
+                    for x in existing.copy():
+                        if not x in qequivs and not x.startswith("__"):
+                            existing.remove(x)
                             try:
                                 del self.idmap[x]
                                 if self.debug:
@@ -268,9 +264,6 @@ class ReferenceManager(object):
                             except:
                                 print(f"\nWhile processing {recid} found {equivs} in record")
                                 print(f"Tried to delete {x} for {uu}")
-                    else:
-                        if self.debug:
-                            print(f"Found {x} in existing and new")
 
         # Build map of equivalent ids given in current record
         if equivs:
