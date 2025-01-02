@@ -223,9 +223,10 @@ class ReferenceManager(object):
 
         uu = self.idmap[qrecid]
         if uu is not None:
+            has_update = self.idmap.has_update_token(uu)
             # We know about this entity/record already
             if self.debug:
-                print(f"Found {uu} for {qrecid}")
+                print(f"Update token status for {uu}: {has_update}")
             equiv_map[qrecid] = uu
             uuset = self.idmap[uu]
             if uuset:
@@ -235,15 +236,20 @@ class ReferenceManager(object):
         else:
             if self.debug:
                 print(f"Got None for {qrecid}, will mint or find")
+            has_update = False
 
         updated_token = False
-        # if we have the current update token, then we've already been touched
-        # so rebuild from scratch is == has_update
-        if uu is not None:
-            has_update = self.idmap.has_update_token(uu)
-        else:
-            has_update = False
+        # # if we have the current update token, then we've already been touched
+        # # so rebuild from scratch is == has_update
+        # if uu is not None:
+        #     has_update = self.idmap.has_update_token(uu)
+        # else:
+        #     has_update = False
         rebuild = not has_update
+        if self.debug:
+            print(f"Rebuild status: {rebuild}")
+            print(f"Existing items: {existing}")
+            print(f"New qequivs: {qequivs}")
 
         # Ensure that previous bad reconciliations are undone
         # But only the first time we see this uuid
