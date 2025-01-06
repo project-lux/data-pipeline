@@ -1,0 +1,19 @@
+	{
+	"name": "nomisma",
+	"type": "external",
+	"namespace": "http://nomisma.org/",
+	"matches": ["nomisma.org/"],
+	"fetch": "http://nomisma.org/id/{identifier}.jsonld",
+
+	"fetcherClass": "sources.authorities.nomisma.fetcher.NomismaFetcher",
+	"mapperClass": "sources.authorities.nomisma.mapper.NomismaMapper",
+	"loaderClass": "",
+
+	"dumpFilePath": "nomisma/nomisma.org.jsonld",
+	"remoteDumpFile": "https://nomisma.org/nomisma.org.jsonld",
+
+	"dump_file_subdir": "nomisma",
+	"remote_dump_files": [
+		"https://nomisma.org/nomisma.org.jsonld"
+		]
+	}

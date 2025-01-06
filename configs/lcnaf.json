@@ -27,6 +27,6 @@
 
     "dump_file_subdir": "lcnaf",
     "remote_dump_files": [
-    	"https://lds-downloads.s3.amazonaws.com/authorities/names.madsrdf.jsonld.gz"
+        "https://lds-downloads.s3.amazonaws.com/authorities/names.madsrdf.jsonld.gz"
     ]
 }

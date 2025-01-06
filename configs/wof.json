@@ -1,0 +1,21 @@
+{
+    "name": "wof",
+    "type": "external",
+    "namespace": "http://data.whosonfirst.org/",
+    "matches": ["whosonfirst.org/"],
+    "fetch": "https://data.whosonfirst.org/",
+    "wikidata_property": ["P6766"],
+    "merge_order": 60,
+    
+    "fetcherClass": "sources.general.wof.fetcher.WofFetcher",
+    "mapperClass": "sources.general.wof.mapper.WofMapper",
+
+    "dumpFilePath": "wof/latest_wof.db",
+    "cycleBreakPath": "wof_cycle_breaks.json",
+
+    "dump_file_subdir": "wof",
+    "remote_dump_files": [
+        "https://data.geocode.earth/wof/dist/sqlite/whosonfirst-data-admin-latest.db.bz2"
+    ]
+
+}

@@ -1,0 +1,16 @@
+{
+    "name": "homosaurus",
+    "type": "external",
+    "namespace": "https://homosaurus.org/v3/",
+    "matches": ["https://homosaurus.org/v3/"],
+    "fetch": "https://homosaurus.org/v3/{identifier}.jsonld",
+
+    "fetcherClass": "sources.authorities.homosaurus.fetcher.HomosaurusFetcher",
+    "mapperClass": "sources.authorities.homosaurus.mapper.HomosaurusMapper",
+
+    "dump_file_subdir": "homosaurus",
+    "remote_dump_files": [
+        "https://homosaurus.org/v3.jsonld"
+    ]
+
+}

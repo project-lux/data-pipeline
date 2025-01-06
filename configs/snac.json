@@ -1,0 +1,11 @@
+{
+    "name": "snac",
+    "type": "external",
+    "namespace": "https://snaccooperative.org",
+    "matches": ["http://n2t.net/ark:/99166/"],
+    "fetch": "https://snaccooperative.org/download?arkid=http://n2t.net/ark:/99166/{identifier}&type=constellation_json",
+    "merge_order": 95,
+    
+    "fetcherClass": "sources.archives.snac.fetcher.SNACFetcher",
+    "mapperClass": "sources.archives.snac.mapper.SNACMapper"
+}
