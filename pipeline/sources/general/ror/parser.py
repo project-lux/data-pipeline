@@ -1,4 +1,3 @@
-from pipeline.sources.utils import fetch_webpage
 from bs4 import BeautifulSoup
 import json
 
