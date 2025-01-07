@@ -27,11 +27,16 @@ def process_uri(uri, option1=False, option2=False):
 	except:
 		return {"records": [], "error": f"Failure: could not fetch uri {uri}"}
 
-	typ = uri.rsplit("/",2)[-2]
-	if typ == "concept":
-		typ = "type"
+	typ = uri.rsplit("/",2)[-2].title()
 
-	typ = typ.title()
+	if typ == "Object":
+		typ = "HumanMadeObject"
+	elif typ == "Concept":
+		typ == "Type"
+	elif typ == "Text":
+		typ == "LinguisticObject"
+	elif typ == "Visual":
+		typ == "VisualWork"
 
 	recnames = {}
 	recequivs = {}
