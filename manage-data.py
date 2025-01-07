@@ -130,10 +130,16 @@ if "--validate" in sys.argv:
         if f"--{src}" in sys.argv:
             to_do.append((src, cfg))
 
+    if len(sys.argv) > 4 and sys.argv[1].isnumeric() and sys.argv[2].isnumeric():
+        my_slice = int(sys.argv[1])
+        max_slice = int(sys.argv[2])
+    else:
+        my_slice = max_slice = -1
+
     v = cfgs.validator
     for (src, cfg) in to_do:
         rc = cfg["recordcache"]
-        for rec in rc.iter_records():
+        for rec in rc.iter_records_slice(my_slice, max_slice):
             sys.stdout.write(".")
             sys.stdout.flush()
             errs = v.validate(rec)

@@ -50,8 +50,9 @@ class YcbaLoader(Loader):
                 # Empty record means was previously deleted
                 continue
 
-            what = ident.replace('home/ec2-user/reconciliation/data/ycba/', '')
-            ident = ident.replace('linked_art/', '')
+            # Should be type/uu/uuid.json
+            bits = ident.split('/')
+            what = '/'.join(bits[-3:])
             if what and what in self.out_cache:
                 done_x += 1
                 if not done_x % 10000:
