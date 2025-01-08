@@ -2,6 +2,7 @@ from pipeline.process.base.mapper import Mapper
 from pipeline.process.utils.mapper_utils import make_datetime, test_birth_death
 from cromulent import model, vocab
 import os
+import json
 
 ### Documentation
 # https://d-nb.info/standards/elementset/gnd 
@@ -12,29 +13,32 @@ class DnbMapper(Mapper):
         Mapper.__init__(self, config)
         self.male = "https://d-nb.info/standards/vocab/gnd/gender#male"
         self.female = "https://d-nb.info/standards/vocab/gnd/gender#female"
-        self.process_macs_nt_file(config)
+        self.process_close_matches(config)
 
-    #process entity graph dump file
-    def process_macs_nt_file(self, config):
+    def process_close_matches(self, config):
         cfgs = config['all_configs']
         data_dir = cfgs.data_dir
-        fn = os.path.join(data_dir, 'macs.nt')
+        fn = os.path.join(data_dir, 'mapping-authorities-gnd-lcsh-ram_lds.jsonld')
         close = {}
         if os.path.exists(fn):
-            with open(fn) as fh:
-                lines = fh.readlines()
-            for l in lines:
-                l = l.strip()
-                # <https://d-nb.info/gnd/4129090-2> <http://www.w3.org/2004/02/skos/core#closeMatch> <http://id.loc.gov/authorities/subjects/sh85000691> .
-                if l.startswith('<https://d-nb.info/gnd/') and 'closeMatch' in l:
-                    l = l.replace(' .', '')
-                    (a,b,c) = l.split(' ')
-                    gnd = a.rsplit('/',1)[1][:-1]
-                    tgt = c[1:-1]
-                    try:
-                        close[gnd].append(tgt)
-                    except:
-                        close[gnd] = [tgt]
+            with open(fn, 'r') as file:
+                data = json.load(file)  # Load the JSON structure                   
+                for nested_list in data:
+                    if isinstance(nested_list, list):
+                        for record in nested_list:
+                            if isinstance(record, dict):
+                                if (
+                                    "@id" in record and
+                                    record["@id"].startswith("https://d-nb.info/gnd/") and
+                                    "http://www.w3.org/2004/02/skos/core#closeMatch" in record
+                                ):
+                                    key = record["@id"]
+                                    values = [
+                                        match["@id"] 
+                                        for match in record["http://www.w3.org/2004/02/skos/core#closeMatch"]
+                                        if isinstance(match, dict) and "@id" in match]
+                                    close.setdefault(key, []).extend(values)
+                                    close[key] = list(set(close[key]))
             self.closeMatches = close
         else:
             self.closeMatches = {}
@@ -42,7 +46,6 @@ class DnbMapper(Mapper):
 
 #person specific attributes from entity graph data
     def handle_person(self, rec, top):
-
         birth = None
         dob = ""
         if 'dateOfBirth' in rec:
