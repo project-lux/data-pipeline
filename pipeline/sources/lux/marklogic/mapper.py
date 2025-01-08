@@ -43,7 +43,6 @@ class MlMapper(Mapper):
         ]
 
         self.external_types = {}
-        # self.record_references = self.configs.instantiate_map('record_refs')['store']
 
     def _walk_node_ref(self, node, refs, all_refs, top=False, ignore=False):
         if (
@@ -818,10 +817,8 @@ class MlMapper(Mapper):
                 ml["triples"].append({"triple": t4})
 
         for r in all_reffed:
-            # update record reference index in redis that me has a reference to r
-            r2 = r.split("/")[-1]
-            me2 = me.split("/")[-1]
-            # self.record_references[r2] = me2
+            t = {"subject": me, "predicate": f"{luxns}allRefCtr", "object": r}
+            ml['triples'].append({'triple': t})
 
         # Add boolean flags for hasImage and isOnline
 
