@@ -135,9 +135,8 @@ class IdMap(RedisCache):
         self.memory_cache = {}
         self.clean_on_remove = False
 
-        fh = open(os.path.join(self.configs.data_dir, 'idmap_update_token.txt'))
-        token = fh.read()
-        fh.close()
+        with open(os.path.join(self.configs.data_dir, 'idmap_update_token.txt')) as fh:
+            token = fh.read()
         token = token.strip()
         if not token.startswith('__') or not token.endswith('__'):
             print("Idmap Update Token is badly formed, should be 8 character date with leading/trailing __")

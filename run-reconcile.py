@@ -217,6 +217,5 @@ poolman.put_all("localsocket")
 # Report Status for orchestration
 if my_slice > -1:
     fn = os.path.join(cfgs.log_dir, "flags", f"reconcile_is_done-{my_slice}.txt")
-    fh = open(fn, "w")
-    fh.write("1")
-    fh.close()
+    with open(fn, "w") as fh:
+        fh.write("1")

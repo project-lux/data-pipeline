@@ -23,9 +23,8 @@ class Cleaner(Mapper):
 
         fn = os.path.join(self.configs.data_dir, "metatypes.json")
         if os.path.exists(fn):
-            fh = open(fn)
-            data = fh.read()
-            fh.close()
+            with open(fn) as fh:
+                data = fh.read()
             self.metatypes = json.loads(data)
 
     def get_commons_license(self, img):

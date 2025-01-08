@@ -33,9 +33,8 @@ class FsCache(object):
     def _read_file(self, fn):
         fn = os.path.join(self.directory, fn)
         if os.path.exists(fn):
-            fh = open(fn)
-            data = fh.read()
-            fh.close()
+            with open(fn) as fh:
+                data = fh.read()
             try:
                 js = json.loads(data)
             except:
@@ -75,9 +74,8 @@ class FsCache(object):
         if 'data' in value and 'identifier' in value:
             value = value['data']
 
-        fh = open(fn, 'w')
-        fh.write(json.dumps(value))
-        fh.close()
+        with open(fn, "w") as fh:
+            fh.write(json.dumps(value))
 
     def iter_keys(self):
         for file in self._list():

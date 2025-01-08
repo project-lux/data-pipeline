@@ -33,9 +33,8 @@ class Validator(object):
 
         # first read in and register core
         corefn = os.path.join(sdir, f"core.json")
-        fh = open(corefn)
-        core_json = json.load(fh)
-        fh.close()
+        with open(corefn) as fh:
+            core_json = json.load(fh)
 
         schema = Resource.from_contents(core_json)
         registry = Registry().with_resources([
@@ -43,9 +42,8 @@ class Validator(object):
                 ("core.json", schema)])
 
         for (k,v) in self.schema_map.items():
-            fh = open(os.path.join(sdir, f"{v}.json"))
-            schema = json.load(fh)
-            fh.close()
+            with open(os.path.join(sdir, f"{v}.json")) as fh:
+                schema = json.load(fh)
             vldr = Draft202012Validator(schema, registry=registry)
             self.schema_map[k] = vldr
         self.schema_map['Period'] = self.schema_map['Event']

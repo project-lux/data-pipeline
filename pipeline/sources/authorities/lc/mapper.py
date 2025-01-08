@@ -467,9 +467,8 @@ class LcnafMapper(LcMapper):
         cfgs = config["all_configs"]
         fn = os.path.join(cfgs.data_dir, "parenthetical_places.json")
         if os.path.exists(fn):
-            fh = open(fn)
-            data = fh.read()
-            fh.close()
+            with open(fn) as fh:
+                data = fh.read()
             self.parenthetical_places = json.loads(data)
         else:
             self.parenthetical_places = {}

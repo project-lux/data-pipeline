@@ -43,9 +43,8 @@ class YulMapper(Mapper):
         fn = os.path.join(data_dir, "stupid_table.json")
         self.object_work_mismatch = {}
         if os.path.exists(fn):
-            fh = open(fn)
-            self.object_work_mismatch = json.load(fh)
-            fh.close()
+            with open(fn) as fh:
+                self.object_work_mismatch = json.load(fh)
         # stubid --> [real_id, type]
 
         ycbaexhs = {}
@@ -68,9 +67,9 @@ class YulMapper(Mapper):
         self.ycbaexhs = ycbaexhs
 
         fn = os.path.join(data_dir, "lib_okay_parts.json")
-        fh = open(fn)
-        okay = json.load(fh)
-        fh.close()
+        if os.path.exists(fn):
+            with open(fn) as fh:
+                okay = json.load(fh)
         self.okay_place_parts = okay
 
         self.wiki_recon = {}
@@ -83,9 +82,8 @@ class YulMapper(Mapper):
 
         fn = os.path.join(data_dir, "parenthetical_places.json")
         if os.path.exists(fn):
-            fh = open(fn)
-            data = fh.read()
-            fh.close()
+            with open(fn) as fh:
+                data = fh.read()
             self.parenthetical_places = json.loads(data)
         else:
             self.parenthetical_places = {}
@@ -93,9 +91,8 @@ class YulMapper(Mapper):
 
         fn = os.path.join(data_dir, "lib_enhance_places.json")
         if os.path.exists(fn):
-            fh = open(fn)
-            data = fh.read()
-            fh.close()
+            with open(fn) as fh:
+                data = fh.read()
             self.gemini_place_data = json.loads(data)
         else:
             self.gemini_place_data = {}

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ### Clear records
-python ./manage-data --clear-all --new-token
+python ./manage-data.py --clear-all --new-token
 
 # Always update from google sheet
 python ./google-sames-diffs.py

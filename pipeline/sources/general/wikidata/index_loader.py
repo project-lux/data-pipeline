@@ -24,22 +24,21 @@ class WdFileIndexLoader(LmdbIndexLoader):
 		updates = {}
 		for fn in files:
 			print(fn)
-			efh = open(os.path.join(self.configs.temp_dir, fn))
-			l = efh.readline().strip()
-
-			while l:
-				(x,y) = l.rsplit(',', 1)
-				updates[x] = y
-				n += 1
+			with open(os.path.join(self.configs.temp_dir, fn)) as efh:
 				l = efh.readline().strip()
-				if not n % 100000:
-					eqindex.update(updates)
-					updates = {}
-					# eqindex.commit()
-					durn = time.time()-start
-					print(f"{n} of {ttl} in {int(durn)} = {n/durn}/sec -> {ttl/(n/durn)} secs")
-					sys.stdout.flush()
-			efh.close()
+
+				while l:
+					(x,y) = l.rsplit(',', 1)
+					updates[x] = y
+					n += 1
+					l = efh.readline().strip()
+					if not n % 100000:
+						eqindex.update(updates)
+						updates = {}
+						# eqindex.commit()
+						durn = time.time()-start
+						print(f"{n} of {ttl} in {int(durn)} = {n/durn}/sec -> {ttl/(n/durn)} secs")
+						sys.stdout.flush()
 
 		eqindex.update(updates)
 		# eqindex.commit()

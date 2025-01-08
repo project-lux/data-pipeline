@@ -46,28 +46,27 @@ if not os.path.exists(cfgs.exports_dir):
     os.mkdir(cfgs.exports_dir)
 
 fn = os.path.join(cfgs.exports_dir, f"export_full_{my_slice}.jsonl")
-outh = open(fn, "w")
-x = 0
-for rec in merged.iter_records_slice(my_slice, max_slice):
-    yuid = rec["yuid"]
-    if not yuid in ml:
-        try:
-            rec2 = mapper.transform(rec, rec["data"]["type"])
-        except Exception as e:
-            print(f"{yuid} errored in marklogic mapper: {e}")
-            continue
-        ml[yuid] = rec2
-    else:
-        rec2 = ml[yuid]["data"]
-    jstr = json.dumps(rec2, separators=(",", ":"))
-    outh.write(jstr)
-    outh.write("\n")
-    sys.stdout.write(".")
-    sys.stdout.flush()
-    x += 1
-    if profiling and x >= 10000:
-        break
-outh.close()
+with open(fn, "w") as outh:
+    x = 0
+    for rec in merged.iter_records_slice(my_slice, max_slice):
+        yuid = rec["yuid"]
+        if not yuid in ml:
+            try:
+                rec2 = mapper.transform(rec, rec["data"]["type"])
+            except Exception as e:
+                print(f"{yuid} errored in marklogic mapper: {e}")
+                continue
+            ml[yuid] = rec2
+        else:
+            rec2 = ml[yuid]["data"]
+        jstr = json.dumps(rec2, separators=(",", ":"))
+        outh.write(jstr)
+        outh.write("\n")
+        sys.stdout.write(".")
+        sys.stdout.flush()
+        x += 1
+        if profiling and x >= 10000:
+            break
 
 
 if profiling:
@@ -83,6 +82,5 @@ if profiling:
 # Explicitly force all postgres connections to close
 poolman.put_all("localsocket")
 
-fh = open(os.path.join(cfgs.log_dir, "flags", f"export_is_done-{my_slice}.txt"), "w")
-fh.write("1\n")
-fh.close()
+with open(os.path.join(cfgs.log_dir, "flags", f"export_is_done-{my_slice}.txt"), "w") as fh:
+    fh.write("1\n")

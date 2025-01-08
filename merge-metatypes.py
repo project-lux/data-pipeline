@@ -8,9 +8,8 @@ files = glob.glob("metatypes-*.json")
 mt = {}
 
 for f in files:
-    fh = open(f)
-    data = fh.read()
-    fh.close()
+    with open(f) as fh:
+        data = fh.read()
     js = json.loads(data)
     if not mt:
         mt = js
@@ -23,7 +22,7 @@ for f in files:
                     if not i in mt[k]:
                         mt[k].append(i)
 
-fh = open('metatypes.json', 'w')
-outstr = json.dumps(mt)
-fh.write(outstr)
-fh.close()
+with open('metatypes.json', 'w') as fh:
+    outstr = json.dumps(mt)
+    fh.write(outstr)
+

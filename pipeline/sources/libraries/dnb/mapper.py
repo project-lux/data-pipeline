@@ -21,26 +21,24 @@ class DnbMapper(Mapper):
         fn = os.path.join(data_dir, 'macs.nt')
         close = {}
         if os.path.exists(fn):
-            fh = open(fn)
+            with open(fn) as fh:
+                lines = fh.readlines()
+            for l in lines:
+                l = l.strip()
+                # <https://d-nb.info/gnd/4129090-2> <http://www.w3.org/2004/02/skos/core#closeMatch> <http://id.loc.gov/authorities/subjects/sh85000691> .
+                if l.startswith('<https://d-nb.info/gnd/') and 'closeMatch' in l:
+                    l = l.replace(' .', '')
+                    (a,b,c) = l.split(' ')
+                    gnd = a.rsplit('/',1)[1][:-1]
+                    tgt = c[1:-1]
+                    try:
+                        close[gnd].append(tgt)
+                    except:
+                        close[gnd] = [tgt]
+            self.closeMatches = close
         else:
             self.closeMatches = {}
             return None
-        lines = fh.readlines()
-        fh.close()
-
-        for l in lines:
-            l = l.strip()
-            # <https://d-nb.info/gnd/4129090-2> <http://www.w3.org/2004/02/skos/core#closeMatch> <http://id.loc.gov/authorities/subjects/sh85000691> .
-            if l.startswith('<https://d-nb.info/gnd/') and 'closeMatch' in l:
-                l = l.replace(' .', '')
-                (a,b,c) = l.split(' ')
-                gnd = a.rsplit('/',1)[1][:-1]
-                tgt = c[1:-1]
-                try:
-                    close[gnd].append(tgt)
-                except:
-                    close[gnd] = [tgt]
-        self.closeMatches = close
 
 #person specific attributes from entity graph data
     def handle_person(self, rec, top):

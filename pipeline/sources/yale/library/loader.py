@@ -49,47 +49,46 @@ class YulLoader(Loader):
         for f in files:
             if not 'jsonl' in f:
                 continue
+            if f.endswith(('jsonl','gz')):
+                open_func = gzip.open if f.endswith('gz') else open
+            else:
+                continue
 
-            if f.endswith('jsonl'):
-                fh = open(os.path.join(self.in_path, f))
-            elif f.endswith('gz'):
-                fh = gzip.open(os.path.join(self.in_path, f))
-
-            l = 1
-            while l:
-                l = fh.readline()
-                if not l:
-                    break
-                # Find id and check if already exists before processing JSON
-                what = self.get_identifier_raw(l)
-                if what and what in self.out_cache:
-                    done_x += 1
-                    if not done_x % 10000:
-                        print(f"Skipping past {done_x} {time.time() - start}")
-                    continue
-                # Cache assumes JSON as input, so need to parse it
-                x += 1
-                try:
-                    js = json.loads(l)
-                except:
-                    print(f"Failed to parse JSON in {what}")                        
-                    continue
-                try:
-                    new = self.post_process_json(js)
-                except:
-                    print(f"Failed to process {l}")
-                    continue
-                if not what:
-                    what = self.get_identifier_json(new)
+            with open_func(os.path.join(self.in_path, f), "rt") as fh:
+                l = 1
+                while l:
+                    l = fh.readline()
+                    if not l:
+                        break
+                    # Find id and check if already exists before processing JSON
+                    what = self.get_identifier_raw(l)
+                    if what and what in self.out_cache:
+                        done_x += 1
+                        if not done_x % 10000:
+                            print(f"Skipping past {done_x} {time.time() - start}")
+                        continue
+                    # Cache assumes JSON as input, so need to parse it
+                    x += 1
+                    try:
+                        js = json.loads(l)
+                    except:
+                        print(f"Failed to parse JSON in {what}")                        
+                        continue
+                    try:
+                        new = self.post_process_json(js)
+                    except:
+                        print(f"Failed to process {l}")
+                        continue
                     if not what:
-                        print(l)
-                        raise NotImplementedError(f"is get_identifier_raw or _json implemented for {self.__class__.__name__}?")
-                self.out_cache[what] = new
-                if not x % 10000:
-                    t = time.time() - start
-                    xps = x/t
-                    ttls = (self.total / (maxSlice+1)) / xps
-                    print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-                    sys.stdout.flush()
-            fh.close()
+                        what = self.get_identifier_json(new)
+                        if not what:
+                            print(l)
+                            raise NotImplementedError(f"is get_identifier_raw or _json implemented for {self.__class__.__name__}?")
+                    self.out_cache[what] = new
+                    if not x % 10000:
+                        t = time.time() - start
+                        xps = x/t
+                        ttls = (self.total / (maxSlice+1)) / xps
+                        print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
+                        sys.stdout.flush()
         self.out_cache.commit()

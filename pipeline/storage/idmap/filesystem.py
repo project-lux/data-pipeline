@@ -24,18 +24,16 @@ class FsMap(object):
     def _load(self):
         # read from disk
         if os.path.exists(self.filename):
-            fh = open(self.filename)
-            data = fh.read()
-            fh.close()
+            with open(self.filename) as fh:
+                data = fh.read()
             self.data = json.loads(data)
         else:
             self._persist()
 
     def _persist(self):
         # write to disk
-        fh = open(self.filename, 'w')
-        fh.write(json.dumps(self.data))
-        fh.close()
+        with open(self.filename,"w") as fh:
+            fh.write(json.dumps(self.data))
 
     def clear(self):
         self.data = {}
@@ -100,9 +98,8 @@ class IdMap(FsMap):
 
     def __init__(self, config):
         FsMap.__init__(self, config)
-        fh = open(os.path.join(cfgs.data_dir, 'idmap_update_token.txt'))
-        token = fh.read()
-        fh.close()
+        with open(os.path.join(cfgs.data_dir, 'idmap_update_token.txt')) as fh:
+            token = fh.read()
         token = token.strip()
         if not token.startswith('__') or not token.endswith('__'):
             print("Idmap Update Token is badly formed, should be 8 character date with leading/trailing __")

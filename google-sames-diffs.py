@@ -24,9 +24,8 @@ cfgs.instantiate_all()
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
 gidfn = os.path.join(cfgs.data_dir, "google_sheet_id.txt")
-fh = open(gidfn)
-SPREADSHEET_ID = fh.read().strip()
-fh.close()
+with open(gidfn) as fh:
+    SPREADSHEET_ID = fh.read().strip()
 
 diffs = []
 sames = []
@@ -124,6 +123,7 @@ while cont:
                 else:
                     arg = ""
             except:
+                print("FAILED to split row from Google Sheet")
                 print(row)
                 cont = False
             fixes.append(
@@ -142,6 +142,5 @@ while cont:
         RANGE = f"Fixes!{rng}"
 
 dfn = os.path.join(cfgs.data_dir, "xpath_fixes.json")
-ofh = open(dfn, "w")
-ofh.write(json.dumps(fixes))
-ofh.close()
+with open(dfn, "w") as ofh:
+    ofh.write(json.dumps(fixes))

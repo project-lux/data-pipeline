@@ -12,9 +12,8 @@ class GettyFetcher(Fetcher):
         Fetcher.__init__(self, config)
         fn = os.path.join(config["all_configs"].data_dir, "getty_replacements.json")
         if os.path.exists(fn):
-            fh = open(fn)
-            data = fh.read()
-            fh.close()
+            with open(fn) as fh:
+                data = fh.read()
         else:
             pass
         try:
@@ -31,9 +30,8 @@ class GettyFetcher(Fetcher):
         fn = os.path.join(config["all_configs"].data_dir, "unidentified_people_ulan.csv")
         self.bad_ulan_people = {}
         if os.path.exists(fn):
-            fh = open(fn)
-            data = fh.readlines()
-            fh.close()
+            with open(fn) as fh:
+                data = fh.readlines()
             for l in data:
                 if "http://vocab.getty.edu/ulan/" in l:
                     l = l.replace("http://vocab.getty.edu/ulan/", "").strip()

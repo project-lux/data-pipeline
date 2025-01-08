@@ -35,45 +35,44 @@ class GnLoader(Loader):
         self.namespace = config['namespace']
         hiers = os.path.join(self.in_path, 'hierarchy.txt')
         if os.path.exists(hiers):
-            fh = open(hiers)
-            self.child_parent = {}
-            for l in fh.readlines():
-                (p,c,t) = l.split('\t')
-                self.child_parent[c] = p
-            fh.close()
+            with open(hiers) as fh:
+                self.child_parent = {}
+                for l in fh.readlines():
+                    (p,c,t) = l.split('\t')
+                    self.child_parent[c] = p
         self.total = 12363290
 
     def load(self):
         allc = os.path.join(self.in_path, 'allCountries.txt')
-        fh = open(allc)
-        start = time.time()
-        x = 0
-        for l in fh.readlines():
-            x += 1
-            stuff = l.split('\t')
-            gnid = stuff[0]
-            if not gnid in self.out_cache:
-                name = stuff[1]
-                alt = stuff[3]
-                alts = alt.split(',')
-                lat = stuff[4]
-                lng = stuff[5]
-                parent = self.child_parent.get(gnid, None)
+        with open(allc) as fh:
+            start = time.time()
+            x = 0
+            for l in fh.readlines():
+                x += 1
+                stuff = l.split('\t')
+                gnid = stuff[0]
+                if not gnid in self.out_cache:
+                    name = stuff[1]
+                    alt = stuff[3]
+                    alts = alt.split(',')
+                    lat = stuff[4]
+                    lng = stuff[5]
+                    parent = self.child_parent.get(gnid, None)
 
-                ident = f"{self.namespace}{gnid}"
-                top = model.Place(ident=ident,label=name)
-                top.identified_by = vocab.PrimaryName(content=name)
-                for a in alts:
-                    if a != name:
-                        top.identified_by = vocab.AlternateName(content=a)
-                if lat and lng:
-                    top.defined_by = f"POINT ( {lng} {lat} )"
-                if parent:
-                    top.part_of = model.Place(ident=f"{self.namespace}{parent}")
-                data = model.factory.toJSON(top)
-                self.out_cache[gnid] = data
-                if not x % 10000:
-                    t = time.time() - start
-                    xps = x/t
-                    ttls = self.total / xps
-                    print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
+                    ident = f"{self.namespace}{gnid}"
+                    top = model.Place(ident=ident,label=name)
+                    top.identified_by = vocab.PrimaryName(content=name)
+                    for a in alts:
+                        if a != name:
+                            top.identified_by = vocab.AlternateName(content=a)
+                    if lat and lng:
+                        top.defined_by = f"POINT ( {lng} {lat} )"
+                    if parent:
+                        top.part_of = model.Place(ident=f"{self.namespace}{parent}")
+                    data = model.factory.toJSON(top)
+                    self.out_cache[gnid] = data
+                    if not x % 10000:
+                        t = time.time() - start
+                        xps = x/t
+                        ttls = self.total / xps
+                        print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")

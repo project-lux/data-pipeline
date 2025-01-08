@@ -20,9 +20,8 @@ cfgs.instantiate_all()
 directory = cfgs.data_dir
 creds = None
 gidfn = os.path.join(directory, 'populate-timestamps.txt')
-fh = open(gidfn)
-SPREADSHEET_ID = fh.read().strip()
-fh.close()
+with open(gidfn) as fh:
+    SPREADSHEET_ID = fh.read().strip()
 
 scope = ['https://www.googleapis.com/auth/spreadsheets']
 

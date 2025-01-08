@@ -20,19 +20,19 @@ class LcLoader(Loader):
                 if not os.path.exists(elp2):
                     raise ValueError("Could not find LC's external_links file")
             elp = elp2
-        fh = open(elp)
-        for line in fh.readlines():
-            # FIXME:  This needs to test for narrower / broader external authority and omit
-            if line.startswith('<http://id.loc.gov/authorities/') and \
-                ("CloseExternalAuthority" in line or "ExactExternalAuthority" in line):
-                # Split into triples
-                (s,p,o) = line[:-2].split(' ', 2)
-                identifier = s.rsplit('/', 1)[1][:-1]
-                tgt = o.strip()[1:-1]
-                try:
-                    self.extAuths[identifier].append(tgt)
-                except:
-                    self.extAuths[identifier] = [tgt]
+        with open(elp) as fh:
+            for line in fh.readlines():
+                # FIXME:  This needs to test for narrower / broader external authority and omit
+                if line.startswith('<http://id.loc.gov/authorities/') and \
+                    ("CloseExternalAuthority" in line or "ExactExternalAuthority" in line):
+                    # Split into triples
+                    (s,p,o) = line[:-2].split(' ', 2)
+                    identifier = s.rsplit('/', 1)[1][:-1]
+                    tgt = o.strip()[1:-1]
+                    try:
+                        self.extAuths[identifier].append(tgt)
+                    except:
+                        self.extAuths[identifier] = [tgt]
         return Loader.load(self)
 
     def get_identifier_raw(self, l):

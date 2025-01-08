@@ -7,9 +7,8 @@ import time
 class RorLoader(Loader):
     def load(self):
         # Just load it all into memory
-        fh = open(self.in_path)
-        recs = json.load(fh)
-        fh.close()
+        with open(self.in_path) as fh:
+            recs = json.load(fh)
         x = 0
         start = time.time()
         for r in recs:

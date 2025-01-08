@@ -253,25 +253,22 @@ for map_name, vals in [("idmap", idmap2)]:
     if vals:
         outstr = json.dumps(vals)
         fn = os.path.join(maps_dir, f"{map_name}.json")
-        fh = open(fn, "w")
-        fh.write(outstr)
-        fh.close()
+        with open(fn, "w") as fh:
+            fh.write(outstr)
 
 for nm, vals in id_rlrs.items():
     if vals:
         outstr = json.dumps(vals)
         fn = os.path.join(indexes_dir, f"{nm}_id.json")
-        fh = open(fn, "w")
-        fh.write(outstr)
-        fh.close()
+        with open(fn, "w") as fh:
+            fh.write(outstr)
 
 for nm, vals in name_rlrs.items():
     if vals:
         outstr = json.dumps(vals)
         fn = os.path.join(indexes_dir, f"{nm}_name.json")
-        fh = open(fn, "w")
-        fh.write(outstr)
-        fh.close()
+        with open(fn, "w") as fh:
+            h.write(outstr)
 
 global_rclrs = [("sameAs", same_vals), ("differentFrom", diff_vals)]
 
@@ -287,9 +284,8 @@ data_dir = os.path.join(test_dir, "data")
 os.mkdir(data_dir)
 os.mkdir(os.path.join(test_dir, "exports"))
 
-fh = open(os.path.join(test_dir, ".env"), "w")
-fh.write('LUX_BASEPATH="config"\n')
-fh.close()
+with open(os.path.join(test_dir, ".env"), "w") as fh:
+    fh.write('LUX_BASEPATH="config"\n')
 
 bootstrap = {
     "name": "config",
@@ -349,9 +345,8 @@ if not NEW_IDMAP_TOK:
 else:
     t = datetime.date.today()
     tok = t.isoformat().replace("-", "")
-    fh = open(os.path.join(data_dir, "idmap_update_token.txt"), "w")
-    fh.write(f"__{tok}__")
-    fh.close()
+    with open(os.path.join(data_dir, "idmap_update_token.txt"), "w") as fh:
+        fh.write(f"__{tok}__")
 
 files = ["run-reconcile.py", "run-merge.py", "run-export.py", "run-all.sh"]
 for fn in files:
