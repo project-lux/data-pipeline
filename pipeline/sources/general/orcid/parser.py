@@ -30,9 +30,8 @@ def get_download_link(html_content, year):
     Returns:
         str: The download link for the file, or None if not found.
     """
-    current_year = datetime.datetime.now().year
     #current_year = 2024
-    expected_file_name = f"ORCID_{current_year}_10_summaries.tar.gz"
+    expected_file_name = f"ORCID_{year}_10_summaries.tar.gz"
 
     soup = BeautifulSoup(html_content, "html.parser")
     link_pattern = re.compile(r'https://orcid\.figshare\.com/ndownloader/files/\d+')
@@ -42,7 +41,7 @@ def get_download_link(html_content, year):
     for link in download_links:
         # Check if the expected file name is mentioned in the HTML
         if expected_file_name in html_content:
-            print(f"Download link for {expected_file_name}: {link}")
+            # print(f"Download link for {expected_file_name}: {link}")
             return link
     else:
         print(f"Download link for {expected_file_name} not found in the HTML.")

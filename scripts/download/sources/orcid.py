@@ -26,8 +26,9 @@ Returns:
 """
 
 def main():
-    current_year = datetime.datetime.now().year
-    #current_year = 2024
+    # current_year = datetime.datetime.now().year
+    current_year = 2024
+
     base_url = "https://info.orcid.org/documentation/integration-guide/working-with-bulk-data/"
     html_content = fetch_webpage(base_url)
     if not html_content:
