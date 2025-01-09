@@ -20,15 +20,23 @@ ml = cfgs.results['marklogic']['recordcache']
 refcts = []
 rescts = []
 
+ref_hash = {}
+
 for rec in ml.iter_records():
     trips = rec['data']['triples']
     # Exclude lux:any
     anys = set([x['triple']['object'][-36:] for x in trips if x['triple']['predicate'].endswith('/any')])
-    refs = set([x['triple']['object'][-36:] for x in trips if x['triple']['predicate'].endswith('allRefCtr')])
+    refs = set([x['triple']['object'][-36:] for x in trips if x['triple']['predicate'].endswith('/allRefCtr')])
     res = refs - gls
     res = res - anys
     refcts.append(len(refs))
     rescts.append(len(res))
+
+    for x in res:
+        try:
+            ref_hash[x] += 1
+        except:
+            ref_hash[x] = 1
+
     if len(refcts) >= 500000:
         break
-
