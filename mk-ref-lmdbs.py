@@ -16,6 +16,10 @@ gls = set([x[-36:] for x in list(cfgs.globals.values()) if x])
 # Walk through ML store and create 16 LMDBs for Object:Subject
 ml = cfgs.results['marklogic']['recordcache']
 
+
+refcts = []
+rescts = []
+
 for rec in ml.iter_records():
     trips = rec['data']['triples']
     # Exclude lux:any
@@ -23,5 +27,8 @@ for rec in ml.iter_records():
     refs = set([x['triple']['object'][-36:] for x in trips if x['triple']['predicate'].endswith('allRefCtr')])
     res = refs - gls
     res = res - anys
-    print(f"{len(refs) --> {len(res)}}")
+    refcts.append(len(refs))
+    rescts.append(len(res))
+    if len(refcts) >= 500000:
+        break
 
