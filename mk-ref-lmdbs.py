@@ -21,14 +21,33 @@ non_global_excludes = [
     'd97f2e4a-1549-4c4b-9a27-bcf41a2b4972', # visitors (?) statement type
     '91fd5ce0-b58a-4571-9fde-839aed0c876e', # physical description
     '53922f57-dab5-43c5-a527-fc20a63fe128', # dimensions description
-    'f3e231d7-6b87-4af2-9bb8-e7b0b1f6ec09', # imprints
+    'f3e231d7-6b87-4af2-9bb8-e7b0b1f6ec09', # imprint stmt type
     '35961a03-7a62-4494-bd50-f1630477035f', # call numbers
     'a1922667-5c32-4181-8897-3e71ecea0ce8', # repository numbers
     'b0ac44c2-83ba-4eae-9a01-fcfa547dd5b0', # numerals (?)
-    'acc79f08-f8f7-4f7c-8179-1c8f03aa9020', # notes
-    'fcd4a80f-b3e2-4c56-9153-3e3a4f4dc19d', # transcription
+    'acc79f08-f8f7-4f7c-8179-1c8f03aa9020', # notes stmt type
+    'fcd4a80f-b3e2-4c56-9153-3e3a4f4dc19d', # transcription stmt type
     '18b96dab-a9f1-4b30-83d9-599289e490ba', # OCLC group
+    'c365fba7-32a1-48eb-91b6-235d90bdca9c', # attribution stmt type
+    '047d3267-e00d-4f90-a08f-fda2041aa1b7', # ISBN
+    '372190e4-3284-4d1d-8236-d771cb7f2dbf', # books
 ]
+
+
+for ng in non_global_excludes:
+    exts = idmap[f"https://lux.collections.yale.edu/data/concept/{ng}"]
+    if not exts:
+        exts = idmap[f"https://lux.collections.yale.edu/data/group/{ng}"]
+    fe = False
+    for e in exts:
+        if e.startswith('http://vocab.getty.edu/aat/'):
+            fe = True
+            print(f"{ng} --> {e}")
+            break
+    if not fe:
+        print(exts)
+
+
 
 gls.update(set(non_global_excludes))
 
@@ -39,8 +58,9 @@ refcts = []
 rescts = []
 
 ref_hash = {}
-
+c = 0
 for rec in ml.iter_records():
+    c += 1
     trips = rec['data']['triples']
     # Exclude lux:any
     anys = set([x['triple']['object'][-36:] for x in trips if x['triple']['predicate'].endswith('/any')])
@@ -56,5 +76,6 @@ for rec in ml.iter_records():
         except:
             ref_hash[x] = 1
 
-    if len(refcts) >= 1000000:
+
+    if c >= 1000000:
         break
