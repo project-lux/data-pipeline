@@ -10,6 +10,9 @@ idmap = cfgs.get_idmap()
 cfgs.cache_globals()
 cfgs.instantiate_all()
 
+
+STORE_OKAY = False
+
 q = """SELECT ?s WHERE {
   ?s <https://lux.collections.yale.edu/ns/allRefCtr> <%%yuid%%>
 }"""
@@ -17,6 +20,9 @@ q = """SELECT ?s WHERE {
 h = cfgs.internal['ypm']['harvester']
 dc = cfgs.internal['ypm']['datacache']
 ypmns = cfgs.internal['ypm']['namespace']
+
+# In prod, this could be acquirer to run the mappers, store in cache and so on
+acquirer = cfgs.internal['ypm']['acquirer']
 latest = dc.latest()
 lday = latest[:10] + "T00:00:00"
 sbx = cfgs.marklogic_stores['ml_sandbox']['store']
@@ -47,21 +53,33 @@ for i in updates[:]:
     if not i in dc:
         creates.append(i)
         updates.remove(i)
+        chgd[i] = "create"
 
-for (chg, ident, empty, dt) in chgs:
-    old_rec = dc[ident]
-    if not old_rec:
-        if chg == "update":
-            chg = "create"
-        elif chg == "delete":
-            print(f"Already deleted {ident}, can't continue")
-            raise ValueError()
+
+# First process creates as easy
+for ident in creates:
+    # new_rec = acquirer.acquire(ident, store=STORE_OKAY)
+
+    # reconcile, and track referenced as normal
+    # merge all (incl refs)
+    # save to batches
+    # upload batches
+
+    pass
+
+for ident in updates:
+
+    old_rec = acquirer.acquire(ident, store=STORE_OKAY)
+    new_rec = acquirer.acquire(ident, store=STORE_OKAY, refetch=True)
+
+
+
+
     uri = old_rec['data']['id']
     typ = old_rec['data']['type']
     quri = cfgs.make_qua(uri, typ)
     yuid = idmap[quri]
     uris = idmap[yuid]
-
     q2 = q.replace('%%yuid%%', yuid)
     refs = cfgs.marklogic_stores['ml_sandbox']['store'].search_sparql_ids(q2)
 
