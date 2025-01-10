@@ -95,7 +95,7 @@ class Acquirer(object):
             result.append(self.do_post_map(rec, rec["data"]["type"], store))
         return result
 
-    def acquire(self, identifier, rectype=None, dataonly=False, store=True, reference=False):
+    def acquire(self, identifier, rectype=None, dataonly=False, store=True, reference=False, refetch=False):
         # Given an identifier, ensure that datacache and recordcache are populated
         # Return resulting record
 
@@ -106,7 +106,7 @@ class Acquirer(object):
             return None
 
         # Return already built record
-        if not dataonly and not reference:
+        if not dataonly and not reference and not refetch:
             rec = self.recordcache[identifier]
             if rec is not None:
                 return rec
