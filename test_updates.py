@@ -67,6 +67,24 @@ for ident in creates:
 
     pass
 
+
+def _walk_refs(node, refs):
+    if 'id' in node:
+        refs[node['id']] = 1
+
+    for k, v in node.items():
+        if not type(v) in [list, dict]:
+            continue
+        if type(v) == list:
+            for vi in v:
+                if type(vi) == dict:
+                    _walk_refs(vi, refs)
+                else:
+                    print(f"found non dict in a list :( {node}")
+        elif type(v) == dict:
+            _walk_refs(v, refs)
+
+
 for ident in updates:
 
     old_rec = acquirer.acquire(ident, store=STORE_OKAY)
@@ -75,6 +93,25 @@ for ident in updates:
     if new_rec['data'] == old_rec['data']:
         # Already seen this one, carry on
         continue
+
+    # First -- is this a boring update with no reference changes
+    old_refs = {}
+    new_refs = {}
+    _walk_refs(old_rec['data'], old_refs)
+    _walk_refs(new_rec['data'], new_refs)
+    sold = set(old_refs.keys())
+    snew = set(new_refs.keys())
+    if sold == snew:
+        # no changes to referenced records
+        # Treat as create -- we can modify in place without concern
+        continue
+    else:
+        # referenced records changed
+        diff_uris = sold.symmetric_difference(snew)
+        print(f"Found difference: {diff_uris}")
+        # Can update this record, but need to test these
+
+    continue
 
     uri = old_rec['data']['id']
     typ = old_rec['data']['type']

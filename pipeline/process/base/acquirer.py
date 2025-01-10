@@ -38,7 +38,6 @@ class Acquirer(object):
             return None
 
         if self.fetcher.enabled:
-            print("... fetching")
             rec = self.fetcher.fetch(identifier)
             if rec is None:
                 if self.debug:
