@@ -32,6 +32,8 @@ class UpdateManager(object):
                     return
                 all_ids = idmap[yuid]
                 del idmap[quaUri]
+
+                # Below is rebuild process, not deleting this record
                 has_internal = False
                 for i in all_ids:
                     for ns in self.internal_nss:
@@ -56,9 +58,10 @@ class UpdateManager(object):
                         pass
         else:
             # upsert
+            # if not ident in storage == create
             if record is not None and (overwrite or not ident in storage):
                 try:
-                    storage.set(record["data"], identifier=ident, record_time=changeTime, change=change)
+                    storage.set(record["data"], identifier=ident, record_time=changeTime)
                     self.changed.append((record, ident, config))
                 except:
                     print(f"Failed to process {ident}")
