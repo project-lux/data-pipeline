@@ -8,7 +8,7 @@ class Acquirer(object):
         self.fetcher = config["fetcher"]
         self.debug = config.get("debug", 0)
         self.name = config["name"]
-        self.force_rebuild = config.get("force_rebuild", False)
+        # self.force_rebuild = config.get("force_rebuild", False)
         self.validate = config.get("validate_on_acquire", False)
         self.raise_on_error = config.get("raise_on_validation_error", False)
         self.validator = config["all_configs"].validator
@@ -23,9 +23,9 @@ class Acquirer(object):
     def returns_multiple(self, record=None):
         return self.mapper.returns_multiple(record)
 
-    def do_fetch(self, identifier, store=True):
+    def do_fetch(self, identifier, store=True, refetch=False):
         rec = None
-        if not self.force_rebuild:
+        if not refetch:
             rec = self.datacache[identifier]
             if rec is not None:
                 return rec
@@ -38,6 +38,7 @@ class Acquirer(object):
             return None
 
         if self.fetcher.enabled:
+            print("... fetching")
             rec = self.fetcher.fetch(identifier)
             if rec is None:
                 if self.debug:
@@ -116,7 +117,7 @@ class Acquirer(object):
                 if rec is not None:
                     return rec
 
-        rec = self.do_fetch(identifier, store)
+        rec = self.do_fetch(identifier, store, refetch)
         if dataonly or rec is None:
             return rec
 
