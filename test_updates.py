@@ -107,11 +107,14 @@ for ident in updates:
         continue
     else:
         # referenced records changed
-        diff_uris = sold.symmetric_difference(snew)
-        print(f"Found difference: {diff_uris}")
-        # Can update this record, but need to test these
-
-    continue
+        removed = sold - snew
+        added = snew - sold
+        print(f"Removed: {removed} | Added: {added}")
+        if not removed:
+            # This is also able to be updated in place, as won't cause a delete
+            continue
+        else:
+            break
 
     uri = old_rec['data']['id']
     typ = old_rec['data']['type']
