@@ -23,6 +23,12 @@ sbx = cfgs.marklogic_stores['ml_sandbox']['store']
 g = h.crawl(last_harvest=lday, refsonly=True)
 chgs = list(g)
 
+chgd = {}
+for c in chgs:
+    if not ident in chgd:
+        chgd[ident] = chg
+    else:
+        print(f"saw duplicate {ident}: {chg}, more recently {chgd[ident]}")
 
 for (chg, ident, empty, dt) in chgs:
     old_rec = dc[ident]
