@@ -64,7 +64,7 @@ class MlMapper(Mapper):
             'http://vocab.getty.edu/aat/300026497##quaType'
         ]
         idmap = self.configs.get_idmap()
-        non_global_excludes = [idmap[x][:-36:] for x in non_global_externals]
+        non_global_excludes = [idmap[x][-36:] for x in non_global_externals]
         self.ref_ctr_excludes.update(set(non_global_excludes))
 
 
@@ -842,7 +842,7 @@ class MlMapper(Mapper):
                 ml["triples"].append({"triple": t4})
 
         for r in all_reffed:
-            if r[:-36:] in self.ref_ctr_excludes:
+            if r[-36:] in self.ref_ctr_excludes:
                 # exclude globals and top 20
                 print(f"exclude glbl: {r}")
                 continue
