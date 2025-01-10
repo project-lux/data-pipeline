@@ -68,8 +68,7 @@ temp_recs = []
 # First process creates as easy
 for ident in creates:
     new_rec = acquirer.acquire(ident, store=STORE_OKAY)
-    if not STORE_OKAY:
-        temp_recs.append(new_rec)
+    temp_recs.append(new_rec)
 
 
 print("Fetching updated recs")
@@ -83,8 +82,7 @@ for ident in updates:
         # Already seen this one, carry on
         continue
 
-    if not STORE_OKAY:
-        temp_recs.append(new_rec)
+    temp_recs.append(new_rec)
 
     # First -- is this a boring update with no reference changes
     old_refs = {}
@@ -107,10 +105,150 @@ for ident in updates:
         else:
             # This might cause a delete on any of these
             for r in removed:
-                ruri = cfgs.make_qua(r, removed[r])
+                ruri = cfgs.make_qua(r, old_refs[r])
                 maybe_delete[ruri] = 1
 
-# Now send all updates to ML before doing any queries
+
+# Here we should have all of the data stored in datacache
+# And know all of the idents to process
+
+# Reconciling
+recs2 = []
+
+for rec in temp_recs:
+    # Reconcile it
+    rec2 = reconciler.reconcile(rec)
+    # Do any post-reconciliation clean up
+    mapper.post_reconcile(rec2)
+    # XXX Shouldn't this be stored somewhere after reconciliation?
+    # Find references from the record
+    ref_mgr.walk_top_for_refs(rec2["data"], 0)
+    # Manage identifiers for rec now we've reconciled and collected
+    ref_mgr.manage_identifiers(rec2)
+    recs2.append(rec2)
+
+item = 1
+while item:
+    # Item is uri, {dist, type} or None
+    item = ref_mgr.pop_ref()
+    try:
+        (uri, dct) = item
+        distance = dct["dist"]
+    except:
+        continue
+    try:
+        maptype = dct["type"]
+    except:
+        continue
+    if distance > cfgs.max_distance:
+        continue
+
+    # We only care if the reference is a *new* record
+    # Otherwise it'll just be the same as previously
+    if cfgs.is_qua(uri):
+        ref_yuid = idmap[uri]
+    else:
+        # Internal ref somehow, which we'll process at some point
+        # if the changeset is consistent
+        continue
+    if ref_yuid is not None:
+        ref_uu = ref_yuid[-36:]
+        if ref_uu in merged:
+            continue
+    # At this point there's either no uuid or one that's not in the dataset
+    # so we need to build it
+
+    ref_mgr.did_ref(uri, distance)
+    uri, rectype = cfgs.split_qua(uri)
+    try:
+        (source, recid) = cfgs.split_uri(uri)
+    except:
+        if debug:
+            print(f"Not processing: {uri}")
+        continue
+    if not source["type"] == "external":
+        # Don't process internal or results
+        print(f"Got internal reference! {uri}")
+        raise ValueError(uri)
+
+    # put back the qua to the id after splitting/canonicalizing in split_uri
+    mapper = source["mapper"]
+    acquirer = source["acquirer"]
+
+    # Acquire the record from cache or network
+    rec = acquirer.acquire(recid, rectype=rectype)
+    if rec is not None:
+        sys.stdout.write(".")
+        sys.stdout.flush()
+        # Reconcile it
+        rec2 = reconciler.reconcile(rec)
+        # Do any post-reconciliation clean up
+        mapper.post_reconcile(rec2)
+        # XXX Shouldn't this be stored somewhere after reconciliation?
+        # Find references from this record
+        ref_mgr.walk_top_for_refs(rec2["data"], distance)
+        # Manage identifiers for rec now we've reconciled and collected
+        # rebuild should be False if this is an equivalent of an internal rec
+        # as we've already seen it, so don't remove URIs (e.g. internal uris)
+        ref_mgr.manage_identifiers(rec2)
+        recs2.append(rec2)
+    else:
+        print(f"Failed to acquire {rectype} reference: {source['name']}:{recid}")
+
+
+# Now merge
+
+for rec in recs2:
+    distance = 0
+    recuri = rec['data']['id']
+    qrecid = cfgs.make_qua(recuri, rec["data"]["type"])
+    yuid = idmap[qrecid]
+    if not yuid:
+        print(f" !!! Couldn't find YUID for internal record: {qrecid}")
+        continue
+    yuid = yuid.rsplit("/", 1)[1]
+    rec2 = reider.reidentify(rec)
+    src["recordcache2"][rec2["yuid"]] = rec2["data"]
+
+    equivs = idmap[rec2["data"]["id"]]
+    if equivs:
+        if qrecid in equivs:
+            equivs.remove(qrecid)
+        if recuri in equivs:
+            equivs.remove(recuri)
+        if idmap.update_token in equivs:
+            equivs.remove(idmap.update_token)
+    else:
+        equivs = []
+    sys.stdout.write(".")
+    sys.stdout.flush()
+
+    rec3 = merger.merge(rec2, equivs)
+    # Final tidy up after merges
+    try:
+        rec3 = final.transform(rec3, rec3["data"]["type"])
+    except:
+        print(f"*** Final transform raised exception for {rec2['identifier']}")
+        raise
+    # Store it
+    if rec3 is not None:
+        try:
+            del rec3["identifier"]
+        except:
+            pass
+        merged_cache[rec3["yuid"]] = rec3
+    else:
+        print(f"*** Final transform returned None")
+
+    rec4 = mlmapper.transform(rec3, rec3["data"]["type"])
+    ml[yuid] = rec4
+    # And send to ML!
+
+
+# Now we're done with reconciling, merging and processing to ML
+# XXX: Can reconcile end up deleting an existing record other than a record in the current set?
+#  ... change is to add an equivalent. That triggers merge with existing. Then update becomes delete, or triggers a delete
+
 
 for ident in deletes:
     # Can I delete ident?
