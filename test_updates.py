@@ -72,8 +72,9 @@ for ident in updates:
     old_rec = acquirer.acquire(ident, store=STORE_OKAY)
     new_rec = acquirer.acquire(ident, store=STORE_OKAY, refetch=True)
 
-
-
+    if new_rec['data'] == old_rec['data']:
+        # Already seen this one, carry on
+        continue
 
     uri = old_rec['data']['id']
     typ = old_rec['data']['type']
