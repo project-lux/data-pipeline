@@ -61,7 +61,8 @@ class MlMapper(Mapper):
             'http://id.loc.gov/authorities/names/n78015294##quaGroup',
             'http://vocab.getty.edu/aat/300404264##quaType',
             'http://vocab.getty.edu/aat/300417443##quaType',
-            'http://vocab.getty.edu/aat/300026497##quaType'
+            'http://vocab.getty.edu/aat/300026497##quaType',
+            'http://vocab.getty.edu/aat/300215302##quaType'
         ]
         idmap = self.configs.get_idmap()
         non_global_excludes = [idmap[x][-36:] for x in non_global_externals]
@@ -844,14 +845,11 @@ class MlMapper(Mapper):
         for r in all_reffed:
             if r[-36:] in self.ref_ctr_excludes:
                 # exclude globals and top 20
-                print(f"exclude glbl: {r}")
                 continue
             elif r in reffed:
                 # exclude lux:any
-                print(f"exclude reffed: {r}")
                 continue
             else:
-                print(f"adding other: {r}")
                 t = {"subject": me, "predicate": f"{luxns}refCtr", "object": r}
                 ml['triples'].append({'triple': t})
 
