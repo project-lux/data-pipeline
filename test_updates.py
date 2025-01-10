@@ -24,7 +24,7 @@ g = h.crawl(last_harvest=lday, refsonly=True)
 chgs = list(g)
 
 chgd = {}
-for c in chgs:
+for (chg, ident, empty, dt) in chgs:
     if not ident in chgd:
         chgd[ident] = chg
     else:
