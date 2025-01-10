@@ -844,11 +844,14 @@ class MlMapper(Mapper):
         for r in all_reffed:
             if r[:-36:] in self.ref_ctr_excludes:
                 # exclude globals and top 20
+                print(f"exclude glbl: {r}")
                 continue
             elif r in reffed:
                 # exclude lux:any
+                print(f"exclude reffed: {r}")
                 continue
             else:
+                print(f"adding other: {r}")
                 t = {"subject": me, "predicate": f"{luxns}refCtr", "object": r}
                 ml['triples'].append({'triple': t})
 
