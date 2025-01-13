@@ -3,10 +3,26 @@
     "type": "external",
     "namespace": "https://homosaurus.org/v3/",
     "matches": ["https://homosaurus.org/v3/"],
+    "wikidata_property": ["P6417"],
+    "merge_order": 35,
+    "mapSizeExponent": null,
     "fetch": "https://homosaurus.org/v3/{identifier}.jsonld",
+    "activitystreams": null,
 
+    "harvesterClass": "",
     "fetcherClass": "sources.authorities.homosaurus.fetcher.HomosaurusFetcher",
+    "loaderClass": "",
+    "indexLoaderClass": "",
     "mapperClass": "sources.authorities.homosaurus.mapper.HomosaurusMapper",
+    "reconcilerClass": "",
+
+    "cycleBreakPath": "",
+    "dumpFilePath": "",
+    "remoteDumpFile": "",
+    "externalLinksPath": "",
+    "reconcileDumpPath": "",
+    "reconcileDbPath": "",
+    "inverseEquivDbPath": "",
 
     "dump_file_subdir": "homosaurus",
     "remote_dump_files": [

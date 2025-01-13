@@ -3,14 +3,26 @@
 	"type": "external",
 	"namespace": "http://nomisma.org/",
 	"matches": ["nomisma.org/"],
+	"wikidata_property": ["P2950"],
+	"merge_order": 34,
+	"mapSizeExponent": null,
 	"fetch": "http://nomisma.org/id/{identifier}.jsonld",
+	"activitystreams": null,
 
+	"harvesterClass": "",
 	"fetcherClass": "sources.authorities.nomisma.fetcher.NomismaFetcher",
-	"mapperClass": "sources.authorities.nomisma.mapper.NomismaMapper",
 	"loaderClass": "",
+	"indexLoaderClass": "",
+	"mapperClass": "sources.authorities.nomisma.mapper.NomismaMapper",
+	"reconcilerClass": "",
 
+	"cycleBreakPath": "",
 	"dumpFilePath": "nomisma/nomisma.org.jsonld",
 	"remoteDumpFile": "https://nomisma.org/nomisma.org.jsonld",
+	"externalLinksPath": "",
+    "reconcileDumpPath": "",
+	"reconcileDbPath": "",
+    "inverseEquivDbPath": "",
 
 	"dump_file_subdir": "nomisma",
 	"remote_dump_files": [

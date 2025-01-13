@@ -3,9 +3,30 @@
     "type": "external",
     "namespace": "https://snaccooperative.org",
     "matches": ["http://n2t.net/ark:/99166/"],
+    "wikidata_property": ["P3430"],
+    "merge_order": 30,
+    "mapSizeExponent": null,
     "fetch": "https://snaccooperative.org/download?arkid=http://n2t.net/ark:/99166/{identifier}&type=constellation_json",
-    "merge_order": 95,
-    
+    "activitystreams": null,
+
+    "harvesterClass": "",
     "fetcherClass": "sources.archives.snac.fetcher.SNACFetcher",
-    "mapperClass": "sources.archives.snac.mapper.SNACMapper"
+    "loaderClass": "",
+    "indexLoaderClass": "",
+    "mapperClass": "sources.archives.snac.mapper.SNACMapper",
+    "reconcilerClass": "",
+
+
+    "cycleBreakPath": "",
+    "dumpFilePath": "",
+    "remoteDumpFile": "",
+    "externalLinksPath": "",
+    "reconcileDumpPath": "",
+    "reconcileDbPath": "",
+    "inverseEquivDbPath": "",
+
+    "dump_file_subdir": "",
+    "remote_dump_files": [
+        ""
+    ]
 }

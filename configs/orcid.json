@@ -3,15 +3,29 @@
     "type": "external",
     "namespace": "https://orcid.org/",
     "matches": ["/orcid.org/"],
-    "fetch": "http://orcid.org/{identifier}",
     "wikidata_property": ["P496"],
-    "merge_order": 102,
+    "merge_order": 32,
+    "mapSizeExponent": null,
+    "fetch": "http://orcid.org/{identifier}",
+    "activitystreams": null,
 
-    "dumpFilePath": "orcid/orcid-summaries.tar.gz",
-    
+    "harvesterClass": "", 
+    "fetcherClass": "",
     "loaderClass": "sources.general.orcid.loader.OrcidLoader",
+    "indexLoaderClass": "",
     "mapperClass": "sources.general.orcid.mapper.OrcidMapper",
+    "reconcilerClass": "",  
 
+    "cycleBreakPath": "",
+    "dumpFilePath": "orcid/orcid-summaries.tar.gz",
+    "remoteDumpFile": "",
+    "externalLinksPath": "",
+    "reconcileDumpPath": "",
+    "reconcileDbPath": "",
+    "inverseEquivDbPath": "",
 
-    "dump_file_subdir": "orcid"
+    "dump_file_subdir": "orcid",
+    "remote_dump_files": [
+        ""
+    ]
 }

@@ -3,14 +3,30 @@
     "type": "external",
     "namespace": "https://ror.org/",
     "matches": ["/ror.org/"],
-    "fetch": "https://api.ror.org/organizations/{identifier}",
     "wikidata_property": ["P6782"],
-    "merge_order": 99,
-    "dumpFilePath": "ror/v1.36-2023-11-08-ror-data.json",
-    
+    "merge_order": 33,
+    "mapSizeExponent": null,
+    "fetch": "https://api.ror.org/organizations/{identifier}",
+    "activitystreams": null,
+
+    "harvesterClass": "",
+    "fetcherClass": "",
     "loaderClass": "sources.general.ror.loader.RorLoader",
+    "indexLoaderClass": "",
     "mapperClass": "sources.general.ror.mapper.RorMapper",
+    "reconcilerClass": "",
 
+    "cycleBreakPath": "",
+    "dumpFilePath": "ror/v1.36-2023-11-08-ror-data.json",
+    "remoteDumpFile": "",
+    "externalLinksPath": "",
+    "reconcileDumpPath": "",
+    "reconcileDbPath": "",
+    "inverseEquivDbPath": "",
 
-    "dump_file_subdir": "ror"
+    "dump_file_subdir": "ror",
+    "remote_dump_files": [
+        ""
+    ]
+
 }

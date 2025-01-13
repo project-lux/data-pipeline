@@ -3,19 +3,26 @@
     "type": "external",
     "namespace": "http://www.wikidata.org/entity/",
     "matches": ["wikidata.org/entity/", "wikidata.org/wiki/"],
-    "fetch": "https://www.wikidata.org/wiki/Special:EntityData/{identifier}.json",
+    "wikidata_property": [""],
     "merge_order": 50,
-    
+    "mapSizeExponent": null,
+    "fetch": "https://www.wikidata.org/wiki/Special:EntityData/{identifier}.json",
+    "activitystreams": null,
+
+    "harvesterClass": "",
     "fetcherClass": "sources.general.wikidata.fetcher.WdFetcher",
-    "mapperClass": "sources.general.wikidata.mapper.WdMapper",
     "loaderClass": "sources.general.wikidata.loader.WdLoader",
     "indexLoaderClass": "sources.general.wikidata.index_loader.WdFileIndexLoader",
+    "mapperClass": "sources.general.wikidata.mapper.WdMapper",
     "reconcilerClass": "sources.general.wikidata.reconciler.WdReconciler",
 
-    "inverseEquivDbPath": "id_to_wikidata.lmdb",
-    "dumpFilePath": "wikidata/latest-all.json.gz",
     "cycleBreakPath": "wikidata_cycle_breaks.json",
-    "totalRecords": 100000000,
+    "dumpFilePath": "wikidata/latest-all.json.gz",
+    "remoteDumpFile": "",
+    "externalLinksPath": "",
+    "reconcileDumpPath": "",
+    "reconcileDbPath": "",
+    "inverseEquivDbPath": "id_to_wikidata.lmdb",
 
     "dump_file_subdir": "wikidata",
     "remote_dump_files": [

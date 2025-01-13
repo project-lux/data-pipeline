@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "name": { "type": "string" },
+    "type": { "type": "string", "enum": ["external", "internal"] },
+    "namespace": { "type": "string", "format": "uri" },
+    "matches": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "wikidata_property": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 0 }
+    },
+    "merge_order": {
+      "type": ["integer", "null"],
+      "minimum": 1
+    },
+    "mapSizeExponent": {
+      "type": ["integer", "null"],
+      "minimum": 1
+    },
+    "fetch": { "type": "string", "format": "uri-template" },
+    "activitystreams": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "string",
+        "format": "uri",
+        "minLength": 0
+      }
+    },
+    "harvesterClass": {"type": "string", "minLength": 0},    
+    "fetcherClass": { "type": "string", "minLength": 0},
+    "loaderClass": { "type": "string", "minLength": 0 },
+    "indexLoaderClass": { "type": "string", "minLength": 0},
+    "mapperClass": { "type": "string", "minLength": 0 },
+    "reconcilerClass": { "type": "string", "minLength": 0},
+
+
+    "cycleBreakPath": { "type": "string", "pattern": "\\.json$|^$", "minLength": 0 },
+    "dumpFilePath": { "type": "string", "pattern": "\\.(jsonld|json|tar)\\.gz$|\\.jsonld$|\\.json$|\\.marcxml\\.zip$|\\.db$|\\.xml\\.gz$|^$", "minLength": 0 },
+    "remoteDumpFile": { "type": "string", "format": "uri", "minLength": 0 },
+    "externalLinksPath": { "type": "string", "minLength": 0 },
+    "reconcileDumpPath": { "type": "string", "minLength": 0 },
+    "reconcileDbPath": { "type": "string", "minLength": 0 },
+    "inverseEquivDbPath": { "type": "string", "pattern": "\\.lmdb$|^$", "minLength": 0 },
+    "dump_file_subdir": { "type": "string", "minLength": 0 },
+    "remote_dump_files": {
+      "type": "array",
+      "items": { "type": "string", "format": "uri", "minLength": 0 }
+    }
+  },
+  "required": [
+    "name",
+    "type",
+    "namespace",
+    "matches",
+    "wikidata_property",
+    "merge_order",
+    "mapSizeExponent",
+    "fetch",
+    "activitystreams",
+    "harvesterClass",
+    "fetcherClass",
+    "loaderClass",
+    "indexLoaderClass",
+    "mapperClass",
+    "reconcilerClass",
+    "cycleBreakPath",
+    "dumpFilePath",
+    "remoteDumpFile",
+    "externalLinksPath",
+    "reconcileDumpPath",
+    "reconcileDbPath",
+    "inverseEquivDbPath",
+    "dump_file_subdir",
+    "remote_dump_files"
+],
+  "additionalProperties": false
+}

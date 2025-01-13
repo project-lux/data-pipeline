@@ -3,15 +3,26 @@
     "type": "external",
     "namespace": "http://data.whosonfirst.org/",
     "matches": ["whosonfirst.org/"],
-    "fetch": "https://data.whosonfirst.org/",
     "wikidata_property": ["P6766"],
-    "merge_order": 60,
-    
-    "fetcherClass": "sources.general.wof.fetcher.WofFetcher",
-    "mapperClass": "sources.general.wof.mapper.WofMapper",
+    "merge_order": 40,
+    "mapSizeExponent": null,
+    "fetch": "https://data.whosonfirst.org/",    
+    "activitystreams": null,
 
-    "dumpFilePath": "wof/latest_wof.db",
+    "harvesterClass": "",
+    "fetcherClass": "sources.general.wof.fetcher.WofFetcher",
+    "loaderClass": "",
+    "indexLoaderClass": "",
+    "mapperClass": "sources.general.wof.mapper.WofMapper",
+    "reconcilerClass": "",
+
     "cycleBreakPath": "wof_cycle_breaks.json",
+    "dumpFilePath": "wof/latest_wof.db",
+    "remoteDumpFile": "",
+    "externalLinksPath": "",
+    "reconcileDumpPath": "",
+    "reconcileDbPath": "",
+    "inverseEquivDbPath": "",
 
     "dump_file_subdir": "wof",
     "remote_dump_files": [

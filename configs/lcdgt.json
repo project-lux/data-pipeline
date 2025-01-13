@@ -3,13 +3,26 @@
     "type": "external",
     "namespace": "http://id.loc.gov/authorities/demographicTerms/",
     "matches": ["id.loc.gov/authorities/demographicTerms/"],
+    "wikidata_property": ["P4946"],
+    "merge_order": 15,
+    "mapSizeExponent": null,
     "fetch": "http://id.loc.gov/authorities/demographicTerms/{identifier}.json",
-    "merge_order": 25,
+    "activitystreams": null,
     
+    "harvesterClass": "",
     "fetcherClass": "sources.authorities.lc.fetcher.LcdgtFetcher",
+    "loaderClass": "",
+    "indexLoaderClass": "",
     "mapperClass": "sources.authorities.lc.mapper.LcnafMapper",
+    "reconcilerClass": "",
 
-    "totalRecords": 1830,
+    "cycleBreakPath": "",
+    "dumpFilePath": "",
+    "remoteDumpFile": "",
+    "externalLinksPath": "",
+    "reconcileDumpPath": "",
+    "reconcileDbPath": "",
+    "inverseEquivDbPath": "",
 
     "dump_file_subdir": "lcdgt",
     "remote_dump_files": [

@@ -3,9 +3,29 @@
     "type": "external",
     "namespace": "http://commons.wikimedia.org/",
     "matches": ["commons.wikimedia.org"],
+    "wikidata_property": [""],
+    "merge_order": null,
+    "mapSizeExponent": null,
     "fetch": "https://en.wikipedia.org/w/api.php?action=query&prop=imageinfo&iiprop=extmetadata&titles=File:{identifier}&format=json",
+    "activitystreams": null,
 
+    "harvesterClass": "",
     "fetcherClass": "sources.general.wikimedia.fetcher.WmFetcher",
+    "loaderClass": "",
+    "indexLoaderClass": "",
     "mapperClass": "sources.general.wikimedia.mapper.WmMapper",
-    "totalRecords": 43000000
+    "reconcilerClass": "",
+
+    "cycleBreakPath": "",
+    "dumpFilePath": "",
+    "remoteDumpFile": "",
+    "externalLinksPath": "",
+    "reconcileDumpPath": "",
+    "reconcileDbPath": "",
+    "inverseEquivDbPath": "",
+    
+    "dump_file_subdir": "",
+    "remote_dump_files": [
+        ""
+    ]
 }

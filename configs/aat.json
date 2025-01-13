@@ -3,17 +3,32 @@
     "type": "external",
     "namespace": "http://vocab.getty.edu/aat/",
     "matches": ["vocab.getty.edu/aat/"],
-    "fetch": "https://vocab.getty.edu/aat/{identifier}.jsonld",
-    "activitystreams": ["https://data.getty.edu/vocab/activity-stream"],
     "wikidata_property": ["P1014"],
     "merge_order": 10,
+    "mapSizeExponent": null,
+    "fetch": "https://vocab.getty.edu/aat/{identifier}.jsonld",
+    "activitystreams": ["https://data.getty.edu/vocab/activity-stream"],
     
     "harvesterClass": "sources.authorities.getty.harvester.GettyHarvester",
-    "mapperClass": "sources.authorities.getty.mapper.AatMapper",
+    "fetcherClass": "",
+    "loaderClass": "",
     "indexLoaderClass": "process.base.index_loader.LmdbIndexLoader",
+    "mapperClass": "sources.authorities.getty.mapper.AatMapper",
     "reconcilerClass": "sources.authorities.getty.reconciler.AatReconciler",
     
+    
+    "cycleBreakPath": "aat_cycle_breaks.json",
+    "dumpFilePath": "",
+    "remoteDumpFile": "",
+    "externalLinksPath": "",
+    "reconcileDumpPath": "",
     "reconcileDbPath": "label_to_aat.lmdb",
-    "cycleBreakPath": "aat_cycle_breaks.json"
+    "inverseEquivDbPath": "",
+
+    "dump_file_subdir": "",
+    "remote_dump_files": [
+        ""
+    ]
+
     
 }

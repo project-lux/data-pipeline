@@ -3,13 +3,27 @@
     "type": "external",
     "namespace": "https://datos.bne.es/resource/",
     "matches": ["datos.bne.es/resource/"],
-    "fetch": "https://datos.bne.es/resource/{identifier}.jsonld",
     "wikidata_property": ["P950"],
-    "merge_order": 100,
+    "merge_order": 22,
+    "mapSizeExponent": null,
+    "fetch": "https://datos.bne.es/resource/{identifier}.jsonld",
+    "activitystreams": null,
     
+    "harvesterClass": "",
     "fetcherClass": "process.base.fetcher.Fetcher",
+    "loaderClass": "",
+    "indexLoaderClass": "",
     "mapperClass": "sources.libraries.bne.mapper.BneMapper",
+    "reconcilerClass": "",
+    
     "cycleBreakPath": "bne_cycle_breaks.json",
+    "dumpFilePath": "",
+    "remoteDumpFile": "",
+    "externalLinksPath": "",
+    "reconcileDumpPath": "",
+    "reconcileDbPath": "",
+    "inverseEquivDbPath": "",
+
 
     "dump_file_subdir": "bne",
     "remote_dump_files": [

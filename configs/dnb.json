@@ -4,19 +4,26 @@
     "namespace": "https://d-nb.info/gnd/",
     "matches": ["d-nb.info/gnd/", "hub.culturegraph.org/entityfacts/", 
 		"d-nb.info/standards/vocab/gnd/"],
-    "fetch": "https://hub.culturegraph.org/entityfacts/{identifier}",
     "wikidata_property": ["P227"],
-    "merge_order": 31,
+    "merge_order": 21,
+    "mapSizeExponent": null,
+    "fetch": "https://hub.culturegraph.org/entityfacts/{identifier}",
+    "activitystreams": null,
     
+    "harvesterClass": "",
     "fetcherClass": "sources.libraries.dnb.fetcher.DnbFetcher",
-    "mapperClass": "sources.libraries.dnb.mapper.DnbMapper",
     "loaderClass": "sources.libraries.dnb.loader.DnbLoader",
+    "indexLoaderClass": "",
+    "mapperClass": "sources.libraries.dnb.mapper.DnbMapper",
+    "reconcilerClass": "",
 
     "cycleBreakPath": "dnb_cycle_breaks.json",
-
     "dumpFilePath": "dnb/authorities-gnd_entityfacts.jsonld.gz",
     "remoteDumpFile": "https://data.dnb.de/opendata/authorities_entityfacts.jsonld.gz",
-
+    "externalLinksPath": "",
+    "reconcileDumpPath": "",
+    "reconcileDbPath": "",
+    "inverseEquivDbPath": "",
 
     "dump_file_subdir": "dnb",
     "remote_dump_files": [

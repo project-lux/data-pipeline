@@ -3,20 +3,30 @@
     "type": "external",
     "namespace": "http://viaf.org/viaf/",
     "matches": ["viaf.org/viaf/"],
-    "fetch": "https://viaf.org/viaf/{identifier}/viaf.xml",
-        "wikidata_property": ["P214"],
-        "merge_order": 70,
+    "wikidata_property": ["P214"],
+    "merge_order": 16,
     "mapSizeExponent": 32,
-    
+    "fetch": "https://viaf.org/viaf/{identifier}/viaf.xml",
+    "activitystreams": null,
+
+    "harvesterClass": "",    
     "fetcherClass": "sources.authorities.oclc.fetcher.ViafFetcher",
-    "mapperClass": "sources.authorities.oclc.mapper.ViafMapper",
     "loaderClass": "sources.authorities.oclc.loader.ViafLoader",
     "indexLoaderClass": "sources.authorities.oclc.index_loader.ViafIndexLoader",
+    "mapperClass": "sources.authorities.oclc.mapper.ViafMapper",
     "reconcilerClass": "sources.authorities.oclc.reconciler.ViafReconciler",
 
-    "inverseEquivDbPath": "id_to_viaf.lmdb",        
-    "reconcileDumpPath": "viaf/viaf-links.txt.gz",
+    "cycleBreakPath": "",
     "dumpFilePath": "viaf/viaf-clusters.xml.gz",
-    
-    "dump_file_subdir": "viaf"
+    "remoteDumpFile": "",
+    "externalLinksPath": "",
+    "reconcileDumpPath": "viaf/viaf-links.txt.gz",
+    "reconcileDbPath": "",
+    "inverseEquivDbPath": "id_to_viaf.lmdb",        
+
+    "dump_file_subdir": "viaf",
+    "remote_dump_files": [
+        ""
+    ]
+
 }

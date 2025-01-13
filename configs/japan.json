@@ -3,11 +3,31 @@
     "type": "external",
     "namespace": "http://id.ndl.go.jp/auth/ndlna/",
     "matches": ["id.ndl.go.jp/auth/ndlna/"],
-    "uniquePerRecord": true,
-    "fetch": "http://id.ndl.go.jp/auth/ndlna/{identifier}.json",
     "wikidata_property": ["P349"],
-    "merge_order": 35,
+    "merge_order": 23,
+    "mapSizeExponent": null,
+    "fetch": "http://id.ndl.go.jp/auth/ndlna/{identifier}.json",    
+    "activitystreams": null,
     
+    "harvesterClass": "",
     "fetcherClass": "sources.libraries.japan.fetcher.JapanFetcher",
-    "mapperClass": "sources.libraries.japan.mapper.JapanMapper"
+    "loaderClass": "",
+    "indexLoaderClass": "",
+    "mapperClass": "sources.libraries.japan.mapper.JapanMapper",
+    "reconcilerClass": "",
+
+    "cycleBreakPath": "",
+    "dumpFilePath": "",
+    "remoteDumpFile": "",
+    "externalLinksPath": "",
+    "reconcileDumpPath": "",
+    "reconcileDbPath": "",
+    "inverseEquivDbPath": "",
+
+
+    "dump_file_subdir": "",
+    "remote_dump_files": [
+        ""
+    ]
+
 }

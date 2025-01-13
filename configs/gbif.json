@@ -3,11 +3,30 @@
     "type": "external",
     "namespace": "https://www.gbif.org/species/",
     "matches": ["www.gbif.org/species/"],
-    "fetch": "https://api.gbif.org/v1/species/{identifier}",
     "wikidata_property": ["P846"],
-    "merge_order": 41,
+    "merge_order": 31,
+    "mapSizeExponent": null,
+    "fetch": "https://api.gbif.org/v1/species/{identifier}",
+    "activitystreams": null,
     
+    "harvesterClass": "",
     "fetcherClass": "process.base.fetcher.Fetcher",
-    "mapperClass": "sources.authorities.gbif.mapper.GbifMapper"
+    "loaderClass": "",
+    "indexLoaderClass": "",
+    "mapperClass": "sources.authorities.gbif.mapper.GbifMapper",
+    "reconcilerClass": "",
+
+    "cycleBreakPath": "",
+    "dumpFilePath": "",
+    "remoteDumpFile": "",
+    "externalLinksPath": "",
+    "reconcileDumpPath": "",
+    "reconcileDbPath": "",
+    "inverseEquivDbPath": "",
+
+    "dump_file_subdir": "",
+    "remote_dump_files": [
+        ""
+    ]
 
 }
