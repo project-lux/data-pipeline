@@ -42,24 +42,25 @@ class GnMapper(Mapper):
             return None
         nss = self.namespaces
         feature = dom.xpath('/rdf:RDF/gn:Feature', namespaces=nss)[0] # if doesn't exist, v broken
-        ident = feature.xpath('./@rdf:about', namespaces=nss)[0] # ditto
+        ident = self.to_plain_string(feature.xpath('./@rdf:about', namespaces=nss)[0]) # ditto
         ident = ident.strip()
         if ident.endswith('/'):
             ident = ident[:-1]
-        name = feature.xpath('./gn:name/text()', namespaces=nss)
+        name = [self.to_plain_string(n) for n in feature.xpath('./gn:name/text()', namespaces=nss)]
         offNames = feature.xpath('./gn:officialName', namespaces=nss) # element, as need xml:lang attrib
         altNames = feature.xpath('./gn:alternateName', namespaces=nss)
         shortNames = feature.xpath('./gn:shortName', namespaces=nss) # ???
 
-        fclass = feature.xpath('./gn:featureClass/@rdf:resource', namespaces=nss) # ignore ... too many to be bothered
-        fcode = feature.xpath('./gn:featureCode/@rdf:resource', namespaces=nss)
+        fclass = [self.to_plain_string(fc) for fc in feature.xpath('./gn:featureClass/@rdf:resource', namespaces=nss)] # ignore ... too many to be bothered
+        fcode = [self.to_plain_string(fc) for fc in feature.xpath('./gn:featureCode/@rdf:resource', namespaces=nss)]
 
-        ccode = feature.xpath('./gn:countryCode/text()', namespaces=nss) # ignore ... is mostly country code of parent
-        lat = feature.xpath('./wgs:lat/text()', namespaces=nss)
-        lng = feature.xpath('./wgs:long/text()', namespaces=nss)
-        parentFeature = feature.xpath('./gn:parentFeature/@rdf:resource', namespaces=nss)
-        parentCountry = feature.xpath('./gn:parentCountry/@rdf:resource', namespaces=nss)
-        seeAlso = feature.xpath('./rdfs:seeAlso/@rdf:resource', namespaces=nss)
+        ccode = [self.to_plain_string(cc) for cc in feature.xpath('./gn:countryCode/text()', namespaces=nss)]
+        lat = [self.to_plain_string(lt) for lt in feature.xpath('./wgs:lat/text()', namespaces=nss)]
+        lng = [self.to_plain_string(lg) for lg in feature.xpath('./wgs:long/text()', namespaces=nss)]
+        parentFeature = [self.to_plain_string(pf) for pf in feature.xpath('./gn:parentFeature/@rdf:resource', namespaces=nss)]
+        parentCountry = [self.to_plain_string(pc) for pc in feature.xpath('./gn:parentCountry/@rdf:resource', namespaces=nss)]
+        seeAlso = [self.to_plain_string(sa) for sa in feature.xpath('./rdfs:seeAlso/@rdf:resource', namespaces=nss)]
+
 
         pnames = {}
         anames = {}
@@ -67,15 +68,15 @@ class GnMapper(Mapper):
             name = name[0]
         for onm in offNames:
             lang = onm.xpath('./@xml:lang')
-            lang = '' if not lang else lang[0]
-            txt = onm.xpath('./text()')[0]
+            lang = '' if not lang else self.to_plain_string(lang[0])
+            txt = self.to_plain_string(onm.xpath('./text()')[0])
             if not lang or lang in self.process_langs:
                 pnames[lang] = txt
 
         for onm in altNames:
             lang = onm.xpath('./@xml:lang')
-            lang = '' if not lang else lang[0]
-            txt = onm.xpath('./text()')[0]
+            lang = '' if not lang else self.to_plain_string(lang[0])
+            txt = self.to_plain_string(onm.xpath('./text()')[0])
             if not lang or lang in self.process_langs:
                 try:
                     anames[lang].append(txt)
