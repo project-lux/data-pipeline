@@ -151,12 +151,20 @@ def delete_old_tabs():
         sheets = sheet_metadata.get('sheets', [])
     
         three_months_ago = datetime.now() - timedelta(days=90)
-        to_delete = [
-            sheet['properties']['sheetId']
-            for sheet in sheets
-            if 'title' in sheet['properties'] and sheet['properties']['title'].isdigit() and
-            datetime.strptime(sheet['properties']['title'], '%Y-%m-%d') < three_months_ago
-        ]
+        to_delete = []
+
+        for sheet in sheets:
+            title = sheet['properties']['title']
+            try:
+                sheet_date = datetime.strptime(title, '%Y-%m-%d')
+                if sheet_date < three_months_ago:
+                    to_delete.append(sheet['properties']['sheetId'])
+            except ValueError:
+                logging.info(f"Skipped sheet with non-date title: {title}")
+
+        if not to_delete:
+            logging.info("No tabs older than 90 days to delete.")
+            return
 
         for sheet_id in to_delete:
             service.spreadsheets().batchUpdate(
@@ -164,9 +172,8 @@ def delete_old_tabs():
                 body={'requests': [{'deleteSheet': {'sheetId': sheet_id}}]}
             ).execute()
             logging.info(f"Deleted tab with Sheet ID: {sheet_id}")
-
     except HttpError as err:
-        logging.error(f"Error: {err}")
+        logging.error(f"Error while deleting old tabs: {err}")
 
 cachetimes = check_file_timestamps()
 
