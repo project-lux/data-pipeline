@@ -14,7 +14,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("populate-timestamps.log"),
+        logging.FileHandler("populate-timestamps.log","w"),
         logging.StreamHandler()
     ]
 )
