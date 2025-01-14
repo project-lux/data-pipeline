@@ -55,7 +55,7 @@ def populate_google_sheet(data):
         service = build('sheets', 'v4', credentials=creds)
         sheet = service.spreadsheets()
         
-        now_str = datetimes.now().strftime("%Y-%m-%d")
+        now_str = datetime.now().strftime("%Y-%m-%d")
 
         # Create a new sheet and get the sheet ID
         add_sheet_body = {'requests': [{'addSheet': {'properties': {'title': now_str}}}]}
