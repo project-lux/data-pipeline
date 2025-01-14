@@ -5,11 +5,19 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 import os
-import requests
-import random
+import logging
 from datetime import datetime, timedelta
 from pipeline.config import Config
 from dotenv import load_dotenv
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("populate-timestamps.log"),
+        logging.StreamHandler()
+    ]
+)
 
 load_dotenv()
 basepath = os.getenv('LUX_BASEPATH', "")
@@ -106,17 +114,17 @@ def populate_google_sheet(data):
             body={'requests': requests}
         ).execute()
         
-        print(f"Sheet '{now_str}' updated successfully.")
+        logging.info(f"Sheet '{now_str}' updated successfully.")
 
     except HttpError as err:
-        print(f"Error: {err}")
+        logging.error(f"Error: {err}")
 
 def check_datacache_times(cache, cachetimes):
     internal = cache in cfgs.internal
     datacache = (cfgs.internal if internal else cfgs.external)[cache]['datacache']
     cachets = datacache.latest()
     if cachets.startswith("0000"):
-        print(f"{cache} failed: invalid timestamp")
+        logging.warning(f"{cache} failed: invalid timestamp")
         return None
     
     cachedt = datetime.fromisoformat(cachets)
@@ -133,10 +141,10 @@ def check_file_timestamps():
             timestamp = os.path.getmtime(file)
             datestamp = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
             return {'Marklogic Export': {'timestamp': datestamp, 'type': 'Internal'}}
-    print("No valid files found for Marklogic timestamp")
+    logging.warning("No valid files found for Marklogic timestamp")
     return {}
 
-def delete_old_tabs(spreadsheet_id, service):
+def delete_old_tabs():
     try:
         service = build('sheets', 'v4', credentials=creds)
         sheet_metadata = service.spreadsheets().get(spreadsheetId=SPREADSHEET_ID).execute()
@@ -155,10 +163,10 @@ def delete_old_tabs(spreadsheet_id, service):
                 spreadsheetId=SPREADSHEET_ID,
                 body={'requests': [{'deleteSheet': {'sheetId': sheet_id}}]}
             ).execute()
-            print(f"Deleted tab with Sheet ID: {sheet_id}")
+            logging.info(f"Deleted tab with Sheet ID: {sheet_id}")
 
     except HttpError as err:
-        print(f"Error: {err}")
+        logging.error(f"Error: {err}")
 
 cachetimes = check_file_timestamps()
 
