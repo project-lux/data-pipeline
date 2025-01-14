@@ -7,7 +7,7 @@ from googleapiclient.errors import HttpError
 import os
 import requests
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 from pipeline.config import Config
 from dotenv import load_dotenv
 
@@ -47,7 +47,7 @@ def populate_google_sheet(data):
         sheet = service.spreadsheets()
         
         now = datetime.now()
-        now_str = now.strftime("%B %d, %Y")
+        now_str = now.strftime("%Y-%m-%d")
 
         # Create a new sheet and get the sheet ID
         add_sheet_body = {
@@ -171,6 +171,32 @@ def check_file_timestamps():
                 return None
 
     return cachetimes
+
+def delete_old_tabs(spreadsheet_id, service):
+    sheet_metadata = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+    sheets = sheet_metadata.get('sheets', [])
+    
+    three_months_ago = datetime.now() - timedelta(days=90)
+    to_delete = []
+    
+    for sheet in sheets:
+        title = sheet['properties']['title']
+        
+        # Assuming tabs are named in the format YYYY-MM-DD
+        try:
+            sheet_date = datetime.strptime(title, '%Y-%m-%d')
+            if sheet_date < three_months_ago:
+                to_delete.append(sheet['properties']['sheetId'])
+        except ValueError:
+            # Skip tabs not following the YYYY-MM-DD format
+            continue
+    
+    for sheet_id in to_delete:
+        request_body = {
+            'requests': [{'deleteSheet': {'sheetId': sheet_id}}]
+        }
+        service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=request_body).execute()
+        print(f"Deleted tab with Sheet ID: {sheet_id}")
 
 cachetimes = {}
 check_file_timestamps()
