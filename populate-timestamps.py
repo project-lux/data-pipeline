@@ -70,6 +70,20 @@ def populate_google_sheet(data):
         response = sheet.batchUpdate(spreadsheetId=SPREADSHEET_ID, body=add_sheet_body).execute()
         sheet_id = response['replies'][0]['addSheet']['properties']['sheetId']
 
+        move_sheet_body = {
+            'requests': [{
+                'updateSheetProperties': {
+                    'properties': {
+                        'sheetId': sheet_id,
+                        'index': 0
+                    },
+                    'fields': 'index'
+                }
+            }]
+        }
+
+        sheet.batchUpdate(spreadsheetId=SPREADSHEET_ID, body=move_sheet_body).execute()
+
         header_row = [
             {'userEnteredValue': {'stringValue': col}, 'userEnteredFormat': {'textFormat': {'bold': True}}}
             for col in ['Source', 'Timestamp', 'Internal or External?']
