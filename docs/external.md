@@ -115,7 +115,7 @@
 
   - Format: LUX only fetches images in .jpg, .jpeg, .gif and .png format. More are available via Wikimedia Commons.
 
-  - Individual images can be fetched atL
+  - Individual images can be fetched at:
       `https://en.wikipedia.org/w/api.php?action=query&prop=imageinfo&iiprop=extmetadata&titles=File:{identifier}&format=json`
 
 
@@ -147,8 +147,7 @@
 
   - Format: XML
 
-  - Individual records can be fetched at:
-    `http://orcid.org/{identifier}`
+  - Individual records can be fetched via Orcid's API, but LUX relies solely on the dump file.
 
 - **ROR (Research Organization Registry)**: Global, open, and community-driven registry of unique identifiers for research organizations.
   - Dump file is updated monthly.
@@ -161,7 +160,7 @@
   - Individual records can be fetched at:
     `https://api.ror.org/organizations/{identifier}`
 
-- **VIAF (Virtual International Authority File)**:
+- **VIAF (Virtual International Authority File)**: International service that consolidates and links authority data for names of people, organizations, and more, from libraries and cultural institutions worldwide.
   - Dump files are typically updated monthly. However, as of August 2024, updating is on pause while VIAF undergoes security and production environment improvements.
   - LUX harvests the following dataset:
     - [VIAF Clusters](https://viaf.org/viaf/data/viaf-20240804-clusters.xml.gz)
@@ -173,32 +172,75 @@
     `https://viaf.org/viaf/{identifier}/viaf.xml`
 
 
-- **Who’s on First (WOF)**: 
-  - Dump files 
+- **Who’s on First (WOF)**: Open-source gazetteer and database of geographic places, providing unique identifiers and metadata for locations worldwide.
+  - Dump files do not have a specified update frequency, but the webpage includes the upload date for each dataset.
+  - LUX harvests the following dataset:
+    - [WOF Global Latest](https://data.geocode.earth/wof/dist/sqlite/whosonfirst-data-admin-latest.db.bz2)
+      - Linked.art Class: Place
 
-- **SNAC (Social Networks and Archival Context)**:
-  - Fetched as referenced. (Currently 0 records.)
+  - Format: SQLite database
 
+  - Individual records can be fetched at:
+    `https://data.whosonfirst.org/{identifier}`
 
-- **GBIF (Global Biodiversity Information Facility)**: 
-  - Fetched as referenced.
-  - Dump files available asynchronously with specific filters.
+- **SNAC (Social Networks and Archival Context)**: Cooperative initiative to discover biographical and historical information about people, families, and organizations, connecting them through archival records.
+  - No dump file available. LUX fetches records as they are referenced. 
+      - Linked.art Class: Person, Group
 
-- **Homosaurus**:
-  - Fetched as referenced. (Currently 0 records.)
+  - Format: JSON
 
-- **Nomisma**:
-  - Fetched as referenced. (Currently 0 records.)
-
-
-- **BNE (Spanish National Library)**:
-  - Dump files available as JSON-LD from [Datos.gob.es](https://datos.gob.es/en/catalogo?publisher_display_name=Biblioteca+Nacional+de+Espa%C3%B1a):
-  - [Groups](https://www.bne.es/media/datosgob/catalogo-autoridades/entidad/entidad-JSON.zip)
-  - [Concepts](https://www.bne.es/media/datosgob/catalogo-autoridades/materia/materia-JSON.zip)
-  - [Places](https://www.bne.es/media/datosgob/catalogo-autoridades/geografico/geografico-JSON.zip)
-  - [People](https://www.bne.es/media/datosgob/catalogo-autoridades/persona/persona-JSON.zip)
+  - Individual records can be fetched at:
+    `https://snaccooperative.org/download?arkid=http://n2t.net/ark:/99166/{identifier}&type=constellation_json`
 
 
+- **GBIF (Global Biodiversity Information Facility)**: International network and data platform that provides open access to biodiversity data, enabling research on species distribution and ecosystems worldwide.
+  - No dump file of the entire dataset is available. LUX fetches records as they are referenced, usually from Yale Peabody Museum taxonomic records.
+    - Linked.art Class: Concept
+
+  - Format: JSON
+
+  - Individual records can be fetched at:
+    `https://api.gbif.org/v1/species/{identifier}`
+
+- **Homosaurus**: International LGBTQ+ linked data vocabulary that provides standardized terms to improve the discovery and organization of LGBTQ+ resources in libraries, archives, and other information systems.
+  - Dump files do not have a specified update frequency, but the webpage includes the upload date for each dataset.
+  - LUX harvests the following dataset:
+    - [V3](https://homosaurus.org/v3.jsonld)
+      - Linked.art Class: Concept
+
+  - Format: JSON-LD
+
+  - Individual records can be fetched at:
+    `https://homosaurus.org/v3/{identifier}.jsonld`
+
+- **Nomisma**: Collaborative project that provides a linked open data vocabulary and digital resource for numismatics, focusing on the study of coins, currency, and related objects.
+  - Dump files are updated nightly.
+  - LUX harvests the following dataset:
+    - [Nomisma](https://nomisma.org/nomisma.org.jsonld)
+      - Linked.art Class: Person, Group, Place, Concept
+
+  - Format: JSON-LD
+
+  - Individual records can be fetched at:
+    `http://nomisma.org/id/{identifier}.jsonld`
+
+
+- **BNE (Biblioteca Nacional de España)**: National Library of Spain, which provides access to Spain's cultural and historical heritage through its collection of books, manuscripts, maps, and digital resources.
+  - Dump files do not have a specified update frequency, but the webpage includes the upload date for each dataset.
+  - LUX harvests the following datasets:
+    - [Entidad](https://www.bne.es/media/datosgob/catalogo-autoridades/entidad/entidad-JSON.zip)
+      - Linked.art Class: Group
+    - [Materia](https://www.bne.es/media/datosgob/catalogo-autoridades/materia/materia-JSON.zip)
+      - Linked.art Class: Concept
+    - [Geografico](https://www.bne.es/media/datosgob/catalogo-autoridades/geografico/geografico-JSON.zip)
+      - Linked.art Class: Place
+    - [Persona](https://www.bne.es/media/datosgob/catalogo-autoridades/persona/persona-JSON.zip)
+      - Linked.art Class: Person
+
+    - Format: JSON
+
+    - Individual records can be fetched at:
+      `https://datos.bne.es/resource/{identifier}.jsonld`
 
 - **BNF (French National Library)**: 
   - Dump files available:

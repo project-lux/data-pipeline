@@ -6,7 +6,7 @@
     "wikidata_property": ["P6766"],
     "merge_order": 40,
     "mapSizeExponent": null,
-    "fetch": "https://data.whosonfirst.org/",    
+    "fetch": "https://data.whosonfirst.org/{identifier}",    
     "activitystreams": null,
 
     "harvesterClass": "",
