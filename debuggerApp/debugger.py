@@ -27,15 +27,15 @@ def process_uri(uri, option1=False, option2=False):
 	except:
 		return {"records": [], "error": f"Failure: could not fetch uri {uri}"}
 
-	typ = uri.rsplit("/",2)[-2].title()
+	typ = uri.rsplit("/",2)[-2]
 
-	if typ == "Object":
+	if typ == "object":
 		typ = "HumanMadeObject"
-	elif typ == "Concept":
+	elif typ == "concept":
 		typ == "Type"
-	elif typ == "Text":
+	elif typ == "text":
 		typ == "LinguisticObject"
-	elif typ == "Visual":
+	elif typ == "visual":
 		typ == "VisualWork"
 
 	recnames = {}
@@ -46,17 +46,16 @@ def process_uri(uri, option1=False, option2=False):
 		if equivs:
 			for e in equivs:
 				ident = e.get("id","")
-				print(ident)
 				if ident:
 					(src, identifier) = cfgs.split_uri(ident)
 					cache = src['recordcache']
 					cachename = src['name']
-					print(cachename)
 					if src['type'] == "external":
 						if option1:
 							continue
 						else:
 							identqua = identifier + "##qua" + typ
+							print(identqua)
 					else:
 						identqua = identifier
 					cacherec = cache[identqua]
