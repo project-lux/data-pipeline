@@ -60,7 +60,7 @@ def process_uri(uri, option1=False, option2=False):
 					cacherec = cache[identqua]
 					if cacherec:
 						data = cacherec['data']
-						print("fell through to data")
+						print(f"{identqua} fell through to data")
 						try:
 							names = data['identified_by']
 						except:
