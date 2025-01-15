@@ -32,11 +32,11 @@ def process_uri(uri, option1=False, option2=False):
 	if typ == "object":
 		typ = "HumanMadeObject"
 	elif typ == "concept":
-		typ == "Type"
+		typ = "Type"
 	elif typ == "text":
-		typ == "LinguisticObject"
+		typ = "LinguisticObject"
 	elif typ == "visual":
-		typ == "VisualWork"
+		typ = "VisualWork"
 
 	recnames = {}
 	recequivs = {}
@@ -55,7 +55,6 @@ def process_uri(uri, option1=False, option2=False):
 							continue
 						else:
 							identqua = identifier + "##qua" + typ
-							print(identqua)
 					else:
 						identqua = identifier
 					cacherec = cache[identqua]
