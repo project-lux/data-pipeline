@@ -41,14 +41,11 @@ def process_uri(uri, option1=False, option2=False):
 	recnames = {}
 	recequivs = {}
 
-	print(typ)
-
 	if rec:
 		equivs = rec.get("equivalent",[])
 		if equivs:
 			for e in equivs:
 				ident = e.get("id","")
-				print(ident)
 				if ident:
 					(src, identifier) = cfgs.split_uri(ident)
 					cache = src['recordcache']
@@ -58,12 +55,12 @@ def process_uri(uri, option1=False, option2=False):
 							continue
 						else:
 							identqua = identifier + "##qua" + typ
-							print(identqua)
 					else:
 						identqua = identifier
 					cacherec = cache[identqua]
 					if cacherec:
 						data = cacherec['data']
+						print("fell through to data")
 						try:
 							names = data['identified_by']
 						except:
