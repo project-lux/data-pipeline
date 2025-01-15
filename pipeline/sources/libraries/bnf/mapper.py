@@ -58,7 +58,7 @@ class BnfXmlMapper(Mapper):
             classes = None
 
         try: 
-            class_typ = classes.xpath('./rdf:type/@rdf:resource',namespaces=nss)[0]
+            class_typ = self.to_plain_string(classes.xpath('./rdf:type/@rdf:resource', namespaces=nss)[0])
         except:
             class_typ = None
 
@@ -128,17 +128,17 @@ class BnfXmlMapper(Mapper):
         me = rec.xpath(f"./rdf:Description[@rdf:about='https://data.bnf.fr/ark:/12148/{ident}#about']",namespaces=nss)[0]
         #if top doesn't have name, set it
         if not hasattr(top, 'identified_by'):
-            name = me.xpath('./foaf:name/text()',namespaces=nss)
+            name = self.to_plain_string(me.xpath('./foaf:name/text()', namespaces=nss)[0])
             top.identified_by = vocab.PrimaryName(content=name)
         if not hasattr(top, 'referred_to_by'):
             notes = me.xpath('./rdagroup2elements:biographicalInformation/text()',namespaces=nss)
             if len(notes) >= 1:
-                notes = notes[0]
+                notes = self.to_plain_string(notes[0])
             top.referred_to_by = vocab.Description(content=notes)
 
         gender = me.xpath('//foaf:gender/text()',namespaces=nss)
         if len(gender) >= 1:
-            gender = gender[0]
+            gender = self.to_plain_string(gender[0])
         if gender:
             if gender.lower() == "male":
                 top.classified_as = vocab.instances['male']
@@ -147,10 +147,10 @@ class BnfXmlMapper(Mapper):
  
         dob = me.xpath('./bio:birth/text()',namespaces=nss)
         if len(dob) >= 1:
-            dob = dob[0]
+            dob = self.to_plain_string(dob[0])
         dod = me.xpath('./bio:death/text()',namespaces=nss)
         if len(dod) >= 1:
-            dod = dod[0]
+            dod = self.to_plain_string(dod[0])
 
         if dob:
             self.make_timespan(dob, top, event="Birth")
@@ -164,16 +164,16 @@ class BnfXmlMapper(Mapper):
         #if top doesn't have name, set it
         me = rec.xpath(f"./rdf:Description[@rdf:about='https://data.bnf.fr/ark:/12148/{ident}#about']",namespaces=nss)[0]
         if not hasattr(top, 'identified_by'):
-            name = me.xpath('./rdfs:label/text()',namespaces=nss)[0]
+            name = self.to_plain_string(me.xpath('./rdfs:label/text()', namespaces=nss)[0])
             if name:
                 top.identified_by = vocab.PrimaryName(content=name)
 
         lat = me.xpath('./geo:lat/text()',namespaces=nss)
         if len(lat) >= 1:
-            lat = lat[0]
+            lat = self.to_plain_string(lat[0])
         lon = me.xpath('./geo:long/text()',namespaces=nss)
         if len(lon) >= 1:
-            lon = lon[0]
+            lon = self.to_plain_string(lon[0])
         if lat and lon:
             top.defined_by = f"POINT ( {lon} {lat} )"
 
@@ -185,23 +185,23 @@ class BnfXmlMapper(Mapper):
         me = rec.xpath(f"./rdf:Description[@rdf:about='https://data.bnf.fr/ark:/12148/{ident}#about']",namespaces=nss)[0]
         #if top doesn't have name, set it
         if not hasattr(top, 'identified_by'):
-            name = me.xpath('./foaf:name/text()',namespaces=nss)
+            name = self.to_plain_string(me.xpath('./foaf:name/text()', namespaces=nss)[0])
             top.identified_by = vocab.PrimaryName(content=name)
 
         if not hasattr(top, 'referred_to_by'):
             notes = me.xpath('./rdagroup2elements:corporateHistory/text()',namespaces=nss)
             if len(notes) >= 1:
-                notes = notes[0]
+                notes = self.to_plain_string(notes[0])
             reference = vocab.Description(content=notes)
             reference.language = lang
             top.referred_to_by = reference
 
         dof = me.xpath('./bnf-onto:firstYear[@rdf:datatype="http://www.w3.org/2001/XMLSchema#integer"]/text()', namespaces=nss)
         if len(dof) >= 1:
-            dof = dof[0]
+            dof = self.to_plain_string(dof[0])
         dod = me.xpath('./bnf-onto:lastYear[@rdf:datatype="http://www.w3.org/2001/XMLSchema#integer"]/text()', namespaces=nss)
         if len(dod) >= 1:
-            dod = dod[0]
+            dod = self.to_plain_string(dod[0])
         if dof:
             self.make_timespan(dof, top, event="Formation")
         if dod:
@@ -219,7 +219,7 @@ class BnfXmlMapper(Mapper):
             common = common[0]
 
         try:
-            pref = common.xpath('./skos:prefLabel/text()', namespaces=nss)[0]
+            pref = self.to_plain_string(common.xpath('./skos:prefLabel/text()', namespaces=nss)[0])
         except:
             pref = None
 
@@ -240,22 +240,27 @@ class BnfXmlMapper(Mapper):
 
         if alts:
             for a in alts:
+                a = self.to_plain_string(a)
                 an = vocab.AlternateName(content=a)
                 an.language = lang
                 top.identified_by = an
         if broaders:
             if topcls == model.Place:
                 for b in broaders:
+                    b = self.to_plain_string(b)
                     top.part_of = topcls(ident=b)
             else:
                 for b in broaders:
+                    b = self.to_plain_string(b)
                     top.broader = topcls(ident=b)
         if equivs:
             for e in equivs:
+                e = self.to_plain_string(e)
                 top.equivalent = topcls(ident=e)
 
         if notes:
             for note in notes:
+                note = self.to_plain_string(note)
                 desc = vocab.Description(content=note)
                 desc.language = lang
                 top.referred_to_by = desc

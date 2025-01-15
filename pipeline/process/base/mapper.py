@@ -187,6 +187,9 @@ class Mapper(object):
 
     def expand_uri(self, identifier):
         return self.namespace + identifier
+    
+    def to_plain_string(self, value):
+        return str(value) if isinstance(value, etree._ElementUnicodeResult) else value
 
     def get_reference(self, identifier):
         if not self.acquirer:

@@ -86,8 +86,8 @@ class SNACMapper(Mapper):
         nmslist = []
         if names:
             for n in names:
-                cont = n.get("original","")
-                prefScr = n.get("preferenceScore","")
+                cont = self.to_plain_string(n.get("original", ""))  # Use inherited function
+                prefScr = self.to_plain_string(n.get("preferenceScore", ""))  # Use inherited function
                 if cont and prefScr:
                     nmslist.append({cont:prefScr})
                 elif cont:
@@ -118,15 +118,15 @@ class SNACMapper(Mapper):
         biog = rec.get("biogHists",[])
         if biog:
             for b in biog:
-                text = b.get("text","")
-                if text and text.startswith("<biogHist>"):
+                text = self.to_plain_string(b.get("text", "")) 
+                if text.startswith("<biogHist>"):
                     root = ET.fromstring(text)
                     text = ''.join(root.itertext())
                     text = re.sub(r'\s+', ' ', text.strip())
                 bstat = vocab.BiographyStatement(content=text)
                 lngblk = b.get("language",{})
                 if lngblk:
-                    term = lngblk.get("term","")
+                    term = self.to_plain_string(lngblk.get("term", ""))
                     if len(term) == 3:
                         term = self.lang_three_to_two.get(term, None)
                     lang = self.process_langs.get(term, None)
@@ -155,29 +155,29 @@ class SNACMapper(Mapper):
                 fromType = d.get("fromType",{})
                 toType = d.get("toType",{})
                 if fromType:
-                    fromTerm = fromType.get("term","")
+                    fromTerm = self.to_plain_string(fromType.get("term", ""))
                 if toType:
-                    toTerm = toType.get("term","")
+                    toTerm = self.to_plain_string(toType.get("term", ""))
                 if fromTerm:
                     if fromTerm == "Birth":
-                        dob = d.get("fromDate", "")
+                        dob = self.to_plain_string(d.get("fromDate", ""))
                         self.make_timespan(dob, top, event="Birth")
                     elif fromTerm == "Establishment":
-                        formedDate = d.get("fromDate", "")
+                        formedDate = self.to_plain_string(d.get("fromDate", ""))
                         self.make_timespan(formedDate, top, event="Formation")
                     elif fromTerm == "Active":
-                        activeStart = d.get("fromDate", "")
+                        activeStart = self.to_plain_string(d.get("fromDate", ""))
                     else:
                         activeStart = None
                 if toTerm:
                     if toTerm == "Death":
-                        dod = d.get("toDate", "")
+                        dod = self.to_plain_string(d.get("toDate", ""))
                         self.make_timespan(dod, top, event="Death")
                     elif toTerm == "Disestablishment":
-                        dissolvedDate = d.get("toDate", "")
+                        dissolvedDate = self.to_plain_string(d.get("toDate", ""))
                         self.make_timespan(dissolvedDate, top, event="Dissolution")
                     elif toTerm == "Active": 
-                        activeEnd = d.get("toDate", "")
+                        activeEnd = self.to_plain_string(d.get("toDate", ""))
                 
                 if activeStart and activeEnd:
                     aDates = f"{activeStart} - {activeEnd}"

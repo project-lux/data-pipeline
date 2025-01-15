@@ -85,8 +85,7 @@ class ViafMapper(Mapper):
             top = self.parse_xml(rec["xml"])
             if top is None:
                 return None
-            nameType = top.xpath("./viaf:nameType/text()", namespaces=nss)[0]
-
+            nameType = self.to_plain_string(top.xpath("./viaf:nameType/text()", namespaces=self.nss)[0])
         topCls = self.nameTypeMap.get(nameType, None)
         return topCls
 
@@ -122,7 +121,7 @@ class ViafMapper(Mapper):
         if top is None:
             return top
 
-        nameType = top.xpath("./viaf:nameType/text()", namespaces=nss)[0]
+        nameType = self.to_plain_string(top.xpath("./viaf:nameType/text()", namespaces=self.nss)[0])
         topCls = self.guess_type(rec, nameType)
         if not topCls:
             if nameType != "UniformTitleWork":
@@ -137,11 +136,10 @@ class ViafMapper(Mapper):
         # According to VIAF all of these are primary ... but no language data
         # So pick one most likely to be english and useful
         for n in names:
-            val = n.xpath("./viaf:text/text()", namespaces=nss)
-            srcs = n.xpath("./viaf:sources/viaf:s/text()", namespaces=nss)
-            if val and val[0]:
-                val = str(val[0])
-                if not primary and ("JPG" in srcs or "LC" in srcs or "LCSH" in srcs or "ULAN" in srcs):
+            val = self.to_plain_string(n.xpath("./viaf:text/text()", namespaces=self.nss)[0])
+            srcs = [self.to_plain_string(src) for src in n.xpath("./viaf:sources/viaf:s/text()", namespaces=self.nss)]
+            if val:
+                if not primary and any(src in srcs for src in ["JPG", "LC", "LCSH", "ULAN"]):
                     primary = val
                     rec.identified_by = vocab.PrimaryName(content=primary)
                     rec._label = primary
@@ -174,7 +172,7 @@ class ViafMapper(Mapper):
                 continue
             rec.equivalent = topCls(ident=eq, label=rec._label)
 
-        equivs = top.xpath("./viaf:sources/viaf:source/text()", namespaces=nss)
+        equivs = [self.to_plain_string(eq) for eq in top.xpath("./viaf:sources/viaf:source/text()", namespaces=nss)]
         wdm = self.wikidata_config["mapper"]
         for eq in equivs:
             (which, val) = eq.split("|")
@@ -197,9 +195,10 @@ class ViafMapper(Mapper):
                     rec.equivalent = topCls(ident=f"{self.viaf_prefixes[which]}{val}", label=rec._label)
 
         if nameType in ["Personal", "Corporate"]:
-            birthdate = top.xpath("./viaf:birthDate/text()", namespaces=nss)
-            deathdate = top.xpath("./viaf:deathDate/text()", namespaces=nss)
-            dateType = top.xpath("./viaf:dateType/text()", namespaces=nss)
+            birthdate = [self.to_plain_string(bd) for bd in top.xpath("./viaf:birthDate/text()", namespaces=self.nss)]
+            deathdate = [self.to_plain_string(dd) for dd in top.xpath("./viaf:deathDate/text()", namespaces=self.nss)]
+            dateType = [self.to_plain_string(dt) for dt in top.xpath("./viaf:dateType/text()", namespaces=self.nss)]
+
 
             if dateType and dateType[0]:
                 # lived, flourished
