@@ -39,7 +39,6 @@ class OrcidMapper(Mapper):
         }
 
     def guess_type(self, data):
-        # uhh, France?
         return model.Person
 
     def get_dom(self, record):
@@ -58,7 +57,7 @@ class OrcidMapper(Mapper):
     def get_text(self, node, path):
         texts = node.xpath(f"{path}/text()", namespaces=self.nss)
         if texts:
-            return texts[0].strip()
+            return self.to_plain_string(texts[0].strip())
         else:
             return None
 

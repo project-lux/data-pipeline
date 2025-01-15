@@ -1,0 +1,55 @@
+name: Bug Report
+description: File a bug report
+title: "[Bug]: "
+labels: ["bug", "${{ input.priority && 'Priority: ' + input.priority }}"]
+assignees:
+  - octocat
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority Level
+      description: How urgent is this issue?
+      options:
+        - Critical
+        - High
+        - Medium
+        - Low
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Also tell us, what did you expect to happen?
+      placeholder: Tell us what you see!
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Please copy and paste any relevant log output. This will be automatically formatted into code.
+      render: shell
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Additional Tasks
+      description: List any tasks that need to be completed to resolve this bug (one task per line). Each line will be converted to a checkbox.
+      placeholder: |
+        Write tests
+        Update documentation
+        Add logging
+        etc...
+      value: |-
+        - [ ] Task 1
+        - [ ] Task 2
+        - [ ] Task 3

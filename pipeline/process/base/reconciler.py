@@ -1,6 +1,7 @@
 from pipeline.process.utils.mapper_utils import get_year_from_timespan
 from sqlitedict import SqliteDict
 from pipeline.storage.idmap.lmdb import TabLmdb
+import re 
 
 
 # Abstract class definition, useless without actual data
@@ -54,6 +55,9 @@ class Reconciler(object):
         equivs = rec.get("equivalent", [])
         return [x["id"] for x in equivs if "id" in x]
 
+    def clean_names(self, name):
+        return re.sub(r'[\u200b-\u200f\u202a-\u202e]', '', name).lower().strip()
+
     def extract_names(self, rec):
         ns = self.configs.external["aat"]["namespace"]
         gbls = self.configs.globals_cfg
@@ -89,13 +93,25 @@ class Reconciler(object):
             if None in cxnids:
                 print(f"  None in Name classifications: {rec['id']}")
 
+
+            # Desired result: lowest numbered language that matches
+            # or 2 if no language
             if aat_primaryName in cxnids and "content" in nm:
-                val = nm["content"].lower().strip()
-                for lang_id, num in check_langs.items():
-                    if lang_id in langids:
-                        vals[val] = num
-                    else:
-                        vals[val] = 2
+                val = self.clean_names(nm['content'])
+                if not langs:
+                    # primary name, no language = 2
+                    vals[val] = 2
+                else:
+                    # This relies on the check_langs dict being processed in order
+                    matched = False
+                    for lang_id, num in check_langs.items():
+                        if lang_id in langids:
+                            vals[val] = num
+                            matched = True
+                            break
+                    if not matched:
+                        # base is 1, and 2 is skipped so len()+2 for next one
+                        vals[val] = len(check_langs)+2
 
                 if typ == "Person":
                     if "part" in nm:
@@ -108,11 +124,11 @@ class Reconciler(object):
                         for part in parts:
                             cxns = part.get("classified_as", [])
                             if aat_firstName in [cx["id"] for cx in cxns]:
-                                first = part["content"].lower().strip()
+                                first = self.clean_names(part['content'])
                             elif aat_middleName in [cx["id"] for cx in cxns]:
-                                middle = part["content"].lower().strip()
+                                middle = self.clean_names(part['content'])
                             elif aat_lastName in [cx["id"] for cx in cxns]:
-                                last = part["content"].lower().strip()
+                                last = self.clean_names(part['content'])
 
                         if last and first and middle:
                             vals[f"{last}, {first} {middle}"] = 1

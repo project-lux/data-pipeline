@@ -739,7 +739,10 @@ class WdMapper(Mapper, WdConfigManager):
             broader = data.get("P17", [])
 
         for b in broader:
-            top.part_of = model.Place(ident=self.expand_uri(b))
+            ref = self.get_reference(b)
+            if ref and ref.__class__ == model.Place:
+                top.part_of = model.Place(ident=self.expand_uri(b))
+            
 
         # Coordinates
         northmost = data.get("P1332", None)

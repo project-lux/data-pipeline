@@ -109,38 +109,37 @@ class UpdateManager(object):
             print(f"No uri/change list to harvest for {config['name']}. Run get_record_list()")
             return
 
-        fh = open(fn, "r")
-        x = 0
-        l = True
-        while l:
-            l = fh.readline()
-            l = l.strip()
-            if maxSlice is not None and x % maxSlice - mySlice != 0:
-                x += 1
-                continue
-            x += 1
-            (ident, dt) = l.split("\t")
-            try:
-                tm = storage.metadata(ident, "insert_time")["insert_time"]
-            except TypeError:
-                # NoneType is not subscriptable
-                tm = None
-            if tm is not None and tm.isoformat() > dt:
-                # inserted after the change, no need to fetch
-                continue
-            try:
-                itjs = harvester.fetcher.fetch(ident)
-                if itjs is None:
-                    print(f"Got None for {ident}")
+        with open(fn, "r") as fh:
+            x = 0
+            l = True
+            while l:
+                l = fh.readline()
+                l = l.strip()
+                if maxSlice is not None and x % maxSlice - mySlice != 0:
+                    x += 1
                     continue
-            except:
-                sys.stdout.write("-")
+                x += 1
+                (ident, dt) = l.split("\t")
+                try:
+                    tm = storage.metadata(ident, "insert_time")["insert_time"]
+                except TypeError:
+                    # NoneType is not subscriptable
+                    tm = None
+                if tm is not None and tm.isoformat() > dt:
+                    # inserted after the change, no need to fetch
+                    continue
+                try:
+                    itjs = harvester.fetcher.fetch(ident)
+                    if itjs is None:
+                        print(f"Got None for {ident}")
+                        continue
+                except:
+                    sys.stdout.write("-")
+                    sys.stdout.flush()
+                    continue
+                storage[ident] = itjs
+                sys.stdout.write(".")
                 sys.stdout.flush()
-                continue
-            storage[ident] = itjs
-            sys.stdout.write(".")
-            sys.stdout.flush()
-        fh.close()
 
     def get_record_list(self, config, until="0001-01-01T00:00:00"):
         # build the set of records that should be in the cache
@@ -167,15 +166,13 @@ class UpdateManager(object):
 
         # Write URIs to all_{name}_uris.txt and deleted_{name}_uris.txt in temp dir
         recs = sorted(list(records.keys()))
-        fh = open(os.path.join(self.configs.temp_dir, f"all_{config['name']}_uris.txt"), "w")
-        for r in recs:
-            fh.write(f"{r}\t{records[r]}\n")
-        fh.close()
+        with open(os.path.join(self.configs.temp_dir, f"all_{config['name']}_uris.txt"), "w") as fh:
+            for r in recs:
+                fh.write(f"{r}\t{records[r]}\n")
 
         recs = sorted(list(deleted.keys()))
-        fh = open(os.path.join(self.configs.temp_dir, f"deleted_{config['name']}_uris.txt"), "w")
-        for r in recs:
-            fh.write(f"{r}\t{deleted[r]}\n")
-        fh.close()
+        with open(os.path.join(self.configs.temp_dir, f"deleted_{config['name']}_uris.txt"), "w") as fh:
+            for r in recs:
+                fh.write(f"{r}\t{deleted[r]}\n")
 
         return records, deleted

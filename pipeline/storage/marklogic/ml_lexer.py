@@ -258,9 +258,8 @@ class InverseRelQuery(RelQuery):
 
 class ConfiguredParser(object):
     def __init__(self, ml_store=None):
-        fh = open('searchConfig.json')
-        data = fh.read()
-        fh.close()
+        with open('searchConfig.json') as fh:
+            data = fh.read()
         js = json.loads(data)
         self.config = js
         self.all_rels = {}

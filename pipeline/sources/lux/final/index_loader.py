@@ -98,7 +98,6 @@ class GlobalIndexLoader(LmdbIndexLoader):
                     except:
                         updates[b] = [a]
 
-        print(updates)
         if updates:
             if which == "equivs":
                 eqindex.update(updates)
