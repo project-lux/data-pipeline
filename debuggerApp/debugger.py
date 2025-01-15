@@ -46,10 +46,12 @@ def process_uri(uri, option1=False, option2=False):
 		if equivs:
 			for e in equivs:
 				ident = e.get("id","")
+				print(ident)
 				if ident:
 					(src, identifier) = cfgs.split_uri(ident)
 					cache = src['recordcache']
 					cachename = src['name']
+					print(cachename)
 					if src['type'] == "external":
 						if option1:
 							continue
