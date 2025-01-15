@@ -41,11 +41,14 @@ def process_uri(uri, option1=False, option2=False):
 	recnames = {}
 	recequivs = {}
 
+	print(typ)
+
 	if rec:
 		equivs = rec.get("equivalent",[])
 		if equivs:
 			for e in equivs:
 				ident = e.get("id","")
+				print(ident)
 				if ident:
 					(src, identifier) = cfgs.split_uri(ident)
 					cache = src['recordcache']
