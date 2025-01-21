@@ -1,8 +1,10 @@
 import os
 import ujson as json
+import re
 from cromulent import model, vocab
 from lxml import etree
 
+from pipeline.process.utils.mapper_utils import make_datetime
 from pipeline.process.utils.xpath_ops import process_operation
 
 model.ExternalResource._write_override = None
@@ -172,6 +174,65 @@ class Mapper(object):
                         self.xpath_fixes[ident].append(f)
                     except:
                         self.xpath_fixes[ident] = [f]
+
+        self.single_century_regex = re.compile(r"(\d{1,2})(?:st|nd|rd|th) century$")
+        self.range_centuries_regex = re.compile(r"(\d{1,2})(?:st|nd|rd|th) century.*?(\d{1,2})(?:st|nd|rd|th) century")
+
+    def process_period_record(self, record):
+        # Add AAT classification
+        record.setdefault("classified_as", []).append({
+            "id": "http://vocab.getty.edu/aat/300081446",
+            "type": "Type",
+            "_label": "Period",
+        })
+        
+        if "timespan" not in record:
+            identified_by = record.get("identified_by", [])
+            for identifier in identified_by:
+                classified_as = identifier.get("classified_as", [])
+                for cxn in classified_as:
+                    if cxn.get("id") == "http://vocab.getty.edu/aat/300404670":
+                        content = identifier.get("content", "")
+
+                        if "," in cont:
+                            #Library periods
+                            dates = cont.rsplit(",", 1)[-1].strip()
+                        if self.single_century_regex.match(content):
+                            #Museum periods
+                            century = int(self.single_century_regex.match(content).group(1))
+                            start_year, end_year = (century - 1) * 100, (century - 1) * 100 + 99
+                            dates = f"{start_year} - {end_year}"
+                        elif self.range_century_regex.match(content):
+                            start_century, end_century = map(
+                                int, self.range_century_regex.match(content).groups()
+                            )
+                            start_year, end_year = (start_century - 1) * 100, (end_century - 1) * 100 + 99
+                            dates = f"{start_year} - {end_year}"
+                        else:
+                            dates = None
+
+                        if dates:
+                            try:
+                                begin, end = make_datetime(dates)
+                            except:
+                                begin = end = None
+                            if begin and end:
+                                record["timespan"] = {
+                                    "type": "TimeSpan",
+                                    "begin_of_the_begin": begin,
+                                    "end_of_the_end": end,
+                                    "identified_by": [{
+                                        "type": "Name",
+                                        "classified_as": [{
+                                            "id": "http://vocab.getty.edu/aat/300404669",
+                                            "type": "Type",
+                                            "_label": "Display Title",
+                                        }],
+                                        "content": content,
+                                    }]
+                                }
+                        break
+        return record
 
     def returns_multiple(self, record=None):
         return False

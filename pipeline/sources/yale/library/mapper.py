@@ -399,6 +399,8 @@ class YulMapper(Mapper):
                         cxnid = c.get("id", "")
                         if cxnid and cxnid.startswith("https://vocab.getty.edu"):
                             c["id"] = cxnid.replace("https://", "http://")
+        if data['type'] == "Period":
+            self.process_period_record(data)
 
 
         return rec
