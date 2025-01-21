@@ -247,7 +247,7 @@
   - LUX harvests the following datasets:
     - [DataBNF Rameau NoSubjects](https://transfert.bnf.fr/link/c26ba50e-17c4-46fe-b6d8-8c2ad393f40e)
       - Linked.art Class: Concept
-    - [DataBND Person Authors](https://transfert.bnf.fr/link/c412f451-2bf2-45a7-b76b-a11d563c2a8a)
+    - [DataBNF Person Authors](https://transfert.bnf.fr/link/c412f451-2bf2-45a7-b76b-a11d563c2a8a)
       - Linked.art Class: People
     - [DataBNF Org Authors](https://transfert.bnf.fr/link/2a2b3690-f642-4644-8615-9b50b59c84d9)
       - Linked.art Class: Group
