@@ -261,7 +261,7 @@
 
 
 - **Japan NDL (Japanese National Diet Library)**: Provides access to a wide range of bibliographic and authority data, enabling researchers and institutions to retrieve and utilize information from the NDL's extensive collections.
-  - While dump files are available for subject headings, LUX uses the SPARQL API to retrieve records as referenced.
+  - While dump files are available for subject headings, LUX retrieves records as referenced.
 
   - Format: JSON-LD
 
