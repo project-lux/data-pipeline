@@ -185,42 +185,44 @@ class Mapper(object):
             "type": "Type",
             "_label": "Period",
         })
-        
+
         if "timespan" not in record:
             identified_by = record.get("identified_by", [])
             for identifier in identified_by:
                 classified_as = identifier.get("classified_as", [])
                 for cxn in classified_as:
                     if cxn.get("id") == "http://vocab.getty.edu/aat/300404670":
-                        content = identifier.get("content", "")
+                        content = identifier.get("content", "").strip()
 
-                        if "," in cont:
-                            #Library periods
-                            dates = cont.rsplit(",", 1)[-1].strip()
-                        if self.single_century_regex.match(content):
-                            #Museum periods
-                            century = int(self.single_century_regex.match(content).group(1))
+                        dates = None
+
+                        #Library periods
+                        if "," in content:
+                            dates = content.rsplit(",", 1)[-1].strip()
+
+                        #Museum periods
+                        match = self.single_century_regex.match(content)
+                        if match:
+                            century = int(match.group(1))
                             start_year, end_year = (century - 1) * 100, (century - 1) * 100 + 99
                             dates = f"{start_year} - {end_year}"
-                        elif self.range_century_regex.match(content):
-                            start_century, end_century = map(
-                                int, self.range_century_regex.match(content).groups()
-                            )
+
+                        match = self.range_centuries_regex.match(content)
+                        if match:
+                            start_century, end_century = map(int, match.groups())
                             start_year, end_year = (start_century - 1) * 100, (end_century - 1) * 100 + 99
                             dates = f"{start_year} - {end_year}"
-                        else:
-                            dates = None
 
                         if dates:
                             try:
                                 begin, end = make_datetime(dates)
                             except:
                                 begin = end = None
-                            if begin and end:
+                            if begin or end:
                                 record["timespan"] = {
                                     "type": "TimeSpan",
-                                    "begin_of_the_begin": begin,
-                                    "end_of_the_end": end,
+                                    "begin_of_the_begin": begin if begin else "",
+                                    "end_of_the_end": end if end else "",
                                     "identified_by": [{
                                         "type": "Name",
                                         "classified_as": [{
