@@ -15,7 +15,7 @@
 | VIAF ^          |   ✅  |  ✅ |     -         |  ✅  | ✅       | N/A |
 | Who's on First  |   ✅  |  ✅ |     -         | N/A  | N/A       | N/A |
 | Wikidata ^      |   ✅  |  ✅ |     -         |  ✅  | ✅     | N/A |
-| Japan NL        |   ✅  |  ✅ |     -         | N/A  | N/A       | N/A |
+| Japan NDL        |   ✅  |  ✅ |     -         | N/A  | N/A       | N/A |
 | BNF             |   ✅  |  ✅ |     -         | ✅  | N/A       | N/A |
 | GBIF            |   ✅  |  ✅ |     -         | N/A  | N/A       | N/A |
 | ORCID           |   ✅  |  ✅ |     -         | ✅  | N/A       | N/A |
@@ -24,9 +24,8 @@
 | DNB             |   ✅  |  ✅ |     -         | ✅  | N/A       | N/A |
 | BNE             |   ✅  |  ✅ |     -         | ✅  | N/A       | N/A |
 | SNAC            |   ✅  |  ✅ |     -         | N/A  | N/A       | N/A |
-| Homosaurus      |   ✅  |  ✅ |     -          | N/A   | N/A      | N/A |
-| Nomisma         |   ✅  |  ✅ |     -          | N/A   | N/A      | N/A |
-| Nomenclature    | -     | -    |   N/A         | N/A    | N/A      | N/A |
+| Homosaurus      |   ✅  |  ✅ |     -          | ✅ | N/A      | N/A |
+| Nomisma         |   ✅  |  ✅ |     -          | ✅ | N/A      | N/A |
 
 
 
@@ -242,15 +241,31 @@
     - Individual records can be fetched at:
       `https://datos.bne.es/resource/{identifier}.jsonld`
 
-- **BNF (French National Library)**: 
-  - Dump files available:
-  - [Concepts](https://transfert.bnf.fr/link/c26ba50e-17c4-46fe-b6d8-8c2ad393f40e): Concepts (without works they reference).
-  - [People](https://transfert.bnf.fr/link/c412f451-2bf2-45a7-b76b-a11d563c2a8a): People.
-  - [Groups](https://transfert.bnf.fr/link/2a2b3690-f642-4644-8615-9b50b59c84d9): Groups.
-  - [Places](https://transfert.bnf.fr/link/86ea06b4-2590-4d1c-8e1e-126eff24b535): Places.
+- **BNF (Bibliothèque nationale de France)**: National library of France, preserving and providing access to a vast collection of books, manuscripts, and cultural heritage materials.
+  - In the past, LUX relied on the BNF's RDF/JSON-LD for harvesting, however this service has not been consistently available. As a result, we swapped to the XML dump files.
+  - Dump files do not have a specified update frequency.
+  - LUX harvests the following datasets:
+    - [DataBNF Rameau NoSubjects](https://transfert.bnf.fr/link/c26ba50e-17c4-46fe-b6d8-8c2ad393f40e)
+      - Linked.art Class: Concept
+    - [DataBND Person Authors](https://transfert.bnf.fr/link/c412f451-2bf2-45a7-b76b-a11d563c2a8a)
+      - Linked.art Class: People
+    - [DataBNF Org Authors](https://transfert.bnf.fr/link/2a2b3690-f642-4644-8615-9b50b59c84d9)
+      - Linked.art Class: Group
+    - [DataBNF Geos](https://transfert.bnf.fr/link/86ea06b4-2590-4d1c-8e1e-126eff24b535)
+      - Linked.art Class: Place
+
+    - Format: XML* see note about RDF/JSON-LD above
+
+    - If service is available, individual records can be fetched at:
+      `https://data.bnf.fr/ark:/12148/{identifier}.rdfjsonld`
 
 
+- **Japan NDL (Japanese National Diet Library)**: Provides access to a wide range of bibliographic and authority data, enabling researchers and institutions to retrieve and utilize information from the NDL's extensive collections.
+  - While dump files are available for subject headings, LUX uses the SPARQL API to retrieve records as referenced.
 
-- **Japan (Japanese National Library)**:
-  - Fetched as referenced.
+  - Format: JSON-LD
+
+  - Individual records can be fetched at, e.g.:
+    `https://id.ndl.go.jp/auth/ndlsh/{identifier}.json`
+
   
