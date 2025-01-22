@@ -275,6 +275,9 @@ for ident in deletes:
     # Can I delete ident? These are all YPM at this stage
     # Are there any records that reference ident, that aren't also slated for deletion?
     old_rec = acquirer.acquire(ident, store=STORE_OKAY)
+    if not old_rec:
+        # already deleted, nothing we can do
+        continue
     uri = old_rec['data']['id']
     typ = old_rec['data']['type']
     quri = cfgs.make_qua(uri, typ)
