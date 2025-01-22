@@ -125,17 +125,25 @@ networkmap = cfgs.instantiate_map("networkmap")["store"]
 reconciler = Reconciler(cfgs, idmap, networkmap)
 merged = cfgs.results["merged"]["recordcache"]
 
+print("Reconciling")
+
 # These are only from YPM
 recs2 = []
 for rec in temp_recs:
+    sys.stdout.write('.')
+    sys.stdout.flush()
     rec2 = reconciler.reconcile(rec)
     mapper.post_reconcile(rec2)
     ref_mgr.walk_top_for_refs(rec2["data"], 0)
     ref_mgr.manage_identifiers(rec2)
     recs2.append(rec2)
 
+print("References")
+
 item = 1
 while item:
+    sys.stdout.write('.')
+    sys.stdout.flush()
     # Item is uri, {dist, type} or None
     item = ref_mgr.pop_ref()
     try:
@@ -191,17 +199,21 @@ while item:
         print(f"Failed to acquire {rectype} reference: {source['name']}:{recid}")
 
 
+print("Merging")
 # Now we should have all our records saved and in recs2
-
 reider = Reidentifier(cfgs, idmap)
 merger = MergeHandler(cfgs, idmap, ref_mgr)
-
-
 ml = cfgs.results["marklogic"]["recordcache"]
 ml_store = cfgs.marklogic_stores['ml_dev']['store']
 
 for rec in recs2:
+    sys.stdout.write('.')
+    sys.stdout.flush()
     recuri = rec['data']['id']
+    try:
+        src = cfgs.internal[rec['source']]
+    except:
+        src = cfgs.external[rec['source']]
     qrecid = cfgs.make_qua(recuri, rec["data"]["type"])
     yuid = idmap[qrecid]
     if not yuid:
@@ -209,7 +221,8 @@ for rec in recs2:
         continue
     yuid = yuid.rsplit("/", 1)[1]
     rec2 = reider.reidentify(rec)
-    src["recordcache2"][rec2["yuid"]] = rec2["data"]
+    if STORE_OKAY:
+        src["recordcache2"][rec2["yuid"]] = rec2["data"]
 
     equivs = idmap[rec2["data"]["id"]]
     if equivs:
@@ -237,12 +250,14 @@ for rec in recs2:
             del rec3["identifier"]
         except:
             pass
-        merged[rec3["yuid"]] = rec3
+        if STORE_OKAY:
+            merged[rec3["yuid"]] = rec3
     else:
         print(f"*** Final transform returned None")
 
     rec4 = mlmapper.transform(rec3, rec3["data"]["type"])
-    ml[yuid] = rec4
+    if STORE_OKAY:
+        ml[yuid] = rec4
 
     # And send to ML environment!
     if STORE_OKAY:
@@ -251,6 +266,8 @@ for rec in recs2:
 # Now we're done with reconciling, merging and processing to ML
 # Can reconcile end up deleting an existing record other than a record in the current set? Yes
 #    Change is to add an equivalent. That triggers merge with existing. Then update becomes delete, or triggers a delete
+
+print("Deleting!")
 
 for ident in deletes:
     # Can I delete ident? These are all YPM at this stage
