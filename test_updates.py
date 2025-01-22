@@ -12,9 +12,11 @@ cfgs.instantiate_all()
 
 STORE_OKAY = False
 
-q = """SELECT ?s WHERE {
-  ?s <https://lux.collections.yale.edu/ns/allRefCtr> <%%yuid%%>
-}"""
+q = """SELECT DISTINCT ?ref WHERE {
+  { ?ref lux:refCtr <https://lux.collections.yale.edu/data/person/c225d5e4-8767-4a25-802b-af054d5e8f52> . }
+  UNION
+  { ?ref lux:any <https://lux.collections.yale.edu/data/person/c225d5e4-8767-4a25-802b-af054d5e8f52> . }
+} LIMIT 10"""
 
 def _walk_refs(node, refs):
     if 'id' in node:
@@ -38,9 +40,10 @@ ypmns = cfgs.internal['ypm']['namespace']
 
 # In prod, this could be acquirer to run the mappers, store in cache and so on
 acquirer = cfgs.internal['ypm']['acquirer']
-latest = dc.latest()
+#latest = dc.latest()
+latest = "2025-01-21T00:00:00"
 lday = latest[:10] + "T00:00:00"
-sbx = cfgs.marklogic_stores['ml_sandbox']['store']
+
 creates = []
 updates = []
 deletes = []
@@ -54,30 +57,28 @@ for (chg, ident, empty, dt) in h.crawl(last_harvest=lday, refsonly=True):
         deletes.append(ident)
     else:
         print(f"Saw chg: {chg} for {ident} ?")
-
 for i in updates[:]:
     if not i in dc:
         creates.append(i)
         updates.remove(i)
 
+
 print("Fetching new recs")
-
 temp_recs = []
-
 # First process creates as easy
 for ident in creates:
     new_rec = acquirer.acquire(ident, store=STORE_OKAY)
     temp_recs.append(new_rec)
 
-print("Fetching updated recs")
 
+print("Fetching updated recs")
 maybe_delete = {}
 for ident in updates:
     old_rec = acquirer.acquire(ident, store=STORE_OKAY)
     new_rec = acquirer.acquire(ident, store=STORE_OKAY, refetch=True)
 
     if new_rec['data'] == old_rec['data']:
-        # Already seen this one, carry on
+        # Already seen this one, carry on!
         continue
 
     temp_recs.append(new_rec)
@@ -107,15 +108,18 @@ for ident in updates:
                 maybe_delete[ruri] = 1
 
 
-
-# Here we should have all of the data stored in datacache
+# At this point we should have all of the data stored in datacache
 # And know all of the idents to process
 
-
-
 # Reconciling
-recs2 = []
 
+ref_mgr = ReferenceManager(cfgs, idmap)
+mapper = cfgs.internal['ypm']['mapper']
+networkmap = cfgs.instantiate_map("networkmap")["store"]
+reconciler = Reconciler(cfgs, idmap, networkmap)
+
+# These are only from YPM
+recs2 = []
 for rec in temp_recs:
     rec2 = reconciler.reconcile(rec)
     mapper.post_reconcile(rec2)
@@ -159,13 +163,10 @@ while item:
     try:
         (source, recid) = cfgs.split_uri(uri)
     except:
-        if debug:
-            print(f"Not processing: {uri}")
         continue
-    if not source["type"] == "external":
-        # Don't process internal or results
-        print(f"Got internal reference! {uri}")
-        raise ValueError(uri)
+    if source["type"] != "external":
+        # Double check we're external
+        continue
 
     # put back the qua to the id after splitting/canonicalizing in split_uri
     mapper = source["mapper"]
@@ -174,33 +175,30 @@ while item:
     # Acquire the record from cache or network
     rec = acquirer.acquire(recid, rectype=rectype)
     if rec is not None:
-        sys.stdout.write(".")
-        sys.stdout.flush()
-        # Reconcile it
         rec2 = reconciler.reconcile(rec)
-        # Do any post-reconciliation clean up
         mapper.post_reconcile(rec2)
-        # XXX Shouldn't this be stored somewhere after reconciliation?
-        # Find references from this record
         ref_mgr.walk_top_for_refs(rec2["data"], distance)
-        # Manage identifiers for rec now we've reconciled and collected
-        # rebuild should be False if this is an equivalent of an internal rec
-        # as we've already seen it, so don't remove URIs (e.g. internal uris)
         ref_mgr.manage_identifiers(rec2)
         recs2.append(rec2)
     else:
         print(f"Failed to acquire {rectype} reference: {source['name']}:{recid}")
 
 
-# Now merge
+# Now we should have all our records saved and in recs2
+
+reider = Reidentifier(cfgs, idmap)
+merger = MergeHandler(cfgs, idmap, ref_mgr)
+
+merged = cfgs.results["merged"]["recordcache"]
+ml = cfgs.results["marklogic"]["recordcache"]
+ml_store = cfgs.marklogic_stores['ml_dev']['store']
 
 for rec in recs2:
-    distance = 0
     recuri = rec['data']['id']
     qrecid = cfgs.make_qua(recuri, rec["data"]["type"])
     yuid = idmap[qrecid]
     if not yuid:
-        print(f" !!! Couldn't find YUID for internal record: {qrecid}")
+        print(f" !!! Couldn't find YUID for record: {qrecid}")
         continue
     yuid = yuid.rsplit("/", 1)[1]
     rec2 = reider.reidentify(rec)
@@ -232,23 +230,23 @@ for rec in recs2:
             del rec3["identifier"]
         except:
             pass
-        merged_cache[rec3["yuid"]] = rec3
+        merged[rec3["yuid"]] = rec3
     else:
         print(f"*** Final transform returned None")
 
     rec4 = mlmapper.transform(rec3, rec3["data"]["type"])
     ml[yuid] = rec4
-    # And send to ML!
 
+    # And send to ML environment!
+    if STORE_OKAY:
+        ml_store[yuid] = rec4
 
 # Now we're done with reconciling, merging and processing to ML
-# XXX: Can reconcile end up deleting an existing record other than a record in the current set?
-#  ... change is to add an equivalent. That triggers merge with existing. Then update becomes delete, or triggers a delete
-
+# Can reconcile end up deleting an existing record other than a record in the current set? Yes
+#    Change is to add an equivalent. That triggers merge with existing. Then update becomes delete, or triggers a delete
 
 for ident in deletes:
-    # Can I delete ident?
-
+    # Can I delete ident? These are all YPM at this stage
     # Are there any records that reference ident, that aren't also slated for deletion?
     old_rec = acquirer.acquire(ident, store=STORE_OKAY)
     uri = old_rec['data']['id']
@@ -256,7 +254,7 @@ for ident in deletes:
     quri = cfgs.make_qua(uri, typ)
     yuid = idmap[quri]
     q2 = q.replace('%%yuid%%', yuid)
-    refs = cfgs.marklogic_stores['ml_sandbox']['store'].search_sparql_ids(q2)
+    refs = ml_store.search_sparql_ids(q2)
 
     arefs = []
     for r in refs:
@@ -281,3 +279,7 @@ for ident in deletes:
     # if only YPM or extenal references, then track
 
     # At the end of the pass, for each record, if the set of preventing records is the a subset of the deletions, then delete
+
+
+
+
