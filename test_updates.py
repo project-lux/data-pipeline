@@ -10,7 +10,6 @@ idmap = cfgs.get_idmap()
 cfgs.cache_globals()
 cfgs.instantiate_all()
 
-
 STORE_OKAY = False
 
 q = """SELECT ?s WHERE {
@@ -70,7 +69,6 @@ for ident in creates:
     new_rec = acquirer.acquire(ident, store=STORE_OKAY)
     temp_recs.append(new_rec)
 
-
 print("Fetching updated recs")
 
 maybe_delete = {}
@@ -109,21 +107,19 @@ for ident in updates:
                 maybe_delete[ruri] = 1
 
 
+
 # Here we should have all of the data stored in datacache
 # And know all of the idents to process
+
+
 
 # Reconciling
 recs2 = []
 
 for rec in temp_recs:
-    # Reconcile it
     rec2 = reconciler.reconcile(rec)
-    # Do any post-reconciliation clean up
     mapper.post_reconcile(rec2)
-    # XXX Shouldn't this be stored somewhere after reconciliation?
-    # Find references from the record
     ref_mgr.walk_top_for_refs(rec2["data"], 0)
-    # Manage identifiers for rec now we've reconciled and collected
     ref_mgr.manage_identifiers(rec2)
     recs2.append(rec2)
 
