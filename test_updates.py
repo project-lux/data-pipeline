@@ -204,6 +204,7 @@ print("Merging")
 reider = Reidentifier(cfgs, idmap)
 merger = MergeHandler(cfgs, idmap, ref_mgr)
 final = cfgs.results["merged"]["mapper"]
+mlmapper = cfgs.results["marklogic"]["mapper"]
 ml = cfgs.results["marklogic"]["recordcache"]
 ml_store = cfgs.marklogic_stores['ml_dev']['store']
 
