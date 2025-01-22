@@ -2,6 +2,10 @@ import os
 import sys
 from dotenv import load_dotenv
 from pipeline.config import Config
+from pipeline.process.reconciler import Reconciler
+from pipeline.process.reference_manager import ReferenceManager
+from pipeline.process.reidentifier import Reidentifier
+from pipeline.process.merger import MergeHandler
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")
@@ -62,8 +66,8 @@ for i in updates[:]:
         creates.append(i)
         updates.remove(i)
 
-
-print("Fetching new recs")
+print("")
+print(f"Fetching {len(creates)} new recs")
 temp_recs = []
 # First process creates as easy
 for ident in creates:
@@ -71,7 +75,7 @@ for ident in creates:
     temp_recs.append(new_rec)
 
 
-print("Fetching updated recs")
+print(f"Fetching {len(updates)} updated recs")
 maybe_delete = {}
 for ident in updates:
     old_rec = acquirer.acquire(ident, store=STORE_OKAY)
@@ -107,6 +111,8 @@ for ident in updates:
                 ruri = cfgs.make_qua(r, old_refs[r])
                 maybe_delete[ruri] = 1
 
+
+print(f"Have maybe_deletes: {list(maybe_delete.keys())}")
 
 # At this point we should have all of the data stored in datacache
 # And know all of the idents to process
