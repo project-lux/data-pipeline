@@ -98,6 +98,9 @@ class YcbaMapper(Mapper):
             data["equivalent"] = [uri for uri in data["equivalent"] if "wikidata.org" not in uri.get("id", "")]
             if not data["equivalent"]:
                 del data["equivalent"]
+        
+        if data['type'] == "Period":
+            self.process_period_record(data)
 
         self.fix_links(rec)
 
