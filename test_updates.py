@@ -203,6 +203,7 @@ print("Merging")
 # Now we should have all our records saved and in recs2
 reider = Reidentifier(cfgs, idmap)
 merger = MergeHandler(cfgs, idmap, ref_mgr)
+final = cfgs.results["merged"]["mapper"]
 ml = cfgs.results["marklogic"]["recordcache"]
 ml_store = cfgs.marklogic_stores['ml_dev']['store']
 
