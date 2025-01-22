@@ -123,6 +123,7 @@ ref_mgr = ReferenceManager(cfgs, idmap)
 mapper = cfgs.internal['ypm']['mapper']
 networkmap = cfgs.instantiate_map("networkmap")["store"]
 reconciler = Reconciler(cfgs, idmap, networkmap)
+merged = cfgs.results["merged"]["recordcache"]
 
 # These are only from YPM
 recs2 = []
@@ -195,7 +196,7 @@ while item:
 reider = Reidentifier(cfgs, idmap)
 merger = MergeHandler(cfgs, idmap, ref_mgr)
 
-merged = cfgs.results["merged"]["recordcache"]
+
 ml = cfgs.results["marklogic"]["recordcache"]
 ml_store = cfgs.marklogic_stores['ml_dev']['store']
 
