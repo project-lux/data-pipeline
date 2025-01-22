@@ -1113,10 +1113,32 @@ class WdMapper(Mapper, WdConfigManager):
 
     def process_event(self, data, top):
         self.process_imageref(data, top)
+        self.process_activity(data, top)
+
+        participant = data.get("P710",[])
+        chairperson = data.get("P488",[])
+        participants = participant + chairperson
+        if participants:
+            for p in participants:
+                pref = self.get_reference(p)
+                if pref and pref.__class__ in [model.Group, model.Person]:
+                    top.participant = pref
+
+        broader = data.get("P361",[])
+        if broader:
+            for b in broader:
+                top.part_of = model.Event(ident=self.expand_uri(b))
 
     def process_period(self, data, top):
         self.process_imageref(data, top)
         self.process_activity(data, top)
+        self.process_period_record(data)
+
+        broader = data.get("P361",[])
+        if broader:
+            for b in broader:
+                top.part_of = model.Period(ident=self.expand_uri(b))
+
 
     def process_activity(self, data, top):
         startTime = data.get("P580")
@@ -1143,26 +1165,6 @@ class WdMapper(Mapper, WdConfigManager):
         
         if startTime or endTime:
             top.timespan = ts
-                
-        participant = data.get("P710",[])
-        chairperson = data.get("P488",[])
-        participants = participant + chairperson
-        if participants:
-            for p in participants:
-                pref = self.get_reference(p)
-                if pref and pref.__class__ in [model.Group, model.Person]:
-                    top.participant = pref
-
-        #P361 part_of
-        broader = data.get("P361",[])
-        if broader:
-            for b in broader:
-                pref = self.get_reference(b)
-                if pref and pref.__class__ == model.Period:
-                    top.part_of = model.Period(ident=self.expand_uri(b))
-                elif pref and pref.__class__ == model.Activity:
-                    top.part_of = model.Activity(ident=self.expand_uri(b))
-
 
         country = data.get("P17",[])
         location = data.get("P276",[])
