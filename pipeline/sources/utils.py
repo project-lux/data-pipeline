@@ -5,6 +5,50 @@ import json
 import subprocess
 import sys
 
+
+def get_download_url(source_name: str, base_url: str, data_key: str) -> str:
+    """
+    Fetches the download URL for a given source by querying its download page.
+
+    Args:
+        source_name (str): Name of the data source (e.g., 'ror', 'viaf').
+        base_url (str): The API endpoint to fetch data from.
+        data_key (str): The key path to extract the download link.
+
+    Returns:
+        str: The download URL, or exits with an error message.
+    """
+    response = fetch_webpage(base_url)
+
+    try:
+        page_data = json.loads(response)
+        if not page_data:
+            sys.exit(f"Error: Received empty JSON response from {source_name}")
+    except json.JSONDecodeError:
+        sys.exit(f"Error: Failed to parse JSON response for {source_name}")
+
+    keys = data_key.split('.')
+    download_url = page_data
+
+    try:
+        for key in keys:
+            # Check if the key includes an index (e.g., hits[0])
+            if '[' in key and ']' in key:
+                key_name, index = key.split('[')
+                index = int(index.rstrip(']'))
+                download_url = download_url.get(key_name, [])[index]
+            else:
+                download_url = download_url.get(key, {})
+
+        return download_url if isinstance(download_url, str) else None
+
+    except (IndexError, KeyError, TypeError) as e:
+        print(f"Error accessing JSON path '{data_key}': {e}")
+        return None
+    except Exception as e:
+        sys.exit(f"Unexpected error fetching {source_name} data: {e}")
+
+
 def fetch_webpage(url: str) -> str:
     """Fetch the webpage content from the given URL.
     

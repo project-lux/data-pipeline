@@ -3,54 +3,48 @@ import os
 import json
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
 
-from pipeline.sources.utils import fetch_webpage
+from pipeline.sources.utils import fetch_webpage, get_download_url
 
 
 def main():
     """
-    Fetches the latest VIAF download URL. The resulting URL is formatted 
-    and returned for use in shell scripts.
+    Main function to fetch and return the download URL for VIAF data.
 
-    **Function Flow:**
-    1. Fetches the VIAF download page content.
-    2. Parses the JSON response to extract the download link.
-    3. Returns the formatted download URL as a JSON string.
+    This script retrieves the VIAF data download link from the API, constructs the full
+    download URL, and returns it in JSON format.
 
-    **Example usage in a shell script:**
-        url=$(python scripts/download/viaf.py)
-        curl -O "$url"
+    Steps:
+    1. Define the base API endpoint and stub URL.
+    2. Use `get_download_url` to extract the download link from the JSON response.
+    3. Construct the full download URL.
+    4. Print and return the download URL as a JSON-encoded list.
 
-    **Returns:**
-    - A list containing the VIAF RDF XML download URL.
+    Raises:
+        SystemExit: If fetching the URL fails or returns invalid data.
+    
+    Returns:
+        list: A list containing the full download URL.
 
-    **Error Handling:**
-    - Exits with an error message if fetching or parsing fails.
-    """ 
-
-    url = "https://viaf.org/api/download/files"
+    Example usage:
+        $ python viaf.py
+        Output: ["https://downloads.viaf.org/viaf/data/monthly/viaf-YYYYMMDD-clusters-rdf.xml.gz"]
+    """
+    base_url = "https://viaf.org/api/download/files"
+    stub = "https://downloads.viaf.org/viaf/data/monthly/"
+    data_key = "queryResult.Monthly.clusterRdfXml"
 
     try:
-        api_response = fetch_webpage(url)
-        page = json.loads(api_response)
-        stub = "https://downloads.viaf.org/viaf/data/monthly/"
-
-        #Extract the monthly RDF file key safely
-        monthly = page.get('queryResult', {}).get('Monthly', {}).get('clusterRdfXml')
+        monthly = get_download_url("viaf", base_url, data_key) 
         if not monthly:
-            raise ValueError("Monthly RDF file key not found in response.")
-        
+            raise ValueError("Error: No download URL found in the response.")
+           
         to_download = stub + monthly
         urls = [to_download]
         print(json.dumps(urls))
         return urls
-
-    except json.JSONDecodeError:
-        sys.exit("Error: Failed to parse JSON response from VIAF API.")
-    except ValueError as e:
-        sys.exit(f"Error: {e}")
-    except Exception as e:
-        sys.exit(f"Unexpected error: {e}")
-
+        
+    except ValueError as ve:
+        sys.exit(f"Error: {ve}")
 
 if __name__ == "__main__":
     main()
