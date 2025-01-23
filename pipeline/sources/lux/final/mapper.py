@@ -561,6 +561,8 @@ class Cleaner(Mapper):
 
         subj = []
         for k in okay:
+            if k.startswith("https://books.google.com"):
+                continue
             try:
                 block = ws[k]
                 subj.append(block)
