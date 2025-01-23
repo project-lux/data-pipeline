@@ -30,7 +30,7 @@ def get_available_sources() -> List[str]:
     Get all available sources from the configs directory.
 
     Returns:
-        List[str]: A list of source names (config filenames without .json extension),
+        List[str]: A list of source names (config filenames with .json extension),
                   excluding the base_download config.
 
     This function scans the configs directory for JSON files and returns their names
@@ -41,7 +41,7 @@ def get_available_sources() -> List[str]:
     configs_dir = Path(__file__).parent.parent.parent / 'configs'
     return [
         f.stem for f in configs_dir.glob('*.json')
-        if f.stem != 'base_download'  # exclude the base config
+        if f.stem not in {'base_download', 'schema', 'validator'}  # exclude the base config, schema and validator files
     ]
 
 def get_urls_from_script(source: str, download_dir: Path) -> List[str]:
@@ -63,7 +63,7 @@ def get_urls_from_script(source: str, download_dir: Path) -> List[str]:
     """
     # Get the root project directory by going up from pipeline/sources
     script_path = Path(__file__).parent.parent.parent / 'scripts' / 'download' / 'sources' / f"{source}.py"
-    
+
     if not script_path.exists():
         print(f"Script not found: {script_path}")
         return []
@@ -73,7 +73,7 @@ def get_urls_from_script(source: str, download_dir: Path) -> List[str]:
                               capture_output=True, 
                               text=True, 
                               check=True)
-        print(result.stdout)
+        output = result.stdout.strip()
         try:
             # Try to parse as JSON first
             urls = json.loads(result.stdout.strip())
