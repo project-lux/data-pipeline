@@ -26,8 +26,6 @@
 
 
     "dump_file_subdir": "",
-    "remote_dump_files": [
-        ""
-    ]
+    "remote_dump_files": []
 
 }
