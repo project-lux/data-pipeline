@@ -253,8 +253,9 @@ def main():
                     urls.extend(source_config['remote_dump_files'])
                 
                 # Add URL from remoteDumpFile if it exists and isn't already included
-                if 'remoteDumpFile' in source_config and source_config['remoteDumpFile'] not in urls:
-                    urls.append(source_config['remoteDumpFile'])
+                # We're going to remove this from the JSON
+                # if 'remoteDumpFile' in source_config and source_config['remoteDumpFile'] not in urls:
+                #     urls.append(source_config['remoteDumpFile'])
 
             # Map URLs to their download paths
             for url in urls:
@@ -268,7 +269,6 @@ def main():
         except Exception as e:
             print(f"Error: Failed to fetch URLs for '{source}': {e}")
             sys.exit(1)
-    
     if not all_urls:
         print("No URLs to download from any source")
         sys.exit(1)
