@@ -45,10 +45,10 @@ for src, cfg in to_do:
     done = {}
     with zipfile.ZipFile(outfn, 'w') as fh:
         for ident in rc.iter_keys():
+            ident = cfgs.split_qua(ident)[0]
             if ident in done:
                 continue
             done[ident] = 1
-            ident = cfgs.split_qua(ident)[0]
             rec = dc[ident]
             outjs = {'data': rec['data']}
             with fh.open(ident, 'w') as ffh:
