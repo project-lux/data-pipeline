@@ -15,8 +15,9 @@ from dataclasses import dataclass
 from queue import Queue
 import time
 import json
+from importlib import import_module
 
-from pipeline.sources.utils import get_urls_from_script, get_available_sources
+from pipeline.sources.utils import get_urls_from_script, get_available_sources, get_downloader_function
 
 base_download_config = Path(__file__).parent.parent.parent / 'configs' / 'base_download.json'
 
@@ -242,9 +243,19 @@ def main():
             
             # Try to get URLs from associated script first
             if not source_config.get("remote_dump_files"):
-                script_urls = get_urls_from_script(source, download_dir)
-                if script_urls:
-                    urls.extend(script_urls)
+                download_function_path = "pipeline." + get_downloader_function(source)
+                print(f"Download function path: {download_function_path}")
+                try:
+                    # Split into module path and function name
+                    module_path, function_name = download_function_path.rsplit('.', 1)
+                    
+                    # Import module and get function in one clean step
+                    download_function = getattr(import_module(module_path), function_name)
+                    
+                    if (script_urls := download_function()):
+                        urls.extend(script_urls)
+                except Exception as e:
+                    print(f"Warning: Failed to execute download function for {source}: {e}")
             
             # If config exists, add URLs from it
             if source_config:

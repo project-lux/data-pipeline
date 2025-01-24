@@ -1,5 +1,6 @@
 from bs4 import BeautifulSoup
 import re
+from pipeline.sources.utils import fetch_webpage
 
 def get_yearly_url(html_content, year):
     """
@@ -45,3 +46,25 @@ def get_download_link(html_content, year):
             return link
     else:
         print(f"Download link for {expected_file_name} not found in the HTML.")
+
+def download_orcid(year=2024):
+    base_url = "https://info.orcid.org/documentation/integration-guide/working-with-bulk-data/"
+    html_content = fetch_webpage(base_url)
+    if not html_content:
+        print("Failed to fetch the base webpage content.")
+
+    yearly_url = get_yearly_url(html_content, year)
+    if not yearly_url:
+        print(f"No valid yearly URL found for {year}.")
+
+    yearly_html = fetch_webpage(yearly_url)
+    if not yearly_html:
+        print(f"Failed to fetch the yearly webpage at {yearly_url}.")
+
+    download_link = get_download_link(yearly_html, year)
+    if not download_link:
+        print(f"No valid download link found for {year}.")
+
+    urls = [download_link]
+    return urls
+

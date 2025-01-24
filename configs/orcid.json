@@ -25,5 +25,6 @@
     "inverseEquivDbPath": "",
 
     "dump_file_subdir": "orcid",
-    "remote_dump_files": []
+    "remote_dump_files": [],
+    "downloaderFunction": "sources.general.orcid.parser.download_orcid"
 }
