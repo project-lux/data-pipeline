@@ -43,7 +43,7 @@ for src, cfg in to_do:
 
     outfn = f"/data-export/output/external/{src}.zip"
     done = {}
-    with zipfile.ZipFile(outfn, 'w') as fh:
+    with zipfile.ZipFile(outfn, 'w', compression=zipfile.ZIP_BZIP2) as fh:
         for ident in rc.iter_keys():
             ident = cfgs.split_qua(ident)[0]
             if ident in done:
