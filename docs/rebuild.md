@@ -79,7 +79,7 @@
 ### 2.4. Move the previous dataset 
 
  * Copy the current latest dataset (likely in production) to a dated directory
-    * YALE: This is /data-io2-2/output/lux/latest
+    * YALE: This is /data-export/output/lux/latest
  * Compress the previous dated dataset
     * e.g. `nohup gzip -1 latest-2023-05-02/* &`
 

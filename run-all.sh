@@ -102,7 +102,7 @@ sleep 30
 ### Export Phase
 #
 echo "Starting Export"
-rm /data-io2-2/output/lux/latest/*jsonl
+rm /data-export/output/lux/latest/*jsonl
 rm ../data/logs/flags/export_is_done-*txt
 for count in `seq 0 23`;
 do
@@ -127,8 +127,4 @@ do
     sleep 30
 done
 rm ../data/logs/flags/export_is_done-*.txt
-
 echo `date` [Success] Build was successful >> /data/logs/pipeline_process_status.txt
-
-#echo "Loading Sandbox"
-#../tools/mlcp-11.0.0/bin/mlcp.sh import -ssl -host lux-ml-sbx.collections.yale.edu -port 8000 -username s_lux_deployer_sbx -password 'PASSWORD-HERE' -input_file_path /data-io2-2/output/lux/latest -database lux-content  -input_file_type delimited_json -output_permissions lux-endpoint-consumer,read,lux-writer,update -uri_id id -fastload -thread_count 64

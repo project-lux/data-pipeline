@@ -148,7 +148,8 @@ def check_datacache_times(cache, cachetimes):
     }
 
 def check_file_timestamps():
-    filepath = f"/data-io2-2/output/lux/latest/"
+    # FIXME: This path should go to config
+    filepath = f"/data-export/output/lux/latest/"
     for filename in os.listdir(filepath):
         file = os.path.join(filepath, filename)
         if os.path.isfile(file):         
