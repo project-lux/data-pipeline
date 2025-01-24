@@ -45,11 +45,13 @@ for src, cfg in to_do:
     done = {}
 
     start = time.time()
+    x = 0
     with zipfile.ZipFile(outfn, 'w', compression=zipfile.ZIP_BZIP2) as fh:
         for ident in rc.iter_keys():
             ident = cfgs.split_qua(ident)[0]
             if ident in done:
                 continue
+            x += 1
             done[ident] = 1
             rec = dc[ident]
             outjs = {'data': rec['data']}
@@ -57,6 +59,9 @@ for src, cfg in to_do:
                 outs = json.dumps(outjs, separators=(",", ":"))
                 outb = outs.encode('utf-8')
                 ffh.write(outb)
+            if not x % 25000:
+                print(f"  {x} in {time.time()-start}")
+
     fh.close()
     end = time.time()
     print(end-start)
