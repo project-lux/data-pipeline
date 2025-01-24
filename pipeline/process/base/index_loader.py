@@ -147,9 +147,9 @@ class LmdbIndexLoader(IndexLoader):
             writer = csv.writer(csvh, delimiter=',')
             for (k,v) in idx.items():
                 if type(v) == list:
-                    writer.writerow(k, "\t".join(v))
+                    writer.writerow([k, "\t".join(v)])
                 else:
-                    writer.writerow(k, v)
+                    writer.writerow([k, v])
 
 
 class SqliteIndexLoader(IndexLoader):
