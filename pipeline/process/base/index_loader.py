@@ -126,6 +126,29 @@ class LmdbIndexLoader(IndexLoader):
             eqindex = None
         return (index, eqindex)
 
+    def export(self):
+        # Once loaded, this will export from the LMDB to a CSV for sharing
+
+        if self.out_path is not None:
+            idx = TabLmdb.open(self.out_path, 'r', readahead=False, writemap=True)
+            csvfn = self.out_path.rsplit('/')[-1].replace('lmdb', 'csv')
+            outfn = os.path.join(self.configs.data_dir, csvfn)
+            self.write_csv(idx, outfn)
+        if self.inverse_path is not None:
+            idx = TabLmdb.open(self.inverse_path, 'r', readahead=False, writemap=True)
+            csvfn = self.inverse_path.rsplit('/')[-1].replace('lmdb', 'csv')
+            outfn = os.path.join(self.configs.data_dir, csvfn)
+            self.write_csv(idx, outfn)
+
+    def write_csv(self, idx, outfn)
+        with open(outfn) as csvh:
+            writer = csv.writer(csvh, delimiter=',')
+            for (k,v) in idx.items():
+                if type(v) == list:
+                    writer.writerow(k, "\t".join(v))
+                else:
+                    writer.writerow(k, v)
+
 
 class SqliteIndexLoader(IndexLoader):
     def get_storage(self):
