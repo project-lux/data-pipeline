@@ -43,6 +43,8 @@ for src, cfg in to_do:
 
     outfn = f"/data-export/output/external/{src}.zip"
     done = {}
+
+    start = time.time()
     with zipfile.ZipFile(outfn, 'w', compression=zipfile.ZIP_BZIP2) as fh:
         for ident in rc.iter_keys():
             ident = cfgs.split_qua(ident)[0]
@@ -56,3 +58,5 @@ for src, cfg in to_do:
                 outb = outs.encode('utf-8')
                 ffh.write(outb)
     fh.close()
+    end = time.time()
+    print(end-start)
