@@ -48,5 +48,7 @@ for src, cfg in to_do:
             rec = dc[ident]
             outjs = {'data': rec['data']}
             with fh.open(ident, 'w') as ffh:
-                ffh.write(json.dumps(outjs, separators=(",", ":")))
+                outs = json.dumps(outjs, separators=(",", ":"))
+                outb = outs.encode('utf-8')
+                ffh.write(outb)
     fh.close()
