@@ -26,5 +26,5 @@
 
     "dump_file_subdir": "orcid",
     "remote_dump_files": [],
-    "downloaderFunction": "sources.general.orcid.parser.download_orcid"
+    "downloaderFunction": "sources.general.orcid.parser.get_orcid_urls"
 }

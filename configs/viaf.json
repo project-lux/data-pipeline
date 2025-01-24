@@ -25,5 +25,6 @@
     "inverseEquivDbPath": "id_to_viaf.lmdb",        
 
     "dump_file_subdir": "viaf",
-    "remote_dump_files": []
+    "remote_dump_files": [],
+    "downloaderFunction": "sources.viaf.parser.get_viaf_urls"
 }

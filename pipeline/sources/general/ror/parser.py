@@ -1,5 +1,7 @@
 from bs4 import BeautifulSoup
 import json
+from pipeline.sources.utils import fetch_webpage, get_download_url
+
 
 
 def parse_ror(html_content: str) -> str:
@@ -31,3 +33,14 @@ def parse_ror(html_content: str) -> str:
         if latest_version_url:
             return latest_version_url
     return None
+
+def get_ror_urls():
+    base_url = "https://zenodo.org/api/records/14429114/versions?size=5&sort=version&allversions=true"
+    data_key = "hits.hits[0].files[0].links.self"
+
+    download_url = get_download_url("ror", base_url, data_key)
+    if not download_url:
+        raise ValueError("Error: No download URL found in the response.")
+    urls = [download_url]
+    return urls
+

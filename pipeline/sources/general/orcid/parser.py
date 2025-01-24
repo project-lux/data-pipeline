@@ -47,7 +47,7 @@ def get_download_link(html_content, year):
     else:
         print(f"Download link for {expected_file_name} not found in the HTML.")
 
-def download_orcid(year=2024):
+def get_orcid_urls(year=2024):
     base_url = "https://info.orcid.org/documentation/integration-guide/working-with-bulk-data/"
     html_content = fetch_webpage(base_url)
     if not html_content:
