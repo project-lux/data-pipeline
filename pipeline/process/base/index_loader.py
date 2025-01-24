@@ -1,3 +1,4 @@
+import csv
 import sys
 import time
 from sqlitedict import SqliteDict
@@ -140,7 +141,7 @@ class LmdbIndexLoader(IndexLoader):
             outfn = os.path.join(self.configs.data_dir, csvfn)
             self.write_csv(idx, outfn)
 
-    def write_csv(self, idx, outfn)
+    def write_csv(self, idx, outfn):
         with open(outfn) as csvh:
             writer = csv.writer(csvh, delimiter=',')
             for (k,v) in idx.items():
