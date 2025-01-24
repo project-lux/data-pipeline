@@ -143,7 +143,7 @@ class LmdbIndexLoader(IndexLoader):
             self.write_csv(idx, outfn)
 
     def write_csv(self, idx, outfn):
-        with open(outfn) as csvh:
+        with open(outfn, 'w') as csvh:
             writer = csv.writer(csvh, delimiter=',')
             for (k,v) in idx.items():
                 if type(v) == list:
