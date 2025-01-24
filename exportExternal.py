@@ -42,8 +42,12 @@ for src, cfg in to_do:
     print(f"Exporting {ttl} records from {src}")
 
     outfn = f"/data-export/output/external/{src}.zip"
+    done = {}
     with zipfile.ZipFile(outfn, 'w') as fh:
         for ident in rc.iter_keys():
+            if ident in done:
+                continue
+            done[ident] = 1
             ident = cfgs.split_qua(ident)[0]
             rec = dc[ident]
             outjs = {'data': rec['data']}
