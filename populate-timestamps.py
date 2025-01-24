@@ -6,6 +6,7 @@ from googleapiclient.errors import HttpError
 
 import os
 import logging
+from pathlib import Path
 from datetime import datetime, timedelta
 from pipeline.config import Config
 from dotenv import load_dotenv
@@ -148,15 +149,31 @@ def check_datacache_times(cache, cachetimes):
     }
 
 def check_file_timestamps():
-    filepath = f"/data-io2-2/output/lux/latest/"
-    for filename in os.listdir(filepath):
-        file = os.path.join(filepath, filename)
-        if os.path.isfile(file):         
-            timestamp = os.path.getmtime(file)
-            datestamp = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
-            return {'Marklogic Export': {'timestamp': datestamp, 'type': 'Internal'}}
-    logging.warning("No valid files found for Marklogic timestamp")
-    return {}
+    filepath = f"/data/previous/exports/"
+    latest_folder = None
+    datestamp = None
+    try:
+        subdirs = [d for d in Path(filepath).iterdir() if d.is_dir()]
+        latest_folder = max(subdirs, key=lambda d: d.stat().st_mtime)
+    except ValueError:
+        logging.warning("No valid directory found for most recent Marklogic export")
+    except Exception as e:
+        logging.warning(f"Unexpected error with Marklogic export: {e}")
+
+    if latest_folder:
+        try:
+            for filename in os.listdir(latest_folder):
+                file = os.path.join(latest_folder, filename)
+                if os.path.isfile(file):         
+                    timestamp = os.path.getmtime(file)
+                    datestamp = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+                    break
+        except Exception as e:
+            logging.warning(f"Error processing files in {latest_folder}: {e}")
+    if datestamp:
+        return {'Marklogic Export': {'timestamp': datestamp, 'type': 'Internal'}}
+    else:
+        return {}
 
 def delete_old_tabs():
     try:
