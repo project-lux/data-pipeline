@@ -149,7 +149,7 @@ def check_datacache_times(cache, cachetimes):
     }
 
 def check_file_timestamps():
-    filepath = f"/data/previous/exports/"
+    filepath = cfgs.exports_dir
     latest_folder = None
     datestamp = None
     try:
