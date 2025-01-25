@@ -182,6 +182,23 @@ class WdMapper(Mapper, WdConfigManager):
             "Q1790144": model.MeasurementUnit,
             "Q3647172": model.MeasurementUnit,
             "Q3550873": model.MeasurementUnit,
+            "Q12418": model.HumanMadeObject,
+            "Q45585": model.HumanMadeObject,
+            "Q175036": model.HumanMadeObject,
+            "Q698487": model.HumanMadeObject,
+            "Q464782": model.HumanMadeObject,
+            "Q83872": model.HumanMadeObject,
+            "Q1044742": model.HumanMadeObject,
+            "Q1404472": model.Period,
+            "Q45805": model.Period,
+            "Q184963": model.Period,
+            "Q11761": model.Period,
+            "Q9903": model.Period,
+            "Q173034": model.Activity,
+            "Q901769": model.Activity,
+            "Q688909": model.Activity,
+            "Q193155": model.Activity,
+            "Q459447": model.Activity
         }
 
         if "P31" in data:
@@ -234,13 +251,14 @@ class WdMapper(Mapper, WdConfigManager):
                 "P1334",
                 "P1335",
             ],
-            #  "event": ["P580", "P585", "P582", "P710", "P1132", "P1542"],
+            "activity": ["P580", "P582", "P710", "P1132", "P1542", "P664", "P585"],
+            "period": ["P580", "P582", "P155", "P156", "P276"],
             "type": ["P1014", "P1843", "P1036"],
             "language": ["P282", "P1098", "P3823", "P218", "P219", "P220", "P1394"],
             "currency": ["P489", "P562", "P498"],
             "unit": ["P2370", "P2442", "P111"],
             "material": ["P2054", "P2067"],
-            "object": ["P127", "P186", "P217", "P2049", "P571", "P176"],  # height used on people
+            "object": ["P127", "P88", "P186", "P217", "P608", "P2049", "P176"],  # height used on people
             "text": ["P747", "P50", "P655", "P123", "P291", "P840"],
         }
 
@@ -255,6 +273,8 @@ class WdMapper(Mapper, WdConfigManager):
             "material": model.Material,
             "object": model.HumanMadeObject,
             "text": model.LinguisticObject,
+            "activity": model.Activity,
+            "period": model.Period
         }
 
         hits = {}
@@ -1093,9 +1113,32 @@ class WdMapper(Mapper, WdConfigManager):
 
     def process_event(self, data, top):
         self.process_imageref(data, top)
+        self.process_activity(data, top)
+
+        participant = data.get("P710",[])
+        chairperson = data.get("P488",[])
+        participants = participant + chairperson
+        if participants:
+            for p in participants:
+                pref = self.get_reference(p)
+                if pref and pref.__class__ in [model.Group, model.Person]:
+                    top.participant = pref
+
+        broader = data.get("P361",[])
+        if broader:
+            for b in broader:
+                top.part_of = model.Event(ident=self.expand_uri(b))
 
     def process_period(self, data, top):
         self.process_imageref(data, top)
+        self.process_activity(data, top)
+        self.process_period_record(data)
+
+        broader = data.get("P361",[])
+        if broader:
+            for b in broader:
+                top.part_of = model.Period(ident=self.expand_uri(b))
+
 
     def process_activity(self, data, top):
         startTime = data.get("P580")
@@ -1122,22 +1165,6 @@ class WdMapper(Mapper, WdConfigManager):
         
         if startTime or endTime:
             top.timespan = ts
-                
-        participant = data.get("P710",[])
-        chairperson = data.get("P488",[])
-        participants = participant + chairperson
-        if participants:
-            for p in participants:
-                pref = self.get_reference(p)
-                if pref and pref.__class__ in [model.Group, model.Person]:
-                    top.participant = pref
-
-        #P361 part_of
-        broader = data.get("P361",[])
-        if broader:
-            for b in broader:
-                top.part_of = model.Activity(ident=self.expand_uri(b))
-
 
         country = data.get("P17",[])
         location = data.get("P276",[])
