@@ -17,7 +17,7 @@ import time
 import json
 from importlib import import_module
 
-from pipeline.sources.utils import get_urls_from_script, get_available_sources, get_downloader_function
+from pipeline.sources.utils import get_available_sources
 
 base_download_config = Path(__file__).parent.parent.parent / 'configs' / 'base_download.json'
 
@@ -243,7 +243,7 @@ def main():
             
             # Try to get URLs from associated script first
             if not source_config.get("remote_dump_files"):
-                download_function_path = "pipeline." + get_downloader_function(source)
+                download_function_path = "pipeline." + source_config.get("downloaderFunction")
                 print(f"Download function path: {download_function_path}")
                 try:
                     # Split into module path and function name

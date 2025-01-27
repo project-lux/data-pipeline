@@ -131,19 +131,3 @@ def get_urls_from_script(source: str, download_dir: Path) -> List[str]:
         print(f"Warning: Failed to run {script_path.name}: {e}")
         return []
     
-def load_source_config(source: str) -> dict:
-    """
-    Load the configuration for a given source.
-    """
-    configs_dir = Path(__file__).parent.parent.parent / 'configs'
-    config_path = configs_dir / f"{source}.json"
-    with open(config_path, 'r') as file:
-        print(f"Loaded config for source: {source}")
-        return json.load(file)
-
-def get_downloader_function(source: str) -> callable:
-    """
-    Get the downloader function for a given source.
-    """
-    source_config = load_source_config(source)
-    return source_config.get('downloaderFunction', None)
