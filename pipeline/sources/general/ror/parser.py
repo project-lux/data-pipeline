@@ -40,7 +40,8 @@ def get_ror_urls():
 
     download_url = get_download_url("ror", base_url, data_key)
     if not download_url:
-        raise ValueError("Error: No download URL found in the response.")
+        print("ROR: No download URL found in the response.")
     urls = [download_url]
     return urls
+
 

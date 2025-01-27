@@ -51,19 +51,19 @@ def get_orcid_urls(year=2024):
     base_url = "https://info.orcid.org/documentation/integration-guide/working-with-bulk-data/"
     html_content = fetch_webpage(base_url)
     if not html_content:
-        print("Failed to fetch the base webpage content.")
+        print("ORCID: Failed to fetch the base webpage content.")
 
     yearly_url = get_yearly_url(html_content, year)
     if not yearly_url:
-        print(f"No valid yearly URL found for {year}.")
+        print(f"ORCID: No valid yearly URL found for {year}.")
 
     yearly_html = fetch_webpage(yearly_url)
     if not yearly_html:
-        print(f"Failed to fetch the yearly webpage at {yearly_url}.")
+        print(f"ORCID: Failed to fetch the yearly webpage at {yearly_url}.")
 
     download_link = get_download_link(yearly_html, year)
     if not download_link:
-        print(f"No valid download link found for {year}.")
+        print(f"ORCID: No valid download link found for {year}.")
 
     urls = [download_link]
     return urls
