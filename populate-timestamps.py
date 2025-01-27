@@ -150,30 +150,24 @@ def check_datacache_times(cache, cachetimes):
 
 def check_file_timestamps():
     filepath = cfgs.exports_dir
-    latest_folder = None
-    datestamp = None
+    logging.info(f"Checking Marklogic export directory: {filepath}")
+
     try:
-        subdirs = [d for d in Path(filepath).iterdir() if d.is_dir()]
-        latest_folder = max(subdirs, key=lambda d: d.stat().st_mtime)
-    except ValueError:
-        logging.warning("No valid directory found for most recent Marklogic export")
+        for file in Path(filepath).iterdir():
+            if file.is_file() and file.suffix == '.jsonl':
+                timestamp = file.stat().st_mtime
+                datestamp = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+                
+                logging.info(f"Using timestamp from: {file.name}, Timestamp: {datestamp}")
+                return {'Marklogic Export': {'timestamp': datestamp, 'type': 'Internal'}}
+        
+        logging.warning("No .jsonl files found in the export directory.")
+        return {}
+
     except Exception as e:
         logging.warning(f"Unexpected error with Marklogic export: {e}")
-
-    if latest_folder:
-        try:
-            for filename in os.listdir(latest_folder):
-                file = os.path.join(latest_folder, filename)
-                if os.path.isfile(file):         
-                    timestamp = os.path.getmtime(file)
-                    datestamp = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
-                    break
-        except Exception as e:
-            logging.warning(f"Error processing files in {latest_folder}: {e}")
-    if datestamp:
-        return {'Marklogic Export': {'timestamp': datestamp, 'type': 'Internal'}}
-    else:
         return {}
+
 
 def delete_old_tabs():
     try:
