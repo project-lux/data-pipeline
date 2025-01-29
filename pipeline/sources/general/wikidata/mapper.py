@@ -150,6 +150,7 @@ class WdMapper(Mapper, WdConfigManager):
             "Q167037": model.Group,
             "Q783794": model.Group,
             "Q163740": model.Group,
+            "Q1530022":model.Group,
             "Q34770": model.Language,
             "Q1288568": model.Language,
             "Q33742": model.Language,
@@ -287,6 +288,7 @@ class WdMapper(Mapper, WdConfigManager):
                         hits[k] = 1
         opts = list(hits.items())
         if opts:
+            print(f"opts is: {opts}")
             opts.sort(key=lambda x: x[1], reverse=True)
             typ = opts[0][0]
             return class_dist[typ]
