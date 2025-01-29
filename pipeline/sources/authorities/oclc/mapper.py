@@ -490,6 +490,7 @@ class FastMapper(Mapper):
             rec.identified_by.extend(alternate_names)
         elif not (primary and alternate_names):
             #no names
+            print("breaking at no names")
             return None
 
         if equivalents:
