@@ -85,7 +85,8 @@ class ViafMapper(Mapper):
             top = self.parse_xml(rec["xml"])
             if top is None:
                 return None
-            nameType = self.to_plain_string(top.xpath("./viaf:nameType/text()", namespaces=self.nss)[0])
+            nameType = top.xpath("./viaf:nameType/text()", namespaces=nss)[0]
+
         topCls = self.nameTypeMap.get(nameType, None)
         return topCls
 
@@ -121,7 +122,7 @@ class ViafMapper(Mapper):
         if top is None:
             return top
 
-        nameType = self.to_plain_string(top.xpath("./viaf:nameType/text()", namespaces=self.nss)[0])
+        nameType = top.xpath("./viaf:nameType/text()", namespaces=nss)[0]
         topCls = self.guess_type(rec, nameType)
         if not topCls:
             if nameType != "UniformTitleWork":
@@ -136,10 +137,11 @@ class ViafMapper(Mapper):
         # According to VIAF all of these are primary ... but no language data
         # So pick one most likely to be english and useful
         for n in names:
-            val = self.to_plain_string(n.xpath("./viaf:text/text()", namespaces=self.nss)[0])
-            srcs = [self.to_plain_string(src) for src in n.xpath("./viaf:sources/viaf:s/text()", namespaces=self.nss)]
-            if val:
-                if not primary and any(src in srcs for src in ["JPG", "LC", "LCSH", "ULAN"]):
+            val = n.xpath("./viaf:text/text()", namespaces=nss)
+            srcs = n.xpath("./viaf:sources/viaf:s/text()", namespaces=nss)
+            if val and val[0]:
+                val = val[0]
+                if not primary and ("JPG" in srcs or "LC" in srcs or "LCSH" in srcs or "ULAN" in srcs):
                     primary = val
                     rec.identified_by = vocab.PrimaryName(content=primary)
                     rec._label = primary
@@ -172,7 +174,7 @@ class ViafMapper(Mapper):
                 continue
             rec.equivalent = topCls(ident=eq, label=rec._label)
 
-        equivs = [self.to_plain_string(eq) for eq in top.xpath("./viaf:sources/viaf:source/text()", namespaces=nss)]
+        equivs = top.xpath("./viaf:sources/viaf:source/text()", namespaces=nss)
         wdm = self.wikidata_config["mapper"]
         for eq in equivs:
             (which, val) = eq.split("|")
@@ -195,10 +197,9 @@ class ViafMapper(Mapper):
                     rec.equivalent = topCls(ident=f"{self.viaf_prefixes[which]}{val}", label=rec._label)
 
         if nameType in ["Personal", "Corporate"]:
-            birthdate = [self.to_plain_string(bd) for bd in top.xpath("./viaf:birthDate/text()", namespaces=self.nss)]
-            deathdate = [self.to_plain_string(dd) for dd in top.xpath("./viaf:deathDate/text()", namespaces=self.nss)]
-            dateType = [self.to_plain_string(dt) for dt in top.xpath("./viaf:dateType/text()", namespaces=self.nss)]
-
+            birthdate = top.xpath("./viaf:birthDate/text()", namespaces=nss)
+            deathdate = top.xpath("./viaf:deathDate/text()", namespaces=nss)
+            dateType = top.xpath("./viaf:dateType/text()", namespaces=nss)
 
             if dateType and dateType[0]:
                 # lived, flourished
@@ -221,7 +222,7 @@ class ViafMapper(Mapper):
                             ts.end_of_the_end = e
                             birth.timespan = ts
                             rec.born = birth
-                            ts.identified_by = vocab.DisplayName(content=bd)
+                            birth.identified_by = vocab.DisplayName(content=bd)
                 if deathdate and deathdate[0]:
                     dd = deathdate[0].strip()
                     if dd not in ["0", "2050", "9800"]:
@@ -236,7 +237,7 @@ class ViafMapper(Mapper):
                             ts.end_of_the_end = e
                             death.timespan = ts
                             rec.died = death
-                            ts.identified_by = vocab.DisplayName(content=dd)
+                            death.identified_by = vocab.DisplayName(content=dd)
             elif dateType == "flourished":
                 if birthdate and birthdate[0] and deathdate and deathdate[0]:
                     bd = birthdate[0].strip()
@@ -293,3 +294,198 @@ class ViafMapper(Mapper):
 
         new = model.factory.toJSON(rec)
         return {"identifier": record["identifier"], "data": new, "source": "viaf"}
+
+class FastMapper(Mapper):
+    def __init__(self, config):
+        Mapper.__init__(self, config)
+
+        self.nss = {
+            'mx': 'http://www.loc.gov/MARC21/slim'
+            }
+
+        self.nameTypeMap = {
+            "148": model.Period,
+            "100": model.Person, 
+            "150": model.Type,
+            "155": model.Type,
+            "151": model.Place,
+            "110": model.Group,
+            "111": model.Activity,
+            "148": model.Period,
+            "147": model.Activity
+            }
+
+    def build_recs_and_reconcile(self, txt, rectype=""):
+        # reconrec returns URI
+
+        rec = {
+            "type": "",
+            "identified_by": [
+                {
+                    "type": "Name",
+                    "content": txt,
+                    "classified_as": [{"id": "http://vocab.getty.edu/aat/300404670"}],
+                }
+            ],
+        }
+        if rectype == "place":
+            rec["type"] = "Place"
+            reconrec = self.config["all_configs"].external['lcnaf']['reconciler'].reconcile(rec, reconcileType="name")
+        elif rectype == "concept":
+            rec["type"] = "Type"
+            reconrec = self.config["all_configs"].external["lcsh"]["reconciler"].reconcile(rec, reconcileType="name")
+        elif rectype == "group":
+            rec["type"] = "Group"
+            reconrec = self.config["all_configs"].external['lcnaf']['reconciler'].reconcile(rec, reconcileType="name")
+
+        return reconrec
+
+    def guess_type(self, root):
+        #148 (chronological): period
+        #100 (personal): person
+        #150 (topical), 155 (genre/form): concept
+        #151 (geographic): place
+        #110 (corporate): group
+        #111 (meeting) meetings, conferences (events)
+        #147 (event): events
+        #130 (title): return None
+        nss = self.nss
+        tags = ["148","100","150","151","155","110","111","147","130"]
+        for tag in tags:
+            if root.find(f".//datafield[@tag={tag}]", nss):
+                topCls = self.nameTypeMap.get(nameType, None)
+                return topCls
+
+    def transform(self, record, rectype=None, reference=False):
+        rec = record["data"]
+        root = etree.fromstring(rec['xml'])
+
+        if root is None:
+            return root
+
+        topCls = self.guess_type(root)
+        if not topCls:
+            return None
+
+        ident = record["identifier"]
+        rec = topCls(ident=f"http://id.worldcat.org/fast/{ident}")
+
+
+        #personal
+
+        df100 = root.find(".//datafield[@tag='100']", nss)
+        primary = False
+        if df100:
+            subfields = {}
+            for s in df100.findall("mx:subfield",nss):
+                code = s.attrib("code")
+                text = s.text
+                if code in subfields:
+                    subfields[code].append(text)
+                else:
+                    subfields[code] = [text]
+            if "a" in subfields:
+                primary = True
+                rec.identified_by = vocab.PrimaryName(content=subfields['a'][0])                   
+            elif "d" in subfields:
+                dates = subfields['d'][0]
+                if "-" in dates:
+                    b,e = dates.split("-")
+                    try:
+                        bb, eb = make_datetime(bd)
+                    except:
+                        bb = None
+                    try:
+                        be, ee = make_datetime(dd)
+                    except:
+                        be = None
+                    if bb and be:
+                        birth = model.Birth()
+                        ts = model.TimeSpan()
+                        ts.begin_of_the_begin = bb
+                        ts.end_of_the_end = be
+                        birth.timespan = ts
+                        rec.born = birth
+                        birth.identified_by = vocab.DisplayName(content=b)
+                        death = model.Death()
+                        ts = model.TimeSpan()
+                        ts.begin_of_the_begin = be
+                        ts.end_of_the_end = ee
+                        death.timespan = ts
+                        rec.died = death
+                        death.identified_by = vocab.DisplayName(content=e)
+                elif len(dates) == 4:
+                    pass
+        okay = test_birth_death(rec)
+            if not okay:
+                try:
+                    rec.born = None
+                    rec.died = None
+                except:
+                    pass
+
+        df370 = root.xpath(".//mx:datafield[@tag='370']", namespaces=nss)
+        if df370:
+            subfields = {}
+            for d in df370:
+                for subfield in d.findall('mx:subfield', namespaces=nss):                   
+                    code = s.attrib("code")
+                    text = s.text
+                    if code in subfields:
+                        subfields[code].append(text)
+                    else:
+                        subfields[code] = [text]
+            if "a" in subfields:
+                for a in subfields['a']:
+                    bpid = self.build_recs_and_reconcile(a, "place")
+                    if bpid:
+                        try:
+                            src, ident = self.config["all_configs"].split_uri(bpid)
+                            where = src["mapper"].get_reference(ident)
+                        except:
+                            print(f"Failed to split URI: {bpid}")
+                            where = None
+                        if where and where.__class__ == model.Place:
+                            if not hasattr(rec, "born"):
+                                birth = model.Birth()
+                                top.born = birth
+                            birth.took_place_at = where
+            elif "b" in subfields:
+                for b in subfields['b']:
+                    rpid = self.build_recs_and_reconcile(b,"place")
+                    if rpid:
+                        try:
+                            src, ident = self.config["all_configs"].split_uri(rpid)
+                            where = src["mapper"].get_reference(ident)
+                        except:
+                            print(f"Failed to split URI: {rpid}")
+                            where = None
+                        if where and where.__class__ == model.Place:
+                            rec.residence = where
+            elif "e" in subfields:
+                for e in subfields['e']:
+                    plpid = self.build_recs_and_reconcile(e, "place")
+                    if plpid:
+                        try:
+                            src, ident = self.config["all_configs"].split_uri(plpid)
+                            where = src["mapper"].get_reference(ident)
+                        except:
+                            print(f"Failed to split URI: {plpid}")
+                            where = None
+                        if where and where.__class__ == model.Place:
+                            if not hasattr(rec,"carried_out"):
+                                active = vocab.Active()
+                                rec.carried_out = active
+                            active.took_place_at = where
+
+        df374 = root.xpath(".//mx:datafield[@tag='374']", namespaces=nss)
+        if df374:
+            pass
+
+
+        #just hand off to class mappers because each record has specific class tags?
+
+
+
+
+
