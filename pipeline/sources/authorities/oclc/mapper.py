@@ -373,11 +373,11 @@ class FastMapper(Mapper):
 
         #personal
 
-        df100 = root.find(".//datafield[@tag='100']", nss)
+        df100 = root.find(".//datafield[@tag='100']", self.nss)
         primary = False
         if df100:
             name_subfields = {}
-            for s in df100.findall("mx:subfield",nss):
+            for s in df100.findall("mx:subfield", self.nss):
                 code = s.attrib("code")
                 text = self.to_plain_string(s.text)
                 name_subfields.setdefault(code, []).append(text)
@@ -418,11 +418,11 @@ class FastMapper(Mapper):
             rec.born = None
             rec.died = None
 
-        df370 = root.xpath(".//mx:datafield[@tag='370']", namespaces=nss)
+        df370 = root.xpath(".//mx:datafield[@tag='370']", namespaces=self.nss)
         if df370:
             place_subfields = {}
             for d in df370:
-                for subfield in d.findall('mx:subfield', namespaces=nss):                   
+                for subfield in d.findall('mx:subfield', namespaces=self.nss):                   
                     code = s.attrib("code")
                     text = self.to_plain_string(s.text)
                     place_subfields.setdefault(code, []).append(text)
@@ -470,7 +470,7 @@ class FastMapper(Mapper):
                                 rec.carried_out = active
                             active.took_place_at = where
 
-        df374 = root.xpath(".//mx:datafield[@tag='374']", namespaces=nss)
+        df374 = root.xpath(".//mx:datafield[@tag='374']", namespaces=self.nss)
         if df374:
             pass
 
