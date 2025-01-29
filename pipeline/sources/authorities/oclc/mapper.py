@@ -371,7 +371,28 @@ class FastMapper(Mapper):
         rec = topCls(ident=f"http://id.worldcat.org/fast/{ident}")
 
 
-        #personal
+        #person records
+
+        birth_date = None
+        death_date = None 
+        df046 = root.xpath(".//mx:datafield[@tag='046']", namespaces=self.nss)
+        if df046:
+            for d in df046:
+                subfield_f = d.find("mx:subfield[@code='f']", self.nss)
+                if subfield_f is not None:
+                    birth_year = self.to_plain_string(subfield_f.text)
+                    try:
+                        birth_date = make_datetime(birth_year)
+                    except Exception as e:
+                        print(f"Failed to parse birth date: {birth_year}, Error: {e}")
+                
+                subfield_g = d.find("mx:subfield[@code='g']", self.nss)
+                if subfield_g is not None:
+                    death_year = self.to_plain_string(subfield_g.text)
+                    try:
+                        death_date = make_datetime(death_year)
+                    except Exception as e:
+                        print(f"Failed to parse death date: {death_year}, Error: {e}")
 
         df100 = root.xpath(".//mx:datafield[@tag='100']", namespaces=self.nss)
         primary = False
@@ -386,8 +407,9 @@ class FastMapper(Mapper):
 
             if "a" in name_subfields:
                 primary = True
-                rec.identified_by = vocab.PrimaryName(content=name_subfields['a'][0])                   
-            elif "d" in name_subfields:
+                rec.identified_by = vocab.PrimaryName(content=name_subfields['a'][0])
+
+            if not birth_date and "d" in name_subfields:
                 dates = name_subfields['d'][0]
                 if "-" in dates:
                     b,e = dates.split("-")
@@ -400,22 +422,58 @@ class FastMapper(Mapper):
                     except:
                         be = None
                     if bb and be:
-                        birth = model.Birth()
-                        ts = model.TimeSpan()
-                        ts.begin_of_the_begin = bb
-                        ts.end_of_the_end = be
-                        birth.timespan = ts
-                        rec.born = birth
-                        birth.identified_by = vocab.DisplayName(content=b)
-                        death = model.Death()
-                        ts = model.TimeSpan()
-                        ts.begin_of_the_begin = be
-                        ts.end_of_the_end = ee
-                        death.timespan = ts
-                        rec.died = death
-                        death.identified_by = vocab.DisplayName(content=e)
+                        birth_date = bb 
+                        death_date = be
                 elif len(dates) == 4:
+                    #birth or death, who knows??
                     pass
+
+        # Extract alternate names and identifiers from 700 fields
+        df700 = root.xpath(".//mx:datafield[@tag='700']", namespaces=self.nss)
+        alternate_names = []
+        equivalents = []
+        if df700:
+            for df in df700:
+                subfield_a = df.find("mx:subfield[@code='a']", self.nss)
+                #subfield_0 = df.find("mx:subfield[@code='0']", self.nss)
+                subfield_1 = df.find("mx:subfield[@code='1']", self.nss)
+
+                if subfield_a is not None:
+                    alt_name = self.to_plain_string(subfield_a.text)
+                    alternate_names.append(vocab.AlternateName(content=alt_name))
+
+                # these are all Wikipedia, not Wikidata
+                # if subfield_0 is not None:
+                #     uri_0 = self.to_plain_string(subfield_0.text)
+                #     equivalents.append(model.Identifier(content=uri_0))
+
+                if subfield_1 is not None:
+                    uri_1 = self.to_plain_string(subfield_1.text)
+                    equivalents.append(model.Identifier(content=uri_1))
+
+        if not primary and alternate_names:
+            rec.identified_by.append(vocab.PrimaryName(content=alternate_names[0].content))
+            alternate_names = alternate_names[1:]
+
+        rec.identified_by.extend(alternate_names)
+        rec.equivalent.extend(equivalents)
+
+        if birth_date:
+            birth = model.Birth()
+            ts = model.TimeSpan()
+            ts.begin_of_the_begin = birth_date
+            birth.timespan = ts
+            rec.born = birth
+            birth.identified_by.append(vocab.DisplayName(content=str(birth_date.year)))
+
+        if death_date:
+            death = model.Death()
+            ts = model.TimeSpan()
+            ts.begin_of_the_begin = death_date
+            death.timespan = ts
+            rec.died = death
+            death.identified_by.append(vocab.DisplayName(content=str(death_date.year)))
+
         if not test_birth_death(rec):
             rec.born = None
             rec.died = None
