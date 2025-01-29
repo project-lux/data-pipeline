@@ -423,8 +423,8 @@ class FastMapper(Mapper):
             place_subfields = {}
             for d in df370:
                 for subfield in d.findall('mx:subfield', namespaces=self.nss):                   
-                    code = s.attrib("code")
-                    text = self.to_plain_string(s.text)
+                    code = d.attrib("code")
+                    text = self.to_plain_string(d.text)
                     place_subfields.setdefault(code, []).append(text)
 
             if "a" in place_subfields:
