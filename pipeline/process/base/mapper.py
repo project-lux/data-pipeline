@@ -283,10 +283,6 @@ class Mapper(object):
 
         return None  # No QID found
 
-# Example Usage
-print(get_wikidata_qid("https://en.wikipedia.org/wiki/Philip_Grierson"))
-
-
     def get_reference(self, identifier):
         if not self.acquirer:
             self.acquirer = self.config["acquirer"]
