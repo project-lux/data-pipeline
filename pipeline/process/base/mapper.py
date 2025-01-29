@@ -262,7 +262,6 @@ class Mapper(object):
     def to_plain_string(self, value):
         return str(value) if isinstance(value, etree._ElementUnicodeResult) else value
 
-
     def get_wikidata_qid(wikipedia_url):
         parsed_url = urlparse(wikipedia_url)
         
