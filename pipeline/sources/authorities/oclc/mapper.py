@@ -377,10 +377,12 @@ class FastMapper(Mapper):
         primary = False
         if df100:
             name_subfields = {}
-            for s in df100.findall("mx:subfield", self.nss):
-                code = s.attrib["code"]
-                text = self.to_plain_string(s.text)
-                name_subfields.setdefault(code, []).append(text)
+            for df in df100:
+                for s in df.findall("mx:subfield", self.nss):
+                    code = s.attrib.get("code")
+                    if code:
+                        text = self.to_plain_string(s.text)
+                        name_subfields.setdefault(code, []).append(text)
 
             if "a" in name_subfields:
                 primary = True
