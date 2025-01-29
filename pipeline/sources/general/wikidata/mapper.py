@@ -150,6 +150,7 @@ class WdMapper(Mapper, WdConfigManager):
             "Q167037": model.Group,
             "Q783794": model.Group,
             "Q163740": model.Group,
+            "Q1530022":model.Group,
             "Q34770": model.Language,
             "Q1288568": model.Language,
             "Q33742": model.Language,
