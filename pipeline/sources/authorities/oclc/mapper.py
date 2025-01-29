@@ -297,7 +297,7 @@ class ViafMapper(Mapper):
 
 class FastMapper(Mapper):
     def __init__(self, config):
-        Mapper.__init__(self, config)
+        super().__init__(self, config)
 
         self.nss = {
             'mx': 'http://www.loc.gov/MARC21/slim'
@@ -311,7 +311,6 @@ class FastMapper(Mapper):
             "151": model.Place,
             "110": model.Group,
             "111": model.Activity,
-            "148": model.Period,
             "147": model.Activity
             }
 
@@ -353,8 +352,9 @@ class FastMapper(Mapper):
         tags = ["148","100","150","151","155","110","111","147","130"]
         for tag in tags:
             if root.find(f".//datafield[@tag={tag}]", nss):
-                topCls = self.nameTypeMap.get(nameType, None)
-                return topCls
+                return self.nameTypeMap.get(nameType, None)
+
+        return None 
 
     def transform(self, record, rectype=None, reference=False):
         rec = record["data"]
@@ -376,19 +376,17 @@ class FastMapper(Mapper):
         df100 = root.find(".//datafield[@tag='100']", nss)
         primary = False
         if df100:
-            subfields = {}
+            name_subfields = {}
             for s in df100.findall("mx:subfield",nss):
                 code = s.attrib("code")
-                text = s.text
-                if code in subfields:
-                    subfields[code].append(text)
-                else:
-                    subfields[code] = [text]
-            if "a" in subfields:
+                text = self.to_plain_string(s.text)
+                name_subfields.setdefault(code, []).append(text)
+
+            if "a" in name_subfields:
                 primary = True
-                rec.identified_by = vocab.PrimaryName(content=subfields['a'][0])                   
-            elif "d" in subfields:
-                dates = subfields['d'][0]
+                rec.identified_by = vocab.PrimaryName(content=name_subfields['a'][0])                   
+            elif "d" in name_subfields:
+                dates = name_subfields['d'][0]
                 if "-" in dates:
                     b,e = dates.split("-")
                     try:
@@ -416,27 +414,21 @@ class FastMapper(Mapper):
                         death.identified_by = vocab.DisplayName(content=e)
                 elif len(dates) == 4:
                     pass
-        okay = test_birth_death(rec)
-            if not okay:
-                try:
-                    rec.born = None
-                    rec.died = None
-                except:
-                    pass
+        if not test_birth_death(rec):
+            rec.born = None
+            rec.died = None
 
         df370 = root.xpath(".//mx:datafield[@tag='370']", namespaces=nss)
         if df370:
-            subfields = {}
+            place_subfields = {}
             for d in df370:
                 for subfield in d.findall('mx:subfield', namespaces=nss):                   
                     code = s.attrib("code")
-                    text = s.text
-                    if code in subfields:
-                        subfields[code].append(text)
-                    else:
-                        subfields[code] = [text]
-            if "a" in subfields:
-                for a in subfields['a']:
+                    text = self.to_plain_string(s.text)
+                    place_subfields.setdefault(code, []).append(text)
+
+            if "a" in place_subfields:
+                for a in place_subfields['a']:
                     bpid = self.build_recs_and_reconcile(a, "place")
                     if bpid:
                         try:
@@ -450,8 +442,8 @@ class FastMapper(Mapper):
                                 birth = model.Birth()
                                 top.born = birth
                             birth.took_place_at = where
-            elif "b" in subfields:
-                for b in subfields['b']:
+            elif "b" in place_subfields:
+                for b in place_subfields['b']:
                     rpid = self.build_recs_and_reconcile(b,"place")
                     if rpid:
                         try:
@@ -462,8 +454,8 @@ class FastMapper(Mapper):
                             where = None
                         if where and where.__class__ == model.Place:
                             rec.residence = where
-            elif "e" in subfields:
-                for e in subfields['e']:
+            elif "e" in place_subfields:
+                for e in place_subfields['e']:
                     plpid = self.build_recs_and_reconcile(e, "place")
                     if plpid:
                         try:
@@ -484,8 +476,4 @@ class FastMapper(Mapper):
 
 
         #just hand off to class mappers because each record has specific class tags?
-
-
-
-
 
