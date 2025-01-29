@@ -433,7 +433,8 @@ class FastMapper(Mapper):
             ts = model.TimeSpan()
             ts.begin_of_the_begin = birth_date
             birth.timespan = ts
-            birth.identified_by =vocab.DisplayName(content=birth_year if birth_year else b )
+            bcont = birth_year if birth_year else b
+            birth.identified_by = vocab.DisplayName(content=bcont)
             rec.born = birth
 
         if death_date:
@@ -441,7 +442,8 @@ class FastMapper(Mapper):
             ts = model.TimeSpan()
             ts.begin_of_the_begin = death_date
             death.timespan = ts
-            death.identified_by = vocab.DisplayName(content=death_year if death_year else e)
+            dcont = death_year if death_year else e
+            death.identified_by = vocab.DisplayName(content=dcont)
             rec.died = death
 
 
