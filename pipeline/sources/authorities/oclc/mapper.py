@@ -428,6 +428,27 @@ class FastMapper(Mapper):
                     #birth or death, who knows??
                     pass
 
+        if birth_date:
+            birth = model.Birth()
+            ts = model.TimeSpan()
+            ts.begin_of_the_begin = birth_date
+            birth.timespan = ts
+            birth.identified_by =vocab.DisplayName(content=birth_year if birth_year else b )
+            rec.born = birth
+
+        if death_date:
+            death = model.Death()
+            ts = model.TimeSpan()
+            ts.begin_of_the_begin = death_date
+            death.timespan = ts
+            death.identified_by = vocab.DisplayName(content=death_year if death_year else e)
+            rec.died = death
+
+
+        if not test_birth_death(rec):
+            rec.born = None
+            rec.died = None
+
         # Extract alternate names and identifiers from 700 fields
         df700 = root.xpath(".//mx:datafield[@tag='700']", namespaces=self.nss)
         alternate_names = []
@@ -469,27 +490,6 @@ class FastMapper(Mapper):
             if not hasattr(rec, "equivalent"):
                 setattr(rec, "equivalent", [])
             rec.equivalent.extend(equivalents)
-
-        if birth_date:
-            birth = model.Birth()
-            ts = model.TimeSpan()
-            ts.begin_of_the_begin = birth_date
-            birth.timespan = ts
-            birth.identified_by =vocab.DisplayName(content=str(birth_date.year))
-            rec.born = birth
-
-        if death_date:
-            death = model.Death()
-            ts = model.TimeSpan()
-            ts.begin_of_the_begin = death_date
-            death.timespan = ts
-            death.identified_by = vocab.DisplayName(content=str(death_date.year))
-            rec.died = death
-
-
-        if not test_birth_death(rec):
-            rec.born = None
-            rec.died = None
 
         df370 = root.xpath(".//mx:datafield[@tag='370']", namespaces=self.nss)
         if df370:
