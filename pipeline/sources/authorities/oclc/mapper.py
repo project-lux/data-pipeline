@@ -471,15 +471,15 @@ class FastMapper(Mapper):
                     if "wikipedia.org" in uri_0:
                         wikidata_qid = self.get_wikidata_qid(uri_0)
                         if wikidata_qid:
-                            equivalents.append(model.Identifier(content=wikidata_qid))
+                            equivalents.append(model.Person(ident=wikidata_qid))
                     else:
                         #Should be LCCN
-                        equivalents.append(model.Identifier(content=uri_0))
+                        equivalents.append(model.Person(ident=uri_0))
 
 
                 if subfield_1 is not None:
                     uri_1 = self.to_plain_string(subfield_1.text)
-                    equivalents.append(model.Identifier(content=uri_1))
+                    equivalents.append(model.Person(ident=uri_1))
 
         if not primary and alternate_names:
             rec.identified_by = vocab.PrimaryName(content=alternate_names[0].content)
