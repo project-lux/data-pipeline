@@ -378,7 +378,6 @@ class FastMapper(Mapper):
         death_year = None 
         df046 = root.xpath(".//mx:datafield[@tag='046']", namespaces=self.nss)
         if df046:
-            print("got df046")
             for d in df046:
                 subfield_f = d.find("mx:subfield[@code='f']", self.nss)
                 if subfield_f is not None:
@@ -399,7 +398,6 @@ class FastMapper(Mapper):
         df100 = root.xpath(".//mx:datafield[@tag='100']", namespaces=self.nss)
         primary = False
         if df100:
-            print("got df100")
             name_subfields = {}
             for df in df100:
                 for s in df.findall("mx:subfield", self.nss):
@@ -459,7 +457,6 @@ class FastMapper(Mapper):
         alternate_names = []
         equivalents = []
         if df700:
-            print("got df700")
             for df in df700:
                 subfield_a = df.find("mx:subfield[@code='a']", self.nss)
                 subfield_0 = df.find("mx:subfield[@code='0']", self.nss)
@@ -488,10 +485,9 @@ class FastMapper(Mapper):
             rec.identified_by = vocab.PrimaryName(content=alternate_names[0].content)
             alternate_names = alternate_names[1:]
             rec.identified_by.extend(alternate_names)
-        # elif not (primary and alternate_names):
-        #     #no names
-        #     print("breaking at no names")
-        #     return None
+        if not primary and not alternate_names:
+            #no names
+            return None
 
         if equivalents:
             if not hasattr(rec, "equivalent"):
@@ -578,6 +574,7 @@ class FastMapper(Mapper):
                 setattr(rec, "classified_as", [])
             rec.classified_as.extend(occupations)
 
-
+        data = model.factory.toJSON(rec)
+        return {'identifier': ident, 'data': data, 'source': 'fast'}
         #just hand off to class mappers because each record has specific class tags?
 
