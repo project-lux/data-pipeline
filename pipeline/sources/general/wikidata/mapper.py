@@ -429,7 +429,7 @@ class WdMapper(Mapper, WdConfigManager):
                 if type(s) != list:
                     s = [s]
                 for v in s:
-                    if not v.endswith(".pdf") or "books.google.com" in v:
+                    if not (v.endswith(".pdf") or "books.google.com" in v):
                         options.append(v)
 
         if "sitelinks" in data and "enwiki" in data["sitelinks"]:
