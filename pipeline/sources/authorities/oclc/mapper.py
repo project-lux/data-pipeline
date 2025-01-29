@@ -351,7 +351,7 @@ class FastMapper(Mapper):
         nss = self.nss
         tags = ["148","100","150","151","155","110","111","147","130"]
         for tag in tags:
-            if root.find(f".//datafield[@tag={tag}]", nss):
+            if root.find(f".//mx:datafield[@tag='{tag}']", self.nss):
                 return self.nameTypeMap.get(nameType, None)
 
         return None 
