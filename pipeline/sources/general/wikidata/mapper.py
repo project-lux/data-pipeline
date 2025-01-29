@@ -285,8 +285,10 @@ class WdMapper(Mapper, WdConfigManager):
                         hits[k] += 1
                     except:
                         hits[k] = 1
+        print(f"hits is: {hits}")                
         opts = list(hits.items())
         if opts:
+            print(f"opts is: {opts}")
             opts.sort(key=lambda x: x[1], reverse=True)
             typ = opts[0][0]
             return class_dist[typ]
