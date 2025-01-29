@@ -361,22 +361,14 @@ class FastMapper(Mapper):
         root = etree.fromstring(rec['xml'])
 
         if root is None:
-            print("root is none")
             return root
-        else:
-            print(f"root is {root}")
 
         topCls = self.guess_type(root)
         if not topCls:
-            print("didn't get topcls")
             return None
-        else:
-            print(f"topcls is {topCls}")
 
         ident = record["identifier"]
-        print(f"ident is {ident}")
         rec = topCls(ident=f"http://id.worldcat.org/fast/{ident}")
-
 
         #person records
 
@@ -386,6 +378,7 @@ class FastMapper(Mapper):
         death_year = None 
         df046 = root.xpath(".//mx:datafield[@tag='046']", namespaces=self.nss)
         if df046:
+            print("got df046")
             for d in df046:
                 subfield_f = d.find("mx:subfield[@code='f']", self.nss)
                 if subfield_f is not None:
@@ -406,6 +399,7 @@ class FastMapper(Mapper):
         df100 = root.xpath(".//mx:datafield[@tag='100']", namespaces=self.nss)
         primary = False
         if df100:
+            print("got df100")
             name_subfields = {}
             for df in df100:
                 for s in df.findall("mx:subfield", self.nss):
@@ -465,6 +459,7 @@ class FastMapper(Mapper):
         alternate_names = []
         equivalents = []
         if df700:
+            print("got df700")
             for df in df700:
                 subfield_a = df.find("mx:subfield[@code='a']", self.nss)
                 subfield_0 = df.find("mx:subfield[@code='0']", self.nss)
@@ -493,10 +488,10 @@ class FastMapper(Mapper):
             rec.identified_by = vocab.PrimaryName(content=alternate_names[0].content)
             alternate_names = alternate_names[1:]
             rec.identified_by.extend(alternate_names)
-        elif not (primary and alternate_names):
-            #no names
-            print("breaking at no names")
-            return None
+        # elif not (primary and alternate_names):
+        #     #no names
+        #     print("breaking at no names")
+        #     return None
 
         if equivalents:
             if not hasattr(rec, "equivalent"):
