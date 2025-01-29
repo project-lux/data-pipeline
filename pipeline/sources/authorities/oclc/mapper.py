@@ -361,10 +361,12 @@ class FastMapper(Mapper):
         root = etree.fromstring(rec['xml'])
 
         if root is None:
+            print("root is none")
             return root
 
         topCls = self.guess_type(root)
         if not topCls:
+            print("didn't get topcls")
             return None
 
         ident = record["identifier"]
