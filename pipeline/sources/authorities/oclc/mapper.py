@@ -363,13 +363,18 @@ class FastMapper(Mapper):
         if root is None:
             print("root is none")
             return root
+        else:
+            print(f"root is {root}")
 
         topCls = self.guess_type(root)
         if not topCls:
             print("didn't get topcls")
             return None
+        else:
+            print(f"topcls is {topCls}")
 
         ident = record["identifier"]
+        print(f"ident is {ident}")
         rec = topCls(ident=f"http://id.worldcat.org/fast/{ident}")
 
 
