@@ -374,7 +374,9 @@ class FastMapper(Mapper):
         #person records
 
         birth_date = None
-        death_date = None 
+        death_date = None
+        birth_year = None 
+        death_year = None 
         df046 = root.xpath(".//mx:datafield[@tag='046']", namespaces=self.nss)
         if df046:
             for d in df046:
