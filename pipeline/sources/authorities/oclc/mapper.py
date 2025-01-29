@@ -297,7 +297,7 @@ class ViafMapper(Mapper):
 
 class FastMapper(Mapper):
     def __init__(self, config):
-        super().__init__(self, config)
+        super().__init__(config)
 
         self.nss = {
             'mx': 'http://www.loc.gov/MARC21/slim'
