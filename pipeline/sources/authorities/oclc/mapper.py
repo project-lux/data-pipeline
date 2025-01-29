@@ -435,28 +435,40 @@ class FastMapper(Mapper):
         if df700:
             for df in df700:
                 subfield_a = df.find("mx:subfield[@code='a']", self.nss)
-                #subfield_0 = df.find("mx:subfield[@code='0']", self.nss)
+                subfield_0 = df.find("mx:subfield[@code='0']", self.nss)
                 subfield_1 = df.find("mx:subfield[@code='1']", self.nss)
 
                 if subfield_a is not None:
                     alt_name = self.to_plain_string(subfield_a.text)
                     alternate_names.append(vocab.AlternateName(content=alt_name))
 
-                # these are all Wikipedia, not Wikidata
-                # if subfield_0 is not None:
-                #     uri_0 = self.to_plain_string(subfield_0.text)
-                #     equivalents.append(model.Identifier(content=uri_0))
+                if subfield_0 is not None:
+                    uri_0 = self.to_plain_string(subfield_0.text)
+                    if "wikipedia.org" in uri_0:
+                        wikidata_qid = self.get_wikidata_qid(uri_0)
+                        if wikidata_qid:
+                            equivalents.append(model.Identifier(content=wikidata_qid))
+                    else:
+                        #Should be LCCN
+                        equivalents.append(model.Identifier(content=uri_0))
+
 
                 if subfield_1 is not None:
                     uri_1 = self.to_plain_string(subfield_1.text)
                     equivalents.append(model.Identifier(content=uri_1))
 
         if not primary and alternate_names:
-            rec.identified_by.append(vocab.PrimaryName(content=alternate_names[0].content))
+            rec.identified_by = vocab.PrimaryName(content=alternate_names[0].content)
             alternate_names = alternate_names[1:]
+            rec.identified_by.extend(alternate_names)
+        elif not (primary and alternate_names):
+            #no names
+            return None
 
-        rec.identified_by.extend(alternate_names)
-        rec.equivalent.extend(equivalents)
+        if equivalents:
+            if not hasattr(rec, "equivalent"):
+                setattr(rec, "equivalent", [])
+            rec.equivalent.extend(equivalents)
 
         if birth_date:
             birth = model.Birth()
@@ -531,10 +543,32 @@ class FastMapper(Mapper):
                                 rec.carried_out = active
                             active.took_place_at = where
 
+        # Extract occupations from 374 fields
         df374 = root.xpath(".//mx:datafield[@tag='374']", namespaces=self.nss)
-
+        occupations = []
         if df374:
-            pass
+            for df in df374:
+                subfield_a = df.find("mx:subfield[@code='a']", self.nss)
+                subfield_0 = df.find("mx:subfield[@code='0']", self.nss)
+                if subfield_0 is not None:  # Use URI if available
+                    occupation_uri = self.to_plain_string(subfield_0.text)
+                    occupations.append(model.Type(ident=occupation_uri))
+                elif subfield_a is not None:
+                    occupation = self.to_plain_string(subfield_a.text)
+                    try:
+                        occupation_uri = self.build_recs_and_reconcile(occupation, "type")
+                        if occupation_uri:
+                            src, ident = self.config['all_configs'].split_uri(occupation_uri)
+                            what = src['mapper'].get_reference(ident)
+                            if what and what.__class__ == model.Type:
+                                occupations.append(model.Type(ident=occupation))
+                    except:
+                        continue
+        
+        if occupations:
+            if not hasattr(rec, "classified_as"):
+                setattr(rec, "classified_as", [])
+            rec.classified_as.extend(occupations)
 
 
         #just hand off to class mappers because each record has specific class tags?

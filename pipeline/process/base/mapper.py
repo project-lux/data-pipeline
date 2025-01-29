@@ -1,6 +1,8 @@
 import os
 import ujson as json
 import re
+import requests
+from urllib.parse import urlparse, unquote
 from cromulent import model, vocab
 from lxml import etree
 
@@ -259,6 +261,31 @@ class Mapper(object):
     
     def to_plain_string(self, value):
         return str(value) if isinstance(value, etree._ElementUnicodeResult) else value
+
+
+    def get_wikidata_qid(wikipedia_url):
+        parsed_url = urlparse(wikipedia_url)
+        
+        if "wikipedia.org" not in parsed_url.netloc:
+            return None  # Not a Wikipedia URL
+        
+        title = parsed_url.path.split("/")[-1]  # Extracts "Philip_Grierson"
+        title = unquote(title.replace("_", " "))  # Convert URL encoding
+
+        url = f"https://www.wikidata.org/w/api.php?action=query&titles={title}&prop=pageprops&format=json"
+
+        response = requests.get(url)
+        if response.status_code == 200:
+            data = response.json()
+            pages = data.get("query", {}).get("pages", {})
+            for page in pages.values():
+                return page.get("pageprops", {}).get("wikibase_item")
+
+        return None  # No QID found
+
+# Example Usage
+print(get_wikidata_qid("https://en.wikipedia.org/wiki/Philip_Grierson"))
+
 
     def get_reference(self, identifier):
         if not self.acquirer:
