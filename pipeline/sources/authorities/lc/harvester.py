@@ -24,16 +24,24 @@ class LCHarvester(ASHarvester):
         else:
             page = self.fetch_json(self.page, 'page')
             if self.page_cache is not None and page is not None:
-                if self.page_cache is not None and page is not None:
-                    if self.page in self.page_cache:
-                        rec = self.page_cache[self.page]
-                        cpage = rec['data']
-                        if 'orderedItems' in page and 'orderedItems' in cpage and page['orderedItems'][0]['endTime'] == cpage['orderedItems'][0]['endTime']:
-                            self.cache_okay = True
-                        else:
-                            self.page_cache[self.page] = page
+                if self.page in self.page_cache:
+                    rec = self.page_cache[self.page]
+                    cpage = rec['data']
+                    # Use 'published' instead of 'endTime' for LC
+                    lc_time_key = 'published' if 'published' in page.get('orderedItems', [{}])[0] else 'endTime'
+
+                    if (
+                        'orderedItems' in page
+                        and 'orderedItems' in cpage
+                        and lc_time_key in page['orderedItems'][0]
+                        and lc_time_key in cpage['orderedItems'][0]
+                        and page['orderedItems'][0][lc_time_key] == cpage['orderedItems'][0][lc_time_key]
+                    ):
+                        self.cache_okay = True
                     else:
                         self.page_cache[self.page] = page
+                else:
+                    self.page_cache[self.page] = page
 
         try:
             items = page.get("orderedItems", [])
