@@ -11,7 +11,7 @@
         "https://id.loc.gov/authorities/names/activitystreams/feed"
     ],
 
-    "harvesterClass": "",
+    "harvesterClass": "sources.authorities.lc.harvester.LCHarvester",
     "fetcherClass": "sources.authorities.lc.fetcher.LcnafFetcher",
     "loaderClass": "sources.authorities.lc.loader.LcLoader",
     "indexLoaderClass": "sources.authorities.lc.index_loader.LCIndexLoader",
