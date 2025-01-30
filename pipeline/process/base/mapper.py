@@ -262,30 +262,6 @@ class Mapper(object):
     def to_plain_string(self, value):
         return str(value) if isinstance(value, etree._ElementUnicodeResult) else value
 
-    def get_wikidata_qid(self, wikipedia_url):
-        parsed_url = urlparse(wikipedia_url)
-        
-        if "wikipedia.org" not in parsed_url.netloc:
-            return None  # Not a Wikipedia URL
-        
-        title = parsed_url.path.split("/")[-1]  # Extract last part of URL
-        title = unquote(title).replace("_", " ").strip()  # Decode and format title
-
-        # Query Wikidata directly using Wikipedia sitelinks
-        wikidata_api_url = f"https://www.wikidata.org/w/api.php?action=wbgetentities&sites=enwiki&titles={title}&format=json"
-        response = requests.get(wikidata_api_url)
-        
-        if response.status_code == 200:
-            data = response.json()
-            print(f"Full Wikidata API response: {json.dumps(data, indent=2)}")
-
-            entities = data.get("entities", {})
-            for entity_id, entity in entities.items():
-                if entity_id.startswith("Q"):  # Ensure it's a valid QID
-                    return entity_id
-        return None
-
-
     def get_reference(self, identifier):
         if not self.acquirer:
             self.acquirer = self.config["acquirer"]
