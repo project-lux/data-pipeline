@@ -272,13 +272,14 @@ class Mapper(object):
         title = unquote(title.replace("_", " "))  # Convert URL encoding
 
         url = f"https://www.wikidata.org/w/api.php?action=query&titles={title}&prop=pageprops&format=json"
-        print(url)
         response = requests.get(url)
-        print(response)
         if response.status_code == 200:
             data = response.json()
+            print(f"data is {data}")
             pages = data.get("query", {}).get("pages", {})
+            print(f"pages is {pages}")
             for page in pages.values():
+                print(f"page is {page}")
                 return page.get("pageprops", {}).get("wikibase_item")
 
         return None  # No QID found
