@@ -264,19 +264,17 @@ class Mapper(object):
 
     def get_wikidata_qid(self, wikipedia_url):
         parsed_url = urlparse(wikipedia_url)
-        print(parsed_url)
         
         if "wikipedia.org" not in parsed_url.netloc:
             return None  # Not a Wikipedia URL
         
         title = parsed_url.path.split("/")[-1]  # Extracts "Philip_Grierson"
-        print(title)
         title = unquote(title.replace("_", " "))  # Convert URL encoding
-        print(title)
 
         url = f"https://www.wikidata.org/w/api.php?action=query&titles={title}&prop=pageprops&format=json"
-
+        print(url)
         response = requests.get(url)
+        print(response)
         if response.status_code == 200:
             data = response.json()
             pages = data.get("query", {}).get("pages", {})

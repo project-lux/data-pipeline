@@ -468,7 +468,6 @@ class FastMapper(Mapper):
 
                 if subfield_0 is not None:
                     uri_0 = self.to_plain_string(subfield_0.text)
-                    print(f"Found 700$0: {uri_0}")
                     if "wikipedia.org" in uri_0:
                         wikidata_qid = self.get_wikidata_qid(uri_0)
                         if wikidata_qid:
