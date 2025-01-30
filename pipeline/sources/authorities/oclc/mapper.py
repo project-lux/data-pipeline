@@ -671,7 +671,7 @@ class FastMapper(Mapper):
         #set referred_to_by Notes
         if biographies:
             if not hasattr(rec,"referred_to_by"):
-                setattr(rec,"referred_to_by")
+                setattr(rec,"referred_to_by",[])
             rec.referred_to_by.extend(biographies)
 
         data = model.factory.toJSON(rec)
