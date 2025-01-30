@@ -469,7 +469,7 @@ class FastMapper(Mapper):
                 if subfield_0 is not None:
                     uri_0 = self.to_plain_string(subfield_0.text)
                     if "wikipedia.org" in uri_0:
-                        wikidata_qid = self.configs['all_configs'].external['wikidata']['reconciler'].get_wikidata_qid(uri_0)
+                        wikidata_qid = self.config['all_configs'].external['wikidata']['reconciler'].get_wikidata_qid(uri_0)
                         if wikidata_qid:
                             wikiuri = self.config['all_configs'].external['wikidata']['namespace'] + wikidata_qid
                             equivalents.append(model.Person(ident=wikiuri))
