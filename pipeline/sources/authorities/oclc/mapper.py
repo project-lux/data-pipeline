@@ -458,9 +458,9 @@ class FastMapper(Mapper):
         equivalents = []
         if df700:
             for df in df700:
-                subfield_a = df.find("mx:subfield[@code='a']", self.nss)
-                subfield_0 = df.find("mx:subfield[@code='0']", self.nss)
-                subfield_1 = df.find("mx:subfield[@code='1']", self.nss)
+                subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
+                subfield_0 = df.find("mx:subfield[@code='0']", namespaces=self.nss)
+                subfield_1 = df.find("mx:subfield[@code='1']", namespaces=self.nss)
 
                 if subfield_a is not None:
                     alt_name = self.to_plain_string(subfield_a.text)
@@ -468,6 +468,7 @@ class FastMapper(Mapper):
 
                 if subfield_0 is not None:
                     uri_0 = self.to_plain_string(subfield_0.text)
+                    print(f"Found 700$0: {uri_0}")
                     if "wikipedia.org" in uri_0:
                         wikidata_qid = self.get_wikidata_qid(uri_0)
                         if wikidata_qid:
@@ -480,6 +481,7 @@ class FastMapper(Mapper):
 
 
                 if subfield_1 is not None:
+                    #VIAF equiv
                     uri_1 = self.to_plain_string(subfield_1.text)
                     equivalents.append(model.Person(ident=uri_1))
 
