@@ -271,12 +271,8 @@ class Mapper(object):
         title = parsed_url.path.split("/")[-1]  # Extract last part of URL
         title = unquote(title).replace("_", " ").strip()  # Decode and format title
 
-        print(f"Fetching Wikidata QID for: {title}")
-
         # Query Wikidata directly using Wikipedia sitelinks
         wikidata_api_url = f"https://www.wikidata.org/w/api.php?action=wbgetentities&sites=enwiki&titles={title}&format=json"
-        print(f"Requesting URL: {wikidata_api_url}")
-
         response = requests.get(wikidata_api_url)
         
         if response.status_code == 200:
@@ -286,10 +282,7 @@ class Mapper(object):
             entities = data.get("entities", {})
             for entity_id, entity in entities.items():
                 if entity_id.startswith("Q"):  # Ensure it's a valid QID
-                    print(f"Found Wikidata QID: {entity_id} for {title}")
                     return entity_id
-
-        print(f"No Wikidata QID found for '{title}'")
         return None
 
 

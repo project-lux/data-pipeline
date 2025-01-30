@@ -471,7 +471,8 @@ class FastMapper(Mapper):
                     if "wikipedia.org" in uri_0:
                         wikidata_qid = self.get_wikidata_qid(uri_0)
                         if wikidata_qid:
-                            equivalents.append(model.Person(ident=wikidata_qid))
+                            wikiuri = self.config['all_configs'].external['wikidata']['namespace'] + wikidata_qid
+                            equivalents.append(model.Person(ident=wikiuri))
                     elif uri_0.startswith("(DLC)"):
                         #Should be LCCN
                         uri_0 = "".join(uri_0.split(")")[1].split())
