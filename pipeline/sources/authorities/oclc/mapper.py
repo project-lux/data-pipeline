@@ -642,7 +642,7 @@ class FastMapper(Mapper):
                 subfield_0 = df.find("mx:subfield[@code='0']",namespaces=self.nss)
                 if subfield_0 is not None: #Use URI if available
                     affiliation_uri = self.to_plain_string(subfield_0.text)
-                    occupations.append(model.Group(ident=affiliation_uri))
+                    affiliations.append(model.Group(ident=affiliation_uri))
                 elif subfield_a is not None: #try to reconcile name
                     affiliation = self.to_plain_string(subfield_a.text)
                     try:
