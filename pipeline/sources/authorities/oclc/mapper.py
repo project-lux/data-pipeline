@@ -455,24 +455,24 @@ class FastMapper(Mapper):
 
         df400 = root.xpath(".//mx:datafield[@tag='400']", namespaces=self.nss)
         if df400:
-            print(f"{rec['identifier']} has df 400")
+            print(f"{identifier} has df 400")
         df500 = root.xpath(".//mx:datafield[@tag='500']", namespaces=self.nss)
         if df500:
-            print(f"{rec['identifier']} has df 500")
+            print(f"{identifier} has df 500")
         df375 = root.xpath(".//mx:datafield[@tag='375']", namespaces=self.nss)
         if df375:
-            print(f"{rec['identifier']} has df 375")
+            print(f"{identifier} has df 375")
         df667 = root.xpath(".//mx:datafield[@tag='667']", namespaces=self.nss)
         if df667:
-            print(f"{rec['identifier']} has df 667") 
+            print(f"{identifier} has df 667") 
         df678 = root.xpath(".//mx:datafield[@tag='678']", namespaces=self.nss)
         if df678:
-            print(f"{rec['identifier']} has df 678")
+            print(f"{identifier} has df 678")
 
         df373 = root.xpath(".//mx:datafield[@tag='373']", namespaces=self.nss)
         if df373:
-            print(f"{rec['identifier']} has df 373")
-       
+            print(f"{identifier} has df 373")
+
         # Extract alternate names and identifiers from 700 fields
         df700 = root.xpath(".//mx:datafield[@tag='700']", namespaces=self.nss)
         alternate_names = []
@@ -600,6 +600,6 @@ class FastMapper(Mapper):
             rec.classified_as.extend(occupations)
 
         data = model.factory.toJSON(rec)
-        return {'identifier': identifier, 'data': data, 'source': 'fast'}
+        #return {'identifier': identifier, 'data': data, 'source': 'fast'}
         #just hand off to class mappers because each record has specific class tags?
 
