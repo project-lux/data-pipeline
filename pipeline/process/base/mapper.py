@@ -268,21 +268,30 @@ class Mapper(object):
         if "wikipedia.org" not in parsed_url.netloc:
             return None  # Not a Wikipedia URL
         
-        title = parsed_url.path.split("/")[-1]  # Extracts "Philip_Grierson"
-        title = unquote(title.replace("_", " "))  # Convert URL encoding
+        title = parsed_url.path.split("/")[-1]  # Extract last part of URL
+        title = unquote(title).replace("_", " ").strip()  # Decode and format title
 
-        url = f"https://www.wikidata.org/w/api.php?action=query&titles={title}&prop=pageprops&format=json"
-        response = requests.get(url)
+        print(f"Fetching Wikidata QID for: {title}")
+
+        # Query Wikidata directly using Wikipedia sitelinks
+        wikidata_api_url = f"https://www.wikidata.org/w/api.php?action=wbgetentities&sites=enwiki&titles={title}&format=json"
+        print(f"Requesting URL: {wikidata_api_url}")
+
+        response = requests.get(wikidata_api_url)
+        
         if response.status_code == 200:
             data = response.json()
-            print(f"data is {data}")
-            pages = data.get("query", {}).get("pages", {})
-            print(f"pages is {pages}")
-            for page in pages.values():
-                print(f"page is {page}")
-                return page.get("pageprops", {}).get("wikibase_item")
+            print(f"Full Wikidata API response: {json.dumps(data, indent=2)}")
 
-        return None  # No QID found
+            entities = data.get("entities", {})
+            for entity_id, entity in entities.items():
+                if entity_id.startswith("Q"):  # Ensure it's a valid QID
+                    print(f"Found Wikidata QID: {entity_id} for {title}")
+                    return entity_id
+
+        print(f"No Wikidata QID found for '{title}'")
+        return None
+
 
     def get_reference(self, identifier):
         if not self.acquirer:
