@@ -475,7 +475,7 @@ class FastMapper(Mapper):
                     elif uri_0.startswith("(DLC)"):
                         #Should be LCCN
                         uri_0 = "".join(uri_0.split(")")[1].split())
-                        ns = self.config["all_configs"].external['lcnaf']['namespace'] + uri_0
+                        lcnafuri = self.config["all_configs"].external['lcnaf']['namespace'] + uri_0
                         equivalents.append(model.Person(ident=lcnafuri))
 
 
