@@ -453,9 +453,6 @@ class FastMapper(Mapper):
             rec.died = None
 
 
-        df400 = root.xpath(".//mx:datafield[@tag='400']", namespaces=self.nss)
-        if df400:
-            print(f"{identifier} has df 400")
         df500 = root.xpath(".//mx:datafield[@tag='500']", namespaces=self.nss)
         if df500:
             print(f"{identifier} has df 500")
@@ -477,6 +474,10 @@ class FastMapper(Mapper):
         df700 = root.xpath(".//mx:datafield[@tag='700']", namespaces=self.nss)
         alternate_names = []
         equivalents = []
+
+        df400 = root.xpath(".//mx:datafield[@tag='400']", namespaces=self.nss)
+        if df400:
+            pass
         if df700:
             for df in df700:
                 subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
@@ -600,6 +601,6 @@ class FastMapper(Mapper):
             rec.classified_as.extend(occupations)
 
         data = model.factory.toJSON(rec)
-        #return {'identifier': identifier, 'data': data, 'source': 'fast'}
+        return {'identifier': identifier, 'data': data, 'source': 'fast'}
         #just hand off to class mappers because each record has specific class tags?
 
