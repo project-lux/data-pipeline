@@ -1,5 +1,7 @@
 
+import requests
 from .base import WdConfigManager
+from urllib.parse import urlparse, unquote
 from pipeline.process.base.reconciler import LmdbReconciler
 
 class WdReconciler(LmdbReconciler, WdConfigManager):

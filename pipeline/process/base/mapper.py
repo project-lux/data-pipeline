@@ -1,8 +1,6 @@
 import os
 import ujson as json
 import re
-import requests
-from urllib.parse import urlparse, unquote
 from cromulent import model, vocab
 from lxml import etree
 
