@@ -433,13 +433,6 @@ class FastMapper(Mapper):
                     #birth or death, who knows??
                     pass
 
-        df667 = root.xpath(".//mx:datafield[@tag='667']", namespaces=self.nss)
-        if df667:
-            print(f"{identifier} has df 667") 
-        df678 = root.xpath(".//mx:datafield[@tag='678']", namespaces=self.nss)
-        if df678:
-            print(f"{identifier} has df 678")
-
         # Extract alternate names and birth and death from 400
         df700 = root.xpath(".//mx:datafield[@tag='700']", namespaces=self.nss)
         df400 = root.xpath(".//mx:datafield[@tag='400']", namespaces=self.nss)
