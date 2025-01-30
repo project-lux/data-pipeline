@@ -367,8 +367,8 @@ class FastMapper(Mapper):
         if not topCls:
             return None
 
-        ident = record["identifier"]
-        rec = topCls(ident=f"http://id.worldcat.org/fast/{ident}")
+        identifier = record["identifier"]
+        rec = topCls(ident=f"http://id.worldcat.org/fast/{identifier}")
 
         #person records
 
@@ -577,6 +577,6 @@ class FastMapper(Mapper):
             rec.classified_as.extend(occupations)
 
         data = model.factory.toJSON(rec)
-        return {'identifier': ident, 'data': data, 'source': 'fast'}
+        return {'identifier': identifier, 'data': data, 'source': 'fast'}
         #just hand off to class mappers because each record has specific class tags?
 
