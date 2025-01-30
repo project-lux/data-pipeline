@@ -363,12 +363,13 @@ class FastMapper(Mapper):
         if root is None:
             return root
 
-        topCls = self.guess_type(root)
-        if not topCls:
-            return None
+        if not rectype:
+            rectype = self.guess_type(root)
+            if not rectype:
+                return None
 
         identifier = record["identifier"]
-        rec = topCls(ident=f"http://id.worldcat.org/fast/{identifier}")
+        rec = rectype(ident=f"http://id.worldcat.org/fast/{identifier}")
 
         #person records
 
@@ -376,6 +377,8 @@ class FastMapper(Mapper):
         death_date = None
         birth_year = None 
         death_year = None 
+
+        #get birth and death from 046
         df046 = root.xpath(".//mx:datafield[@tag='046']", namespaces=self.nss)
         if df046:
             for d in df046:
@@ -395,6 +398,7 @@ class FastMapper(Mapper):
                     except Exception as e:
                         print(f"Failed to parse death date: {death_year}, Error: {e}")
 
+        #get primary name and birth and death from 100
         df100 = root.xpath(".//mx:datafield[@tag='100']", namespaces=self.nss)
         primary = False
         if df100:
@@ -429,6 +433,107 @@ class FastMapper(Mapper):
                     #birth or death, who knows??
                     pass
 
+
+        df500 = root.xpath(".//mx:datafield[@tag='500']", namespaces=self.nss)
+        if df500:
+            print(f"{identifier} has df 500")
+        df667 = root.xpath(".//mx:datafield[@tag='667']", namespaces=self.nss)
+        if df667:
+            print(f"{identifier} has df 667") 
+        df678 = root.xpath(".//mx:datafield[@tag='678']", namespaces=self.nss)
+        if df678:
+            print(f"{identifier} has df 678")
+
+        # Extract alternate names and birth and death from 400
+        df700 = root.xpath(".//mx:datafield[@tag='700']", namespaces=self.nss)
+        df400 = root.xpath(".//mx:datafield[@tag='400']", namespaces=self.nss)
+        alternate_names = set()
+        equivalents = []
+
+        if df400:
+            for df in df400:
+                subfield_a = df.find("mx:subfield[@code='a']", self.nss)
+                subfield_q = df.find("mx:subfield[@code='q']", self.nss)  # Fuller form
+                subfield_d = df.find("mx:subfield[@code='d']", self.nss)  # Dates
+
+                if subfield_a is not None:
+                    alt_name = self.to_plain_string(subfield_a.text)
+                    alternate_names.add(alt_name)
+                if subfield_q is not None:
+                    alt_name = self.to_plain_string(subfield_q.text)
+                    alternate_names.add(alt_name)
+
+                if subfield_d is not None:
+                    dates = self.to_plain_string(subfield_d)
+                    if "-" in dates:
+                        b,e = dates.split("-")
+                        try:
+                            bb, eb = make_datetime(b)
+                        except:
+                            bb = None
+                        try:
+                            be, ee = make_datetime(e)
+                        except:
+                            be = None
+                        if bb and be:
+                            birth_date = bb 
+                            death_date = be
+                    elif len(dates) == 4:
+                        #birth or death, who knows??
+                        pass
+
+        #extract alternate names and equivalents from 700 field
+        if df700:
+            for df in df700:
+                subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
+                subfield_0 = df.find("mx:subfield[@code='0']", namespaces=self.nss)
+                subfield_1 = df.find("mx:subfield[@code='1']", namespaces=self.nss)
+
+                if subfield_a is not None:
+                    alt_name = self.to_plain_string(subfield_a.text)
+                    alternate_names.add(alt_name)
+
+                if subfield_0 is not None:
+                    uri_0 = self.to_plain_string(subfield_0.text)
+                    if "wikipedia.org" in uri_0:
+                        wikidata_qid = self.config['all_configs'].external['wikidata']['reconciler'].get_wikidata_qid(uri_0)
+                        if wikidata_qid:
+                            wikiuri = self.config['all_configs'].external['wikidata']['namespace'] + wikidata_qid
+                            equivalents.append(model.Person(ident=wikiuri))
+                    elif uri_0.startswith("(DLC)"):
+                        #Should be LCCN
+                        uri_0 = "".join(uri_0.split(")")[1].split())
+                        lcnafuri = self.config["all_configs"].external['lcnaf']['namespace'] + uri_0
+                        equivalents.append(model.Person(ident=lcnafuri))
+
+                if subfield_1 is not None:
+                    #VIAF equiv
+                    uri_1 = self.to_plain_string(subfield_1.text)
+                    equivalents.append(model.Person(ident=uri_1))
+
+        #set equivalents
+        if equivalents:
+            if not hasattr(rec, "equivalent"):
+                rec.equivalent = []
+                rec.equivalent.extend(equivalents)
+
+        alternate_names = sorted(list(alternate_names))
+
+        #set alternate names
+        if not hasattr(rec,"identified_by"):
+            rec.identified_by = []
+            rec.identified_by.extend(vocab.AlternateName(content=name) for name in alternate_names)
+
+        # Assign a primary name if none exists
+        if not primary and alternate_names:
+            primary_name = alternate_names.pop(0)  # Take the first alternate name
+            rec.identified_by.insert(0, vocab.PrimaryName(content=primary_name))
+
+        # If no names remain, return None
+        if not rec.identified_by:
+            return None
+
+        #set birth and death
         if birth_date:
             birth = model.Birth()
             ts = model.TimeSpan()
@@ -447,79 +552,12 @@ class FastMapper(Mapper):
             death.identified_by = vocab.DisplayName(content=dcont)
             rec.died = death
 
-
+        #test birth and death
         if not test_birth_death(rec):
             rec.born = None
             rec.died = None
 
-
-        df500 = root.xpath(".//mx:datafield[@tag='500']", namespaces=self.nss)
-        if df500:
-            print(f"{identifier} has df 500")
-        df375 = root.xpath(".//mx:datafield[@tag='375']", namespaces=self.nss)
-        if df375:
-            print(f"{identifier} has df 375")
-        df667 = root.xpath(".//mx:datafield[@tag='667']", namespaces=self.nss)
-        if df667:
-            print(f"{identifier} has df 667") 
-        df678 = root.xpath(".//mx:datafield[@tag='678']", namespaces=self.nss)
-        if df678:
-            print(f"{identifier} has df 678")
-
-        df373 = root.xpath(".//mx:datafield[@tag='373']", namespaces=self.nss)
-        if df373:
-            print(f"{identifier} has df 373")
-
-        # Extract alternate names and identifiers from 700 fields
-        df700 = root.xpath(".//mx:datafield[@tag='700']", namespaces=self.nss)
-        alternate_names = []
-        equivalents = []
-
-        df400 = root.xpath(".//mx:datafield[@tag='400']", namespaces=self.nss)
-        if df400:
-            pass
-        if df700:
-            for df in df700:
-                subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
-                subfield_0 = df.find("mx:subfield[@code='0']", namespaces=self.nss)
-                subfield_1 = df.find("mx:subfield[@code='1']", namespaces=self.nss)
-
-                if subfield_a is not None:
-                    alt_name = self.to_plain_string(subfield_a.text)
-                    alternate_names.append(vocab.AlternateName(content=alt_name))
-
-                if subfield_0 is not None:
-                    uri_0 = self.to_plain_string(subfield_0.text)
-                    if "wikipedia.org" in uri_0:
-                        wikidata_qid = self.config['all_configs'].external['wikidata']['reconciler'].get_wikidata_qid(uri_0)
-                        if wikidata_qid:
-                            wikiuri = self.config['all_configs'].external['wikidata']['namespace'] + wikidata_qid
-                            equivalents.append(model.Person(ident=wikiuri))
-                    elif uri_0.startswith("(DLC)"):
-                        #Should be LCCN
-                        uri_0 = "".join(uri_0.split(")")[1].split())
-                        lcnafuri = self.config["all_configs"].external['lcnaf']['namespace'] + uri_0
-                        equivalents.append(model.Person(ident=lcnafuri))
-
-
-                if subfield_1 is not None:
-                    #VIAF equiv
-                    uri_1 = self.to_plain_string(subfield_1.text)
-                    equivalents.append(model.Person(ident=uri_1))
-
-        if not primary and alternate_names:
-            rec.identified_by = vocab.PrimaryName(content=alternate_names[0].content)
-            alternate_names = alternate_names[1:]
-            rec.identified_by.extend(alternate_names)
-        if not primary and not alternate_names:
-            #no names
-            return None
-
-        if equivalents:
-            if not hasattr(rec, "equivalent"):
-                setattr(rec, "equivalent", [])
-            rec.equivalent.extend(equivalents)
-
+        #extract related places from 370
         df370 = root.xpath(".//mx:datafield[@tag='370']", namespaces=self.nss)
         if df370:
             place_subfields = {}
@@ -529,78 +567,104 @@ class FastMapper(Mapper):
                     if code:
                         text = self.to_plain_string(subfield.text)
                         place_subfields.setdefault(code, []).append(text)
-
+            #birth place
             if "a" in place_subfields:
                 for a in place_subfields['a']:
                     bpid = self.build_recs_and_reconcile(a, "place")
                     if bpid:
-                        try:
-                            src, ident = self.config["all_configs"].split_uri(bpid)
-                            where = src["mapper"].get_reference(ident)
-                        except:
-                            print(f"Failed to split URI: {bpid}")
-                            where = None
-                        if where and where.__class__ == model.Place:
-                            if not hasattr(rec, "born"):
-                                birth = model.Birth()
-                                rec.born = birth
-                            birth.took_place_at = where
+                        if not hasattr(rec, "born"):
+                            birth = model.Birth()
+                            rec.born = birth
+                        birth.took_place_at = model.Place(ident=bpid)
+                        
+            #death place
             elif "b" in place_subfields:
                 for b in place_subfields['b']:
-                    rpid = self.build_recs_and_reconcile(b,"place")
-                    if rpid:
-                        try:
-                            src, ident = self.config["all_configs"].split_uri(rpid)
-                            where = src["mapper"].get_reference(ident)
-                        except:
-                            print(f"Failed to split URI: {rpid}")
-                            where = None
-                        if where and where.__class__ == model.Place:
-                            rec.residence = where
+                    dpid = self.build_recs_and_reconcile(b,"place")
+                    if dpid:
+                        if not hasattr(rec, "died"):
+                            death = model.Death()
+                            rec.died = death
+                        death.took_place_at = model.Place(ident=dpid)
+                        
+            #residence
             elif "e" in place_subfields:
                 for e in place_subfields['e']:
-                    plpid = self.build_recs_and_reconcile(e, "place")
-                    if plpid:
-                        try:
-                            src, ident = self.config["all_configs"].split_uri(plpid)
-                            where = src["mapper"].get_reference(ident)
-                        except:
-                            print(f"Failed to split URI: {plpid}")
-                            where = None
-                        if where and where.__class__ == model.Place:
-                            if not hasattr(rec,"carried_out"):
-                                active = vocab.Active()
-                                rec.carried_out = active
-                            active.took_place_at = where
+                    resid = self.build_recs_and_reconcile(e, "place")
+                    if resid:
+                        rec.residence = model.Place(ident=resid)
 
         # Extract occupations from 374 fields
         df374 = root.xpath(".//mx:datafield[@tag='374']", namespaces=self.nss)
-        occupations = []
+        classifications = []
         if df374:
             for df in df374:
-                subfield_a = df.find("mx:subfield[@code='a']", self.nss)
-                subfield_0 = df.find("mx:subfield[@code='0']", self.nss)
+                subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
+                subfield_0 = df.find("mx:subfield[@code='0']", namespaces=self.nss)
                 if subfield_0 is not None:  # Use URI if available
                     occupation_uri = self.to_plain_string(subfield_0.text)
-                    occupations.append(model.Type(ident=occupation_uri))
-                elif subfield_a is not None:
+                    classifications.append(model.Type(ident=occupation_uri))
+                elif subfield_a is not None: #try to reconcile name
                     occupation = self.to_plain_string(subfield_a.text)
                     try:
-                        occupation_uri = self.build_recs_and_reconcile(occupation, "type")
+                        occupation_uri = self.build_recs_and_reconcile(occupation, "concept")
                         if occupation_uri:
-                            src, ident = self.config['all_configs'].split_uri(occupation_uri)
-                            what = src['mapper'].get_reference(ident)
-                            if what and what.__class__ == model.Type:
-                                occupations.append(model.Type(ident=occupation))
+                            classifications.append(model.Type(ident=occupation_uri,label=occupation))
                     except:
                         continue
         
-        if occupations:
+
+        #extract gender from 375
+        df375 = root.xpath(".//mx:datafield[@tag='375']", namespaces=self.nss)
+        if df375:
+            for df in df375:
+                subfield_a = df.find("mx:subfield[@code='a']",namespaces=self.nss)
+                subfield_0 = df.find("mx:subfield[@code='0']",namespaces=self.nss)
+                if subfield_0 is not None:
+                    gender_uri = self.to_plain_string(subfield_0.text)
+                    if "wikidata" in gender_uri or gender_uri == "http://id.loc.gov/authorities/subjects/sh2007005819":
+                        classifications.append(model.Type(ident=gender_uri))
+                elif subfield_a is not None:
+                    gender = self.to_plain_string(subfield_0.text)
+                    if gender == "male":
+                        classifications.append(vocab.instances['male'])
+                    elif gender == "female":
+                        classifications.append(vocab.instances['female'])
+
+        #set classified_as
+        if classifications:
             if not hasattr(rec, "classified_as"):
                 setattr(rec, "classified_as", [])
-            rec.classified_as.extend(occupations)
+            rec.classified_as.extend(classifications)
+
+        #extract affiliations from 373
+        df373 = root.xpath(".//mx:datafield[@tag='373']", namespaces=self.nss)
+        affiliations = []
+        if df373:
+            for df in df373:
+                subfield_a = df.find("mx:subfield[@code='a']",namespaces=self.nss)
+                subfield_0 = df.find("mx:subfield[@code='0']",namespaces=self.nss)
+                if subfield_0 is not None: #Use URI if available
+                    affiliation_uri = self.to_plain_string(subfield_0.text)
+                    occupations.append(model.Group(ident=affiliation_uri))
+                elif subfield_a is not None: #try to reconcile name
+                    affiliation = self.to_plain_string(subfield_a.text)
+                    try:
+                        affiliation_uri = self.build_recs_and_reconcile(affiliation, "group")
+                        if affiliation_uri:
+                            affiliations.append(model.Group(ident=affiliation_uri,label=affiliation))
+                    except:
+                        continue
+
+        #set member_of
+        if affiliations:
+            if not hasattr(rec,"member_of"):
+                setattr(rec,"member_of",[])
+            rec.member_of.extend(affiliations)
+
+
 
         data = model.factory.toJSON(rec)
-        return {'identifier': identifier, 'data': data, 'source': 'fast'}
+        #return {'identifier': identifier, 'data': data, 'source': 'fast'}
         #just hand off to class mappers because each record has specific class tags?
 
