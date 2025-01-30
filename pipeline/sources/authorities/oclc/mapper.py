@@ -472,9 +472,11 @@ class FastMapper(Mapper):
                         wikidata_qid = self.get_wikidata_qid(uri_0)
                         if wikidata_qid:
                             equivalents.append(model.Person(ident=wikidata_qid))
-                    else:
+                    elif uri_0.startswith("(DLC)"):
                         #Should be LCCN
-                        equivalents.append(model.Person(ident=uri_0))
+                        uri_0 = "".join(uri_0.split(")")[1].split())
+                        ns = cfgs.external['lcnaf']['namespace'] + uri_0
+                        equivalents.append(model.Person(ident=lcnafuri))
 
 
                 if subfield_1 is not None:
