@@ -664,7 +664,7 @@ class FastMapper(Mapper):
         if df500:
             for df in df500:
                 subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
-                if subfield_a if not None:
+                if subfield_a is not None:
                     bio = self.to_plain_string(subfield_a.text)
                     biographies.append(model.LinguisticObject(content=bio))
 
