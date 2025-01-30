@@ -433,10 +433,6 @@ class FastMapper(Mapper):
                     #birth or death, who knows??
                     pass
 
-
-        df500 = root.xpath(".//mx:datafield[@tag='500']", namespaces=self.nss)
-        if df500:
-            print(f"{identifier} has df 500")
         df667 = root.xpath(".//mx:datafield[@tag='667']", namespaces=self.nss)
         if df667:
             print(f"{identifier} has df 667") 
@@ -625,7 +621,7 @@ class FastMapper(Mapper):
                     if "wikidata" in gender_uri or gender_uri == "http://id.loc.gov/authorities/subjects/sh2007005819":
                         classifications.append(model.Type(ident=gender_uri))
                 elif subfield_a is not None:
-                    gender = self.to_plain_string(subfield_0.text)
+                    gender = self.to_plain_string(subfield_a.text)
                     if gender == "male":
                         classifications.append(vocab.instances['male'])
                     elif gender == "female":
@@ -662,7 +658,21 @@ class FastMapper(Mapper):
                 setattr(rec,"member_of",[])
             rec.member_of.extend(affiliations)
 
+        #extract notes from 500
+        df500 = root.xpath(".//mx:datafield[@tag='500']", namespaces=self.nss)
+        biographies = []
+        if df500:
+            for df in df500:
+                subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
+                if subfield_a if not None:
+                    bio = self.to_plain_string(subfield_a.text)
+                    biographies.append(model.LinguisticObject(content=bio))
 
+        #set referred_to_by Notes
+        if biographies:
+            if not hasattr(rec,"referred_to_by"):
+                setattr(rec,"referred_to_by")
+            rec.referred_to_by.extend(biographies)
 
         data = model.factory.toJSON(rec)
         #return {'identifier': identifier, 'data': data, 'source': 'fast'}
