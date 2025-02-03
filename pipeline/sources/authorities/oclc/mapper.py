@@ -352,6 +352,9 @@ class FastMapper(Mapper):
         tags = ["148","100","150","151","155","110","111","147","130"]
         for tag in tags:
             if root.find(f".//mx:datafield[@tag='{tag}']", self.nss) is not None:
+                mytag = self.nameTypeMap.get(tag, None)
+                if mytag != "100" and mytag is not None:
+                    print(f"mytag is {mytag}")
                 return self.nameTypeMap.get(tag, None)
 
         return None 
@@ -370,23 +373,6 @@ class FastMapper(Mapper):
 
         identifier = record["identifier"]
         rec = rectype(ident=f"http://id.worldcat.org/fast/{identifier}")
-
-        if rectype == model.Group:
-            df046 = root.xpath(".//mx:datafield[@tag='046']", namespaces=self.nss)
-            if df046:
-                print(f"df046")
-            df370 = root.xpath(".//mx:datafield[@tag='370']", namespaces=self.nss)
-            if df370:
-                print(f"df370")
-            df551 = root.xpath(".//mx:datafield[@tag='551']", namespaces=self.nss)
-            if df551:
-                print(f"df551")
-            df372 = root.xpath(".//mx:datafield[@tag='372']", namespaces=self.nss)
-            if df372:
-                print(f"df372")
-            df678 = root.xpath(".//mx:datafield[@tag='678']", namespaces=self.nss)
-            if df678:
-                print(f"df678")
 
 
         #person records
