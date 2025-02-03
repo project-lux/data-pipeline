@@ -368,11 +368,6 @@ class FastMapper(Mapper):
             if not rectype:
                 return None
 
-        if rectype == model.Group:
-            df046 = root.xpath(".//mx:datafield[@tag='046']", namespaces=self.nss)
-            if df046:
-                print(identifier)
-
         identifier = record["identifier"]
         rec = rectype(ident=f"http://id.worldcat.org/fast/{identifier}")
 
