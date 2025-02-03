@@ -1,10 +1,6 @@
 from pipeline.process.base.loader import Loader
-import gzip
 import zipfile
 from lxml import etree
-import time
-import re
-import os
 
 class FastLoader(Loader):
     def __init__(self, config):
@@ -12,45 +8,39 @@ class FastLoader(Loader):
         self.in_path = config["dumpFilePath"]
         self.out_cache = config["datacache"]
         self.total = config.get("totalRecords", 14000000)
-        self.skip_lines = 0
         self.config = config
         self.configs = config["all_configs"]
 
     def load(self):
-        start = time.time()
-        with zipfile.ZipFile(self.in_path) as fh:
-            members = fh.namelist()
+        nss = {"mx": "http://www.loc.gov/MARC21/slim"}
+        records_processed = 0
 
-            x = 0
-            done_x = 0
-            
-            for f in members:
-                if not f.endswith(".marcxml"):
+        with zipfile.ZipFile(self.in_path, "r") as fh:
+            for fn in fh.namelist():
+                if not fn.endswith(".marcxml"):
                     continue
-                with fh.open(f) as facet:
-                    tree = etree.parse(facet)
-                    nss = {"mx": "http://www.loc.gov/MARC21/slim"}
-                    records = tree.xpath("//mx:record", namespaces=nss)
-                    for record in records:
-                        try:
-                            identfield = record.xpath('//mx:controlfield[@tag="001"]', namespaces=nss)
-                        except:
-                            # no id??
-                            continue
-                        if identfield:
-                            ident = identfield[0].text
-                            ident = ident.split("fst")[-1]
-                            if ident.startswith("0"):
-                                ident = ident.lstrip("0")
+                
+                with fh.open(fn) as f:
+                    try:
+                        tree = etree.parse(f)
+                        root = tree.getroot()
+                        
+                        for record in root.findall(".//mx:record", namespaces=nss):
+                            control_001 = record.find('//mx:controlfield[@tag="001"]', namespaces=nss)
+                            if control_001 is not None and control_001.text:
+                                ident = control_001.text.split("fst")[-1]
+                                ident = ident.lstrip("0") if ident.startswith("0") else ident
 
-                    x += 1
-                    done_x += 1
-                    new = {"xml": record}
-                    self.out_cache[ident] = new
+                                self.out_cache[ident] = {"xml": etree.tostring(record, encoding="unicode")}
+                                records_processed += 1
+                            else:
+                                print(f"FAST record in {fn} is missing an identifier.")
 
-                    if not done_x % 10000:
-                        t = time.time() - start
-                        xps = x / t
-                        ttls = self.total / xps
-                        print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-        self.out_cache.commit()
+                    except etree.XMLSyntaxError as e:
+                        print(f"Error parsing XML in {fn}: {e}")
+
+        if records_processed > 0:
+            self.out_cache.commit()
+            print(f"Successfully loaded {records_processed} records into cache.")
+        else:
+            print("No valid records were processed.")
