@@ -88,8 +88,8 @@ class FastMapper(Mapper):
         rec = rectype(ident=f"http://id.worldcat.org/fast/{identifier}")
 
         field_counter = Counter()
-        if rectype.__name__ == model.Group:
-            for datafield in rec.findall(".//mx:datafield", namespaces=nss):
+        if isinstance(rectype, model.Group)
+            for datafield in root.findall(".//mx:datafield", namespaces=nss):
                 tag = datafield.get("tag")
                 field_counter[tag] += 1
             print("\n📊 MARC Fields Found in FAST Records:")
@@ -97,8 +97,6 @@ class FastMapper(Mapper):
                 print(f"Field {tag}: {count} occurrences")
 
         #person records
-        else:
-            continue
 
         birth_date = None
         death_date = None
