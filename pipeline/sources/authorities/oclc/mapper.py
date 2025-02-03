@@ -376,33 +376,24 @@ class FastMapper(Mapper):
         identifier = record["identifier"]
         rec = rectype(ident=f"http://id.worldcat.org/fast/{identifier}")
 
-        df046count = 0
-        df370count = 0
-        df551count = 0
-        df372count = 0
-        df678count = 0
-
         if rectype == model.Group:
             df046 = root.xpath(".//mx:datafield[@tag='046']", namespaces=self.nss)
             if df046:
-                df046count += 1
+                print(f"df046")
             df370 = root.xpath(".//mx:datafield[@tag='370']", namespaces=self.nss)
             if df370:
-                df370count += 1
+                print(f"df370")
             df551 = root.xpath(".//mx:datafield[@tag='551']", namespaces=self.nss)
             if df551:
-                df551count += 1
+                print(f"df551")
             df372 = root.xpath(".//mx:datafield[@tag='372']", namespaces=self.nss)
             if df372:
-                df372count += 1
+                print(f"df372")
             df678 = root.xpath(".//mx:datafield[@tag='678']", namespaces=self.nss)
             if df678:
-                df678count += 1
-        print(f"df046 count: {df046count}")
-        print(f"df370 count: {df370count}")
-        print(f"df551 count: {df551count}")
-        print(f"df372 count: {df372count}")
-        print(f"df678 count: {df678count}")
+                print(f"df678")
+
+
         #person records
 
         birth_date = None
