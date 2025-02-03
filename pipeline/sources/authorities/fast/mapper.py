@@ -2,9 +2,16 @@ from pipeline.process.base.mapper import Mapper
 from cromulent import model, vocab
 from pipeline.process.utils.mapper_utils import make_datetime, test_birth_death
 from lxml import etree
-import re
+from collections import Counter
 
 class FastMapper(Mapper):
+    """
+
+    this mapper may not need the to_plain_string function,
+    as the loader decodes everything to string before storage. however, if we fetch
+    across the network, it will still need the conversion.
+
+    """
     def __init__(self, config):
         super().__init__(config)
 
@@ -80,8 +87,18 @@ class FastMapper(Mapper):
         identifier = record["identifier"]
         rec = rectype(ident=f"http://id.worldcat.org/fast/{identifier}")
 
+        field_counter = Counter()
+        if rectype.__name__ == model.Group:
+            for datafield in rec.findall(".//mx:datafield", namespaces=nss):
+                tag = datafield.get("tag")
+                field_counter[tag] += 1
+            print("\n📊 MARC Fields Found in FAST Records:")
+            for tag, count in field_counter.most_common(50):  # Show top 50 fields
+                print(f"Field {tag}: {count} occurrences")
 
         #person records
+        else:
+            continue
 
         birth_date = None
         death_date = None
@@ -421,6 +438,8 @@ class FastMapper(Mapper):
                                     rec.member_of = model.Group(ident=reconciled_uri, label=broader_name)
                             except:
                                 continue
+
+
 
         data = model.factory.toJSON(rec)
         #return {'identifier': identifier, 'data': data, 'source': 'fast'}
