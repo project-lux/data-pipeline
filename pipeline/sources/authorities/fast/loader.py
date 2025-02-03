@@ -1,3 +1,11 @@
+from pipeline.process.base.loader import Loader
+import gzip
+import zipfile
+from lxml import etree
+import time
+import re
+import os
+
 class FastLoader(Loader):
     def __init__(self, config):
         self.in_url = config.get("remoteDumpFile", "")
