@@ -368,9 +368,41 @@ class FastMapper(Mapper):
             if not rectype:
                 return None
 
+        if rectype == model.Group:
+            df046 = root.xpath(".//mx:datafield[@tag='046']", namespaces=self.nss)
+            if df046:
+                print(identifier)
+
         identifier = record["identifier"]
         rec = rectype(ident=f"http://id.worldcat.org/fast/{identifier}")
 
+        df046count = 0
+        df370count = 0
+        df551count = 0
+        df372count = 0
+        df678count = 0
+
+        if rectype == model.Group:
+            df046 = root.xpath(".//mx:datafield[@tag='046']", namespaces=self.nss)
+            if df046:
+                df046count += 1
+            df370 = root.xpath(".//mx:datafield[@tag='370']", namespaces=self.nss)
+            if df370:
+                df370count += 1
+            df551 = root.xpath(".//mx:datafield[@tag='551']", namespaces=self.nss)
+            if df551:
+                df551count += 1
+            df372 = root.xpath(".//mx:datafield[@tag='372']", namespaces=self.nss)
+            if df372:
+                df372count += 1
+            df678 = root.xpath(".//mx:datafield[@tag='678']", namespaces=self.nss)
+            if df678:
+                df678count += 1
+        print(f"df046 count: {df046count}")
+        print(f"df370 count: {df370count}")
+        print(f"df551 count: {df551count}")
+        print(f"df372 count: {df372count}")
+        print(f"df678 count: {df678count}")
         #person records
 
         birth_date = None
@@ -666,6 +698,58 @@ class FastMapper(Mapper):
             if not hasattr(rec,"referred_to_by"):
                 setattr(rec,"referred_to_by",[])
             rec.referred_to_by.extend(biographies)
+
+        #Group marc fields
+
+        #primary name
+        df110 = root.xpath(".//mx:datafield[@tag='110']", namespaces=self.nss)
+        primary = False
+        if df110:
+            for df in df110:
+                subfield_a = df.find("mx:subfield[@code='a']",namespaces=self.nss)
+                subfield_b = df.find("mx:subfield[@code='b']",namespaces=self.nss)
+
+                org_name = self.to_plain_string(subfield_a.text) if subfield_a is not None else ""
+                sub_unit = self.to_plain_string(subfield_b.text) if subfield_b is not None else ""
+                primary_name = f"{org_name}, {sub_unit}" if sub_unit else org_name
+
+                if primary_name:
+                    primary = True
+                    rec.identified_by = vocab.PrimaryName(content=primary_name)
+
+        #broader
+        df510 = root.xpath(".//mx:datafield[@tag='510']", namespaces=self.nss)
+        if df510:
+            for df in df510:
+                subfield_a = df.find("mx:subfield[@code='a']",namespaces=self.nss)
+                subfield_0 = df.find("mx:subfield[@code='0']",namespaces=self.nss)
+                subfield_w = df.find("mx:subfield[@code='w']",namespaces=self.nss)
+
+
+                # Check if it's a broader organization (subfield `w` should contain "b")
+                relationship_type = self.to_plain_string(subfield_w.text).lower() if subfield_w is not None else None
+                if relationship_type == "b":
+                    broader_uri = self.to_plain_string(subfield_0.text) if subfield_0 is not None else None
+
+                    if broader_uri:
+                        rec.member_of = model.Group(ident=broader_uri)
+                    else:
+                        # Try reconciling the name if no direct URI is available
+                        broader_name = self.to_plain_string(subfield_a.text) if subfield_a is not None else None
+                        if broader_name:
+                            try:
+                                reconciled_uri = self.build_recs_and_reconcile(broader_name, "group")
+                                if reconciled_uri:
+                                    rec.member_of = model.Group(ident=reconciled_uri, label=broader_name)
+                            except:
+                                continue
+
+
+
+
+
+
+
 
         data = model.factory.toJSON(rec)
         #return {'identifier': identifier, 'data': data, 'source': 'fast'}
