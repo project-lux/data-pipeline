@@ -154,14 +154,14 @@ def check_file_timestamps():
 
     try:
         for file in Path(filepath).iterdir():
-            if file.is_file() and file.suffix == '.jsonl':
+            if file.is_file() and file.suffix == '.jsonl.gz':
                 timestamp = file.stat().st_mtime
                 datestamp = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
                 
                 logging.info(f"Using timestamp from: {file.name}, Timestamp: {datestamp}")
                 return {'Marklogic Export': {'timestamp': datestamp, 'type': 'Internal'}}
         
-        logging.warning("No .jsonl files found in the export directory.")
+        logging.warning("No .jsonl.gz files found in the export directory.")
         return {}
 
     except Exception as e:
