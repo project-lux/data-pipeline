@@ -418,13 +418,6 @@ class FastMapper(Mapper):
                             except:
                                 continue
 
-
-
-
-
-
-
-
         data = model.factory.toJSON(rec)
         #return {'identifier': identifier, 'data': data, 'source': 'fast'}
         #just hand off to class mappers because each record has specific class tags?
