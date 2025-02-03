@@ -19,6 +19,7 @@ class FastLoader(Loader):
             for fn in fh.namelist():
                 if not fn.endswith(".marcxml"):
                     continue
+                print(f"Processing file: {fn}")
                 
                 with fh.open(fn) as f:
                     try:
@@ -26,7 +27,7 @@ class FastLoader(Loader):
                         root = tree.getroot()
                         
                         for record in root.findall(".//mx:record", namespaces=nss):
-                            control_001 = record.find('//mx:controlfield[@tag="001"]', namespaces=nss)
+                            control_001 = record.find('.//mx:controlfield[@tag="001"]', namespaces=nss)
                             if control_001 is not None and control_001.text:
                                 ident = control_001.text.split("fst")[-1]
                                 ident = ident.lstrip("0") if ident.startswith("0") else ident
