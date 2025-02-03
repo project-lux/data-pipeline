@@ -63,15 +63,15 @@ class FastMapper(Mapper):
         #110 (corporate): group
         #111 (meeting) meetings, conferences (events)
         #147 (event): events
-        #130 (title): return None
+        #130 (title): do not process
         nss = self.nss
-        tags = ["148","100","150","151","155","110","111","147","130"]
+        tags = ["148","100","150","151","155","110","111","147"]
         for tag in tags:
             if root.find(f".//mx:datafield[@tag='{tag}']", self.nss) is not None:
-                return self.nameTypeMap.get(tag, None)
-
-        return None 
-
+                print(f"Found tag {tag} in record: {etree.tostring(root, pretty_print=True).decode()[:500]}")
+                return self.nameTypeMap.get(tag)
+        return None
+        
     def transform(self, record, rectype=None, reference=False):
         rec = record["data"]
         root = etree.fromstring(rec['xml'])
