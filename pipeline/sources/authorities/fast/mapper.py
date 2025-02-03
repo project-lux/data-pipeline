@@ -88,7 +88,7 @@ class FastMapper(Mapper):
         rec = rectype(ident=f"http://id.worldcat.org/fast/{identifier}")
 
         field_counter = Counter()
-        if isinstance(rectype, model.Group)
+        if isinstance(rectype, model.Group):
             for datafield in root.findall(".//mx:datafield", namespaces=nss):
                 tag = datafield.get("tag")
                 field_counter[tag] += 1
