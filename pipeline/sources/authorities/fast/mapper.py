@@ -2,7 +2,6 @@ from pipeline.process.base.mapper import Mapper
 from cromulent import model, vocab
 from pipeline.process.utils.mapper_utils import make_datetime, test_birth_death
 from lxml import etree
-from collections import Counter
 
 class FastMapper(Mapper):
     """
