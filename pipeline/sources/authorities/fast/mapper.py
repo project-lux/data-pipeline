@@ -70,23 +70,9 @@ class FastMapper(Mapper):
                 return self.nameTypeMap.get(tag)
         return None
         
-    def transform(self, record, rectype=None, reference=False):
-        rec = record["data"]
-        root = etree.fromstring(rec['xml'])
 
-        if root is None:
-            return root
-
-        if not rectype:
-            rectype = self.guess_type(root)
-            if not rectype:
-                return None
-
-        identifier = record["identifier"]
-        rec = rectype(ident=f"http://id.worldcat.org/fast/{identifier}")
-        print(rec)
+    def process_person(self, root, rec):   
         #person records
-
         birth_date = None
         death_date = None
         birth_year = None 
@@ -381,12 +367,11 @@ class FastMapper(Mapper):
                 setattr(rec,"referred_to_by",[])
             rec.referred_to_by.extend(biographies)
 
+    def process_group(self, root, rec):
         #Group marc fields
 
         #primary name
         df110 = root.xpath(".//mx:datafield[@tag='110']", namespaces=self.nss)
-        if df110:
-            print("found df110")
         primary = False
         if df110:
             for df in df110:
@@ -428,7 +413,29 @@ class FastMapper(Mapper):
                             except:
                                 continue
 
+    def transform(self, record, rectype=None, reference=False):
+        rec = record["data"]
+        root = etree.fromstring(rec['xml'])
 
+        if root is None:
+            return root
+
+        if not rectype:
+            rectype = self.guess_type(root)
+            if not rectype:
+                return None
+
+        identifier = record["identifier"]
+        rec = rectype(ident=f"http://id.worldcat.org/fast/{identifier}")
+        
+
+        if reference:
+            pass
+            #replace with get name?
+        else:
+            typ = rec['type'].lower()
+            fn = getattr(self, f"process_{typ}")
+            fn(root, rec)
 
         data = model.factory.toJSON(rec)
         return {'identifier': identifier, 'data': data, 'source': 'fast'}
