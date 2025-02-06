@@ -420,20 +420,24 @@ class FastMapper(Mapper):
         if root is None:
             return root
 
+
         if not rectype:
-            rectype = self.guess_type(root)
-            if not rectype:
+            crmcls = self.guess_type(root)
+            if not crmcls:
                 return None
+            rectype = crmcls.__name__
+        else:
+            crmcls = getattr(model, rectype)
 
         identifier = record["identifier"]
-        rec = rectype(ident=f"http://id.worldcat.org/fast/{identifier}")
+        rec = crmcls(ident=f"http://id.worldcat.org/fast/{identifier}")
         
 
         if reference:
             pass
             #replace with get name?
         else:
-            typ = rec['type'].lower()
+            typ = rectype.lower()
             fn = getattr(self, f"process_{typ}")
             fn(root, rec)
 
