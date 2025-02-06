@@ -403,5 +403,10 @@ class YulMapper(Mapper):
         if data['type'] == "Period":
             self.process_period_record(data)
 
+        if data['type'] == "Set":
+            for c in data.get("classified_as",[]):
+                if c.get("id") == "http://vocab.getty.edu/aat/300311990":
+                    c['id'] = "http://vocab.getty.edu/aat/300456764"
+
 
         return rec
