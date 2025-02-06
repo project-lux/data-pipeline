@@ -67,7 +67,6 @@ class FastMapper(Mapper):
         tags = ["148","100","150","151","155","110","111","147"]
         for tag in tags:
             if root.find(f".//mx:datafield[@tag='{tag}']", self.nss) is not None:
-                print(f"Found tag {tag} in record")
                 return self.nameTypeMap.get(tag)
         return None
         
