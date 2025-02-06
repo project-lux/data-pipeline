@@ -81,8 +81,10 @@ class FastMapper(Mapper):
             rectype = self.guess_type(root)
             if not rectype:
                 return None
+        print(rectype)
 
         identifier = record["identifier"]
+        print(identifier)
         rec = rectype(ident=f"http://id.worldcat.org/fast/{identifier}")
 
         #person records
@@ -429,6 +431,5 @@ class FastMapper(Mapper):
 
 
         data = model.factory.toJSON(rec)
-        #return {'identifier': identifier, 'data': data, 'source': 'fast'}
-        #just hand off to class mappers because each record has specific class tags?
+        return {'identifier': identifier, 'data': data, 'source': 'fast'}
 
