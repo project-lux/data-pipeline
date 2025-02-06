@@ -81,12 +81,10 @@ class FastMapper(Mapper):
             rectype = self.guess_type(root)
             if not rectype:
                 return None
-        print(rectype)
 
         identifier = record["identifier"]
-        print(identifier)
         rec = rectype(ident=f"http://id.worldcat.org/fast/{identifier}")
-
+        print(rec)
         #person records
 
         birth_date = None
@@ -387,6 +385,8 @@ class FastMapper(Mapper):
 
         #primary name
         df110 = root.xpath(".//mx:datafield[@tag='110']", namespaces=self.nss)
+        if df110:
+            print("found df110")
         primary = False
         if df110:
             for df in df110:
