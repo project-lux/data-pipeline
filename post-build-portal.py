@@ -31,10 +31,9 @@ def walk_for_refs(node, distance, top=False):
         if type(v) == list:
             for vi in v:
                 if type(vi) == dict:
-                    self.walk_for_refs(vi, distance)
+                    walk_for_refs(vi, distance)
         elif type(v) == dict:
-            self.walk_for_refs(v, distance)
-
+            walk_for_refs(v, distance)
 
 all_distances = {}
 added_refs = {}
