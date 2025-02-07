@@ -53,7 +53,7 @@ for k in rc.iter_keys():
 
 print("dist=0")
 x = 0
-for k in all_distances.keys():
+for k in list(all_distances.keys()):
     try:
         rec = merged[k]
         walk_for_refs(rec['data'], 1, top=True)
