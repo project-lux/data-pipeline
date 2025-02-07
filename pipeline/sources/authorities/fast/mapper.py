@@ -415,7 +415,7 @@ class FastMapper(Mapper):
             for df in df411:
                 subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
 
-                org_name = self.to_plain_string(subfield_a.text) is subfield_a is not None else ""
+                org_name = self.to_plain_string(subfield_a.text) if subfield_a is not None else ""
                 if org_name:
                     if not primary:
                         primary = True
