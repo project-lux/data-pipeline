@@ -13,7 +13,7 @@ cfgs.instantiate_all()
 
 src = cfgs.internal['ypm']
 rc = src['recordcache2']
-merged = cfgs.results['merged']
+merged = cfgs.results['merged']['recordcache']
 
 def walk_for_refs(node, distance, top=False):
 
@@ -49,7 +49,7 @@ for k in rc.iter_keys():
     # k is the uuid
     all_distances[k] = 0
     x += 1
-    if not x % 25000:
+    if not x % 250000:
         print(f"{x}/{ttl}")
 
 print("dist=0")
@@ -62,7 +62,7 @@ for k in all_distances.keys():
         missing[k] = 1
         print(f"missing: {k}")
     x += 1
-    if not x % 25000:
+    if not x % 100000:
         print(f"{x}/{ttl}")
 
 while added_refs:
