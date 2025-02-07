@@ -2,6 +2,7 @@ from pipeline.process.base.mapper import Mapper
 from cromulent import model, vocab
 from pipeline.process.utils.mapper_utils import make_datetime, test_birth_death
 from lxml import etree
+import re
 
 class FastMapper(Mapper):
     """
@@ -70,6 +71,9 @@ class FastMapper(Mapper):
                 return self.nameTypeMap.get(tag)
         return None
         
+    def extract_numeric_id(self, marc_id):
+        match = re.search(r"fst0*(\d+)",marc_id)
+        return match.group(1) if match else None
 
     def process_person(self, root, rec):   
         #person records
@@ -282,6 +286,8 @@ class FastMapper(Mapper):
                     resid = self.build_recs_and_reconcile(e, "place")
                     if resid:
                         rec.residence = model.Place(ident=resid)
+                        
+        #add 368 for both people and orgs
 
         # Extract occupations from 374 fields
         df374 = root.xpath(".//mx:datafield[@tag='374']", namespaces=self.nss)
@@ -315,9 +321,9 @@ class FastMapper(Mapper):
                         classifications.append(model.Type(ident=gender_uri))
                 elif subfield_a is not None:
                     gender = self.to_plain_string(subfield_a.text)
-                    if gender == "male":
+                    if gender.lower() in ("male", "males"):
                         classifications.append(vocab.instances['male'])
-                    elif gender == "female":
+                    elif gender.lower() in ("female", "females"):
                         classifications.append(vocab.instances['female'])
 
         #set classified_as
@@ -386,25 +392,61 @@ class FastMapper(Mapper):
                     primary = True
                     rec.identified_by = vocab.PrimaryName(content=primary_name)
 
+        #alternate names
+        df410 = root.xpath(".//mx:datafield[@tag='410']", namespaces=self.nss)
+        if df410:
+            for df in df410:
+                subfield_a = df.find("mx:subfield[@code='a']",namespaces=self.nss)
+                subfield_b = df.find("mx:subfield[@code='b']",namespaces=self.nss)
+
+                org_name = self.to_plain_string(subfield_a.text) if subfield_a is not None else ""
+                sub_unit = self.to_plain_string(subfield_b.text) if subfield_b is not None else ""
+                alt_name = f"{org_name}, {sub_unit}" if sub_unit else org_name
+
+                if alt_name:
+                    if not primary:
+                        primary = True
+                        rec.identified_by = vocab.PrimaryName(content=alt_name)
+                    else:
+                        rec.identified_by = vocab.AlternateName(content=alt_name)
+
+        df411 = root.xpath(".//mx:datafield[@tag='411']", namespaces=self.nss)
+        if df411:
+            for df in df411:
+                subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
+
+                org_name = self.to_plain_string(subfield_a.text) is subfield_a is not None else ""
+                if org_name:
+                    if not primary:
+                        primary = True
+                        rec.identified_by = vocab.PrimaryName(content=org_name)
+                    else:
+                        rec.identified_by = vocab.AlternateName(content=org_name)
+
+
         #broader
         df510 = root.xpath(".//mx:datafield[@tag='510']", namespaces=self.nss)
         if df510:
             for df in df510:
                 subfield_a = df.find("mx:subfield[@code='a']",namespaces=self.nss)
+                subfield_b = df.find("mx:subfield[@code='b']",namespaces=self.nss)
                 subfield_0 = df.find("mx:subfield[@code='0']",namespaces=self.nss)
                 subfield_w = df.find("mx:subfield[@code='w']",namespaces=self.nss)
 
 
                 # Check if it's a broader organization (subfield `w` should contain "b")
                 relationship_type = self.to_plain_string(subfield_w.text).lower() if subfield_w is not None else None
-                if relationship_type == "b":
+                if relationship_type in ("b","r"):
                     broader_uri = self.to_plain_string(subfield_0.text) if subfield_0 is not None else None
 
-                    if broader_uri:
+                    if broader_uri and broader_uri.startswith("(OCoLC)fst"):
+                        broader_uri = broader_uri.lstrip("(OCoLC)fst")
                         rec.member_of = model.Group(ident=broader_uri)
                     else:
                         # Try reconciling the name if no direct URI is available
-                        broader_name = self.to_plain_string(subfield_a.text) if subfield_a is not None else None
+                        org_name = self.to_plain_string(subfield_a.text) if subfield_a is not None else ""
+                        sub_unit = self.to_plain_string(subfield_b.text) if subfield_b is not None else ""
+                        broader_name = f"{org_name}, {sub_unit}" if sub_unit else org_name                        
                         if broader_name:
                             try:
                                 reconciled_uri = self.build_recs_and_reconcile(broader_name, "group")
@@ -412,14 +454,28 @@ class FastMapper(Mapper):
                                     rec.member_of = model.Group(ident=reconciled_uri, label=broader_name)
                             except:
                                 continue
+        df373 = root.xpath(".//mx:datafield[@tag='373']", namespaces=self.nss)
+        if df373:
+            for df in df373:
+                subfield_a = df.find("mx:subfield[@code='a']",namespaces=self.nss)
+
+                # Try reconciling the name if no direct URI is available
+                broader_name = self.to_plain_string(subfield_a.text) if subfield_a is not None else None
+                if broader_name:
+                    try:
+                        reconciled_uri = self.build_recs_and_reconcile(broader_name, "group")
+                        if reconciled_uri:
+                            rec.member_of = model.Group(ident=reconciled_uri, label=broader_name)
+                    except:
+                        continue
 
     def transform(self, record, rectype=None, reference=False):
         rec = record["data"]
+        identifier = record["identifier"]
         root = etree.fromstring(rec['xml'])
 
         if root is None:
             return root
-
 
         if not rectype:
             crmcls = self.guess_type(root)
@@ -429,7 +485,6 @@ class FastMapper(Mapper):
         else:
             crmcls = getattr(model, rectype)
 
-        identifier = record["identifier"]
         rec = crmcls(ident=f"http://id.worldcat.org/fast/{identifier}")
         
 
