@@ -56,15 +56,25 @@ x = 0
 for k in list(all_distances.keys()):
     try:
         rec = merged[k]
+        if not rec:
+            continue
         walk_for_refs(rec['data'], 1, top=True)
     except KeyError:
         missing[k] = 1
         print(f"missing: {k}")
     x += 1
-    if not x % 100000:
-        print(f"{x}/{ttl}")
+    if not x % 50000:
+        print(f"{x}/{ttl} - {len(added_refs)} new")
 
+x = 0
 while added_refs:
     (k,d) = added_refs.popitem()
+    if d > 3:
+        continue
     rec = merged[k]
+    if not rec:
+        continue
     walk_for_refs(rec['data'], d, top=True)
+    x += 1
+    if not x % 50000:
+        print(f"{x}/{ttl} - {len(added_refs)} remaining")
