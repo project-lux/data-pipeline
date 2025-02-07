@@ -17,9 +17,9 @@ cfgs.instantiate_all()
 STORE_OKAY = False
 
 q = """SELECT DISTINCT ?ref WHERE {
-  { ?ref lux:refCtr <https://lux.collections.yale.edu/data/person/c225d5e4-8767-4a25-802b-af054d5e8f52> . }
+  { ?ref lux:refCtr <%%YUID%%> . }
   UNION
-  { ?ref lux:any <https://lux.collections.yale.edu/data/person/c225d5e4-8767-4a25-802b-af054d5e8f52> . }
+  { ?ref lux:any <%%YUID%%> . }
 } LIMIT 10"""
 
 def _walk_refs(node, refs):
@@ -282,7 +282,7 @@ for ident in deletes:
     typ = old_rec['data']['type']
     quri = cfgs.make_qua(uri, typ)
     yuid = idmap[quri]
-    q2 = q.replace('%%yuid%%', yuid)
+    q2 = q.replace('%%YUID%%', yuid)
     refs = ml_store.search_sparql_ids(q2)
 
     arefs = []

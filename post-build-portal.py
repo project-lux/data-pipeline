@@ -38,15 +38,32 @@ def walk_for_refs(node, distance, top=False):
 
 all_distances = {}
 added_refs = {}
+missing = {}
 
+x = 0
+ttl = len(rc)
+
+print("Keys...")
 # populate all at 0
 for k in rc.iter_keys():
     # k is the uuid
     all_distances[k] = 0
+    x += 1
+    if not x % 25000:
+        print(f"{x}/{ttl}")
 
+print("dist=0")
+x = 0
 for k in all_distances.keys():
-    rec = merged[k]
-    walk_for_refs(rec['data'], 1, top=True)
+    try:
+        rec = merged[k]
+        walk_for_refs(rec['data'], 1, top=True)
+    except KeyError:
+        missing[k] = 1
+        print(f"missing: {k}")
+    x += 1
+    if not x % 25000:
+        print(f"{x}/{ttl}")
 
 while added_refs:
     (k,d) = added_refs.popitem()
