@@ -169,8 +169,11 @@ class FastMapper(Mapper):
         df700_data = self.extract_datafields(root, '700', ['a', '0', '1'])
 
         # Extract birth and death dates (046)
-        birth_date = make_datetime(df046_data.get('f', [''])[0]) if 'f' in df046_data else None
-        death_date = make_datetime(df046_data.get('g', [''])[0]) if 'g' in df046_data else None
+        try:
+            birth_date = make_datetime(df046_data.get('f', [''])[0]) if 'f' in df046_data else None
+            death_date = make_datetime(df046_data.get('g', [''])[0]) if 'g' in df046_data else None
+        except:
+            birth_date = death_date = None
 
         # Extract potential alternate names (400, 700)
         alternate_names = list(set(df400_data.get('a', []) + df400_data.get('q', []) + df700_data.get('a', [])))
