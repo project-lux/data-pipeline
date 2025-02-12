@@ -250,7 +250,7 @@ class FastMapper(Mapper):
             elif uri.startswith("(DLC)"):
                 #Should be LCCN
                 lcnaf_uri = self.config["all_configs"].external['lcnaf']['namespace'] + "".join(uri.split(")")[1].split())
-                equivalents.append(model.Person(ident=lcnafuri))
+                equivalents.append(model.Person(ident=lcnaf_uri))
         # VIAF
         equivalents.extend(model.Person(ident=uri) for uri in df700_data.get('1', []))
 
