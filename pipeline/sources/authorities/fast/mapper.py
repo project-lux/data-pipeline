@@ -44,7 +44,7 @@ class FastMapper(Mapper):
 
         source = source_map.get(rectype)
         if source:
-            reconcler = self.configs['all_configs'].external[source]['reconciler']
+            reconciler = self.config['all_configs'].external[source]['reconciler']
             return reconciler.reconcile(rec, reconcileType="name")
 
         return None
