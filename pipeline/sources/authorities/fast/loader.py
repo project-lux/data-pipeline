@@ -24,10 +24,8 @@ class FastLoader(Loader):
 
         Args:
             config (dict): A dictionary containing required paths and cache settings.
-                - "remoteDumpFile" (str): URL of the remote dump file.
                 - "dumpFilePath" (str): Local path to the ZIP archive.
                 - "datacache" (dict-like): Storage for parsed records.
-                - "all_configs" (dict): Additional configuration settings.
         """
 
         self.in_path = config["dumpFilePath"]

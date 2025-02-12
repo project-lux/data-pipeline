@@ -6,7 +6,7 @@ import re
 
 class FastMapper(Mapper):
     """
-
+    
     this mapper may not need the to_plain_string function,
     as the loader decodes everything to string before storage. 
     however, if data is retrieved another way, it will need the conversion.
@@ -15,561 +15,340 @@ class FastMapper(Mapper):
     def __init__(self, config):
         super().__init__(config)
 
-        self.nss = {
-            'mx': 'http://www.loc.gov/MARC21/slim'
-            }
+        self.nss = {'mx': 'http://www.loc.gov/MARC21/slim'}
 
         self.nameTypeMap = {
-            "148": model.Period,
-            "100": model.Person, 
-            "150": model.Type,
-            "155": model.Type,
-            "151": model.Place,
-            "110": model.Group,
-            "111": model.Activity,
-            "147": model.Activity
-            }
+            "148": model.Period, "100": model.Person, "150": model.Type,
+            "155": model.Type, "151": model.Place, "110": model.Group,
+            "111": model.Activity, "147": model.Activity
+        }
+
 
     def build_recs_and_reconcile(self, txt, rectype=""):
-        # reconrec returns URI
+        """Creates a record and reconciles it to an external source. Returns a URI."""
+
+        if not txt:
+            return None 
 
         rec = {
-            "type": "",
-            "identified_by": [
-                {
-                    "type": "Name",
-                    "content": txt,
+            "type": rectype.capitalize(),
+            "identified_by": [{
+                    "type": "Name", "content": txt,
                     "classified_as": [{"id": "http://vocab.getty.edu/aat/300404670"}],
-                }
-            ],
+                }],
         }
-        if rectype == "place":
-            rec["type"] = "Place"
-            reconrec = self.config["all_configs"].external['lcnaf']['reconciler'].reconcile(rec, reconcileType="name")
-        elif rectype == "concept":
-            rec["type"] = "Type"
-            reconrec = self.config["all_configs"].external["lcsh"]["reconciler"].reconcile(rec, reconcileType="name")
-        elif rectype == "group":
-            rec["type"] = "Group"
-            reconrec = self.config["all_configs"].external['lcnaf']['reconciler'].reconcile(rec, reconcileType="name")
 
-        return reconrec
+        source_map = {
+            "place":"lcnaf", "concept":"lcsh", "group":"lcnaf"
+        }
+
+        source = source_map.get(rectype)
+        if source:
+            reconcler = self.configs['all_configs'].external[source]['reconciler']
+            return reconciler.reconcile(rec, reconcileType="name")
+
+        return None
 
     def guess_type(self, root):
-        #148 (chronological): period
-        #100 (personal): person
-        #150 (topical), 155 (genre/form): concept
-        #151 (geographic): place
-        #110 (corporate): group
-        #111 (meeting) meetings, conferences (events)
-        #147 (event): events
-        #130 (title): do not process
-        nss = self.nss
-        tags = ["148","100","150","151","155","110","111","147"]
-        for tag in tags:
+        """Guesses entity type based on MARC data fields"""
+        for tag in self.nameTypeMap.keys():
             if root.find(f".//mx:datafield[@tag='{tag}']", self.nss) is not None:
-                return self.nameTypeMap.get(tag)
+                return self.nameTypeMap[tag]
+
         return None
-        
+    
     def extract_numeric_id(self, marc_id):
+        """Extracts the numeric portion of an FST identifier"""
         match = re.search(r"fst0*(\d+)",marc_id)
         return match.group(1) if match else None
 
-    def process_agent(self, root, rec, cxns=None):
+    def extract_datafields(self, root, tag, subfields):
+        """Extracts and returns data from specific MARC subfields"""
+        data = {}
+        fields = root.xpath(f".//mx:datafield[@tag='{tag}']", namespaces=self.nss)
+        for field in fields:
+            for subfield in subfields:
+                sf = field.find(f"mx:subfield[@code='{subfield}']", self.nss)
+                if sf is not None and sf.text:
+                    data.setdefault(subfield, []).append(self.to_plain_string(sf.text))
+        return data
 
-        # Extract occupations from 374 fields
-        df374 = root.xpath(".//mx:datafield[@tag='374']", namespaces=self.nss)
-        if df374:
-            for df in df374:
-                subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
-                subfield_0 = df.find("mx:subfield[@code='0']", namespaces=self.nss)
-                if subfield_0 is not None:  # Use URI if available
-                    occupation_uri = self.to_plain_string(subfield_0.text)
-                    cxns.append(model.Type(ident=occupation_uri))
-                elif subfield_a is not None: #try to reconcile name
-                    occupation = self.to_plain_string(subfield_a.text)
-                    try:
-                        occupation_uri = self.build_recs_and_reconcile(occupation, "concept")
-                        if occupation_uri:
-                            cxns.append(model.Type(ident=occupation_uri,label=occupation))
-                    except:
-                        continue
+    def process_agent(self, root, rec):
+        """Processes common fields for People and Groups"""
 
-        df370 = root.xpath(".//mx:datafield[@tag='370']", namespaces=self.nss)
-        df551 = root.xpath(".//mx:datafield[@tag='551']", namespaces=self.nss)
-        if df370:
-            for df in df370:
-                subfield_c = df.find("mx:subfield[@code='c']", namespaces=self.nss)
-                subfield_e = df.find("mx:subfield[@code='e']", namespaces=self.nss)
-                #if have both e and c, use e, else use one or the other
-                assoc_place = self.to_plain_string(subfield_c.text) if subfield_c is not None else ""
-                residence = self.to_plain_string(subfield_e.text) if subfield_e is not None else ""
-                if residence and assoc_place:
-                    rpid = self.build_recs_and_reconcile(residence, "place")
+        # Extract affiliations (373)
+        membership = [] 
+        affiliations = self.extract_datafields(root, '373', ['a', '0'])
+        for uri in affiliations.get('0', []):
+            membership.append(model.Group(ident=uri))
+        for name in affiliations.get('a', []):
+            uri = self.build_recs_and_reconcile(name, "group")
+            if uri:
+                membership.append(model.Group(ident=uri, label=name))
+        
+        # Set member_of
+        if membership:
+            rec.member_of = getattr(rec, "member_of", []) + membership
+
+        # Extract occupations (374)
+        classifications = []
+        occupations = self.extract_datafields(root, '374',['a','0'])
+        for uri in occupations.get('0', []):
+            classifications.append(model.Type(ident=uri))
+        for name in occupations.get('a',[]):
+            uri = self.build_recs_and_reconcile(name, "type")
+            if uri:
+                classifications.append(model.Type(ident=uri, label=name))
+
+        # Set classification
+        if classifications:
+            rec.classified_as = getattr(rec, "classified_as",[]) + classifications
+
+
+        # Extract residence (370 or 551)
+        # Prefer 370
+        locations = self.extract_datafields(root, '370', ['c','e'])
+        if locations.get('c') or locations.get('e'):
+            for assoc_place, residence in zip(locations.get('c',[]), locations.get('e',[])):
+                if residence:
+                    rpid = self.build_recs_and_reconcile(residence, 'place')
                     if rpid:
                         rec.residence = model.Place(ident=rpid, label=residence)
                 elif assoc_place:
-                    rpid = self.build_recs_and_reconcile(assoc_place, "place")
+                    rpid = self.build_recs_and_reconcile(assoc_place, 'place')
                     if rpid:
                         rec.residence = model.Place(ident=rpid, label=assoc_place)
-                elif residence:
-                    rpid = self.build_recs_and_reconcile(residence, "place")
-                    if rpid:
-                        rec.residence = model.Place(ident=rpid, label=residence)
-        elif df551:
-            for df in df551:
-                subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
-                assoc_place = self.to_plain_string(subfield_a.text) if subfield_a is not None else ""
-                if assoc_place:
-                    rpid = self.build_recs_and_reconcile(assoc_place,"place")
-                    if rpid:
-                        rec.residence = model.Place(ident=rpid, label=assoc_place)
+        else:
+        # Try 551
+            locations = self.extract_datafields(root, '551',['a'])
+            for place in locations.get('a',[]):
+                rpid = self.build_recs_and_reconcile(place, "place")
+                if rpid:
+                    rec.residence = model.Place(ident=rpid, label=place)
 
-
-        df372 = root.xpath(".//mx:datafield[@tag='372']", namespaces=self.nss)
-        if df372:
-            for df in df372:
-                subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
-                subfield_s = df.find("mx:subfield[@code='s']", namespaces=self.nss)
-                subfield_t = df.find("mx:subfield[@code='t']", namespaces=self.nss)
-
-                field_of_activity = self.to_plain_string(subfield_a.text) if subfield_a is not None else ""
-                work_start = self.to_plain_string(subfield_s.text) if subfield_s is not None else ""
-                work_end = self.to_plain_string(subfield_t.text) if subfield_t is not None else ""
-                if field_of_activity or work_end or work_start:
-                    activity = vocab.Active()
-                if field_of_activity:
-                    fpid = self.build_recs_and_reconcile(field_of_activity,"concept")
-                    if fpid:
-                        activity.classified_as = model.Type(ident=fpid, label=field_of_activity)
-                        rec.carried_out = activity
-                if work_start or work_end:
-                    ts = model.TimeSpan()
-                    if work_start:
-                        try:
-                            bstart, bend = self.make_datetime(work_start)
-                        except:
-                            bstart = None
-                        if bstart:
-                            ts.begin_of_the_begin = bstart
-                            ts.end_of_the_begin = bend 
-                    if work_end:
-                        try:
-                            dstart, dend = self.make_datetime(work_end)
-                        except:
-                            dstart = None
-                        if dstart:
-                            ts.begin_of_the_end = dstart
-                            ts.end_of_the_end = dend
-                    if dstart or bstart:
-                        activity.timespan = ts
-
-    def process_person(self, root, rec):   
-        #person records
-        birth_date = None
-        death_date = None
-        birth_year = None 
-        death_year = None 
-
-        #get birth and death from 046
-        df046 = root.xpath(".//mx:datafield[@tag='046']", namespaces=self.nss)
-        if df046:
-            for d in df046:
-                subfield_f = d.find("mx:subfield[@code='f']", self.nss)
-                if subfield_f is not None:
-                    birth_year = self.to_plain_string(subfield_f.text)
+        # Extract professional activity (372)
+        activities = self.extract_datafields(root, '372',['a','s','t'])
+        for field_of_activity, work_start, work_end in zip(
+            activities.get('a', ['']), activities.get('s', ['']), activities.get('t', [''])
+        ):
+            if field_of_activity or work_start or work_end:
+                activity = vocab.Active()
+            
+            if field_of_activity:
+                fpid = self.build_recs_and_reconcile(field_of_activity, "concept")
+                if fpid:
+                    activity.classified_as = model.Type(ident=fpid, label=field_of_activity)
+                    rec.carried_out = activity
+            
+            if work_start or work_end:
+                ts = model.TimeSpan()
+                if work_start:
                     try:
-                        birth_date = make_datetime(birth_year)
-                    except Exception as e:
-                        print(f"Failed to parse birth date: {birth_year}, Error: {e}")
-                
-                subfield_g = d.find("mx:subfield[@code='g']", self.nss)
-                if subfield_g is not None:
-                    death_year = self.to_plain_string(subfield_g.text)
-                    try:
-                        death_date = make_datetime(death_year)
-                    except Exception as e:
-                        print(f"Failed to parse death date: {death_year}, Error: {e}")
-
-        #get primary name and birth and death from 100
-        df100 = root.xpath(".//mx:datafield[@tag='100']", namespaces=self.nss)
-        primary = False
-        if df100:
-            name_subfields = {}
-            for df in df100:
-                for s in df.findall("mx:subfield", self.nss):
-                    code = s.attrib.get("code")
-                    if code:
-                        text = self.to_plain_string(s.text)
-                        name_subfields.setdefault(code, []).append(text)
-
-            if "a" in name_subfields:
-                primary = True
-                rec.identified_by = vocab.PrimaryName(content=name_subfields['a'][0])
-
-            if not birth_date and "d" in name_subfields:
-                dates = name_subfields['d'][0]
-                if "-" in dates:
-                    b,e = dates.split("-")
-                    try:
-                        bb, eb = make_datetime(b)
+                        bstart, bend = make_datetime(work_start)
                     except:
-                        bb = None
+                        bstart = None
+                    if bstart:
+                        ts.begin_of_the_begin = bstart
+                        ts.end_of_the_begin = bend 
+                if work_end:
                     try:
-                        be, ee = make_datetime(e)
+                        dstart, dend = make_datetime(work_end)
                     except:
-                        be = None
-                    if bb and be:
-                        birth_date = bb 
-                        death_date = be
-                elif len(dates) == 4:
-                    #birth or death, who knows??
-                    pass
+                        dstart = None
+                    if dstart:
+                        ts.begin_of_the_end = dstart
+                        ts.end_of_the_end = dend
+                if dstart or bstart:
+                    activity.timespan = ts
 
-        # Extract alternate names and birth and death from 400
-        df700 = root.xpath(".//mx:datafield[@tag='700']", namespaces=self.nss)
-        df400 = root.xpath(".//mx:datafield[@tag='400']", namespaces=self.nss)
-        alternate_names = set()
-        equivalents = []
+    def process_person(self, root, rec):
+    """Processes Person-only fields"""
+        df100_data = self.extract_datafields(root, '100', ['a', 'd'])
+        df046_data = self.extract_datafields(root, '046', ['f', 'g'])
+        df400_data = self.extract_datafields(root, '400', ['a', 'q', 'd'])
+        df700_data = self.extract_datafields(root, '700', ['a', '0', '1'])
 
-        if df400:
-            for df in df400:
-                subfield_a = df.find("mx:subfield[@code='a']", self.nss)
-                subfield_q = df.find("mx:subfield[@code='q']", self.nss)  # Fuller form
-                subfield_d = df.find("mx:subfield[@code='d']", self.nss)  # Dates
+        # Extract birth and death dates (046)
+        birth_date = make_datetime(df046_data.get('f', [''])[0]) if 'f' in df046_data else None
+        death_date = make_datetime(df046_data.get('g', [''])[0]) if 'g' in df046_data else None
 
-                if subfield_a is not None:
-                    alt_name = self.to_plain_string(subfield_a.text)
-                    alternate_names.add(alt_name)
-                if subfield_q is not None:
-                    alt_name = self.to_plain_string(subfield_q.text)
-                    alternate_names.add(alt_name)
+        # Extract potential alternate names (400, 700)
+        alternate_names = list(set(df400_data.get('a', []) + df400_data.get('q', []) + df700_data.get('a', [])))
 
-                if subfield_d is not None:
-                    dates = self.to_plain_string(subfield_d)
-                    if "-" in dates:
-                        b,e = dates.split("-")
-                        try:
-                            bb, eb = make_datetime(b)
-                        except:
-                            bb = None
-                        try:
-                            be, ee = make_datetime(e)
-                        except:
-                            be = None
-                        if bb and be:
-                            birth_date = bb 
-                            death_date = be
-                    elif len(dates) == 4:
-                        #birth or death, who knows??
-                        pass
-
-        #extract alternate names and equivalents from 700 field
-        if df700:
-            for df in df700:
-                subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
-                subfield_0 = df.find("mx:subfield[@code='0']", namespaces=self.nss)
-                subfield_1 = df.find("mx:subfield[@code='1']", namespaces=self.nss)
-
-                if subfield_a is not None:
-                    alt_name = self.to_plain_string(subfield_a.text)
-                    alternate_names.add(alt_name)
-
-                if subfield_0 is not None:
-                    uri_0 = self.to_plain_string(subfield_0.text)
-                    if "wikipedia.org" in uri_0:
-                        wikidata_qid = self.config['all_configs'].external['wikidata']['reconciler'].get_wikidata_qid(uri_0)
-                        if wikidata_qid:
-                            wikiuri = self.config['all_configs'].external['wikidata']['namespace'] + wikidata_qid
-                            equivalents.append(model.Person(ident=wikiuri))
-                    elif uri_0.startswith("(DLC)"):
-                        #Should be LCCN
-                        uri_0 = "".join(uri_0.split(")")[1].split())
-                        lcnafuri = self.config["all_configs"].external['lcnaf']['namespace'] + uri_0
-                        equivalents.append(model.Person(ident=lcnafuri))
-
-                if subfield_1 is not None:
-                    #VIAF equiv
-                    uri_1 = self.to_plain_string(subfield_1.text)
-                    equivalents.append(model.Person(ident=uri_1))
-
-        #set equivalents
-        if equivalents:
-            if not hasattr(rec, "equivalent"):
-                rec.equivalent = []
-                rec.equivalent.extend(equivalents)
-
-        alternate_names = sorted(list(alternate_names))
-
-        #set alternate names
-        if not hasattr(rec,"identified_by"):
+        # Set primary name (100)
+        if 'a' in df100_data:
+            rec.identified_by = vocab.PrimaryName(content=df100_data['a'][0])
+        else:
             rec.identified_by = []
-            rec.identified_by.extend(vocab.AlternateName(content=name) for name in alternate_names)
 
-        # Assign a primary name if none exists
-        if not primary and alternate_names:
-            primary_name = alternate_names.pop(0)  # Take the first alternate name
+        # Add alternate names
+        rec.identified_by.extend(vocab.AlternateName(content=name) for name in alternate_names)
+
+        # Assign a primary name from alternates if none exists
+        if not any(isinstance(name, vocab.PrimaryName) for name in rec.identified_by) and alternate_names:
+            primary_name = alternate_names.pop(0) 
             rec.identified_by.insert(0, vocab.PrimaryName(content=primary_name))
 
         # If no names remain, return None
         if not rec.identified_by:
             return None
 
-        #set birth and death
+        # Extract birth and death dates (100, 400) if not set
+        
+        for data in [df100_data, df400_data]:
+            if not birth_date and 'd' in data:
+                dates = data['d'][0]
+                if "-" in dates:
+                    b, e = dates.split("-")
+                    birth_date = birth_date or make_datetime(b)
+                    death_date = death_date or make_datetime(e)
+
+        # Set birth and death timespans
         if birth_date:
-            birth = model.Birth()
-            ts = model.TimeSpan()
-            ts.begin_of_the_begin = birth_date
-            birth.timespan = ts
-            bcont = birth_year if birth_year else b
-            birth.identified_by = vocab.DisplayName(content=bcont)
+            birth = model.Birth(timespan=model.TimeSpan(begin_of_the_begin=birth_date))
             rec.born = birth
-
+        
         if death_date:
-            death = model.Death()
-            ts = model.TimeSpan()
-            ts.begin_of_the_begin = death_date
-            death.timespan = ts
-            dcont = death_year if death_year else e
-            death.identified_by = vocab.DisplayName(content=dcont)
+            death = model.Death(timespan=model.TimeSpan(begin_of_the_begin=death_date))
             rec.died = death
-
-        #test birth and death
+        
         if not test_birth_death(rec):
             rec.born = None
             rec.died = None
+
+        # Extract birth and death places (370)
+        df370_data = self.extract_datafields(root, '370', ['a', 'b'])
+
+        # Set birth and death places
+        birth_place = df370_data.get('a', [])[0]
+        death_place = df370_data.get('b', [])[0]
+        if birth_place:
+            bpid = self.build_recs_and_reconcile(birth_place, "place")
+            if bpid:
+                if not hasattr(rec, "born"):
+                    rec.born = model.Birth()
+                rec.born.took_place_at = model.Place(ident=bpid, label=birth_place)
+        
+        if death_place:
+            dpid = self.build_recs_and_reconcile(death_place, "place")
+            if dpid:
+                if not hasattr(rec, "died"):
+                    rec.died = model.Death()
+                rec.died.took_place_at = model.Place(ident=dpid, label=death_place)
+
+        # Extract equivalents (700)
+        uri_0 = df700_data.get('0', [])
+
+        equivalents = []
+        for uri in uri_0:
+            # Wikidata and LCNAF
+            if "wikipedia.org" in uri:
+                wikidata_qid = self.config['all_configs'].external['wikidata']['reconciler'].get_wikidata_qid(uri)
+                if wikidata_qid:
+                    wikiuri = self.config['all_configs'].external['wikidata']['namespace'] + wikidata_qid
+                    equivalents.append(model.Person(ident=wikiuri))
+            elif uri.startswith("(DLC)"):
+                #Should be LCCN
+                lcnaf_uri = self.config["all_configs"].external['lcnaf']['namespace'] + "".join(uri.split(")")[1].split())
+                equivalents.append(model.Person(ident=lcnafuri))
+        # VIAF
+        equivalents.extend(model.Person(ident=uri) for uri in df700_data.get('1', []))
+
+        # Set equivalents
+        if equivalents:
+            if not hasattr(rec, "equivalent"):
+                rec.equivalent = []
+                rec.equivalent.extend(equivalents)
                         
-        #extract related places from 370
-        df370 = root.xpath(".//mx:datafield[@tag='370']", namespaces=self.nss)
-        if df370:
-            for df in df370:
-                subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
-                subfield_b = df.find("mx:subfield[@code='b']", namespaces=self.nss)
-            #birth place
-                birth_place = self.to_plain_string(subfield_a.text) if subfield_a is not None else ""
-                if birth_place:
-                    bpid = self.build_recs_and_reconcile(birth_place, "place")
-                    if bpid:
-                        if not hasattr(rec, "born"):
-                            birth = model.Birth()
-                            rec.born = birth
-                        birth.took_place_at = model.Place(ident=bpid, label=birth_place)
-                        
-            #death place
-                death_place = self.to_plain_string(subfield_b.text) if subfield_b is not None else ""
-                if death_place:
-                    dpid = self.build_recs_and_reconcile(death_place,"place")
-                    if dpid:
-                        if not hasattr(rec, "died"):
-                            death = model.Death()
-                            rec.died = death
-                        death.took_place_at = model.Place(ident=dpid, label=death_place)
-                    
+        # Extract gender (375)
+        df375_data = self.extract_datafields(root, '375', ['a', '0'])
+        genders = []
+        for uri in df375_data.get('0',[]):
+            if "wikidata" in uri or uri == "http://id.loc.gov/authorities/subjects/sh2007005819":
+                genders.append(vocab.Gender(ident=uri))
+        for gender in df375_data.get('a', []):
+            if gender.lower() in ("male", "males"):
+                genders.append(vocab.instances['male'])
+            elif gender.lower() in ("female", "females"):
+                genders.append(vocab.instances['female'])
 
-        #extract gender from 375
-        df375 = root.xpath(".//mx:datafield[@tag='375']", namespaces=self.nss)
-        classifications = []
-        if df375:
-            for df in df375:
-                subfield_a = df.find("mx:subfield[@code='a']",namespaces=self.nss)
-                subfield_0 = df.find("mx:subfield[@code='0']",namespaces=self.nss)
-                if subfield_0 is not None:
-                    gender_uri = self.to_plain_string(subfield_0.text)
-                    if "wikidata" in gender_uri or gender_uri == "http://id.loc.gov/authorities/subjects/sh2007005819":
-                        classifications.append(model.Type(ident=gender_uri))
-                elif subfield_a is not None:
-                    gender = self.to_plain_string(subfield_a.text)
-                    if gender.lower() in ("male", "males"):
-                        classifications.append(vocab.instances['male'])
-                    elif gender.lower() in ("female", "females"):
-                        classifications.append(vocab.instances['female'])
+        # Set gender
+        if genders:
+            rec.classified_as = getattr(rec, "classified_as", []) + genders
+        
+        # Extract biographical note (500)
+        df500_data = self.extract_datafields(root, '500', ['a'])
+        biographies = [model.LinguisticObject(content=bio) for bio in df500_data.get('a', [])]
 
-        #set classified_as
-        if classifications:
-            if not hasattr(rec, "classified_as"):
-                setattr(rec, "classified_as", [])
-            rec.classified_as.extend(classifications)
-
-        #extract affiliations from 373
-        df373 = root.xpath(".//mx:datafield[@tag='373']", namespaces=self.nss)
-        affiliations = []
-        if df373:
-            for df in df373:
-                subfield_a = df.find("mx:subfield[@code='a']",namespaces=self.nss)
-                subfield_0 = df.find("mx:subfield[@code='0']",namespaces=self.nss)
-                if subfield_0 is not None: #Use URI if available
-                    affiliation_uri = self.to_plain_string(subfield_0.text)
-                    affiliations.append(model.Group(ident=affiliation_uri))
-                elif subfield_a is not None: #try to reconcile name
-                    affiliation = self.to_plain_string(subfield_a.text)
-                    try:
-                        affiliation_uri = self.build_recs_and_reconcile(affiliation, "group")
-                        if affiliation_uri:
-                            affiliations.append(model.Group(ident=affiliation_uri,label=affiliation))
-                    except:
-                        continue
-
-        #set member_of
-        if affiliations:
-            if not hasattr(rec,"member_of"):
-                setattr(rec,"member_of",[])
-            rec.member_of.extend(affiliations)
-
-        #extract notes from 500
-        df500 = root.xpath(".//mx:datafield[@tag='500']", namespaces=self.nss)
-        biographies = []
-        if df500:
-            for df in df500:
-                subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
-                if subfield_a is not None:
-                    bio = self.to_plain_string(subfield_a.text)
-                    biographies.append(model.LinguisticObject(content=bio))
-
-        #set referred_to_by Notes
+        # Set biographical note
         if biographies:
-            if not hasattr(rec,"referred_to_by"):
-                setattr(rec,"referred_to_by",[])
-            rec.referred_to_by.extend(biographies)
-
-        self.process_agent(root, rec, classifications)
+            rec.referred_to_by = getattr(rec, "referred_to_by", []) + biographies
+        
+        # Send to process_agent for common fields
+        self.process_agent(root, rec) 
 
     def process_group(self, root, rec):
-        #Group marc fields
+        """Processes organizational details, including names and classifications."""
 
-        #primary name
-        df110 = root.xpath(".//mx:datafield[@tag='110']", namespaces=self.nss)
+        df110_data = self.extract_datafields(root, '110', ['a', 'b'])
+        df410_data = self.extract_datafields(root, '410', ['a', 'b'])
+        df710_data = self.extract_datafields(root, '710', ['a', 'b'])
+        df411_data = self.extract_datafields(root, '411', ['a'])
+        
+
         primary = False
-        if df110:
-            for df in df110:
-                subfield_a = df.find("mx:subfield[@code='a']",namespaces=self.nss)
-                subfield_b = df.find("mx:subfield[@code='b']",namespaces=self.nss)
+        alternate_names = []
 
-                org_name = self.to_plain_string(subfield_a.text) if subfield_a is not None else ""
-                sub_unit = self.to_plain_string(subfield_b.text) if subfield_b is not None else ""
-                primary_name = f"{org_name}, {sub_unit}" if sub_unit else org_name
+        # Extract primary (110)
+        if df110_data.get('a'):
+            org_name = df110_data.get('a', [''])[0]
+            sub_unit = df110_data.get('b', [''])[0]
+            primary_name = f"{org_name}, {sub_unit}" if sub_unit else org_name
+            rec.identified_by = [vocab.PrimaryName(content=primary_name)]
+            primary = True
+        else:
+            rec.identified_by = []
 
-                if primary_name:
+        # Extract alternates (410, 710, 411)
+        # Set one as primary if 110 did not exist
+
+        for data in [df410_data, df710_data, df411_data]:
+            for org_name, sub_unit in zip(data.get('a', []), data.get('b', [])):
+                name = f"{org_name}, {sub_unit}" if sub_unit else org_name
+                if not primary:
+                    rec.identified_by = [vocab.PrimaryName(content=name)]
                     primary = True
-                    rec.identified_by = vocab.PrimaryName(content=primary_name)
+                else:
+                    alternate_names.append(vocab.AlternateName(content=name))
+        
+        rec.identified_by.extend(alternate_names)
 
-        #alternate names
-        df410 = root.xpath(".//mx:datafield[@tag='410']", namespaces=self.nss)
-        if df410:
-            for df in df410:
-                subfield_a = df.find("mx:subfield[@code='a']",namespaces=self.nss)
-                subfield_b = df.find("mx:subfield[@code='b']",namespaces=self.nss)
+        # If no names remain, return None
+        if not rec.identified_by:
+            return None
 
-                org_name = self.to_plain_string(subfield_a.text) if subfield_a is not None else ""
-                sub_unit = self.to_plain_string(subfield_b.text) if subfield_b is not None else ""
-                alt_name = f"{org_name}, {sub_unit}" if sub_unit else org_name
-
-                if alt_name:
-                    if not primary:
-                        primary = True
-                        rec.identified_by = vocab.PrimaryName(content=alt_name)
-                    else:
-                        rec.identified_by = vocab.AlternateName(content=alt_name)
-
-        df710 = root.xpath(".//mx:datafield[@tag='710']", namespaces=self.nss)
-        if df710:
-            for df in df710:
-                subfield_a = df.find("mx:subfield[@code='a']",namespaces=self.nss)
-                subfield_b = df.find("mx:subfield[@code='b']",namespaces=self.nss)
-
-                org_name = self.to_plain_string(subfield_a.text) if subfield_a is not None else ""
-                sub_unit = self.to_plain_string(subfield_b.text) if subfield_b is not None else ""
-                alt_name = f"{org_name}, {sub_unit}" if sub_unit else org_name
-
-                if alt_name:
-                    if not primary:
-                        primary = True
-                        rec.identified_by = vocab.PrimaryName(content=alt_name)
-                    else:
-                        rec.identified_by = vocab.AlternateName(content=alt_name)
-
-        df411 = root.xpath(".//mx:datafield[@tag='411']", namespaces=self.nss)
-        if df411:
-            for df in df411:
-                subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
-
-                org_name = self.to_plain_string(subfield_a.text) if subfield_a is not None else ""
-                if org_name:
-                    if not primary:
-                        primary = True
-                        rec.identified_by = vocab.PrimaryName(content=org_name)
-                    else:
-                        rec.identified_by = vocab.AlternateName(content=org_name)
-
-
-        #broader
-        df510 = root.xpath(".//mx:datafield[@tag='510']", namespaces=self.nss)
-        if df510:
-            for df in df510:
-                subfield_a = df.find("mx:subfield[@code='a']",namespaces=self.nss)
-                subfield_b = df.find("mx:subfield[@code='b']",namespaces=self.nss)
-                subfield_0 = df.find("mx:subfield[@code='0']",namespaces=self.nss)
-                subfield_w = df.find("mx:subfield[@code='w']",namespaces=self.nss)
-
-
-                # Check if it's a broader organization (subfield `w` should contain "b")
-                relationship_type = self.to_plain_string(subfield_w.text).lower() if subfield_w is not None else None
-                if relationship_type in ("b","r"):
-                    broader_uri = self.to_plain_string(subfield_0.text) if subfield_0 is not None else None
-
-                    if broader_uri and broader_uri.startswith("(OCoLC)fst"):
-                        broader_uri = self.extract_numeric_id(broader_uri)
-                        rec.member_of = model.Group(ident=f"http://id.worldcat.org/fast/" + broader_uri)
-                    else:
-                        # Try reconciling the name if no direct URI is available
-                        org_name = self.to_plain_string(subfield_a.text) if subfield_a is not None else ""
-                        sub_unit = self.to_plain_string(subfield_b.text) if subfield_b is not None else ""
-                        broader_name = f"{org_name}, {sub_unit}" if sub_unit else org_name                        
-                        if broader_name:
-                            try:
-                                reconciled_uri = self.build_recs_and_reconcile(broader_name, "group")
-                                if reconciled_uri:
-                                    rec.member_of = model.Group(ident=reconciled_uri, label=broader_name)
-                            except:
-                                continue
-        df373 = root.xpath(".//mx:datafield[@tag='373']", namespaces=self.nss)
-        if df373:
-            for df in df373:
-                subfield_a = df.find("mx:subfield[@code='a']",namespaces=self.nss)
-
-                # Try reconciling the name if no direct URI is available
-                broader_name = self.to_plain_string(subfield_a.text) if subfield_a is not None else None
-                if broader_name:
-                    try:
-                        reconciled_uri = self.build_recs_and_reconcile(broader_name, "group")
-                        if reconciled_uri:
-                            rec.member_of = model.Group(ident=reconciled_uri, label=broader_name)
-                    except:
-                        continue
-
-        #add 368 for orgs, is garbage for people. only subfield_a is suitable as classification.
-        df368 = root.xpath(".//mx:datafield[@tag='368']", namespaces=self.nss)
-        if df368:
-            for df in df368:
-                subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
-                cxnname = self.to_plain_string(subfield_a.text) if subfield_a is not None else None 
-                if cxnname:
-                    try:
-                        reconciled_uri = self.build_recs_and_reconcile(cxnname, "concept")
-                        if reconciled_uri:
-                            rec.classified_as = model.Type(ident=reconciled_uri, label=cxnname)
-                    except:
-                        continue
+        # Extract and set classification (368)
+        df368_data = self.extract_datafields(root, '368', ['a'])
+        for classification in df368_data.get('a',[]):
+            try:
+                reconciled_uri = self.build_recs_and_reconcile(classification, "concept")
+                if reconciled_uri:
+                    rec.classified_as = getattr(rec, "classified_as", []) + [model.Type(ident=reconciled_uri, label=classification)]
+            except:
+                continue
 
         self.process_agent(root, rec)
 
 
     def transform(self, record, rectype=None, reference=False):
-        rec = record["data"]
-        identifier = record["identifier"]
-        root = etree.fromstring(rec['xml'])
+        """Transforms a MARC record into Linked.art JSON."""
+        try:
+            root = etree.fromstring(record["data"]['xml'])
+        except Exception as e:
+            print(f"Error parsing XML: {e}")
+            return None  # Return None if XML parsing fails
 
-        if root is None:
-            return root
+        identifier = record["identifier"]
 
         if not rectype:
             crmcls = self.guess_type(root)
@@ -577,19 +356,18 @@ class FastMapper(Mapper):
                 return None
             rectype = crmcls.__name__
         else:
-            crmcls = getattr(model, rectype)
+            crmcls = getattr(model, rectype, None)
+
 
         rec = crmcls(ident=f"http://id.worldcat.org/fast/{identifier}")
-        
 
-        if reference:
-            pass
-            #replace with get name?
-        else:
+        if not reference:
             typ = rectype.lower()
-            fn = getattr(self, f"process_{typ}")
-            fn(root, rec)
+            process_fn = getattr(self, f"process_{typ}", None)
+            if process_fn:
+                process_fn(root, rec)
+        else:
+            pass
+            # Add functionality for get_reference
 
-        data = model.factory.toJSON(rec)
-        return {'identifier': identifier, 'data': data, 'source': 'fast'}
-
+        return {'identifier': identifier, 'data': model.factory.toJSON(rec), 'source': 'fast'}
