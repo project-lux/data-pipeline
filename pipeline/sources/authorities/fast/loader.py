@@ -30,10 +30,9 @@ class FastLoader(Loader):
                 - "all_configs" (dict): Additional configuration settings.
         """
 
-        self.in_url = config["remoteDumpFile"]
         self.in_path = config["dumpFilePath"]
         self.out_cache = config["datacache"]
-        
+
     def load(self):
 
         """
