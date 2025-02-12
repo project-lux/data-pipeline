@@ -203,8 +203,16 @@ class FastMapper(Mapper):
                 dates = data['d'][0]
                 if "-" in dates:
                     b, e = dates.split("-")
-                    birth_date = birth_date or make_datetime(b)
-                    death_date = death_date or make_datetime(e)
+                    birth_tmp = death_tmp = None 
+                    try:
+                        birth_tmp = make_datetime(b)
+                        death_tmp = make_datetime(e)
+                    except:
+                        pass
+                        
+                    if birth_tmp and death_tmp:
+                        birth_date, death_date = birth_tmp, death_tmp
+                        break
 
         # Set birth and death timespans
         if birth_date:
