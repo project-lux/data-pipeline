@@ -126,7 +126,7 @@ class FastMapper(Mapper):
                 if rpid:
                     rec.residence = model.Place(ident=rpid, label=place)
 
-        # Extract professional activity (372)
+        # Extract and set professional activity (372)
         activities = self.extract_datafields(root, '372',['a','s','t'])
         for field_of_activity, work_start, work_end in zip(
             activities.get('a', ['']), activities.get('s', ['']), activities.get('t', [''])
@@ -142,23 +142,28 @@ class FastMapper(Mapper):
             
             if work_start or work_end:
                 ts = model.TimeSpan()
+                bstart = bend = None
+                dstart = dend = None
+
                 if work_start:
                     try:
                         bstart, bend = make_datetime(work_start)
                     except:
-                        bstart = None
-                    if bstart:
-                        ts.begin_of_the_begin = bstart
-                        ts.end_of_the_begin = bend 
+                        pass
                 if work_end:
                     try:
                         dstart, dend = make_datetime(work_end)
                     except:
-                        dstart = None
-                    if dstart:
-                        ts.begin_of_the_end = dstart
-                        ts.end_of_the_end = dend
-                if dstart or bstart:
+                        pass
+
+                if bstart:
+                    ts.begin_of_the_begin = bstart
+                    ts.end_of_the_begin = bend
+                if dstart:
+                    ts.begin_of_the_end = dstart
+                    ts.end_of_the_end = dend
+
+                if bstart or dstart:
                     activity.timespan = ts
 
     def process_person(self, root, rec):
@@ -209,7 +214,7 @@ class FastMapper(Mapper):
                         death_tmp = make_datetime(e)
                     except:
                         pass
-                        
+
                     if birth_tmp and death_tmp:
                         birth_date, death_date = birth_tmp, death_tmp
                         break
