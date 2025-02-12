@@ -220,8 +220,8 @@ class FastMapper(Mapper):
         df370_data = self.extract_datafields(root, '370', ['a', 'b'])
 
         # Set birth and death places
-        birth_place = df370_data.get('a', [])[0]
-        death_place = df370_data.get('b', [])[0]
+        birth_place = df370_data.get('a', [None])[0]
+        death_place = df370_data.get('b', [None])[0]
         if birth_place:
             bpid = self.build_recs_and_reconcile(birth_place, "place")
             if bpid:
