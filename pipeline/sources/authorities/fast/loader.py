@@ -27,7 +27,16 @@ class FastLoader(Loader):
                         
                         for record in root.findall(".//mx:record", namespaces=nss):
                             control_001 = record.find('.//mx:controlfield[@tag="001"]', namespaces=nss)
-                            if control_001 is not None and control_001.text:
+                            df682 = record.find(".//mx:datafield[@tag='682']",namespaces=nss)
+                            if df682:
+                                #do not load deleted records
+                                for df in df682:
+                                    subfield_i = df.find("mx:subfield[@code='i']", namespaces=self.nss)
+                                    delete_text = str(subfield_i.text) if subfield_i.text is not None else ""
+                                    if delete_text and "deleted" in delete_text:
+                                        continue
+
+                            elif control_001 is not None and control_001.text:
                                 ident = control_001.text.split("fst")[-1]
                                 ident = ident.lstrip("0") if ident.startswith("0") else ident
 
@@ -35,6 +44,7 @@ class FastLoader(Loader):
                                 records_processed += 1
                             else:
                                 print(f"FAST record in {fn} is missing an identifier.")
+                                continue
 
                     except etree.XMLSyntaxError as e:
                         print(f"Error parsing XML in {fn}: {e}")

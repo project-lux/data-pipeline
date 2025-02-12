@@ -8,8 +8,8 @@ class FastMapper(Mapper):
     """
 
     this mapper may not need the to_plain_string function,
-    as the loader decodes everything to string before storage. however, if we fetch
-    across the network, it will still need the conversion.
+    as the loader decodes everything to string before storage. 
+    however, if data is retrieved another way, it will need the conversion.
 
     """
     def __init__(self, config):
@@ -74,6 +74,95 @@ class FastMapper(Mapper):
     def extract_numeric_id(self, marc_id):
         match = re.search(r"fst0*(\d+)",marc_id)
         return match.group(1) if match else None
+
+    def process_agent(self, root, rec, cxns=None):
+
+        # Extract occupations from 374 fields
+        df374 = root.xpath(".//mx:datafield[@tag='374']", namespaces=self.nss)
+        if df374:
+            for df in df374:
+                subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
+                subfield_0 = df.find("mx:subfield[@code='0']", namespaces=self.nss)
+                if subfield_0 is not None:  # Use URI if available
+                    occupation_uri = self.to_plain_string(subfield_0.text)
+                    cxns.append(model.Type(ident=occupation_uri))
+                elif subfield_a is not None: #try to reconcile name
+                    occupation = self.to_plain_string(subfield_a.text)
+                    try:
+                        occupation_uri = self.build_recs_and_reconcile(occupation, "concept")
+                        if occupation_uri:
+                            cxns.append(model.Type(ident=occupation_uri,label=occupation))
+                    except:
+                        continue
+
+        df370 = root.xpath(".//mx:datafield[@tag='370']", namespaces=self.nss)
+        df551 = root.xpath(".//mx:datafield[@tag='551']", namespaces=self.nss)
+        if df370:
+            for df in df370:
+                subfield_c = df.find("mx:subfield[@code='c']", namespaces=self.nss)
+                subfield_e = df.find("mx:subfield[@code='e']", namespaces=self.nss)
+                #if have both e and c, use e, else use one or the other
+                assoc_place = self.to_plain_string(subfield_c.text) if subfield_c is not None else ""
+                residence = self.to_plain_string(subfield_e.text) if subfield_e is not None else ""
+                if residence and assoc_place:
+                    rpid = self.build_recs_and_reconcile(residence, "place")
+                    if rpid:
+                        rec.residence = model.Place(ident=rpid, label=residence)
+                elif assoc_place:
+                    rpid = self.build_recs_and_reconcile(assoc_place, "place")
+                    if rpid:
+                        rec.residence = model.Place(ident=rpid, label=assoc_place)
+                elif residence:
+                    rpid = self.build_recs_and_reconcile(residence, "place")
+                    if rpid:
+                        rec.residence = model.Place(ident=rpid, label=residence)
+        elif df551:
+            for df in df551:
+                subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
+                assoc_place = self.to_plain_string(subfield_a.text) if subfield_a if not None else ""
+                if assoc_place:
+                    rpid = self.build_recs_and_reconcile(assoc_place,"place")
+                    if rpid:
+                        rec.residence = model.Place(ident=rpid, label=assoc_place)
+
+
+        df372 = root.xpath(".//mx:datafield[@tag='372']", namespaces=self.nss)
+        if df372:
+            for df in df372:
+                subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
+                subfield_s = df.find("mx:subfield[@code='s']", namespaces=self.nss)
+                subfield_t = df.find("mx:subfield[@code='t']", namespaces=self.nss)
+
+                field_of_activity = self.to_plain_string(subfield_a.text) if subfield_a is not None else ""
+                work_start = self.to_plain_string(subfield_s.text) if subfield_s is not None else ""
+                work_end = self.to_plain_string(subfield_t.text) if subfield_t is not None else ""
+                if field_of_activity or work_end or work_start:
+                    activity = vocab.Active()
+                if field_of_activity:
+                    fpid = self.build_recs_and_reconcile(field_of_activity,"concept")
+                    if fpid:
+                        activity.classified_as = model.Type(ident=fpid, label=field_of_activity)
+                        rec.carried_out = activity
+                if work_start or work_end:
+                    ts = model.TimeSpan()
+                    if work_start:
+                        try:
+                            bstart, bend = self.make_datetime(work_start)
+                        except:
+                            bstart = None
+                        if bstart:
+                            ts.begin_of_the_begin = bstart
+                            ts.end_of_the_begin = bend 
+                    if work_end:
+                        try:
+                            dstart, dend = self.make_datetime(work_end)
+                        except:
+                            dstart = None
+                        if dstart:
+                            ts.begin_of_the_end = dstart
+                            ts.end_of_the_end = dend
+                    if dstart or bstart:
+                        activity.timespan = ts
 
     def process_person(self, root, rec):   
         #person records
@@ -249,68 +338,37 @@ class FastMapper(Mapper):
         if not test_birth_death(rec):
             rec.born = None
             rec.died = None
-
+                        
         #extract related places from 370
         df370 = root.xpath(".//mx:datafield[@tag='370']", namespaces=self.nss)
         if df370:
-            place_subfields = {}
-            for d in df370:
-                for subfield in d.findall('mx:subfield', namespaces=self.nss):                   
-                    code = subfield.attrib.get("code")  
-                    if code:
-                        text = self.to_plain_string(subfield.text)
-                        place_subfields.setdefault(code, []).append(text)
+            for df in df370:
+                subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
+                subfield_b = df.find("mx:subfield[@code='b']", namespaces=self.nss)
             #birth place
-            if "a" in place_subfields:
-                for a in place_subfields['a']:
-                    bpid = self.build_recs_and_reconcile(a, "place")
+                birth_place = self.to_plain_string(subfield_a.text) if subfield_a is not None else ""
+                if birth_place:
+                    bpid = self.build_recs_and_reconcile(birth_place, "place")
                     if bpid:
                         if not hasattr(rec, "born"):
                             birth = model.Birth()
                             rec.born = birth
-                        birth.took_place_at = model.Place(ident=bpid)
+                        birth.took_place_at = model.Place(ident=bpid, label=birth_place)
                         
             #death place
-            elif "b" in place_subfields:
-                for b in place_subfields['b']:
-                    dpid = self.build_recs_and_reconcile(b,"place")
+                death_place = self.to_plain_string(subfield_b.text) if subfield_b is not None else ""
+                if death_place:
+                    dpid = self.build_recs_and_reconcile(death_place,"place")
                     if dpid:
                         if not hasattr(rec, "died"):
                             death = model.Death()
                             rec.died = death
-                        death.took_place_at = model.Place(ident=dpid)
-                        
-            #residence
-            elif "e" in place_subfields:
-                for e in place_subfields['e']:
-                    resid = self.build_recs_and_reconcile(e, "place")
-                    if resid:
-                        rec.residence = model.Place(ident=resid)
-                        
-        #add 368 for both people and orgs
-
-        # Extract occupations from 374 fields
-        df374 = root.xpath(".//mx:datafield[@tag='374']", namespaces=self.nss)
-        classifications = []
-        if df374:
-            for df in df374:
-                subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
-                subfield_0 = df.find("mx:subfield[@code='0']", namespaces=self.nss)
-                if subfield_0 is not None:  # Use URI if available
-                    occupation_uri = self.to_plain_string(subfield_0.text)
-                    classifications.append(model.Type(ident=occupation_uri))
-                elif subfield_a is not None: #try to reconcile name
-                    occupation = self.to_plain_string(subfield_a.text)
-                    try:
-                        occupation_uri = self.build_recs_and_reconcile(occupation, "concept")
-                        if occupation_uri:
-                            classifications.append(model.Type(ident=occupation_uri,label=occupation))
-                    except:
-                        continue
-        
+                        death.took_place_at = model.Place(ident=dpid, label=death_place)
+                    
 
         #extract gender from 375
         df375 = root.xpath(".//mx:datafield[@tag='375']", namespaces=self.nss)
+        classifications = []
         if df375:
             for df in df375:
                 subfield_a = df.find("mx:subfield[@code='a']",namespaces=self.nss)
@@ -373,6 +431,8 @@ class FastMapper(Mapper):
                 setattr(rec,"referred_to_by",[])
             rec.referred_to_by.extend(biographies)
 
+        self.process_agent(root, rec, classifications)
+
     def process_group(self, root, rec):
         #Group marc fields
 
@@ -396,6 +456,23 @@ class FastMapper(Mapper):
         df410 = root.xpath(".//mx:datafield[@tag='410']", namespaces=self.nss)
         if df410:
             for df in df410:
+                subfield_a = df.find("mx:subfield[@code='a']",namespaces=self.nss)
+                subfield_b = df.find("mx:subfield[@code='b']",namespaces=self.nss)
+
+                org_name = self.to_plain_string(subfield_a.text) if subfield_a is not None else ""
+                sub_unit = self.to_plain_string(subfield_b.text) if subfield_b is not None else ""
+                alt_name = f"{org_name}, {sub_unit}" if sub_unit else org_name
+
+                if alt_name:
+                    if not primary:
+                        primary = True
+                        rec.identified_by = vocab.PrimaryName(content=alt_name)
+                    else:
+                        rec.identified_by = vocab.AlternateName(content=alt_name)
+
+        df710 = root.xpath(".//mx:datafield[@tag='710']", namespaces=self.nss)
+        if df710:
+            for df in df710:
                 subfield_a = df.find("mx:subfield[@code='a']",namespaces=self.nss)
                 subfield_b = df.find("mx:subfield[@code='b']",namespaces=self.nss)
 
@@ -440,8 +517,8 @@ class FastMapper(Mapper):
                     broader_uri = self.to_plain_string(subfield_0.text) if subfield_0 is not None else None
 
                     if broader_uri and broader_uri.startswith("(OCoLC)fst"):
-                        broader_uri = broader_uri.lstrip("(OCoLC)fst")
-                        rec.member_of = model.Group(ident=broader_uri)
+                        broader_uri = self.extract_numeric_id(broader_uri)
+                        rec.member_of = model.Group(ident=f"http://id.worldcat.org/fast/" + broader_uri)
                     else:
                         # Try reconciling the name if no direct URI is available
                         org_name = self.to_plain_string(subfield_a.text) if subfield_a is not None else ""
@@ -468,6 +545,23 @@ class FastMapper(Mapper):
                             rec.member_of = model.Group(ident=reconciled_uri, label=broader_name)
                     except:
                         continue
+
+        #add 368 for orgs, is garbage for people. only subfield_a is suitable as classification.
+        df368 = root.xpath(".//mx:datafield[@tag='368']", namespaces=self.nss)
+        if df368:
+            for df in df368:
+                subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
+                cxnname = self.to_plain_string(subfield_a.text) if subfield_a is not None else None 
+                if cxnname:
+                    try:
+                        reconciled_uri = self.build_recs_and_reconcile(cxnname, "concept")
+                        if reconciled_uri:
+                            rec.classified_as = model.Type(ident=reconciled_uri, label=cxnname)
+                    except:
+                        continue
+
+        self.process_agent(root, rec)
+
 
     def transform(self, record, rectype=None, reference=False):
         rec = record["data"]
