@@ -119,7 +119,7 @@ class FastMapper(Mapper):
         elif df551:
             for df in df551:
                 subfield_a = df.find("mx:subfield[@code='a']", namespaces=self.nss)
-                assoc_place = self.to_plain_string(subfield_a.text) if subfield_a if not None else ""
+                assoc_place = self.to_plain_string(subfield_a.text) if subfield_a is not None else ""
                 if assoc_place:
                     rpid = self.build_recs_and_reconcile(assoc_place,"place")
                     if rpid:
