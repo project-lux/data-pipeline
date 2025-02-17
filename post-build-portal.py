@@ -90,7 +90,7 @@ recids = list(all_distances.keys())
 #pg_cpus = 10
 #procs = multiprocessing.cpu_count() - pg_cpus
 
-procs = 1
+procs = 2
 
 print(f"dist=0, {procs} processes, {len(recids)} keys")
 future_dists = {}
