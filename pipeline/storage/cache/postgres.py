@@ -94,7 +94,16 @@ class PooledCache(object):
         self.pools.put_all(self.pool_name)
         self.conn = None
         self.iterating_conn = None
-           
+
+
+    def make_threadsafe(self):
+        self.conn = None
+        self.iterating_conn = None
+        local_pool = PoolManager()
+        self.pools = local_pool
+        local_pool.make_pool(self.pool_name, user=self.config['user'], dbname=self.config['dbname'])
+
+
     def _cursor(self, internal=True, iter=False, size=0):
         # Ensure cursor is managed server-side otherwise select * from table
         # will return EVERYTHING into python (without a manual LIMIT/OFFSET)

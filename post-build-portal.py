@@ -64,14 +64,7 @@ def process_recids(recids, thr):
     print(f"Called {thr}")
 
     merged = cfgs.results['merged']['recordcache']
-    merged.conn = None
-    merged.iterating_conn = None
-    local_pool = PoolManager()
-    print(local_pool)
-    merged.pools = local_pool
-    local_pool.make_pool(merged.pool_name, user=merged.config['user'], dbname=merged.config['dbname'])
-
-    print(f"Made {local_pool.conn} / {local_pool.iterating_conn} in {thr}")
+    merged.make_threadsafe()
 
     local_dists = {}
     local_added = {}
