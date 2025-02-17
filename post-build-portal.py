@@ -112,8 +112,9 @@ for k in recids:
     x += 1
     if not x % 50000:
         print(f"{x}/{ttl} - {len(added_refs)} new")
-gdurn = time.time() - start
+gdurn = time.time() - gstart
 
+print(gdurn)
 
 print("Added refs")
 x = 0
