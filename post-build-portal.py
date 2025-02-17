@@ -85,7 +85,7 @@ recids = list(all_distances.keys())
 
 print(f"dist=0, 20 threads, {len(recids)} keys")
 future_dists = {}
-with concurrent.futures.ProcessPoolExecutor(max_workers=20) as executor:
+with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
     gstart = time.time()
     for x in range(20):
         future = executor.submit(process_recids, recids[x::20], x)
