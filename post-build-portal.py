@@ -80,7 +80,6 @@ def process_recids(recids, thr):
     for recid in recids:
         try:
             rec = merged[recid]
-            sys.stdout.write(f"{thr}"); sys.stdout.flush()
             if not rec:
                 continue
             walk_for_refs(rec['data'], 1, local_dists, local_added, top=True)
