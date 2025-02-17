@@ -65,7 +65,7 @@ def process_recids(recids, thr):
 
     merged = cfgs.results['merged']['recordcache']
     local_pool = PoolManager()
-    local_pool.make_pool(pname, user=merged.config['user'], dbname=merged.config['dbname'])
+    local_pool.make_pool(merged.pool_name, user=merged.config['user'], dbname=merged.config['dbname'])
     merged.pools = local_pool
 
     local_dists = {}
