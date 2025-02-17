@@ -25,20 +25,12 @@ src = cfgs.internal['ypm']
 rc = src['recordcache2']
 
 
-
-#x = 0
-#ttl = len(rc)
-
 all_distances = {}
 print("Keys...")
 # populate all at distance 0
-for k in tqdm(rc.iter_keys()):
+for k in tqdm(rc.iter_keys(), total=len(rc)):
     # k is the uuid
     all_distances[k] = 0
-    #x += 1
-    #if not x % 250000:
-    #    print(f"{x}/{ttl}")
-
 
 
 def walk_for_refs(node, distance, distances, added, top=False):
