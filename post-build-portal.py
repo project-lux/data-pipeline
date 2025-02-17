@@ -61,7 +61,6 @@ for k in rc.iter_keys():
         print(f"{x}/{ttl}")
         break
 
-
 def process_recids(recids, thr):
     local_dists = {}
     local_added = {}
@@ -86,16 +85,19 @@ def process_recids(recids, thr):
 recids = list(all_distances.keys())
 
 
-print(f"dist=0, {multiprocessing.cpu_count()} processes, {len(recids)} keys")
+pg_cpus = 10
+procs = multiprocessing.cpu_count() - pg_cpus
+
+print(f"dist=0, {procs} processes, {len(recids)} keys")
 future_dists = {}
 with ProcessPoolExecutor() as executor:  # Uses processes instead of threads
     gstart = time.time()
     chunk_size = len(recids) // multiprocessing.cpu_count()
     futures = []
 
-    for x in range(multiprocessing.cpu_count()):
+    for x in range(procs):
         start_idx = x * chunk_size
-        end_idx = start_idx + chunk_size if x < multiprocessing.cpu_count() - 1 else len(recids)
+        end_idx = start_idx + chunk_size if x < procs - 1 else len(recids)
         future = executor.submit(process_recids, recids[start_idx:end_idx], x)
         future_dists[future] = x
 
