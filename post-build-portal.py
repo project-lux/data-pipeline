@@ -6,6 +6,7 @@ import concurrent.futures
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 import multiprocessing
 import time
+from tqdm import tqdm
 from pipeline.storage.cache.postgres import PoolManager
 
 load_dotenv()
@@ -22,6 +23,21 @@ cfgs.instantiate_all()
 
 src = cfgs.internal['ypm']
 rc = src['recordcache2']
+
+
+
+x = 0
+ttl = len(rc)
+print("Keys...")
+# populate all at distance 0
+for k in tqdm(rc.iter_keys()):
+    # k is the uuid
+    all_distances[k] = 0
+    x += 1
+    if not x % 250000:
+        print(f"{x}/{ttl}")
+
+
 
 def walk_for_refs(node, distance, distances, added, top=False):
 
@@ -46,18 +62,6 @@ def walk_for_refs(node, distance, distances, added, top=False):
 all_distances = {}
 added_refs = {}
 missing = {}
-
-x = 0
-ttl = len(rc)
-
-print("Keys...")
-# populate all at distance 0
-for k in rc.iter_keys():
-    # k is the uuid
-    all_distances[k] = 0
-    x += 1
-    if not x % 250000:
-        print(f"{x}/{ttl}")
 
 def process_recids(recids, thr):
     print(f"Called {thr}")
@@ -95,7 +99,7 @@ procs = 24
 
 print(f"dist=0, {procs} processes, {len(recids)} keys")
 future_dists = {}
-with ThreadPoolExecutor(max_workers=procs) as executor:  # Uses processes instead of threads
+with ProcessPoolExecutor(max_workers=procs) as executor:  # Uses processes instead of threads
     gstart = time.time()
     chunk_size = len(recids) // procs
     futures = []
