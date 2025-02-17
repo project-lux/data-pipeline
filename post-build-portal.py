@@ -21,8 +21,6 @@ cfgs.instantiate_all()
 
 src = cfgs.internal['ypm']
 rc = src['recordcache2']
-merged = cfgs.results['merged']['recordcache']
-
 
 def walk_for_refs(node, distance, distances, added, top=False):
 
@@ -64,6 +62,7 @@ for k in rc.iter_keys():
 def process_recids(recids, thr):
     print(f"Called {thr}")
 
+    merged = cfgs.results['merged']['recordcache']
     local_dists = {}
     local_added = {}
     x = 0
