@@ -102,8 +102,10 @@ with ProcessPoolExecutor(max_workers=procs) as executor:  # Uses processes inste
         added_refs.update(local_added)
     gdurn = int(time.time() - gstart)
 
+time.sleep(1)
+
 print("Added refs")
-x = 0
+pbar = tqdm(total=len(added_refs), desc="Referenced")
 merged = cfgs.results['merged']['recordcache']
 while added_refs:
     (k,d) = added_refs.popitem()
@@ -113,6 +115,6 @@ while added_refs:
     if not rec:
         continue
     walk_for_refs(rec['data'], d+1, all_distances, added_refs, top=True)
-    x += 1
-    if not x % 50000:
-        print(f"{x}/{ttl} - {len(added_refs)} remaining")
+    pbar.update(1)
+    pbar.total= len(added_refs)
+
