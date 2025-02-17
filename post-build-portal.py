@@ -83,7 +83,6 @@ def process_recids(recids, thr):
 
 recids = list(all_distances.keys())
 procs = 24
-
 print(f"dist=0, {procs} processes, {len(recids)} keys")
 future_dists = {}
 with ProcessPoolExecutor(max_workers=procs) as executor:  # Uses processes instead of threads
@@ -103,10 +102,9 @@ with ProcessPoolExecutor(max_workers=procs) as executor:  # Uses processes inste
         added_refs.update(local_added)
     gdurn = int(time.time() - gstart)
 
-print(gdurn)
-
 print("Added refs")
 x = 0
+merged = cfgs.results['merged']['recordcache']
 while added_refs:
     (k,d) = added_refs.popitem()
     if d > 4:
