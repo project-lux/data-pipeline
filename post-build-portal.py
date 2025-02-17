@@ -68,7 +68,6 @@ def process_recids(recids, thr):
     x = 0
     start = time.time()
     for recid in recids:
-        print(f"{recid} in {thr}")
         try:
             rec = merged[recid]
             print(f"retrieved in {thr}")
@@ -88,8 +87,10 @@ def process_recids(recids, thr):
 recids = list(all_distances.keys())
 
 
-pg_cpus = 10
-procs = multiprocessing.cpu_count() - pg_cpus
+#pg_cpus = 10
+#procs = multiprocessing.cpu_count() - pg_cpus
+
+procs = 8
 
 print(f"dist=0, {procs} processes, {len(recids)} keys")
 future_dists = {}
