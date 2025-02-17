@@ -11,9 +11,14 @@ cfgs.cache_globals()
 cfgs.instantiate_all()
 
 
+# Strategy:  Iterate the YPM recordcache2 records
+# and then walk the merged equivalents to find referenced records
+# record them all as YPM portal required
+
 src = cfgs.internal['ypm']
 rc = src['recordcache2']
 merged = cfgs.results['merged']['recordcache']
+
 
 def walk_for_refs(node, distance, top=False):
 
@@ -43,7 +48,7 @@ x = 0
 ttl = len(rc)
 
 print("Keys...")
-# populate all at 0
+# populate all at distance 0
 for k in rc.iter_keys():
     # k is the uuid
     all_distances[k] = 0
@@ -53,6 +58,7 @@ for k in rc.iter_keys():
 
 print("dist=0")
 x = 0
+# populate all distance 1 references into all_distances
 for k in list(all_distances.keys()):
     try:
         rec = merged[k]
@@ -66,15 +72,16 @@ for k in list(all_distances.keys()):
     if not x % 50000:
         print(f"{x}/{ttl} - {len(added_refs)} new")
 
+print("Added refs")
 x = 0
 while added_refs:
     (k,d) = added_refs.popitem()
-    if d > 3:
+    if d > 4:
         continue
     rec = merged[k]
     if not rec:
         continue
-    walk_for_refs(rec['data'], d, top=True)
+    walk_for_refs(rec['data'], d+1, top=True)
     x += 1
     if not x % 50000:
         print(f"{x}/{ttl} - {len(added_refs)} remaining")

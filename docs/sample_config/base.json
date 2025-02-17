@@ -49,12 +49,12 @@
     "tests_dir": "data/tests",
     
     "path_types": {
-	"reconcileDbPath": "indexes_dir",
-	"reconcileDumpPath": "dumps_dir",
-	"dumpFilePath": "dumps_dir",
-	"exportPath": "exports_dir",
-	"inverseEquivDbPath": "indexes_dir",
-	"cycleBreakPath": "data_dir"
+    	"reconcileDbPath": "indexes_dir",
+    	"reconcileDumpPath": "dumps_dir",
+    	"dumpFilePath": "dumps_dir",
+    	"exportPath": "exports_dir",
+    	"inverseEquivDbPath": "indexes_dir",
+    	"cycleBreakPath": "data_dir"
     },
 
     "other_external_matches":[

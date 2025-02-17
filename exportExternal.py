@@ -41,7 +41,7 @@ for src, cfg in to_do:
     ttl = rc.len_estimate()
     print(f"Exporting {ttl} records from {src}")
 
-    outfn = f"/data-export/output/external/{src}.zip"
+    outfn = f"/data-export/output/external/export_{src}.zip"
     done = {}
 
     start = time.time()

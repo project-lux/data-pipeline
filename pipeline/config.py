@@ -170,6 +170,7 @@ class Config(object):
         identifier = identifier.replace(" ", "")
         identifier = identifier.replace('"', "")
         identifier = identifier.replace("”", "")
+        # FIXME: What about open quotes too?
         if identifier.endswith("/"):
             identifier = identifier[:-1]
         elif identifier.endswith(".html"):
@@ -182,6 +183,7 @@ class Config(object):
         return identifier
 
     def pre_split_fix_uri(self, uri):
+        # FIXME: Shouldn't this just be canonicalize?
         if "page/aat" in uri:
             return uri.replace("page/aat", "aat")
         elif "aat/page" in uri:
@@ -270,6 +272,8 @@ class Config(object):
                 qid = self.make_qua(f"http://www.wikidata.org/entity/{v}", "Type")
             elif v.startswith("http"):
                 qid = self.make_qua(v, "Type")
+            else:
+                continue
             uu = idmap[qid]
             self.globals[k] = uu
 
