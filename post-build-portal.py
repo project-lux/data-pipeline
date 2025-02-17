@@ -58,7 +58,6 @@ for k in rc.iter_keys():
     x += 1
     if not x % 250000:
         print(f"{x}/{ttl}")
-        break
 
 def process_recids(recids, thr):
     print(f"Called {thr}")
