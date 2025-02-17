@@ -119,7 +119,7 @@ while added_refs:
 
 
 def set_portal(portal_ids, portal, thr):
-    pbar = tqdm(total=len(recids),
+    pbar = tqdm(total=len(portal_ids),
                 desc=f'Process {thr}',
                 position=thr,  # Position the progress bar based on process number
                 leave=True)
@@ -143,8 +143,12 @@ with ProcessPoolExecutor(max_workers=procs) as executor:  # Uses processes inste
     futures = []
     for x in range(procs):
         start_idx = x * chunk_size
-        end_idx = start_idx + chunk_size if x < procs - 1 else len(recids)
-        future = executor.submit(set_portal, recids[start_idx:end_idx], 'ypm', x)
+        end_idx = start_idx + chunk_size if x < procs - 1 else len(portal_ids)
+        print(f"{x} from {start_idx} to {end_idx} of {len(portal_ids)}")
+        future = executor.submit(set_portal, portal_ids[start_idx:end_idx], 'ypm', x)
         future_sets[future] = x
     for future in concurrent.futures.as_completed(future_sets):
         done = future.result()
+
+
+
