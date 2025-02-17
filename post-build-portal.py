@@ -62,13 +62,17 @@ for k in rc.iter_keys():
         break
 
 def process_recids(recids, thr):
+    print(f"Called {thr}")
+
     local_dists = {}
     local_added = {}
     x = 0
     start = time.time()
     for recid in recids:
+        print(f"{recid} in {thr}")
         try:
             rec = merged[recid]
+            print(f"retrieved in {thr}")
             if not rec:
                 continue
             walk_for_refs(rec['data'], 1, local_dists, local_added, top=True)
