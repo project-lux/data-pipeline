@@ -68,6 +68,8 @@ def process_recids(recids, thr):
     local_pool.make_pool(merged.pool_name, user=merged.config['user'], dbname=merged.config['dbname'])
     merged.pools = local_pool
 
+    print(f"Made {local_pool.conn} / {local_pool.iterating_conn} in {thr}")
+
     local_dists = {}
     local_added = {}
     x = 0
