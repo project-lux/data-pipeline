@@ -90,11 +90,11 @@ recids = list(all_distances.keys())
 #pg_cpus = 10
 #procs = multiprocessing.cpu_count() - pg_cpus
 
-procs = 4
+procs = 1
 
 print(f"dist=0, {procs} processes, {len(recids)} keys")
 future_dists = {}
-with ProcessPoolExecutor(max_workers=procs+1) as executor:  # Uses processes instead of threads
+with ProcessPoolExecutor(max_workers=procs) as executor:  # Uses processes instead of threads
     gstart = time.time()
     chunk_size = len(recids) // procs
     futures = []
