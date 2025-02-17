@@ -83,38 +83,37 @@ def process_recids(recids, thr):
 
 recids = list(all_distances.keys())
 
-# print(f"dist=0, 20 threads, {len(recids)} keys")
-# future_dists = {}
-# with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-#     gstart = time.time()
-#     for x in range(20):
-#         future = executor.submit(process_recids, recids[x::20], x)
-#         future_dists[future] = x
-#     for future in concurrent.futures.as_completed(future_dists):
-#         (local_dists, local_added) = future.result()
-#         all_distances.update(local_dists)
-#         added_refs.update(local_added)
-#     gdurn = int(time.time() - gstart)
+print(f"dist=0, 20 threads, {len(recids)} keys")
+future_dists = {}
+with concurrent.futures.ProcessPoolExecutor(max_workers=20) as executor:
+    gstart = time.time()
+    for x in range(20):
+        future = executor.submit(process_recids, recids[x::20], x)
+        future_dists[future] = x
+    for future in concurrent.futures.as_completed(future_dists):
+        (local_dists, local_added) = future.result()
+        all_distances.update(local_dists)
+        added_refs.update(local_added)
+    gdurn = int(time.time() - gstart)
 
-print("dist=0, no threads")
-x = 0
-# populate all distance 1 references into all_distances
-gstart = time.time()
-for k in recids:
-    try:
-        rec = merged[k]
-        if not rec:
-            continue
-        walk_for_refs(rec['data'], 1, all_distances, added_refs, top=True)
-    except KeyError:
-        missing[k] = 1
-        print(f"missing: {k}")
-    x += 1
-    if not x % 50000:
-        print(f"{x}/{ttl} - {len(added_refs)} new")
-gdurn = time.time() - gstart
-
-print(gdurn)
+# print("dist=0, no threads")
+# x = 0
+# # populate all distance 1 references into all_distances
+# gstart = time.time()
+# for k in recids:
+#     try:
+#         rec = merged[k]
+#         if not rec:
+#             continue
+#         walk_for_refs(rec['data'], 1, all_distances, added_refs, top=True)
+#     except KeyError:
+#         missing[k] = 1
+#         print(f"missing: {k}")
+#     x += 1
+#     if not x % 50000:
+#         print(f"{x}/{ttl} - {len(added_refs)} new")
+# gdurn = time.time() - gstart
+# print(gdurn)
 
 print("Added refs")
 x = 0
