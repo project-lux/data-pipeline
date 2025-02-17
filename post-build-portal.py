@@ -56,6 +56,7 @@ for k in rc.iter_keys():
     x += 1
     if not x % 250000:
         print(f"{x}/{ttl}")
+        break
 
 
 def process_recids(recids, thr):
@@ -72,18 +73,18 @@ def process_recids(recids, thr):
             missing[k] = 1
             print(f"missing: {recid}")
         x += 1
-        if not x % 20000:
+        if not x % 10000:
             print(f"Thread {thr} at {x}")
     return [local_dists, local_added]
 
 
 recids = list(all_distances.keys())
 
-print(f"dist=0, 30 threads, {len(recids)} keys")
+print(f"dist=0, 20 threads, {len(recids)} keys")
 future_dists = {}
-with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
-    for x in range(30):
-        future = executor.submit(process_recids, recids[x::30], x)
+with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+    for x in range(20):
+        future = executor.submit(process_recids, recids[x::20], x)
         future_dists[future] = x
     for future in concurrent.futures.as_completed(future_dists):
         (local_dists, local_added) = future.result()
