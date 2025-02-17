@@ -3,6 +3,7 @@ import sys
 from dotenv import load_dotenv
 from pipeline.config import Config
 import concurrent.futures
+import time
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")
@@ -63,6 +64,7 @@ def process_recids(recids, thr):
     local_dists = {}
     local_added = {}
     x = 0
+    start = time.time()
     for recid in recids:
         try:
             rec = merged[recid]
@@ -74,7 +76,8 @@ def process_recids(recids, thr):
             print(f"missing: {recid}")
         x += 1
         if not x % 10000:
-            print(f"Thread {thr} at {x}")
+            durn = int(time.time() - start)
+            print(f"Thread {thr} at {x} after {durn}")
     return [local_dists, local_added]
 
 
@@ -83,13 +86,15 @@ recids = list(all_distances.keys())
 print(f"dist=0, 20 threads, {len(recids)} keys")
 future_dists = {}
 with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+    gstart = time.time()
     for x in range(20):
         future = executor.submit(process_recids, recids[x::20], x)
         future_dists[future] = x
     for future in concurrent.futures.as_completed(future_dists):
         (local_dists, local_added) = future.result()
         all_distances.update(local_dists)
-        added_refs.update(local)
+        added_refs.update(local_added)
+    gdurn = int(time.time() - gstart)
 
 # print("dist=0")
 # x = 0
