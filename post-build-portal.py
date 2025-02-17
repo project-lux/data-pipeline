@@ -3,7 +3,7 @@ import sys
 from dotenv import load_dotenv
 from pipeline.config import Config
 import concurrent.futures
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 import multiprocessing
 import time
 from pipeline.storage.cache.postgres import PoolManager
