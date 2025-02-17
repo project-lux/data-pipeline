@@ -60,25 +60,24 @@ poolman = PoolManager()
 
 class PooledCache(object):
 
-
     def __init__(self, config):
         self.config = config
         self.name = config['name'] + '_' + config['tabletype']
         self.conn = None
         self.iterating_conn = None
+        self.pools = poolman
 
         if config['host']:
             # TCP/IP
             pname = f"{config['host']}:{config['port']}/{config['dbname']}"
             self.pool_name = pname
-            poolman.make_pool(pname, host=self.config['host'], port=self.config['port'], 
+            self.pools.make_pool(pname, host=self.config['host'], port=self.config['port'],
                 user=self.config['user'], password=self.config['password'], dbname=self.config['dbname'])
         else:
             # local socket
             pname = "localsocket"
             self.pool_name = pname
-            poolman.make_pool(pname, user=self.config['user'], dbname=self.config['dbname'])
-
+            self.pools.make_pool(pname, user=self.config['user'], dbname=self.config['dbname'])
 
         # Test that our table exists
         qry = "SELECT 1 FROM pg_tables WHERE tablename = %s"
@@ -92,7 +91,7 @@ class PooledCache(object):
 
     def shutdown(self):
         # Close our connections
-        poolman.put_all(self.pool_name)
+        self.pools.put_all(self.pool_name)
         self.conn = None
         self.iterating_conn = None
            
@@ -102,9 +101,9 @@ class PooledCache(object):
         # Get a connection from the pool
 
         if iter and not self.iterating_conn:
-            self.iterating_conn = poolman.get_conn(self.pool_name, itr=True)
+            self.iterating_conn = self.pools.get_conn(self.pool_name, itr=True)
         elif iter is False and not self.conn:
-            self.conn = poolman.get_conn(self.pool_name, itr=False)
+            self.conn = self.pools.get_conn(self.pool_name, itr=False)
         if iter:
             conn = self.iterating_conn
         else:
@@ -438,7 +437,7 @@ class PooledCache(object):
 
     def start_bulk(self):    
         if self.iterating_conn is None:
-            self.iterating_conn = poolman.get_conn(self.pool_name, itr=True)
+            self.iterating_conn = self.pools.get_conn(self.pool_name, itr=True)
         self.bulk_cursor = self.iterating_conn.cursor(cursor_factory=RealDictCursor)
 
     def set_bulk(self, data, identifier=None, yuid=None, format=None, valid=None, record_time=None, refresh_time=None, change=None):
@@ -477,7 +476,7 @@ class PooledCache(object):
         qry = f"VACUUM (ANALYZE) {self.name}"
 
         if not self.conn:
-            self.conn = poolman.get_conn(self.pool_name)
+            self.conn = self.pools.get_conn(self.pool_name)
         old_iso = self.conn.isolation_level
         self.conn.set_isolation_level(0)
         with self._cursor(internal=False) as cursor:

@@ -6,6 +6,7 @@ import concurrent.futures
 from concurrent.futures import ProcessPoolExecutor
 import multiprocessing
 import time
+from pipeline.storage.cache.postgres import PoolManager
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")
@@ -63,6 +64,10 @@ def process_recids(recids, thr):
     print(f"Called {thr}")
 
     merged = cfgs.results['merged']['recordcache']
+    local_pool = PoolManager()
+    local_pool.make_pool(pname, user=merged.config['user'], dbname=merged.config['dbname'])
+    merged.pools = local_pool
+
     local_dists = {}
     local_added = {}
     x = 0
