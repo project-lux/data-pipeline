@@ -94,7 +94,7 @@ procs = 4
 
 print(f"dist=0, {procs} processes, {len(recids)} keys")
 future_dists = {}
-with ProcessPoolExecutor() as executor:  # Uses processes instead of threads
+with ProcessPoolExecutor(max_workers=procs+1) as executor:  # Uses processes instead of threads
     gstart = time.time()
     chunk_size = len(recids) // procs
     futures = []
