@@ -86,21 +86,17 @@ procs = 24
 print(f"dist=0, {procs} processes, {len(recids)} keys")
 future_dists = {}
 with ProcessPoolExecutor(max_workers=procs) as executor:  # Uses processes instead of threads
-    gstart = time.time()
     chunk_size = len(recids) // procs
     futures = []
-
     for x in range(procs):
         start_idx = x * chunk_size
         end_idx = start_idx + chunk_size if x < procs - 1 else len(recids)
         future = executor.submit(process_recids, recids[start_idx:end_idx], x)
         future_dists[future] = x
-
     for future in concurrent.futures.as_completed(future_dists):
         (local_dists, local_added) = future.result()
         all_distances.update(local_dists)
         added_refs.update(local_added)
-    gdurn = int(time.time() - gstart)
 
 time.sleep(1)
 
@@ -120,6 +116,35 @@ while added_refs:
     pbar.update(1)
     pbar.total = done + len(added_refs)
 
+
+
+def set_portal(portal_ids, portal, thr):
+    pbar = tqdm(total=len(recids),
+                desc=f'Process {thr}',
+                position=thr,  # Position the progress bar based on process number
+                leave=True)
+    merged = cfgs.results['merged']['recordcache']
+    merged.make_threadsafe()
+    done = 0
+    for recid in portal_ids:
+        try:
+            merged.set_metadata(recid, 'change', portal)
+            pbar.update(1)
+            done += 1
+        except:
+            print(f"Failed to set metadata on {recid}")
+    pbar.close()
+    return done
+
 portal_ids = list(all_distances.keys())
-for uu in tqdm(portal_ids):
-    merged[uu].set_metadata('change', 'ypm')
+future_sets = {}
+with ProcessPoolExecutor(max_workers=procs) as executor:  # Uses processes instead of threads
+    chunk_size = len(portal_ids) // procs
+    futures = []
+    for x in range(procs):
+        start_idx = x * chunk_size
+        end_idx = start_idx + chunk_size if x < procs - 1 else len(recids)
+        future = executor.submit(set_portal, recids[start_idx:end_idx], 'ypm', x)
+        future_sets[future] = x
+    for future in concurrent.futures.as_completed(future_sets):
+        done = future.result()
