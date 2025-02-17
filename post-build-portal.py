@@ -107,8 +107,10 @@ time.sleep(1)
 print("Added refs")
 pbar = tqdm(total=len(added_refs), desc="Referenced")
 merged = cfgs.results['merged']['recordcache']
+done = 0
 while added_refs:
     (k,d) = added_refs.popitem()
+    done += 1
     if d > 4:
         continue
     rec = merged[k]
@@ -116,5 +118,8 @@ while added_refs:
         continue
     walk_for_refs(rec['data'], d+1, all_distances, added_refs, top=True)
     pbar.update(1)
-    pbar.total= len(added_refs)
+    pbar.total = done + len(added_refs)
 
+portal_ids = list(all_distances.keys())
+for uu in tqdm(portal_ids):
+    merged[uu].set_metadata('change', 'ypm')
