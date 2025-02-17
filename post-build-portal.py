@@ -26,16 +26,18 @@ rc = src['recordcache2']
 
 
 
-x = 0
-ttl = len(rc)
+#x = 0
+#ttl = len(rc)
+
+all_distances = {}
 print("Keys...")
 # populate all at distance 0
 for k in tqdm(rc.iter_keys()):
     # k is the uuid
     all_distances[k] = 0
-    x += 1
-    if not x % 250000:
-        print(f"{x}/{ttl}")
+    #x += 1
+    #if not x % 250000:
+    #    print(f"{x}/{ttl}")
 
 
 
@@ -59,7 +61,7 @@ def walk_for_refs(node, distance, distances, added, top=False):
         elif type(v) == dict:
             walk_for_refs(v, distance, distances, added)
 
-all_distances = {}
+
 added_refs = {}
 missing = {}
 
