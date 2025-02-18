@@ -2,10 +2,7 @@ import os
 import sys
 from dotenv import load_dotenv
 from pipeline.config import Config
-import concurrent.futures
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-import multiprocessing
-import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
 from pipeline.storage.cache.postgres import PoolManager
 
@@ -16,25 +13,24 @@ idmap = cfgs.get_idmap()
 cfgs.cache_globals()
 cfgs.instantiate_all()
 
-
 # Strategy:  Iterate the YPM recordcache2 records
 # and then walk the merged equivalents to find referenced records
 # record them all as YPM portal required
 
+procs = 24
+TQDM_DISABLE = "--no-tqdm" in sys.argv
+
 src = cfgs.internal['ypm']
 rc = src['recordcache2']
-
 
 all_distances = {}
 print("Keys...")
 # populate all at distance 0
-for k in tqdm(rc.iter_keys(), total=len(rc)):
+for k in tqdm(rc.iter_keys(), total=len(rc), disable=TQDM_DISABLE):
     # k is the uuid
     all_distances[k] = 0
 
-
 def walk_for_refs(node, distance, distances, added, top=False):
-
     if not top and "id" in node and not node["id"].startswith("_"):
         yuid = node['id'].rsplit('/', 1)[-1]
         dist = distances.get(yuid, 100)
@@ -53,20 +49,16 @@ def walk_for_refs(node, distance, distances, added, top=False):
         elif type(v) == dict:
             walk_for_refs(v, distance, distances, added)
 
-
-added_refs = {}
-missing = {}
-
 def process_recids(recids, thr):
     pbar = tqdm(total=len(recids),
                 desc=f'Process {thr}',
                 position=thr,  # Position the progress bar based on process number
-                leave=True)
+                leave=True,
+                disable=TQDM_DISABLE)
     merged = cfgs.results['merged']['recordcache']
     merged.make_threadsafe()
     local_dists = {}
     local_added = {}
-    start = time.time()
     for recid in recids:
         try:
             rec = merged[recid]
@@ -80,9 +72,31 @@ def process_recids(recids, thr):
     pbar.close()
     return [local_dists, local_added]
 
+def set_portal(portal_ids, portal, thr):
+    pbar = tqdm(total=len(portal_ids),
+                desc=f'Process {thr}',
+                position=thr,  # Position the progress bar based on process number
+                leave=True,
+                disable=TQDM_DISABLE)
+    merged = cfgs.results['merged']['recordcache']
+    merged.make_threadsafe()
+    done = 0
+    for recid in portal_ids:
+        try:
+            merged.set_metadata(recid, 'change', portal)
+            pbar.update(1)
+            done += 1
+        except:
+            print(f"Failed to set metadata on {recid}")
+    pbar.close()
+    return done
 
+
+
+added_refs = {}
+missing = {}
 recids = list(all_distances.keys())
-procs = 24
+
 print(f"dist=0, {procs} processes, {len(recids)} keys")
 future_dists = {}
 with ProcessPoolExecutor(max_workers=procs) as executor:  # Uses processes instead of threads
@@ -93,15 +107,13 @@ with ProcessPoolExecutor(max_workers=procs) as executor:  # Uses processes inste
         end_idx = start_idx + chunk_size if x < procs - 1 else len(recids)
         future = executor.submit(process_recids, recids[start_idx:end_idx], x)
         future_dists[future] = x
-    for future in concurrent.futures.as_completed(future_dists):
+    for future in as_completed(future_dists):
         (local_dists, local_added) = future.result()
         all_distances.update(local_dists)
         added_refs.update(local_added)
 
-time.sleep(1)
-
-print("Added refs")
-pbar = tqdm(total=len(added_refs), desc="Referenced")
+print(f"Added refs: {len(added_refs)} base")
+pbar = tqdm(total=len(added_refs), desc="Referenced", disable=TQDM_DISABLE)
 merged = cfgs.results['merged']['recordcache']
 done = 0
 while added_refs:
@@ -116,26 +128,7 @@ while added_refs:
     pbar.update(1)
     pbar.total = done + len(added_refs)
 
-
-
-def set_portal(portal_ids, portal, thr):
-    pbar = tqdm(total=len(portal_ids),
-                desc=f'Process {thr}',
-                position=thr,  # Position the progress bar based on process number
-                leave=True)
-    merged = cfgs.results['merged']['recordcache']
-    merged.make_threadsafe()
-    done = 0
-    for recid in portal_ids:
-        try:
-            merged.set_metadata(recid, 'change', portal)
-            pbar.update(1)
-            done += 1
-        except:
-            print(f"Failed to set metadata on {recid}")
-    pbar.close()
-    return done
-
+print(f"Setting metadata: {procs} processes, {len(all_distances)}")
 portal_ids = list(all_distances.keys())
 future_sets = {}
 with ProcessPoolExecutor(max_workers=procs) as executor:  # Uses processes instead of threads
@@ -144,10 +137,9 @@ with ProcessPoolExecutor(max_workers=procs) as executor:  # Uses processes inste
     for x in range(procs):
         start_idx = x * chunk_size
         end_idx = start_idx + chunk_size if x < procs - 1 else len(portal_ids)
-        print(f"{x} from {start_idx} to {end_idx} of {len(portal_ids)}")
         future = executor.submit(set_portal, portal_ids[start_idx:end_idx], 'ypm', x)
         future_sets[future] = x
-    for future in concurrent.futures.as_completed(future_sets):
+    for future in as_completed(future_sets):
         done = future.result()
 
 

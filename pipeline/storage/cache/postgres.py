@@ -95,14 +95,16 @@ class PooledCache(object):
         self.conn = None
         self.iterating_conn = None
 
-
     def make_threadsafe(self):
+        # Might be calling threadsafe a second time or otherwise have
+        # a poolman floating around
+        if self.pools is not None and self.pools != poolman:
+            self.pools.put_all()
         self.conn = None
         self.iterating_conn = None
         local_pool = PoolManager()
         self.pools = local_pool
         local_pool.make_pool(self.pool_name, user=self.config['user'], dbname=self.config['dbname'])
-
 
     def _cursor(self, internal=True, iter=False, size=0):
         # Ensure cursor is managed server-side otherwise select * from table
@@ -130,7 +132,6 @@ class PooledCache(object):
         return cursor
 
     # --- pgcache ---
-
 
     def _make_table(self):
         qry = f"""CREATE TABLE public.{self.name} (

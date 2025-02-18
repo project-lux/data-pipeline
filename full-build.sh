@@ -1,5 +1,9 @@
 #!/bin/bash
 
+
+exit 0
+
+
 ### Clear records
 python ./manage-data.py --clear-all --new-token
 

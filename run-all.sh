@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export TQDM_DISABLE=1
+
 ### Clear records
 
 if [ ! -n "$1" ]
@@ -98,6 +100,11 @@ done
 rm ../data/logs/flags/merge_is_done-*.txt
 
 sleep 30
+
+# Now run post-build-portal to tag YPM records
+python ./post-build-portal.py --no-tqdm
+sleep 10
+
 
 ### Export Phase
 #
