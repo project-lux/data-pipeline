@@ -48,8 +48,6 @@ def process_uri(uri, option1=False, option2=False):
 				ident = e.get("id","")
 				if ident:
 					(src, identifier) = cfgs.split_uri(ident)
-					print(src)
-					print(identifier)
 					cache = src['recordcache']
 					cachename = src['name']
 					if src['type'] == "external":
@@ -57,10 +55,12 @@ def process_uri(uri, option1=False, option2=False):
 							continue
 						else:
 							identqua = identifier + "##qua" + typ
+							print(f"identqua is {identqua}")
 					else:
 						identqua = identifier
 					cacherec = cache[identqua]
 					if cacherec:
+						print(f"got cacherec for {identqua}")
 						data = cacherec['data']
 						try:
 							names = data['identified_by']
