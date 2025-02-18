@@ -167,6 +167,8 @@ class FastMapper(Mapper):
                     activity.timespan = ts
 
     def process_person(self, root, rec):
+        ##FIXME: test names and don't add alts if same as primary
+        
         """Processes Person-only fields"""
         df100_data = self.extract_datafields(root, '100', ['a', 'd'])
         df046_data = self.extract_datafields(root, '046', ['f', 'g'])
