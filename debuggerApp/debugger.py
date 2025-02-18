@@ -29,7 +29,7 @@ def process_uri(uri, option1=False, option2=False):
 
 	TYPE_MAP = {
 		"object": "HumanMadeObject",
-		"digital":"DigitalObject"
+		"digital":"DigitalObject",
 		"concept": "Type",
 		"text": "LinguisticObject",
 		"visual": "VisualWork",
