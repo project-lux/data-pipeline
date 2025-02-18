@@ -27,16 +27,18 @@ def process_uri(uri, option1=False, option2=False):
 	except:
 		return {"records": [], "error": f"Failure: could not fetch uri {uri}"}
 
-	typ = uri.rsplit("/",2)[-2]
+	TYPE_MAP = {
+		"object": "HumanMadeObject",
+		"digital":"DigitalObject"
+		"concept": "Type",
+		"text": "LinguisticObject",
+		"visual": "VisualWork",
+		"person": "Person",
+		"group": "Group"
+	}
 
-	if typ == "object":
-		typ = "HumanMadeObject"
-	elif typ == "concept":
-		typ = "Type"
-	elif typ == "text":
-		typ = "LinguisticObject"
-	elif typ == "visual":
-		typ = "VisualWork"
+	uri_typ = uri.rsplit("/",2)[-2]
+	typ = TYPE_MAP.get(uri_typ, None)
 
 	recnames = {}
 	recequivs = {}
