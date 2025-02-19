@@ -2,9 +2,13 @@ import os
 import sys
 from dotenv import load_dotenv
 from pipeline.config import Config
+import multiprocessing
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
 from pipeline.storage.cache.postgres import PoolManager
+
+
+multiprocessing.set_start_method("spawn")
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")
@@ -56,7 +60,7 @@ def process_recids(recids, thr):
                 leave=True,
                 disable=TQDM_DISABLE)
     merged = cfgs.results['merged']['recordcache']
-    merged.make_threadsafe()
+    #merged.make_threadsafe()
     local_dists = {}
     local_added = {}
     for recid in recids:
@@ -79,7 +83,7 @@ def set_portal(portal_ids, portal, thr):
                 leave=True,
                 disable=TQDM_DISABLE)
     merged = cfgs.results['merged']['recordcache']
-    merged.make_threadsafe()
+    #merged.make_threadsafe()
     done = 0
     for recid in portal_ids:
         try:
