@@ -6,6 +6,7 @@ from googleapiclient.errors import HttpError
 
 import os
 import logging
+from pathlib import Path
 from datetime import datetime, timedelta
 from pipeline.config import Config
 from dotenv import load_dotenv
@@ -148,16 +149,24 @@ def check_datacache_times(cache, cachetimes):
     }
 
 def check_file_timestamps():
-    # FIXME: This path should go to config
-    filepath = f"/data-export/output/lux/latest/"
-    for filename in os.listdir(filepath):
-        file = os.path.join(filepath, filename)
-        if os.path.isfile(file):         
-            timestamp = os.path.getmtime(file)
-            datestamp = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
-            return {'Marklogic Export': {'timestamp': datestamp, 'type': 'Internal'}}
-    logging.warning("No valid files found for Marklogic timestamp")
-    return {}
+    filepath = cfgs.exports_dir
+    logging.info(f"Checking Marklogic export directory: {filepath}")
+
+    try:
+        for file in Path(filepath).iterdir():
+            if file.is_file() and file.suffix == '.jsonl.gz':
+                timestamp = file.stat().st_mtime
+                datestamp = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+
+                logging.info(f"Using timestamp from: {file.name}, Timestamp: {datestamp}")
+                return {'Marklogic Export': {'timestamp': datestamp, 'type': 'Internal'}}
+
+        logging.warning("No .jsonl.gz files found in the export directory.")
+        return {}
+
+    except Exception as e:
+        logging.warning(f"Unexpected error with Marklogic export: {e}")
+        return {}
 
 def delete_old_tabs():
     try:
