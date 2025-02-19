@@ -3,7 +3,7 @@ import sys
 import json
 from dotenv import load_dotenv
 from pipeline.config import Config
-from pipeline.storage.cache.postgres import poolman
+from pipeline.storage.cache.postgres import PoolManager
 
 import datetime
 import io
@@ -80,6 +80,7 @@ if profiling:
     raise ValueError()
 
 # Explicitly force all postgres connections to close
+poolman = PoolManager.get_instance()
 poolman.put_all("localsocket")
 
 with open(os.path.join(cfgs.log_dir, "flags", f"export_is_done-{my_slice}.txt"), "w") as fh:

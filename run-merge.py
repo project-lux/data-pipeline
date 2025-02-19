@@ -6,7 +6,7 @@ from pipeline.config import Config
 from pipeline.process.reidentifier import Reidentifier
 from pipeline.process.merger import MergeHandler
 from pipeline.process.reference_manager import ReferenceManager
-from pipeline.storage.cache.postgres import poolman
+from pipeline.storage.cache.postgres import PoolManager
 
 import datetime
 import io
@@ -235,6 +235,7 @@ if DO_REFERENCES:
                 print(f"*** Final transform returned None")
 
 # force all postgres connections to close
+poolman = PoolManager.get_instance()
 poolman.put_all("localsocket")
 
 with open(os.path.join(cfgs.log_dir, "flags", f"merge_is_done-{my_slice}.txt"), "w") as fh:

@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from pipeline.config import Config
 from pipeline.process.reconciler import Reconciler
 from pipeline.process.reference_manager import ReferenceManager
-from pipeline.storage.cache.postgres import poolman
+from pipeline.storage.cache.postgres import PoolManager
 
 import io
 import cProfile
@@ -212,6 +212,7 @@ if DO_REFERENCES:
 # final tidy up
 ref_mgr.write_metatypes(my_slice)
 # force all postgres connections to close
+poolman = PoolManager.get_instance()
 poolman.put_all("localsocket")
 
 # Report Status for orchestration
