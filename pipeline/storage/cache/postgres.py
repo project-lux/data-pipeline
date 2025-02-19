@@ -4,6 +4,7 @@ from psycopg2.pool import SimpleConnectionPool
 import time
 import datetime
 import sys
+import threading
 
 #
 # How to index into JSONB arrays:
@@ -20,10 +21,22 @@ import sys
 # This means we can't iterate two different tables at the same time, but that's fine.
 
 class PoolManager(object):
+    _instance = None
+    _lock = threading.Lock()
+
     def __init__(self):
         self.conn = None
         self.iterating_conn = None
         self.pool = None
+
+    @classmethod
+    def get_instance(cls):
+        if cls._instance is None:
+            with cls._lock:
+                # Double-check locking pattern
+                if cls._instance is None:
+                    cls._instance = PoolManager()
+        return cls._instance
 
     def make_pool(self, name, host=None, port=None, user=None, password=None, dbname=None):   
         if self.conn is None:
@@ -56,7 +69,7 @@ class PoolManager(object):
         self.put_conn(self.pool, close=True)
         self.put_conn(self.pool, close=True, itr=True)
 
-poolman = PoolManager()
+
 
 class PooledCache(object):
 
@@ -65,7 +78,7 @@ class PooledCache(object):
         self.name = config['name'] + '_' + config['tabletype']
         self.conn = None
         self.iterating_conn = None
-        self.pools = poolman
+        self.pools = PoolManager.get_instance()
 
         if config['host']:
             # TCP/IP
