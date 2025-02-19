@@ -1,9 +1,0 @@
-{
-	"name": "record_refs",
-	"type": "map",
-	"storeClass": "storage.idmap.redis.MultiMap",
-	"host": "localhost",
-	"port": 6379,
-    "db": 8,
-    "maxItems": 10000
-}

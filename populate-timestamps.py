@@ -157,17 +157,16 @@ def check_file_timestamps():
             if file.is_file() and file.suffix == '.jsonl.gz':
                 timestamp = file.stat().st_mtime
                 datestamp = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
-                
+
                 logging.info(f"Using timestamp from: {file.name}, Timestamp: {datestamp}")
                 return {'Marklogic Export': {'timestamp': datestamp, 'type': 'Internal'}}
-        
+
         logging.warning("No .jsonl.gz files found in the export directory.")
         return {}
 
     except Exception as e:
         logging.warning(f"Unexpected error with Marklogic export: {e}")
         return {}
-
 
 def delete_old_tabs():
     try:

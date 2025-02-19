@@ -41,9 +41,33 @@ class MlMapper(Mapper):
             "assigned_by",
             "exemplary_member_of",
         ]
-
         self.external_types = {}
-        # self.record_references = self.configs.instantiate_map('record_refs')['store']
+
+        self.ref_ctr_excludes = set([x[-36:] for x in list(self.configs.globals.values()) if x])
+        non_global_externals = [
+            'http://vocab.getty.edu/aat/300264578##quaType',
+            'http://vocab.getty.edu/aat/300435704##quaType',
+            'http://id.loc.gov/authorities/names/n80008747##quaGroup',
+            'http://vocab.getty.edu/aat/300133046##quaType',
+            'http://vocab.getty.edu/aat/300025883##quaType',
+            'http://vocab.getty.edu/aat/300435452##quaType',
+            'http://vocab.getty.edu/aat/300435430##quaType',
+            'http://vocab.getty.edu/aat/300202362##quaType',
+            'http://vocab.getty.edu/aat/300311706##quaType',
+            'http://vocab.getty.edu/aat/300404621##quaType',
+            'http://vocab.getty.edu/aat/300055665##quaType',
+            'http://vocab.getty.edu/aat/300027200##quaType',
+            'http://vocab.getty.edu/aat/300404333##quaType',
+            'http://id.loc.gov/authorities/names/n78015294##quaGroup',
+            'http://vocab.getty.edu/aat/300404264##quaType',
+            'http://vocab.getty.edu/aat/300417443##quaType',
+            'http://vocab.getty.edu/aat/300026497##quaType',
+            'http://vocab.getty.edu/aat/300215302##quaType'
+        ]
+        idmap = self.configs.get_idmap()
+        non_global_excludes = [idmap[x][-36:] for x in non_global_externals]
+        self.ref_ctr_excludes.update(set(non_global_excludes))
+
 
     def _walk_node_ref(self, node, refs, all_refs, top=False, ignore=False):
         if (
@@ -796,6 +820,7 @@ class MlMapper(Mapper):
         # Add in inter-record shortcut triples
 
         (reffed, all_reffed) = self.find_named_refs(data)
+
         for r in reffed:
             t = {"subject": me, "predicate": f"{luxns}{pfx}Any", "object": r}
             ml["triples"].append({"triple": t})
@@ -818,10 +843,15 @@ class MlMapper(Mapper):
                 ml["triples"].append({"triple": t4})
 
         for r in all_reffed:
-            # update record reference index in redis that me has a reference to r
-            r2 = r.split("/")[-1]
-            me2 = me.split("/")[-1]
-            # self.record_references[r2] = me2
+            if r[-36:] in self.ref_ctr_excludes:
+                # exclude globals and top 20
+                continue
+            elif r in reffed:
+                # exclude lux:any
+                continue
+            else:
+                t = {"subject": me, "predicate": f"{luxns}refCtr", "object": r}
+                ml['triples'].append({'triple': t})
 
         # Add boolean flags for hasImage and isOnline
 

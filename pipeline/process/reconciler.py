@@ -63,7 +63,7 @@ class Reconciler(object):
                 print("    (uris)")
             self.reconcile_uris(record)
             leqs = record["data"].get("equivalent", [])
-            if self.filter_internal:
+            if self.filter_internal:  ## FIXME: uhhh... huh????
                 to_remove = []
                 for e in leqs:
                     for i in self.config.internal.values():

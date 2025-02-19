@@ -1,3 +1,4 @@
+
 class Acquirer(object):
     def __init__(self, config):
         self.config = config
@@ -8,7 +9,7 @@ class Acquirer(object):
         self.fetcher = config["fetcher"]
         self.debug = config.get("debug", 0)
         self.name = config["name"]
-        self.force_rebuild = config.get("force_rebuild", False)
+        # self.force_rebuild = config.get("force_rebuild", False)
         self.validate = config.get("validate_on_acquire", False)
         self.raise_on_error = config.get("raise_on_validation_error", False)
         self.validator = config["all_configs"].validator
@@ -23,9 +24,9 @@ class Acquirer(object):
     def returns_multiple(self, record=None):
         return self.mapper.returns_multiple(record)
 
-    def do_fetch(self, identifier, store=True):
+    def do_fetch(self, identifier, store=True, refetch=False):
         rec = None
-        if not self.force_rebuild:
+        if not refetch:
             rec = self.datacache[identifier]
             if rec is not None:
                 return rec
@@ -95,7 +96,7 @@ class Acquirer(object):
             result.append(self.do_post_map(rec, rec["data"]["type"], store))
         return result
 
-    def acquire(self, identifier, rectype=None, dataonly=False, store=True, reference=False):
+    def acquire(self, identifier, rectype=None, dataonly=False, store=True, reference=False, refetch=False):
         # Given an identifier, ensure that datacache and recordcache are populated
         # Return resulting record
 
@@ -106,7 +107,7 @@ class Acquirer(object):
             return None
 
         # Return already built record
-        if not dataonly and not reference:
+        if not dataonly and not reference and not refetch:
             rec = self.recordcache[identifier]
             if rec is not None:
                 return rec
@@ -116,7 +117,7 @@ class Acquirer(object):
                 if rec is not None:
                     return rec
 
-        rec = self.do_fetch(identifier, store)
+        rec = self.do_fetch(identifier, store, refetch)
         if dataonly or rec is None:
             return rec
 

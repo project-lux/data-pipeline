@@ -127,7 +127,7 @@ class Cleaner(Mapper):
             "_label": "Primary Name",
             "equivalent": [
                 {
-                    "id": "http://vocab.getty.edu/aat/300404670",
+                    "id": "http://vocab.getty.edu/aat/300404670", # FIXME: use global
                     "type": "Type",
                     "_label": "Final: Primary Name",
                 }
@@ -139,7 +139,7 @@ class Cleaner(Mapper):
             "_label": "Sort Name",
             "equivalent": [
                 {
-                    "id": "http://vocab.getty.edu/aat/300451544",
+                    "id": "http://vocab.getty.edu/aat/300451544", # FIXME: use global
                     "type": "Type",
                     "_label": "Final: Sort Title",
                 }
@@ -565,8 +565,8 @@ class Cleaner(Mapper):
                 block = ws[k]
                 subj.append(block)
             except:
-                print(f"\n ------- Could not find {k} in {ws} for {data['id']}")
-                # pass
+                # print(f"\n ------- Could not find {k} in {ws} for {data['id']}")
+                pass
 
         if subj:
             data["subject_of"] = subj

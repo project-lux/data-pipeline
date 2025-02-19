@@ -85,3 +85,31 @@ class Loader(object):
                 print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
         fh.close()
         self.out_cache.commit()
+
+
+
+    def load_export(self):
+        where = '/Users/rs2668/Development/lux/data/source'
+        zipfn = os.path.join(where, f'export_{self.config["name"]}.zip')
+        zh = zipfile.ZipFile(zipfn, 'r', compression=zipfile.ZIP_BZIP2)
+        start = time.time()
+        x = 0
+        idents = zh.namelist()
+        total = len(idents)
+        for ident in idents:
+            fh = zh.open(ident)
+            data = fh.read()
+            fh.close()
+            try:
+                data = data.encode('utf-8')
+                js = json.loads(data)
+            except:
+                continue
+            x += 1
+            self.out_cache[ident] = js['data']
+            if not x % 10000:
+                t = time.time() - start
+                xps = x/t
+                ttls = total / xps
+                print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
+        zh.close()

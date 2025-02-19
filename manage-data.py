@@ -125,28 +125,40 @@ if "--reload" in sys.argv:
 ### VALIDATION
 if "--validate" in sys.argv:
     ignore_matches = []
-    rc = cfgs.internal["ils"]["recordcache"]
+    to_do = []
+    for src, cfg in cfgs.internal.items():
+        if f"--{src}" in sys.argv:
+            to_do.append((src, cfg))
+
+    if len(sys.argv) > 4 and sys.argv[1].isnumeric() and sys.argv[2].isnumeric():
+        my_slice = int(sys.argv[1])
+        max_slice = int(sys.argv[2])
+    else:
+        my_slice = max_slice = -1
+
     v = cfgs.validator
-    for rec in rc.iter_records():
-        sys.stdout.write(".")
-        sys.stdout.flush()
-        errs = v.validate(rec)
-        if errs:
-            filtered = []
-            for error in errs:
-                done = False
-                for im in ignore_matches:
-                    if im in error.message:
-                        done = True
-                if not done:
-                    filtered.append(error)
-            if filtered:
-                print(f"\n{rec['identifier']}")
-                for error in filtered:
-                    print(f"  /{'/'.join([str(x) for x in error.absolute_path])} --> {error.message} ")
-        else:
-            # print(f"{rec['identifier']}: Valid")
-            pass
+    for (src, cfg) in to_do:
+        rc = cfg["recordcache"]
+        for rec in rc.iter_records_slice(my_slice, max_slice):
+            sys.stdout.write(".")
+            sys.stdout.flush()
+            errs = v.validate(rec)
+            if errs:
+                filtered = []
+                for error in errs:
+                    done = False
+                    for im in ignore_matches:
+                        if im in error.message:
+                            done = True
+                    if not done:
+                        filtered.append(error)
+                if filtered:
+                    print(f"\n{rec['identifier']}")
+                    for error in filtered:
+                        print(f"  /{'/'.join([str(x) for x in error.absolute_path])} --> {error.message} ")
+            else:
+                # print(f"{rec['identifier']}: Valid")
+                pass
 
 ### WRITE NEW IDMAP TOKEN
 
@@ -189,7 +201,8 @@ if "--nt" in sys.argv:
 
     mpr = QleverMapper(cfgs.results["marklogic"])
     rc = cfgs.results["merged"]["recordcache"]
-    with gzip.open(f"/data-io2-2/output/lux/nt/lux_{my_slice}.nt.gz", "wt", 1) as fh:
+    # FIXME: this path should go to config
+    with gzip.open(f"/data-export/output/lux/nt/lux_{my_slice}.nt.gz", "wt", 1) as fh:
         if my_slice == -1:
             itr = rc.iter_keys()
         else:

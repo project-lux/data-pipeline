@@ -202,7 +202,7 @@ class Collector(object):
                     # This could do a better job determining the prefix part
                     # but would be Much Slower to iterate through all known vocabs
                     for xeq in xeqs:
-                        xpfx = xeq["id"].rsplit("/", 1)[0]
+                        xpfx = xeq["id"].rsplit("/", 1)[0]  ### FIXME: Should this be split_uri ?
                         try:
                             xpfxs[xpfx] += 1
                         except:
@@ -252,6 +252,7 @@ class Collector(object):
                                 # Check if we should drop it out as already have an entry from this source
                                 # Should this be before we start processing? e.g. does having one bad equivalent
                                 # mean all the equivalents should be thrown out?
+                                ### FIXME: Do we ever do this? If not, throw it out
                                 if known[0].get("uniquePerRecord", False):
                                     for xid in currids:
                                         if xid.startswith(known[0]["namespace"]):
