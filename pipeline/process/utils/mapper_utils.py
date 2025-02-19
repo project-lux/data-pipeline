@@ -6,10 +6,10 @@ from edtf import parse_edtf, text_to_edtf, struct_time_to_datetime
 from datetime import datetime, timedelta
 from edtf.parser.parser_classes import (
     UncertainOrApproximate as UOA,
-    PartialUncertainOrApproximate as PUOA,
-    MaskedPrecision as MP,
-)
+    PartialUncertainOrApproximate as PUOA)
 import numpy as np
+
+# Note -- MaskedPrecision was removed from edtf, so removing as fuzzy parser
 
 try:
     from pyluach.dates import HebrewDate
@@ -352,7 +352,7 @@ def make_datetime(value, precision=""):
 
         if dt is not None:
             # Yes to EDTF
-            if type(dt) in [UOA, PUOA, MP]:
+            if type(dt) in [UOA, PUOA]:
                 begin = dt.lower_fuzzy()
                 end = dt.upper_fuzzy()
             else:

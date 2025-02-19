@@ -30,13 +30,14 @@ class Mapper(object):
         self.process_langs = {}
         self.aat_material_ids = []
         self.aat_unit_ids = []
-        for l, i in vocab.identity_instances.items():
-            if i["parent"] == model.Language:
-                self.process_langs[i["code"]] = vocab.instances[l]
-            elif i["parent"] == model.Material:
-                self.aat_material_ids.append(vocab.instances[l].id)
-            elif i["parent"] == model.MeasurementUnit:
-                self.aat_unit_ids.append(vocab.instances[l].id)
+        for i in vocab.instances.values():
+            if isinstance(i, model.Language):
+                if hasattr(i, 'notation'):
+                    self.process_langs[i.notation] = i
+            elif isinstance(i, model.Material):
+                self.aat_material_ids.append(i.id)
+            elif isinstance(i, model.MeasurementUnit):
+                self.aat_unit_ids.append(i.id)
 
         self.lang_three_to_two = {
             "por": "pt",
@@ -139,6 +140,7 @@ class Mapper(object):
             for f in data:
                 if f["source"] == self.name:
                     which = "identifier" if f["identifier"] else "equivalent"
+                    ident = None
                     if f["identifier"]:
                         ident = f["identifier"]
                     elif f["equivalent"]:

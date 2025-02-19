@@ -23,7 +23,7 @@ class GettyMapper(Mapper):
         self.ignore_name_classifications = ["http://vocab.getty.edu/term/type/UsedForTerm"]
 
         self.statements = {}
-        for name, thing in vocab.ext_classes.items():
+        for name, thing in vocab.inst_js.items(): ### FIXME: This is terrible and will break
             if "metatype" in thing and thing["metatype"] == "brief text":
                 self.statements[thing["id"]] = getattr(vocab, name)
 
