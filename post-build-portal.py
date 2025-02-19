@@ -18,7 +18,8 @@ cfgs.instantiate_all()
 # and then walk the merged equivalents to find referenced records
 # record them all as YPM portal required
 
-multiprocessing.set_start_method("spawn")
+if multiprocessing.get_start_method() != "spawn":
+    multiprocessing.set_start_method("spawn")
 procs = multiprocessing.cpu_count() * 2 // 3
 TQDM_DISABLE = "--no-tqdm" in sys.argv
 
