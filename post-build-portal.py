@@ -7,9 +7,6 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from tqdm import tqdm
 from pipeline.storage.cache.postgres import PoolManager
 
-
-multiprocessing.set_start_method("spawn")
-
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")
 cfgs = Config(basepath=basepath)
@@ -21,7 +18,8 @@ cfgs.instantiate_all()
 # and then walk the merged equivalents to find referenced records
 # record them all as YPM portal required
 
-procs = 24
+multiprocessing.set_start_method("spawn")
+procs = multiprocessing.cpu_count() * 2 // 3
 TQDM_DISABLE = "--no-tqdm" in sys.argv
 
 src = cfgs.internal['ypm']
@@ -60,7 +58,6 @@ def process_recids(recids, thr):
                 leave=True,
                 disable=TQDM_DISABLE)
     merged = cfgs.results['merged']['recordcache']
-    #merged.make_threadsafe()
     local_dists = {}
     local_added = {}
     for recid in recids:
@@ -83,7 +80,6 @@ def set_portal(portal_ids, portal, thr):
                 leave=True,
                 disable=TQDM_DISABLE)
     merged = cfgs.results['merged']['recordcache']
-    #merged.make_threadsafe()
     done = 0
     for recid in portal_ids:
         try:
@@ -94,7 +90,6 @@ def set_portal(portal_ids, portal, thr):
             print(f"Failed to set metadata on {recid}")
     pbar.close()
     return done
-
 
 
 added_refs = {}
