@@ -74,7 +74,6 @@ for ident in creates:
     new_rec = acquirer.acquire(ident, store=STORE_OKAY)
     temp_recs.append(new_rec)
 
-
 print(f"Fetching {len(updates)} updated recs")
 maybe_delete = {}
 for ident in updates:
@@ -138,7 +137,7 @@ for rec in temp_recs:
     ref_mgr.manage_identifiers(rec2)
     recs2.append(rec2)
 
-print("References")
+print(" ... References")
 
 item = 1
 while item:

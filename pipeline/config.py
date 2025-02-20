@@ -86,6 +86,9 @@ class Config(object):
             self.tests_dir = os.path.join(self.base_dir, self.tests_dir)
         if hasattr(self, "temp_dir") and not self.temp_dir.startswith("/"):
             self.temp_dir = os.path.join(self.base_dir, self.temp_dir)
+        if hasattr(self, "dumps_dir") and not self.dumps_dir.startswith("/"):
+            self.dumps_dir = os.path.join(self.base_dir, self.dumps_dir)
+
 
         if hasattr(self, "validatorClass"):
             vcls = importObject(self.validatorClass)
@@ -416,7 +419,7 @@ class Config(object):
             else:
                 cfg["mapper"] = None
 
-            ldr = cfg.get("loaderClass", None)
+            ldr = cfg.get("loaderClass", "process.base.loader.Loader")
             if ldr:
                 ldrcls = importObject(ldr)
                 cfg["loader"] = ldrcls(cfg)

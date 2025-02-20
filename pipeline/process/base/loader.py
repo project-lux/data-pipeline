@@ -12,7 +12,7 @@ class Loader(object):
     def __init__(self, config):
         self.config = config
         self.in_url = config.get('remoteDumpFile', '')
-        self.in_path = config['dumpFilePath']
+        self.in_path = config.get('dumpFilePath', '')
         self.out_cache = config['datacache']
         self.total = config.get('totalRecords', -1)
 
@@ -89,21 +89,29 @@ class Loader(object):
 
 
     def load_export(self):
-        where = '/Users/rs2668/Development/lux/data/source'
+        where = self.config['all_configs'].dumps_dir
         zipfn = os.path.join(where, f'export_{self.config["name"]}.zip')
-        zh = zipfile.ZipFile(zipfn, 'r', compression=zipfile.ZIP_BZIP2)
+        if not os.path.exists(zipfn):
+            zipfn = os.path.join(where, f'{self.config["name"]}.zip')
+        if os.path.exists(zipfn):
+            zh = zipfile.ZipFile(zipfn, 'r', compression=zipfile.ZIP_BZIP2)
+        else:
+            print("Could not find export zip")
+            return None
         start = time.time()
         x = 0
         idents = zh.namelist()
         total = len(idents)
+        print(total)
         for ident in idents:
             fh = zh.open(ident)
             data = fh.read()
             fh.close()
             try:
-                data = data.encode('utf-8')
+                data = data.decode('utf-8')
                 js = json.loads(data)
-            except:
+            except Exception as e:
+                print(e)
                 continue
             x += 1
             self.out_cache[ident] = js['data']

@@ -66,7 +66,9 @@ class LcMapper(Mapper):
             "Group": nafreconciler,
             "Person": nafreconciler, 
             "Type": shreconciler,
-            "Activity": nafreconciler
+            "Activity": nafreconciler,
+            "Material": shreconciler,
+            "Language": shreconciler
         }
 
         if rectype in reconcilers:
@@ -250,6 +252,7 @@ class LcMapper(Mapper):
                 if type(later) != list:
                     later = [later]
                 ex.extend(later)
+
             earliers = new.get("madsrdf:hasEarlierEstablishedForm", [])
             earlier_ids = []
             if earliers:

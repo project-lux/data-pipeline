@@ -40,23 +40,28 @@ else:
 # NOTE: This implies the existence and use of AAT
 if "--baseline" in sys.argv:
     # Only do global terms. Only needed with a new idmap
-    to_do = [("aat", cfgs.external["aat"])]
-    recids = list(cfgs.globals_cfg.values())
+    recids = [x for x in list(cfgs.globals_cfg.values()) if x.startswith("3")]
     lngs = cfgs.external["aat"]["mapper"].process_langs.values()
     recids.extend([l.id.replace("http://vocab.getty.edu/aat/", "") for l in lngs])
+    to_do = [["aat", cfgs.external["aat"], recids]]
+
+    recids = [x for x in list(cfgs.globals_cfg.values()) if x.startswith("Q")]
+    if recids:
+        to_do.append(["wikidata", cfgs.external['wikidata'], recids])
+
 
 else:
     recids = []
     if "--all" in sys.argv:
-        to_do = list(cfgs.internal.items())
+        to_do = list([x,y,[]] for x in cfgs.internal.items())
     else:
         to_do = []
         for src, cfg in cfgs.internal.items():
             if f"--{src}" in sys.argv:
-                to_do.append((src, cfg))
+                to_do.append([src, cfg, []])
         for src, cfg in cfgs.external.items():
             if f"--{src}" in sys.argv:
-                to_do.append((src, cfg))
+                to_do.append([src, cfg, []])
 
     while "--recid" in sys.argv:
         idx = sys.argv.index("--recid")
@@ -64,6 +69,11 @@ else:
         recids.append(recid)
         sys.argv.pop(idx)
         sys.argv.pop(idx)
+
+    if len(to_do) > 1:
+        print("Can only build individual records from a single source")
+        sys.exit(0)
+    to_do[0][2] = recids
 
     if len(sys.argv) > 2 and sys.argv[1].isnumeric() and sys.argv[2].isnumeric():
         my_slice = int(sys.argv[1])
@@ -96,7 +106,7 @@ if profiling:
     pr = cProfile.Profile()
     pr.enable()
 
-for name, cfg in to_do:
+for name, cfg, recids in to_do:
     print(f" *** {name} ***")
     sys.stdout.flush()
     in_db = cfg["datacache"]

@@ -27,16 +27,22 @@ class Mapper(object):
         self.factory.order_json = False
         self.factory.cache_hierarchy()
 
+
+        ### FIXME: How much of this is actually needed for *all* mappers?
+        ### shouldn't they be instantiated on some constants instance
+        ### and then referenced?
+
         self.process_langs = {}
         self.aat_material_ids = []
         self.aat_unit_ids = []
-        for l, i in vocab.identity_instances.items():
-            if i["parent"] == model.Language:
-                self.process_langs[i["code"]] = vocab.instances[l]
-            elif i["parent"] == model.Material:
-                self.aat_material_ids.append(vocab.instances[l].id)
-            elif i["parent"] == model.MeasurementUnit:
-                self.aat_unit_ids.append(vocab.instances[l].id)
+        for i in vocab.instances.values():
+            if isinstance(i, model.Language):
+                if hasattr(i, 'notation'):
+                    self.process_langs[i.notation] = i
+            elif isinstance(i, model.Material):
+                self.aat_material_ids.append(i.id)
+            elif isinstance(i, model.MeasurementUnit):
+                self.aat_unit_ids.append(i.id)
 
         self.lang_three_to_two = {
             "por": "pt",
@@ -130,6 +136,7 @@ class Mapper(object):
         self.debug = False
         self.acquirer = None
 
+        idmap_has_data = len(idmap)
         self.xpath_fixes = {}
         fn = os.path.join(self.configs.data_dir, f"xpath_fixes.json")
         if os.path.exists(fn):
@@ -139,6 +146,7 @@ class Mapper(object):
             for f in data:
                 if f["source"] == self.name:
                     which = "identifier" if f["identifier"] else "equivalent"
+                    ident = None
                     if f["identifier"]:
                         ident = f["identifier"]
                     elif f["equivalent"]:
@@ -151,15 +159,17 @@ class Mapper(object):
                             except:
                                 yuid = None
                             if not yuid:
-                                print(f"Failed to find record for equivalent: {qua}")
+                                if idmap_has_data:
+                                    print(f"Failed to find record for equivalent: {qua}")
                             else:
                                 yuids.append(yuid)
                         if len(set(yuids)) != 1:
-                            print(f"Failed to find single YUID for {qua}: {yuids}")
+                            if idmap_has_data:
+                                print(f"Failed to find single YUID for {qua}: {yuids}")
                         else:
                             ident = yuids[0][-36:]
 
-                    if not ident:
+                    if not ident and idmap_has_data:
                         print(f"{self.name} xpath fix has no identifier or equivalent: {f}")
                         continue
                     if not f["path"]:
