@@ -28,6 +28,7 @@ class GettyMapper(Mapper):
                 self.statements[thing["id"]] = getattr(vocab, name)
 
         self.statements["300080102"] = vocab.BiographyStatement
+        self.statements["300435416"] = vocab.Description
         self.ignore_statements = ["300418049"]
 
         self.ignore_values = [
