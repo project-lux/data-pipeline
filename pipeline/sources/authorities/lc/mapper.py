@@ -74,7 +74,7 @@ class LcMapper(Mapper):
         if rectype in reconcilers:
             reconciler = reconcilers[rectype]
             rec["type"] = rectype
-            if rectype in ["Place","Group","Person","Ativity"]:
+            if rectype in ["Place","Group","Person","Activity"]:
                 rec["source"] = "lcnaf"
             else:
                 rec["source"] = "lcsh"
@@ -253,12 +253,12 @@ class LcMapper(Mapper):
                     later = [later]
                 ex.extend(later)
 
-            earlier = new.get("madsrdf:hasEarlierEstablishedForm", [])
-            if earlier:
-                earliers = []
-                if not isinstance(earlier, list):
-                    earlier = [earlier]
-                for e in earlier:
+            earliers = new.get("madsrdf:hasEarlierEstablishedForm", [])
+            earlier_ids = []
+            if earliers:
+                if not isinstance(earliers, list):
+                    earliers = [earliers]
+                for e in earliers:
                     txt = e.get("madsrdf:variantLabel")
                     txt = txt.get("@value") if isinstance(txt, dict) else txt
                     eid = e.get("@id")
@@ -270,8 +270,8 @@ class LcMapper(Mapper):
                     else:
                         reid = eid
                     if reid:
-                        earliers.append(reid)
-                ex.extend(earliers)
+                        earlier_ids.append(reid)
+                ex.extend(earlier_ids)
 
         # skos:closeMatch -- Only as a last resort
         close = new.get("madsrdf:hasCloseExternalAuthority", [])
@@ -385,53 +385,32 @@ class LcshMapper(LcMapper):
         else:
             self.map_common(new, top)
 
-            if topcls in [
-                model.Type,
-                model.Language,
-                model.Material,
-                model.Currency,
-                model.MeasurementUnit,
-            ]:
-                cxn = new.get("madsrdf:classification", "")
-                if cxn and type(cxn) == str:
-                    top.equivalent = topcls(ident=f"https://id.loc.gov/authorities/classification/{cxn}")
+        if topcls in [
+            model.Type,
+            model.Language,
+            model.Material,
+            model.Currency,
+            model.MeasurementUnit,
+        ]:
+            cxn = new.get("madsrdf:classification", "")
+            if cxn and type(cxn) == str:
+                top.equivalent = topcls(ident=f"https://id.loc.gov/authorities/classification/{cxn}")
 
-                # broader == madsrdf:hasBroaderAuthority
-                brdr = new.get("madsrdf:hasBroaderAuthority", [])
-                if type(brdr) != list:
-                    brdr = [brdr]
-                for b in brdr:
-                    bident = b["@id"]
-                    if bident.startswith("_"):
-                        continue
-                    try:
-                        blbl = b["madsrdf:authoritativeLabel"]["@value"]
-                    except:
-                        blbl = ""
-                    # concept broader concept
-                    top.broader = topcls(ident=bident, label=blbl)
-            elif topcls == model.Place:
-                # place part_of place
-                # top.part_of = model.Place(ident=bident, label=blbl)
-                # Might be part_of Place, could be classified_as Type
-                # Ignore for now
-                # FIXME: figure this out
-                # print(f"Got a broader term for a Place record in {top.id}")
-                pass
-            elif topcls == model.Group:
-                # group member_of group ?
-                # top.member_of = model.Group(ident=bident, label=blbl)
-                # print(f"Got a broader term for a Group record in {top.id}")
-                pass
-            elif topcls == model.Person:
-                # uhh ... too weird!!
-                # print(f"Got a broader term for a Person record in {top.id}")
-                pass
-            elif topcls == model.Period:
-                # ...
-                pass
-            else:
-                print(f"GOT request for a {topcls} from LCSH {new['@id']}")
+            # broader == madsrdf:hasBroaderAuthority
+            brdr = new.get("madsrdf:hasBroaderAuthority", [])
+            if type(brdr) != list:
+                brdr = [brdr]
+            for b in brdr:
+                bident = b["@id"]
+                if bident.startswith("_"):
+                    continue
+                try:
+                    blbl = b["madsrdf:authoritativeLabel"]["@value"]
+                except:
+                    blbl = ""
+                # concept broader concept
+                top.broader = topcls(ident=bident, label=blbl)
+        #Eventually add in handling for member_of Group, broader Place, part_of Events
 
         js = model.factory.toJSON(top)
         return {"identifier": record["identifier"], "data": js, "source": self.name}
@@ -503,35 +482,35 @@ class LcnafMapper(LcMapper):
         else:
             self.map_common(new, top)
 
-            if topcls == model.Place:
-                # Test if () in name and add a broader if we know it
-                # https://id.loc.gov/authorities/names/n96039009.html
-                name = top._label.strip()
-                if name and (m := self.parens_re.match(name)):
-                    (nm, parent) = m.groups()
-                    if parent.strip() in self.parenthetical_places:
-                        uri = self.parenthetical_places[parent.strip()]
-                        top.part_of = model.Place(ident=uri, label=parent)
+        if topcls == model.Place:
+            # Test if () in name and add a broader if we know it
+            # https://id.loc.gov/authorities/names/n96039009.html
+            name = top._label.strip()
+            if name and (m := self.parens_re.match(name)):
+                (nm, parent) = m.groups()
+                if parent.strip() in self.parenthetical_places:
+                    uri = self.parenthetical_places[parent.strip()]
+                    top.part_of = model.Place(ident=uri, label=parent)
 
-            # Now fill out the details from RWO
-            # if we have one
-            if "madsrdf:identifiesRWO" in new:
-                rwo = new["madsrdf:identifiesRWO"]
-                if type(rwo) == list:
-                    for r in rwo:
-                        self.process_rwo(r, top)
-                elif type(rwo) == dict:
-                    self.process_rwo(rwo, top)
+        # Now fill out the details from RWO
+        # if we have one
+        if "madsrdf:identifiesRWO" in new:
+            rwo = new["madsrdf:identifiesRWO"]
+            if type(rwo) == list:
+                for r in rwo:
+                    self.process_rwo(r, top)
+            elif type(rwo) == dict:
+                self.process_rwo(rwo, top)
 
-                if top.type == "Person":
-                    okay = test_birth_death(top)
-                    if not okay:
-                        try:
-                            top.born = None
-                            top.died = None
-                        except:
-                            # This shouldn't ever happen, but not going to die on the hill
-                            pass
+            if top.type == "Person":
+                okay = test_birth_death(top)
+                if not okay:
+                    try:
+                        top.born = None
+                        top.died = None
+                    except:
+                        # This shouldn't ever happen, but not going to die on the hill
+                        pass
 
         js = model.factory.toJSON(top)
         return {"identifier": record["identifier"], "data": js, "source": self.name}
