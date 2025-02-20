@@ -326,13 +326,14 @@ def make_datetime(value, precision=""):
         if "?" in value or "X" in value or "x" in value:
             # value = x_re.sub('\g<1>u', value)
             # value = x_re.sub('\g<1>u', value)
-            value = value.replace("X", "u")
-            value = value.replace("x", "u")
-            value = value.replace("?", "u")
-            if value.startswith("uu.uu.") or value.startswith("uu-uu-") or value.startswith("uu uu "):
+            value = value.replace("u", "X")
+            value = value.replace("x", "X")
+            value = value.replace("?", "X")
+            value = value.replace('.XX.XX', '-XX-XX')
+            if value.startswith("XX.XX.") or value.startswith("XX-XX-") or value.startswith("XX XX "):
                 value = value[6:]
 
-        value = value.replace("-00", "-uu")
+        value = value.replace("-00", "-XX")
         ed_value = "-" + value if is_bce_date else value
 
         try:
