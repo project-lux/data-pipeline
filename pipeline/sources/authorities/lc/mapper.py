@@ -66,7 +66,9 @@ class LcMapper(Mapper):
             "Group": nafreconciler,
             "Person": nafreconciler, 
             "Type": shreconciler,
-            "Activity": nafreconciler
+            "Activity": nafreconciler,
+            "Material": shreconciler,
+            "Language": shreconciler
         }
 
         if rectype in reconcilers:
@@ -249,10 +251,11 @@ class LcMapper(Mapper):
             if later:
                 if type(later) != list:
                     later = [later]
-                ex.extend(laters)
+                ex.extend(later)
+
             earlier = new.get("madsrdf:hasEarlierEstablishedForm", [])
-            earliers = []
             if earlier:
+                earliers = []
                 if not isinstance(earlier, list):
                     earlier = [earlier]
                 for e in earlier:
@@ -264,7 +267,6 @@ class LcMapper(Mapper):
                     if eid and eid.startswith("_:"):
                         if txt:
                             reid = self.build_recs_and_reconcile(txt, type(top).__name__)
-                            print(f"Earlier form reconciled for {new['@id']}")
                     else:
                         reid = eid
                     if reid:
