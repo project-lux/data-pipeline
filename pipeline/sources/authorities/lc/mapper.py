@@ -407,7 +407,8 @@ class LcshMapper(LcMapper):
                     blbl = ""
                 # concept broader concept
                 top.broader = topcls(ident=bident, label=blbl)
-                
+        #Eventually add in handling for member_of Group, broader Place, part_of Events
+
         js = model.factory.toJSON(top)
         return {"identifier": record["identifier"], "data": js, "source": self.name}
 
