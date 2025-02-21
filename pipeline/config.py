@@ -13,6 +13,8 @@ def importObject(objectType):
     try:
         m = importlib.import_module(modName)
     except ModuleNotFoundError as mnfe:
+        # allow "pipeline" to be skipped
+        ### FIXME: This should use magic to determine the module name
         try:
             m = importlib.import_module(f"pipeline.{modName}")
         except Exception as e:
@@ -33,7 +35,7 @@ class Config(object):
     def __init__(self, configcache=None, basepath=None):
         self.internal = {}
         self.external = {}
-        self.caches = {}
+        self.defaults = {"cache": {}, "map": {}, "marklogic": {}}
         self.results = {}
         self.marklogic_stores = {}
         self.map_stores = {}
@@ -41,6 +43,7 @@ class Config(object):
         self.globals_cfg = {}
         self.validator = None
         self.configcache = None
+        self.subconfig_stores = {}
 
         # This (thus) needs a directory called 'config_cache'
         if configcache:
@@ -61,7 +64,11 @@ class Config(object):
             configcache = FsCache(bootstrap)
             self.configcache = configcache
 
-        base = configcache["base"]["data"]
+        base = configcache["system"]
+        if base is None:
+            raise ValueError(f"Could not find base system configuration (system.json) in {basepath}")
+        else:
+            base = base['data']
         self.process_base(base)
 
         if not self.data_dir.startswith("/"):
@@ -78,34 +85,53 @@ class Config(object):
             self.dumps_dir = os.path.join(self.base_dir, self.dumps_dir)
 
 
-        if hasattr(self, "validatorClass"):
-            vcls = importObject(self.validatorClass)
-            if vcls is not None:
-                self.validator = vcls(self)
-            else:
-                self.validator = None
+        # FIXME: Validators should be per source per cache
+        # if hasattr(self, "validatorClass"):
+        #     vcls = importObject(self.validatorClass)
+        #     if vcls is not None:
+        #         self.validator = vcls(self)
+        #     else:
+        #         self.validator = None
+        self.validator = None
 
         for k in configcache.iter_keys():
-            rec = configcache[k]["data"]
-            if rec["type"] == "internal":
-                self.internal[k] = rec
-            elif rec["type"] == "external":
-                self.external[k] = rec
-            elif rec["type"] == "results":
-                self.results[k] = rec
-            elif rec["type"] == "caches":
-                self.caches = rec
-            elif rec["type"] == "globals":
-                del rec["type"]
-                self.globals_cfg = rec
-            elif rec["type"] == "base":
-                pass
-            elif rec["type"] == "marklogic":
-                self.marklogic_stores[rec["name"]] = rec
-            elif rec["type"] == "map":
-                self.map_stores[rec["name"]] = rec
-            else:
-                print(f"Unknown config type: {rec['type']} in {k}")
+            rec = configcache[k]['data']
+            if type(rec) != dict:
+                raise ValueError("Could not read JSON from record: {k} --> {rec}")
+            self.handle_config_record(k, rec)
+
+        for cfg in self.subconfig_stores.values():
+            cache = cfg['datacache']
+            for k in cache.iter_keys():
+                rec = cache[k]['data']
+                self.handle_config_record(k, rec)
+
+    def handle_config_record(self, k, rec):
+        if not 'type' in rec:
+            raise ValueError(f"missing 'type' in {k}: {rec}")
+        if rec["type"] == "internal":
+            self.internal[k] = rec
+        elif rec["type"] == "external":
+            self.external[k] = rec
+        elif rec["type"] == "results":
+            self.results[k] = rec
+        elif rec["type"] == "default":
+            self.defaults[rec["name"]] = rec
+        elif rec["type"] == "globals":
+            del rec["type"]
+            self.globals_cfg = rec
+        elif rec["type"] == "system":
+            pass
+        elif rec["type"] == "marklogic":
+            self.marklogic_stores[rec["name"]] = rec
+        elif rec["type"] == "map":
+            self.map_stores[rec["name"]] = rec
+        elif rec["type"] == "config":
+            self.subconfig_stores[k] = rec
+            self.instantiate_config(k)
+        else:
+            print(f"Unknown config type: {rec['type']} in {k}")
+            print(rec)
 
     def process_base(self, rec):
         vcls = None
@@ -306,6 +332,85 @@ class Config(object):
         cfg["store"] = clso(cfg)
         return cfg
 
+
+    def instantiate_config(self, key):
+        if not key or not key in self.subconfig_stores:
+            raise ValueError("No such map store config")
+        else:
+            cfg = self.subconfig_stores[key]
+        if "datacache" in cfg and cfg["datacache"] is not None:
+            return cfg
+
+        # Smush directories
+
+        for d in ['base_dir','data_dir', 'exports_dir', 'log_dir', 'tests_dir', 'temp_dir', 'dumps_dir']:
+            if d in cfg and not cfg[d].startswith('/'):
+                cfg[d] = os.path.join(getattr(self, d), cfg[d])
+            else:
+                cfg[d] = getattr(self, d)
+
+        for k, ptype in self.path_types.items():
+            if k in cfg:
+                pth = cfg[k]
+                if pth and not pth.startswith("/"):
+                    # put the right type of base directory before it
+                    pfx = getattr(self, ptype)
+                    if not pfx.startswith("/"):
+                        bd = self.base_dir
+                        path = os.path.join(bd, pfx, pth)
+                    else:
+                        path = os.path.join(pfx, pth)
+                    cfg[k] = path
+        # Add self to config
+        cfg["all_configs"] = self
+
+        try:
+            dcc = cfg.get("datacacheClass", "storage.cache.postgres.DataCache")
+            cls3 = importObject(dcc)
+            tmp_cfg = self.merge_configs(cfg, self.defaults['cache'])
+            cfg["datacache"] = cls3(tmp_cfg)
+
+            if "fetch" in cfg or "fetcherClass" in cfg:
+                fc = cfg.get("fetcherClass", None)
+                if fc:
+                    cls1 = importObject(fc)
+                    cfg["fetcher"] = cls1(cfg)
+
+                    nmap_name = cfg.get("networkmap_name", "networkmap")
+                    if nmap_name in self.map_stores:
+                        nmap_c = self.map_stores[nmap_name]
+                        if "store" in nmap_c and nmap_c["store"] is not None:
+                            nmap = nmap_c["store"]
+                        else:
+                            nmap = self.instantiate_map(nmap_name)["store"]
+                    else:
+                        raise ValueError(f"{cfg['name']} references network map store that does not exist: {nmap_name}")
+                    cfg["fetcher"].networkmap = nmap
+
+            hclsName = cfg.get("harvesterClass", None)
+            if hclsName:
+                hcls = importObject(hclsName)
+                cfg["harvester"] = hcls(cfg)
+            else:
+                cfg["harvester"] = None
+            ldr = cfg.get("loaderClass", None)
+            if ldr:
+                ldrcls = importObject(ldr)
+                cfg["loader"] = ldrcls(cfg)
+            else:
+                cfg["loader"] = None
+            dldr = cfg.get("downloaderClass", None)
+            if dldr:
+                dldrcls = importObject(dldr)
+                cfg["downloader"] = dldrcls(cfg)
+            else:
+                cfg["downloader"] = None
+        except Exception as e:
+            print(f"Failed to build configuration for {cfg['name']}")
+            raise
+
+        return cfg
+
     def instantiate(self, key, which=None):
         # build the set of components for a configured source
 
@@ -340,7 +445,7 @@ class Config(object):
             # Harvester needs the datacache to be in config
             dcc = cfg.get("datacacheClass", "storage.cache.postgres.DataCache")
             cls3 = importObject(dcc)
-            tmp_cfg = self.merge_configs(cfg, self.caches)
+            tmp_cfg = self.merge_configs(cfg, self.defaults['cache'])
             cfg["datacache"] = cls3(tmp_cfg)
 
             if "fetch" in cfg:
@@ -382,7 +487,7 @@ class Config(object):
 
                 rrcc = cfg.get("recordcacheReconciledClass", "storage.cache.postgres.ExternalReconciledRecordCache")
                 cls5 = importObject(rrcc)
-                tmp_cfg = self.merge_configs(cfg, self.caches)
+                tmp_cfg = self.merge_configs(cfg, self.defaults['cache'])
                 cfg["reconciledRecordcache"] = cls5(tmp_cfg)
 
                 rcc = cfg.get("recordcacheClass", "storage.cache.postgres.ExternalRecordCache")
@@ -397,7 +502,7 @@ class Config(object):
 
             # Different default classes for record caches based on internal/external
             cls4 = importObject(rcc)
-            tmp_cfg = self.merge_configs(cfg, self.caches)
+            tmp_cfg = self.merge_configs(cfg, self.defaults['cache'])
             cfg["recordcache"] = cls4(tmp_cfg)
 
             # Everything needs a mapper to get from data to record
@@ -417,7 +522,7 @@ class Config(object):
             rcc2 = cfg.get("recordcache2Class", "storage.cache.postgres.RecordCache")
             if rcc2:
                 cls5 = importObject(rcc2)
-                tmp_cfg = self.merge_configs(cfg, self.caches)
+                tmp_cfg = self.merge_configs(cfg, self.defaults['cache'])
                 cfg["recordcache2"] = cls5(tmp_cfg)
             else:
                 cfg["recordcache2"] = None
