@@ -314,10 +314,9 @@ class Config(object):
 
         cfg["all_configs"] = self
         tmp_cfg = self.merge_configs(cfg, self.defaults['ml'])
-
         clss = tmp_cfg.get("storeClass", "storage.marklogic.rest.MarkLogicStore")
         clso = importObject(clss)
-        cfg["store"] = clso(cfg)
+        cfg["store"] = clso(tmp_cfg)
         return cfg
 
     def instantiate_map(self, key):
@@ -329,9 +328,10 @@ class Config(object):
             return cfg
 
         cfg["all_configs"] = self
-        clss = cfg.get("storeClass", "storage.idmap.redis.IdMap")
+        tmp_cfg = self.merge_configs(cfg, self.defaults['map'])
+        clss = tmp_cfg.get("storeClass", "storage.idmap.redis.IdMap")
         clso = importObject(clss)
-        cfg["store"] = clso(cfg)
+        cfg["store"] = clso(tmp_cfg)
         return cfg
 
 
