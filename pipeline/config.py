@@ -313,7 +313,9 @@ class Config(object):
             return cfg
 
         cfg["all_configs"] = self
-        clss = cfg.get("storeClass", "storage.marklogic.rest.MarkLogicStore")
+        tmp_cfg = self.merge_configs(cfg, self.defaults['ml'])
+
+        clss = tmp_cfg.get("storeClass", "storage.marklogic.rest.MarkLogicStore")
         clso = importObject(clss)
         cfg["store"] = clso(cfg)
         return cfg
