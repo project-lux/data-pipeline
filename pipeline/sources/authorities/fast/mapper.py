@@ -214,8 +214,11 @@ class FastMapper(Mapper):
             return None
 
         # Extract birth and death dates (046)
-        birth_dates = make_datetime(df046_data.get('f', [''])[0]) if 'f' in df046_data else None
-        death_dates = make_datetime(df046_data.get('g', [''])[0]) if 'g' in df046_data else None
+
+        birth_dates = make_datetime(df046_data.get('f', [''])[0])
+        print(f"birth dates is {birth_dates}")
+        death_dates = make_datetime(df046_data.get('g', [''])[0])
+        print(f"death dates is {death_dates}")
 
         # Extract birth and death dates (100, 400) if not set      
         for potential_dates in [df100_data.get('d',[None]), df400_data.get('d',[None])]:            
@@ -223,6 +226,8 @@ class FastMapper(Mapper):
                 b, e = dates.split("-")
                 birth_tmps = make_datetime(b) if b else None
                 death_tmps = make_datetime(e) if e else None
+                print(f"birth_tmps is {birth_tmps}")
+                print(f"death_tmps is {death_tmps}")
 
                 if not birth_dates and birth_tmps:
                     birth_dates = birth_tmps
