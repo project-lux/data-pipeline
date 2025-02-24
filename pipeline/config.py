@@ -537,7 +537,7 @@ class Config(object):
             else:
                 cfg["loader"] = None
 
-            dldr = cfg.get("downloaderClass", None)
+            dldr = cfg.get("downloaderClass", "process.base.downloader.BaseDownloader")
             if dldr:
                 dldrcls = importObject(dldr)
                 cfg["downloader"] = dldrcls(cfg)

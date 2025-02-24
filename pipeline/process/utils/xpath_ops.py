@@ -104,13 +104,4 @@ def process_operation(what, xpath, operation, argument=None):
             print(f"Got APPEND operation from fixes, and not yet implemented")
         else:
             print(f"Unknown operation: {operation}")
-
     return what
-
-
-if __name__ == "__main__":
-    import requests
-
-    resp = requests.get("https://lux.collections.yale.edu/data/object/436afada-ac05-455e-922a-2a99dfb040b2")
-    js = resp.json()
-    del js["_links"]
