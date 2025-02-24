@@ -88,7 +88,7 @@ class FastMapper(Mapper):
         
         # Set member_of
         if membership:
-            rec.member_of = getattr(rec, "member_of", None) + membership
+            rec.member_of = getattr(rec, "member_of", []) + membership
 
         # Extract occupations (374)
         classifications = []
@@ -102,7 +102,7 @@ class FastMapper(Mapper):
 
         # Set classification
         if classifications:
-            rec.classified_as = getattr(rec, "classified_as", None) + classifications
+            rec.classified_as = getattr(rec, "classified_as", []) + classifications
 
 
         # Extract residence (370 or 551)
@@ -306,7 +306,8 @@ class FastMapper(Mapper):
 
         # Set gender
         if genders:
-            rec.classified_as = getattr(rec, "classified_as", None) + genders
+            rec.classified_as = getattr(rec, "classified_as", []) + genders
+
         
         # Extract biographical note (500)
         df500_data = self.extract_datafields(root, '500', ['a'])
@@ -314,7 +315,7 @@ class FastMapper(Mapper):
 
         # Set biographical note
         if biographies:
-            rec.referred_to_by = getattr(rec, "referred_to_by", None) + biographies
+            rec.referred_to_by = getattr(rec, "referred_to_by", []) + biographies
         
         # Send to process_agent for common fields
         self.process_agent(root, rec) 
@@ -365,7 +366,7 @@ class FastMapper(Mapper):
             try:
                 reconciled_uri = self.build_recs_and_reconcile(classification, "concept")
                 if reconciled_uri:
-                    rec.classified_as = getattr(rec, "classified_as", None) + [model.Type(ident=reconciled_uri, label=classification)]
+                    rec.classified_as = getattr(rec, "classified_as", []) + [model.Type(ident=reconciled_uri, label=classification)]
             except:
                 continue
 
