@@ -160,9 +160,7 @@ class FastMapper(Mapper):
                             ts.end_of_the_end = dend
 
                         activity.timespan = ts  # Attach timespan to the specific activity
-
-                # Append valid activities
-                carried_out_activities.append(activity)
+                    carried_out_activities.append(activity)
 
         if carried_out_activities:
             rec.carried_out = carried_out_activities
