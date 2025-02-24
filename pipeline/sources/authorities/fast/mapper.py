@@ -102,6 +102,7 @@ class FastMapper(Mapper):
             if name:
                 uri = self.build_recs_and_reconcile(name.lower(), "type")
                 if uri:
+                    print(f" got occupation uri from reconciliation")
                     classifications.append(model.Type(ident=uri, label=name))
 
         # Set classification
@@ -139,8 +140,10 @@ class FastMapper(Mapper):
                 activity = vocab.Active()
             
             if field_of_activity:
+                print(f"  got field_of_activity {field_of_activity}")
                 fpid = self.build_recs_and_reconcile(field_of_activity.lower(), "concept")
                 if fpid:
+                    print(f"  got fpid")
                     activity.classified_as = model.Type(ident=fpid, label=field_of_activity)
                     rec.carried_out = activity
             
@@ -378,6 +381,7 @@ class FastMapper(Mapper):
         for classification in df368_data.get('a',['']):
             try:
                 reconciled_uri = self.build_recs_and_reconcile(classification.lower(), "concept")
+                print(f"  got reconciled uri {reconciled_uri}")
                 if reconciled_uri:
                     rec.classified_as = getattr(rec, "classified_as", []) + [model.Type(ident=reconciled_uri, label=classification)]
             except:
