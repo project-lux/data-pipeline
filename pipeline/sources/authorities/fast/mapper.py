@@ -217,13 +217,12 @@ class FastMapper(Mapper):
 
         birth_dates = make_datetime(df046_data.get('f', [''])[0])
         death_dates = make_datetime(df046_data.get('g', [''])[0])
-        print(f"type of birth_dates is {type(birth_dates)}")
 
         # Extract birth and death dates (100, 400) if not set      
         for potential_dates in [df100_data.get('d',[None]), df400_data.get('d',[None])]:
             for date in potential_dates:            
                 if "-" in date:
-                    b, e = dates.split("-")
+                    b, e = date.split("-")
                 else:
                     #no way of knowing if birth or death
                     continue
