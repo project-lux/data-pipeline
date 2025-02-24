@@ -256,7 +256,7 @@ def make_datetime(value, precision=""):
 
     # 197208 --> 1972-08
     if len(value) == 6 and value.isnumeric():
-        value = f"{value[:4]}-{value:4:}"
+        value = f"{value[:4]}-{value[4:]}"
 
     if value[0] == "-" and value[1].isnumeric():
         # -1
