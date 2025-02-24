@@ -174,6 +174,10 @@ class FastMapper(Mapper):
         df046_data = self.extract_datafields(root, '046', ['f', 'g'])
         df400_data = self.extract_datafields(root, '400', ['a', 'q', 'd'])
         df700_data = self.extract_datafields(root, '700', ['a', '0', '1'])
+        df378_data = self.extract_datafields(root, '378', ['a', 'q'])
+        df450_data = self.extract_datafields(root, '450', ['a'])
+        df410_data = self.extract_datafields(root, '410', ['a'])
+
 
         # Extract birth and death dates (046)
         try:
@@ -182,12 +186,26 @@ class FastMapper(Mapper):
         except:
             birth_date = death_date = None
 
-        # Extract potential alternate names (400, 700)
-        alternate_names = list(set(df400_data.get('a', []) + df400_data.get('q', []) + df700_data.get('a', [])))
+        # Extract primary name
+        primary_name = df100_data.get('a',[None])[0]
 
-        # Set primary name (100)
-        if 'a' in df100_data:
-            rec.identified_by = vocab.PrimaryName(content=df100_data['a'][0])
+        # Extract potential alternate names (400, 700)
+        alternate_names = set(
+            df400_data.get('a', []) + 
+            df400_data.get('q', []) + 
+            df700_data.get('a', []) + 
+            df378_data.get('a', []) + 
+            df378_data.get('q', []) +
+            df450_data.get('a', []) +
+            df410_data.get('a', [])
+        )
+
+        if primary_name:
+            alternate_names.discard(primary_name)  # Remove primary name if it exists in alternates
+
+        # Assign primary name (100) if available
+        if primary_name:
+            rec.identified_by = [vocab.PrimaryName(content=primary_name)]
         else:
             rec.identified_by = []
 
@@ -312,7 +330,7 @@ class FastMapper(Mapper):
         df410_data = self.extract_datafields(root, '410', ['a', 'b'])
         df710_data = self.extract_datafields(root, '710', ['a', 'b'])
         df411_data = self.extract_datafields(root, '411', ['a'])
-        
+
 
         primary = False
         alternate_names = []
@@ -327,7 +345,7 @@ class FastMapper(Mapper):
         else:
             rec.identified_by = []
 
-        # Extract alternates (410, 710, 411)
+        # Extract alternates (410, 710, 411, 378)
         # Set one as primary if 110 did not exist
 
         for data in [df410_data, df710_data, df411_data]:
