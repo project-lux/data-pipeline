@@ -337,8 +337,8 @@ class FastMapper(Mapper):
 
         # Extract primary (110)
         if df110_data.get('a'):
-            org_name = df110_data.get('a', [''])[0]
-            sub_unit = df110_data.get('b', [''])[0]
+            org_name = df110_data.get('a', [])[0]
+            sub_unit = df110_data.get('b', [])[0]
             primary_name = f"{org_name}, {sub_unit}" if sub_unit else org_name
             rec.identified_by = [vocab.PrimaryName(content=primary_name)]
             primary = True
