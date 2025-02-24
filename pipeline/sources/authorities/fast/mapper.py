@@ -377,7 +377,7 @@ class FastMapper(Mapper):
         df368_data = self.extract_datafields(root, '368', ['a'])
         for classification in df368_data.get('a',['']):
             try:
-                reconciled_uri = self.build_recs_and_reconcile(classification, "concept")
+                reconciled_uri = self.build_recs_and_reconcile(classification.lower(), "concept")
                 if reconciled_uri:
                     rec.classified_as = getattr(rec, "classified_as", []) + [model.Type(ident=reconciled_uri, label=classification)]
             except:
