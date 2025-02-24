@@ -214,34 +214,37 @@ class FastMapper(Mapper):
             return None
 
         # Extract birth and death dates (046)
-        birth_date = make_datetime(df046_data.get('f', [''])[0]) if 'f' in df046_data else None
-        death_date = make_datetime(df046_data.get('g', [''])[0]) if 'g' in df046_data else None
+        birth_dates = make_datetime(df046_data.get('f', [''])[0]) if 'f' in df046_data else None
+        death_dates = make_datetime(df046_data.get('g', [''])[0]) if 'g' in df046_data else None
 
-        # Extract birth and death dates (100, 400) if not set
-        
-        for data in [df100_data, df400_data]:
-            if 'd' in data:
-                dates = data['d'][0]
-                if "-" in dates:
-                    b, e = dates.split("-")
-                    birth_tmp = make_datetime(b) if b else None
-                    death_tmp = make_datetime(e) if e else None
+        # Extract birth and death dates (100, 400) if not set      
+        for potential_dates in [df100_data.get('d',[None]), df400_data.get('d',[None])]:            
+            if "-" in potential_dates:
+                b, e = dates.split("-")
+                birth_tmps = make_datetime(b) if b else None
+                death_tmps = make_datetime(e) if e else None
 
-                    if not birth_date and birth_tmp:
-                        birth_date = birth_tmp
-                    if not death_date and death_tmp:
-                        death_date = death_tmp
-                    
-                    if birth_date and death_date:
-                        break
+                if not birth_dates and birth_tmps:
+                    birth_dates = birth_tmps
+                if not death_dates and death_tmps:
+                    death_dates = death_tmps
+                
+                if birth_dates and death_dates:
+                    break
 
         # Set birth and death timespans
-        if birth_date:
-            birth = model.Birth(timespan=model.TimeSpan(begin_of_the_begin=birth_date))
+        if birth_dates:
+            ts = model.TimeSpan()
+            ts.begin_of_the_begin = birth_dates[0]
+            ts.end_of_the_end = birth_dates[0]
+            birth = model.Birth(timespan=ts)
             rec.born = birth
         
-        if death_date:
-            death = model.Death(timespan=model.TimeSpan(begin_of_the_begin=death_date))
+        if death_dates:
+            ts = model.TimeSpan()
+            ts.begin_of_the_begin = death_dates[0]
+            ts.end_of_the_end = death_dates[0]
+            death = model.Death(timespan=ts)
             rec.died = death
         
         if not test_birth_death(rec):
