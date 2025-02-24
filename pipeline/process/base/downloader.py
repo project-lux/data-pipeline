@@ -9,7 +9,7 @@ class BaseDownloader:
         self.dumps_dir = config['all_configs'].dumps_dir
         if 'dumps_dir' in config:
             self.dumps_dir = os.path.join(self.dumps_dir, config['dumps_dir'])
-        self.urls = self.get_urls()
+        # self.urls = self.get_urls()
 
     def fetch_webpage(self, url: str) -> str:
         """Fetch the webpage content from the given URL.
@@ -83,9 +83,7 @@ class BaseDownloader:
         """
         Download files from specified source(s). Returns a list of urls and paths as a list of dictionaries.
         """
-
         # {records: [{url, path}, ...], other: [{url, path}, ...], ...}
-
 
         urls = []
         if 'dumpFilePath' in self.config and 'remoteDumpFile' in self.config:

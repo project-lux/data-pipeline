@@ -10,7 +10,7 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'lux = lux_pipeline.cli.entry:main',
+            'lux = pipeline.cli.entry:main',
         ]
     }
 )

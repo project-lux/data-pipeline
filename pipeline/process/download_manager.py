@@ -82,7 +82,7 @@ class DownloadManager:
     def _download_file(self, url: str) -> bool:
         download = self.downloads[url]
         try:
-            response = requests.get(url, stream=True)
+            response = requests.get(url, stream=True, verify=False)
             response.raise_for_status()
 
             # Create parent directories if they don't exist
@@ -108,6 +108,7 @@ class DownloadManager:
         okay = False
         if downloader is not None:
             urls = downloader.get_urls()
+            print(urls)
             for pair in urls:
                 url = pair["url"]
                 path = pair["path"]
