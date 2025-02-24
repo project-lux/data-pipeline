@@ -243,7 +243,8 @@ class FastMapper(Mapper):
             ts = model.TimeSpan()
             ts.begin_of_the_begin = birth_dates[0]
             ts.end_of_the_end = birth_dates[1]
-            birth = model.Birth(timespan=ts)
+            birth = model.Birth()
+            birth.timespan = ts
             rec.born = birth
         
         if death_dates:
@@ -251,7 +252,8 @@ class FastMapper(Mapper):
             ts = model.TimeSpan()
             ts.begin_of_the_begin = death_dates[0]
             ts.end_of_the_end = death_dates[1]
-            death = model.Death(timespan=ts)
+            death = model.Death()
+            death.timespan = ts
             rec.died = death
         
         if not test_birth_death(rec):
