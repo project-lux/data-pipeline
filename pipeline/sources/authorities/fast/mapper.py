@@ -66,7 +66,7 @@ class FastMapper(Mapper):
                 sf_list = field.findall(f"mx:subfield[@code='{subfield}']", self.nss)
                 for sf in sf_list:
                     if sf is not None:
-                        data.setdefault(subfield, []).append(self.to_plain_string(sf.text))
+                        data.setdefault(subfield, []).append(self.to_plain_string(sf.text.rstrip(',')))
         return data
 
     def process_agent(self, root, rec):
@@ -129,32 +129,20 @@ class FastMapper(Mapper):
         # Extract and set professional activity (372)
         activities = self.extract_datafields(root, '372',['a','s','t'])
         for field_of_activity, work_start, work_end in zip(
-            activities.get('a', ['']), activities.get('s', ['']), activities.get('t', [''])
+            activities.get('a', []), activities.get('s', []), activities.get('t', [])
         ):
             if field_of_activity or work_start or work_end:
                 activity = vocab.Active()
             
             if field_of_activity:
-                fpid = self.build_recs_and_reconcile(field_of_activity.lower(), "concept")
+                fpid = self.build_recs_and_reconcile(field_of_activity.lower(), "type")
                 if fpid:
                     activity.classified_as = model.Type(ident=fpid, label=field_of_activity)
-                    rec.carried_out = activity
             
             if work_start or work_end:
                 ts = model.TimeSpan()
-                bstart = bend = None
-                dstart = dend = None
-
-                if work_start:
-                    try:
-                        bstart, bend = make_datetime(work_start)
-                    except:
-                        pass
-                if work_end:
-                    try:
-                        dstart, dend = make_datetime(work_end)
-                    except:
-                        pass
+                bstart, bend = make_datetime(work_start) if work_start else (None, None)
+                dstart, dend = make_datetime(work_end) if work_end else (None, None)
 
                 if bstart:
                     ts.begin_of_the_begin = bstart
@@ -165,6 +153,11 @@ class FastMapper(Mapper):
 
                 if bstart or dstart:
                     activity.timespan = ts
+
+            if not hasattr(rec, "carried_out"):
+                rec.carried_out = []
+
+            rec.carried_out.append(activity)
 
     def process_person(self, root, rec):        
         """Processes Person-only fields"""
@@ -372,7 +365,7 @@ class FastMapper(Mapper):
         df368_data = self.extract_datafields(root, '368', ['a'])
         for classification in df368_data.get('a',['']):
             if classification:
-                reconciled_uri = self.build_recs_and_reconcile(classification.lower(), "concept")
+                reconciled_uri = self.build_recs_and_reconcile(classification.lower(), "type")
                 if reconciled_uri:
                     rec.classified_as = getattr(rec, "classified_as", []) + [model.Type(ident=reconciled_uri, label=classification)]
 
