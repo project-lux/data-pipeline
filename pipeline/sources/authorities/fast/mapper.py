@@ -95,6 +95,7 @@ class FastMapper(Mapper):
         # Extract occupations (374)
         classifications = []
         occupations = self.extract_datafields(root, '374',['a','0'])
+        print(f" occupations are {occupations}")
         for uri in occupations.get('0', ['']):
             if uri:
                 classifications.append(model.Type(ident=uri))
@@ -140,10 +141,8 @@ class FastMapper(Mapper):
                 activity = vocab.Active()
             
             if field_of_activity:
-                print(f"  got field_of_activity {field_of_activity}")
                 fpid = self.build_recs_and_reconcile(field_of_activity.lower(), "concept")
                 if fpid:
-                    print(f"  got fpid")
                     activity.classified_as = model.Type(ident=fpid, label=field_of_activity)
                     rec.carried_out = activity
             
@@ -379,13 +378,11 @@ class FastMapper(Mapper):
         # Extract and set classification (368)
         df368_data = self.extract_datafields(root, '368', ['a'])
         for classification in df368_data.get('a',['']):
-            try:
+            if classification:
                 reconciled_uri = self.build_recs_and_reconcile(classification.lower(), "concept")
-                print(f"  got reconciled uri {reconciled_uri}")
                 if reconciled_uri:
                     rec.classified_as = getattr(rec, "classified_as", []) + [model.Type(ident=reconciled_uri, label=classification)]
-            except:
-                continue
+
 
         self.process_agent(root, rec)
 
