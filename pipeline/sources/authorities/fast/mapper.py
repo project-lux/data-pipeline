@@ -221,22 +221,19 @@ class FastMapper(Mapper):
 
         # Extract birth and death dates (100, 400) if not set      
         for potential_dates in [df100_data.get('d',[None]), df400_data.get('d',[None])]:
-            for date in potential_dates:            
-                if "-" in date:
+            for date in potential_dates:
+                if date and "-" in date:
                     b, e = date.split("-")
-                else:
-                    #no way of knowing if birth or death
-                    continue
-                birth_tmps = make_datetime(b) if b else None
-                death_tmps = make_datetime(e) if e else None
+                    birth_tmps = make_datetime(b) if b else None
+                    death_tmps = make_datetime(e) if e else None
 
-                if not birth_dates and birth_tmps:
-                    birth_dates = birth_tmps
-                if not death_dates and death_tmps:
-                    death_dates = death_tmps
-                
-                if birth_dates and death_dates:
-                    break
+                    if not birth_dates and birth_tmps:
+                        birth_dates = birth_tmps
+                    if not death_dates and death_tmps:
+                        death_dates = death_tmps
+                    
+                    if birth_dates and death_dates:
+                        break
 
         # Set birth and death timespans
         if birth_dates:
