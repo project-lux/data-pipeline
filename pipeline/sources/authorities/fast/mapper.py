@@ -228,8 +228,6 @@ class FastMapper(Mapper):
                     continue
                 birth_tmps = make_datetime(b) if b else None
                 death_tmps = make_datetime(e) if e else None
-                print(f"birth_tmps is {birth_tmps}")
-                print(f"death_tmps is {death_tmps}")
 
                 if not birth_dates and birth_tmps:
                     birth_dates = birth_tmps
@@ -241,16 +239,18 @@ class FastMapper(Mapper):
 
         # Set birth and death timespans
         if birth_dates:
+            print(f"got birthdates and they are {birth_dates}")
             ts = model.TimeSpan()
             ts.begin_of_the_begin = birth_dates[0]
-            ts.end_of_the_end = birth_dates[0]
+            ts.end_of_the_end = birth_dates[1]
             birth = model.Birth(timespan=ts)
             rec.born = birth
         
         if death_dates:
+            print(f"got death dates and they are {death_dates}")
             ts = model.TimeSpan()
             ts.begin_of_the_begin = death_dates[0]
-            ts.end_of_the_end = death_dates[0]
+            ts.end_of_the_end = death_dates[1]
             death = model.Death(timespan=ts)
             rec.died = death
         
