@@ -39,7 +39,7 @@ class FastMapper(Mapper):
         }
 
         source_map = {
-            "place":"lcnaf", "concept":"lcsh", "group":"lcnaf"
+            "place":"lcnaf", "type":"lcsh", "group":"lcnaf"
         }
 
         source = source_map.get(rectype, None)
@@ -96,10 +96,8 @@ class FastMapper(Mapper):
                 classifications.append(model.Type(ident=uri))
         for name in occupations.get('a',[]):
             if name:
-                print(name)
                 uri = self.build_recs_and_reconcile(name.lower(), "type")
                 if uri:
-                    print(uri)
                     classifications.append(model.Type(ident=uri, label=name))
 
         # Set classification
