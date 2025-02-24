@@ -128,33 +128,44 @@ class FastMapper(Mapper):
 
         # Extract and set professional activity (372)
         activities = self.extract_datafields(root, '372',['a','s','t'])
-        field_classifications = []
-        for field_of_activity in activities.get('a',[]):
+        carried_out_activities = []
+        for i, field_of_activity in enumerate(activities.get('a',[])):
+            work_start = activities.get('s', [None])[i] if i < len(activities.get('s', [])) else None
+            work_end = activities.get('t', [None])[i] if i < len(activities.get('t', [])) else None
             if field_of_activity:
                 fpid = self.build_recs_and_reconcile(field_of_activity.lower(), "type")
                 if fpid:
-                    field_classifications.append(model.Type(ident=fpid, label=field_of_activity))
+                    # Can only create an activity if we have an URI for the type
+                    activity = vocab.Active()
+                    activity.classified_as = [model.Type(ident=fpid, label=field_of_activity)]
 
-        work_start = activities.get('s',[None])[0]
-        work_end = activities.get('t',[None])[0]
+                    # If there is a timespan (s or t), attach it
+                    if work_start or work_end:
+                        ts = model.TimeSpan()
+                        try:
+                            bstart, bend = make_datetime(work_start) if work_start else (None, None)
+                        except:
+                            bstart, bend = None, None
 
-        if work_start or work_end:
-            ts = model.TimeSpan()
-            bstart, bend = make_datetime(work_start) if work_start else (None, None)
-            dstart, dend = make_datetime(work_end) if work_end else (None, None)
-            if bstart:
-                ts.begin_of_the_begin = bstart
-                ts.end_of_the_begin = bend
-            if dstart:
-                ts.begin_of_the_end = dstart
-                ts.end_of_the_end = dend
+                        try:
+                            dstart, dend = make_datetime(work_end) if work_end else (None, None)
+                        except:
+                            dstart, dend = None, None
 
-        if field_classifications or bstart or dstart:
-            activity = vocab.Active()
-            if bstart or dstart:
-                activity.timespan = ts
+                        if bstart:
+                            ts.begin_of_the_begin = bstart
+                            ts.end_of_the_begin = bend
+                        if dstart:
+                            ts.begin_of_the_end = dstart
+                            ts.end_of_the_end = dend
 
-            rec.carried_out = activity
+                        activity.timespan = ts  # Attach timespan to the specific activity
+
+                # Append valid activities
+                carried_out_activities.append(activity)
+
+        if carried_out_activities:
+            rec.carried_out = carried_out_activities
 
     def process_person(self, root, rec):        
         """Processes Person-only fields"""
