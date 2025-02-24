@@ -80,11 +80,13 @@ class FastMapper(Mapper):
         membership = [] 
         affiliations = self.extract_datafields(root, '373', ['a', '0'])
         for uri in affiliations.get('0', ['']):
-            membership.append(model.Group(ident=uri))
-        for name in affiliations.get('a', ['']):
-            uri = self.build_recs_and_reconcile(name, "group")
             if uri:
-                membership.append(model.Group(ident=uri, label=name))
+                membership.append(model.Group(ident=uri))
+        for name in affiliations.get('a', ['']):
+            if name:
+                uri = self.build_recs_and_reconcile(name, "group")
+                if uri:
+                    membership.append(model.Group(ident=uri, label=name))
         
         # Set member_of
         if membership:
@@ -94,16 +96,17 @@ class FastMapper(Mapper):
         classifications = []
         occupations = self.extract_datafields(root, '374',['a','0'])
         for uri in occupations.get('0', ['']):
-            classifications.append(model.Type(ident=uri))
-        for name in occupations.get('a',['']):
-            uri = self.build_recs_and_reconcile(name, "type")
             if uri:
-                classifications.append(model.Type(ident=uri, label=name))
+                classifications.append(model.Type(ident=uri))
+        for name in occupations.get('a',['']):
+            if name:
+                uri = self.build_recs_and_reconcile(name, "type")
+                if uri:
+                    classifications.append(model.Type(ident=uri, label=name))
 
         # Set classification
         if classifications:
             rec.classified_as = getattr(rec, "classified_as", []) + classifications
-
 
         # Extract residence (370 or 551)
         # Prefer 370
@@ -122,9 +125,10 @@ class FastMapper(Mapper):
         # Try 551
             locations = self.extract_datafields(root, '551',['a'])
             for place in locations.get('a',['']):
-                rpid = self.build_recs_and_reconcile(place, "place")
-                if rpid:
-                    rec.residence = model.Place(ident=rpid, label=place)
+                if place:
+                    rpid = self.build_recs_and_reconcile(place, "place")
+                    if rpid:
+                        rec.residence = model.Place(ident=rpid, label=place)
 
         # Extract and set professional activity (372)
         activities = self.extract_datafields(root, '372',['a','s','t'])
@@ -283,24 +287,23 @@ class FastMapper(Mapper):
 
         equivalents = []
         for uri in uri_0:
-            # Wikidata and LCNAF
-            if "wikipedia.org" in uri:
-                wikidata_qid = self.config['all_configs'].external['wikidata']['reconciler'].get_wikidata_qid(uri)
-                if wikidata_qid:
-                    wikiuri = self.config['all_configs'].external['wikidata']['namespace'] + wikidata_qid
-                    equivalents.append(model.Person(ident=wikiuri))
-            elif uri.startswith("(DLC)"):
-                #Should be LCCN
-                lcnaf_uri = self.config["all_configs"].external['lcnaf']['namespace'] + "".join(uri.split(")")[1].split())
-                equivalents.append(model.Person(ident=lcnaf_uri))
+            if uri:
+                # Wikidata and LCNAF
+                if "wikipedia.org" in uri:
+                    wikidata_qid = self.config['all_configs'].external['wikidata']['reconciler'].get_wikidata_qid(uri)
+                    if wikidata_qid:
+                        wikiuri = self.config['all_configs'].external['wikidata']['namespace'] + wikidata_qid
+                        equivalents.append(model.Person(ident=wikiuri))
+                elif uri.startswith("(DLC)"):
+                    #Should be LCCN
+                    lcnaf_uri = self.config["all_configs"].external['lcnaf']['namespace'] + "".join(uri.split(")")[1].split())
+                    equivalents.append(model.Person(ident=lcnaf_uri))
         # VIAF
         equivalents.extend(model.Person(ident=uri) for uri in df700_data.get('1', [None]) if uri)
 
         # Set equivalents
         if equivalents:
-            if not hasattr(rec, "equivalent"):
-                rec.equivalent = []
-                rec.equivalent.extend(equivalents)
+            rec.equivalent = getattr(rec, "equivalent", []) + equivalents
                         
         # Extract gender (375)
         df375_data = self.extract_datafields(root, '375', ['a', '0'])
