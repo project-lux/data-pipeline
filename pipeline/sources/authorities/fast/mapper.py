@@ -128,6 +128,7 @@ class FastMapper(Mapper):
 
         # Extract and set professional activity (372)
         activities = self.extract_datafields(root, '372',['a','s','t'])
+        print(f"activities is {activities}")
         for field_of_activity, work_start, work_end in zip(
             activities.get('a', []), activities.get('s', []), activities.get('t', [])
         ):
