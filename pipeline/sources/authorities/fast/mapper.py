@@ -135,9 +135,14 @@ class FastMapper(Mapper):
                 activity = vocab.Active()
             
             if field_of_activity:
+                print(f"  got field_of_activity {field_of_activity}")
                 fpid = self.build_recs_and_reconcile(field_of_activity.lower(), "type")
+                print(f" sent {field_of_activity.lower()} to reconciler")
                 if fpid:
-                    activity.classified_as = model.Type(ident=fpid, label=field_of_activity)
+                    print(f" got fpid")
+                    if not hasattr(activity, "classified_as"):
+                        activity.classified_as = []
+                    activity.classified_as.append(model.Type(ident=fpid, label=field_of_activity))
             
             if work_start or work_end:
                 ts = model.TimeSpan()
