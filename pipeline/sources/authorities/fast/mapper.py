@@ -68,7 +68,7 @@ class FastMapper(Mapper):
         fields = root.xpath(f".//mx:datafield[@tag='{tag}']", namespaces=self.nss)
         for field in fields:
             for subfield in subfields:
-                sf = field.find(f"mx:subfield[@code='{subfield}']", self.nss)
+                sf = field.findall(f"mx:subfield[@code='{subfield}']", self.nss)
                 if sf is not None and sf.text:
                     data.setdefault(subfield, []).append(self.to_plain_string(sf.text))
         return data
@@ -95,15 +95,13 @@ class FastMapper(Mapper):
         # Extract occupations (374)
         classifications = []
         occupations = self.extract_datafields(root, '374',['a','0'])
-        for uri in occupations.get('0', ['']):
+        for uri in occupations.get('0',[]):
             if uri:
                 classifications.append(model.Type(ident=uri))
-        for name in occupations.get('a',['']):
+        for name in occupations.get('a',[]):
             if name:
-                print(f"got name {name}")
                 uri = self.build_recs_and_reconcile(name.lower(), "type")
                 if uri:
-                    print(f" got occupation uri from reconciliation")
                     classifications.append(model.Type(ident=uri, label=name))
 
         # Set classification
