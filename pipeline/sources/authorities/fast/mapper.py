@@ -65,7 +65,7 @@ class FastMapper(Mapper):
             for subfield in subfields:
                 sf_list = field.findall(f"mx:subfield[@code='{subfield}']", self.nss)
                 for sf in sf_list:
-                    if sf:
+                    if sf is not None:
                         data.setdefault(subfield, []).append(self.to_plain_string(sf.text))
         return data
 
@@ -166,9 +166,7 @@ class FastMapper(Mapper):
                 if bstart or dstart:
                     activity.timespan = ts
 
-    def process_person(self, root, rec):
-        ##FIXME: test names and don't add alts if same as primary
-        
+    def process_person(self, root, rec):        
         """Processes Person-only fields"""
         df100_data = self.extract_datafields(root, '100', ['a', 'd'])
         df046_data = self.extract_datafields(root, '046', ['f', 'g'])
@@ -180,16 +178,18 @@ class FastMapper(Mapper):
 
         # Extract primary name
         primary_name = df100_data.get('a',[None])[0]
+        if primary_name is None:
+            primary_name = ""
 
         # Extract potential alternate names (400, 700)
         alternate_names = set(
-            df400_data.get('a', [None]) + 
-            df400_data.get('q', [None]) + 
-            df700_data.get('a', [None]) + 
-            df378_data.get('a', [None]) + 
-            df378_data.get('q', [None]) +
-            df450_data.get('a', [None]) +
-            df410_data.get('a', [None])
+            df400_data.get('a', []) + 
+            df400_data.get('q', []) + 
+            df700_data.get('a', []) + 
+            df378_data.get('a', []) + 
+            df378_data.get('q', []) +
+            df450_data.get('a', []) +
+            df410_data.get('a', [])
         )
 
         if primary_name:
@@ -197,12 +197,12 @@ class FastMapper(Mapper):
 
         # Assign primary name (100) if available
         if primary_name:
-            rec.identified_by = [vocab.PrimaryName(content=primary_name)]
-        else:
-            rec.identified_by = []
+            rec.identified_by = [vocab.PrimaryName(content=primary_name)] if primary_name else []
+
+        alternate_names = list(alternate_names)
 
         # Add alternate names
-        rec.identified_by.extend(vocab.AlternateName(content=name) for name in alternate_names)
+        rec.identified_by.extend(vocab.AlternateName(content=name) for name in alternate_names if name)
 
         # Assign a primary name from alternates if none exists
         if not any(isinstance(name, vocab.PrimaryName) for name in rec.identified_by) and alternate_names:
