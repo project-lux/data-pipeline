@@ -100,7 +100,7 @@ class FastMapper(Mapper):
                 classifications.append(model.Type(ident=uri))
         for name in occupations.get('a',['']):
             if name:
-                uri = self.build_recs_and_reconcile(name, "type")
+                uri = self.build_recs_and_reconcile(name.lower(), "type")
                 if uri:
                     classifications.append(model.Type(ident=uri, label=name))
 
@@ -139,7 +139,7 @@ class FastMapper(Mapper):
                 activity = vocab.Active()
             
             if field_of_activity:
-                fpid = self.build_recs_and_reconcile(field_of_activity, "concept")
+                fpid = self.build_recs_and_reconcile(field_of_activity.lower(), "concept")
                 if fpid:
                     activity.classified_as = model.Type(ident=fpid, label=field_of_activity)
                     rec.carried_out = activity
