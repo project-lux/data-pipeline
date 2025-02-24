@@ -56,11 +56,6 @@ class FastMapper(Mapper):
                 return self.nameTypeMap[tag]
 
         return None
-    
-    def extract_numeric_id(self, marc_id):
-        """Extracts the numeric portion of an FST identifier"""
-        match = re.search(r"fst0*(\d+)",marc_id)
-        return match.group(1) if match else None
 
     def extract_datafields(self, root, tag, subfields):
         """Extracts and returns data from specific MARC subfields"""
@@ -68,9 +63,10 @@ class FastMapper(Mapper):
         fields = root.xpath(f".//mx:datafield[@tag='{tag}']", namespaces=self.nss)
         for field in fields:
             for subfield in subfields:
-                sf = field.findall(f"mx:subfield[@code='{subfield}']", self.nss)
-                if sf is not None and sf.text:
-                    data.setdefault(subfield, []).append(self.to_plain_string(sf.text))
+                sf_list = field.findall(f"mx:subfield[@code='{subfield}']", self.nss)
+                for sf in sf_list:
+                    if sf:
+                        data.setdefault(subfield, []).append(self.to_plain_string(sf.text))
         return data
 
     def process_agent(self, root, rec):
