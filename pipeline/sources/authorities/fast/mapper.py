@@ -91,14 +91,15 @@ class FastMapper(Mapper):
         # Extract occupations (374)
         classifications = []
         occupations = self.extract_datafields(root, '374',['a','0'])
-        print(f"occupations is {occupations}")
         for uri in occupations.get('0',[]):
             if uri:
                 classifications.append(model.Type(ident=uri))
         for name in occupations.get('a',[]):
             if name:
+                print(name)
                 uri = self.build_recs_and_reconcile(name.lower(), "type")
                 if uri:
+                    print(uri)
                     classifications.append(model.Type(ident=uri, label=name))
 
         # Set classification
