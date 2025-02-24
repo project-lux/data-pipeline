@@ -5,6 +5,9 @@ from base64 import b64decode
 import json
 
 
+### NOTE WELL: Git has a limit of 1000 files per directory.
+### To have an actual record cache in git, we would need a PairTree
+
 class GithubCache(AbstractCache):
 
     def __init__(self, config):
@@ -21,6 +24,8 @@ class GithubCache(AbstractCache):
         self.directory = config.get('path', 'configs/subs/sources_cache')
         self.suffix = ".json"
 
+        self.memory_cache = {}
+
     def _manage_key_in(self, key):
         if not key.endswith(self.suffix):
             key = key + self.suffix
@@ -31,9 +36,20 @@ class GithubCache(AbstractCache):
             key = key.replace(self.suffix, '')
         return key
 
+
+    def _add_to_memory(self, ct):
+        # Add the github content object to our in-memory cache
+        # Only do this for small caches!
+
     def iter_keys(self):
         cts = self.repo.get_contents(self.directory)
-        # this is paged
+        for c in cts:
+            yield
+        return cts
+
+    def iter_records(self):
+        pass
+
 
     def get(self, key):
         key2 = self._manage_key_in(key)
@@ -41,3 +57,9 @@ class GithubCache(AbstractCache):
         jstr = b64decode(ct.content)
         data = json.loads(jstr)
         return {"identifier": key, "data": data, "source": self.config['name']}
+
+
+
+
+class PairTreeGithubCache(GithubCache):
+    pass

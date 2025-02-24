@@ -1,6 +1,7 @@
 import os
 from .storage.cache.filesystem import FsCache
 import importlib
+import multiprocessing
 
 
 def importObject(objectType):
@@ -10,16 +11,14 @@ def importObject(objectType):
         (modName, className) = objectType.rsplit(".", 1)
     except:
         raise ValueError("Need module.class instead of %s" % objectType)
+    if not modName.startswith("pipeline."):
+        modName = f"pipeline.{modName}"
+
     try:
         m = importlib.import_module(modName)
     except ModuleNotFoundError as mnfe:
-        # allow "pipeline" to be skipped
-        ### FIXME: This should use magic to determine the module name
-        try:
-            m = importlib.import_module(f"pipeline.{modName}")
-        except Exception as e:
-            print(f"Failed to import pipeline.{modName}: {e}")
-            raise
+        print(f"Could not find module {modName}: {mnfe}")
+        raise
     except Exception as e:
         print(f"Failed to import {modName}: {e}")
         raise
@@ -28,7 +27,6 @@ def importObject(objectType):
     except AttributeError as e:
         raise
     return parentClass
-
 
 
 class Config(object):
@@ -84,6 +82,9 @@ class Config(object):
         if hasattr(self, "dumps_dir") and not self.dumps_dir.startswith("/"):
             self.dumps_dir = os.path.join(self.base_dir, self.dumps_dir)
 
+        if not hasattr(self, 'max_workers'):
+            # Default to 2/3rds of our CPUs
+            self.max_workers = multiprocessing.cpu_count() * 2 // 3
 
         # FIXME: Validators should be per source per cache
         # if hasattr(self, "validatorClass"):

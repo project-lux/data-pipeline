@@ -1,0 +1,8 @@
+[build-system]
+requires = ["setuptools>=42", "redis", "psycopg2-binary", "cromulent>=0.16.8", "requests", "requests_toolbelt", "ujson", "SPARQLWrapper", "dateutils", "edtf", "dateparser", "shapely", "lxml", "jsonschema", "lmdbm>=0.0.6", "sqlitedict", "numpy", "bs4", "python-dotenv", "pyluach", "tqdm", "requests", "beautifulsoup4"]
+
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lux_pipeline"
+version = "0.0.1"
