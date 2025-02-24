@@ -42,7 +42,7 @@ class FastMapper(Mapper):
             "place":"lcnaf", "concept":"lcsh", "group":"lcnaf"
         }
 
-        source = source_map.get(rectype)
+        source = source_map.get(rectype, None)
         if source:
             reconciler = self.config['all_configs'].external[source]['reconciler']
             return reconciler.reconcile(rec, reconcileType="name")
@@ -79,37 +79,37 @@ class FastMapper(Mapper):
         # Extract affiliations (373)
         membership = [] 
         affiliations = self.extract_datafields(root, '373', ['a', '0'])
-        for uri in affiliations.get('0', []):
+        for uri in affiliations.get('0', [None]):
             membership.append(model.Group(ident=uri))
-        for name in affiliations.get('a', []):
+        for name in affiliations.get('a', [None]):
             uri = self.build_recs_and_reconcile(name, "group")
             if uri:
                 membership.append(model.Group(ident=uri, label=name))
         
         # Set member_of
         if membership:
-            rec.member_of = getattr(rec, "member_of", []) + membership
+            rec.member_of = getattr(rec, "member_of", [None]) + membership
 
         # Extract occupations (374)
         classifications = []
         occupations = self.extract_datafields(root, '374',['a','0'])
-        for uri in occupations.get('0', []):
+        for uri in occupations.get('0', [None]):
             classifications.append(model.Type(ident=uri))
-        for name in occupations.get('a',[]):
+        for name in occupations.get('a',[None]):
             uri = self.build_recs_and_reconcile(name, "type")
             if uri:
                 classifications.append(model.Type(ident=uri, label=name))
 
         # Set classification
         if classifications:
-            rec.classified_as = getattr(rec, "classified_as",[]) + classifications
+            rec.classified_as = getattr(rec, "classified_as",[None]) + classifications
 
 
         # Extract residence (370 or 551)
         # Prefer 370
         locations = self.extract_datafields(root, '370', ['c','e'])
         if locations.get('c') or locations.get('e'):
-            for assoc_place, residence in zip(locations.get('c',[]), locations.get('e',[])):
+            for assoc_place, residence in zip(locations.get('c',[None]), locations.get('e',[None])):
                 if residence:
                     rpid = self.build_recs_and_reconcile(residence, 'place')
                     if rpid:
@@ -121,7 +121,7 @@ class FastMapper(Mapper):
         else:
         # Try 551
             locations = self.extract_datafields(root, '551',['a'])
-            for place in locations.get('a',[]):
+            for place in locations.get('a',[None]):
                 rpid = self.build_recs_and_reconcile(place, "place")
                 if rpid:
                     rec.residence = model.Place(ident=rpid, label=place)
@@ -129,7 +129,7 @@ class FastMapper(Mapper):
         # Extract and set professional activity (372)
         activities = self.extract_datafields(root, '372',['a','s','t'])
         for field_of_activity, work_start, work_end in zip(
-            activities.get('a', ['']), activities.get('s', ['']), activities.get('t', [''])
+            activities.get('a', [None]), activities.get('s', [None]), activities.get('t', [None])
         ):
             if field_of_activity or work_start or work_end:
                 activity = vocab.Active()
@@ -178,26 +178,18 @@ class FastMapper(Mapper):
         df450_data = self.extract_datafields(root, '450', ['a'])
         df410_data = self.extract_datafields(root, '410', ['a'])
 
-
-        # Extract birth and death dates (046)
-        try:
-            birth_date = make_datetime(df046_data.get('f', [''])[0]) if 'f' in df046_data else None
-            death_date = make_datetime(df046_data.get('g', [''])[0]) if 'g' in df046_data else None
-        except:
-            birth_date = death_date = None
-
         # Extract primary name
         primary_name = df100_data.get('a',[None])[0]
 
         # Extract potential alternate names (400, 700)
         alternate_names = set(
-            df400_data.get('a', []) + 
-            df400_data.get('q', []) + 
-            df700_data.get('a', []) + 
-            df378_data.get('a', []) + 
-            df378_data.get('q', []) +
-            df450_data.get('a', []) +
-            df410_data.get('a', [])
+            df400_data.get('a', [None]) + 
+            df400_data.get('q', [None]) + 
+            df700_data.get('a', [None]) + 
+            df378_data.get('a', [None]) + 
+            df378_data.get('q', [None]) +
+            df450_data.get('a', [None]) +
+            df410_data.get('a', [None])
         )
 
         if primary_name:
@@ -221,22 +213,26 @@ class FastMapper(Mapper):
         if not rec.identified_by:
             return None
 
+        # Extract birth and death dates (046)
+        birth_date = make_datetime(df046_data.get('f', [None])[0]) if 'f' in df046_data else None
+        death_date = make_datetime(df046_data.get('g', [None])[0]) if 'g' in df046_data else None
+
         # Extract birth and death dates (100, 400) if not set
         
         for data in [df100_data, df400_data]:
-            if not birth_date and 'd' in data:
+            if 'd' in data:
                 dates = data['d'][0]
                 if "-" in dates:
                     b, e = dates.split("-")
-                    birth_tmp = death_tmp = None 
-                    try:
-                        birth_tmp = make_datetime(b)
-                        death_tmp = make_datetime(e)
-                    except:
-                        pass
+                    birth_tmp = make_datetime(b) if b else None
+                    death_tmp = make_datetime(e) if e else None
 
-                    if birth_tmp and death_tmp:
-                        birth_date, death_date = birth_tmp, death_tmp
+                    if not birth_date and birth_tmp:
+                        birth_date = birth_tmp
+                    if not death_date and death_tmp:
+                        death_date = death_tmp
+                    
+                    if birth_date and death_date:
                         break
 
         # Set birth and death timespans
@@ -273,7 +269,7 @@ class FastMapper(Mapper):
                 rec.died.took_place_at = model.Place(ident=dpid, label=death_place)
 
         # Extract equivalents (700)
-        uri_0 = df700_data.get('0', [])
+        uri_0 = df700_data.get('0', [None])
 
         equivalents = []
         for uri in uri_0:
@@ -299,10 +295,10 @@ class FastMapper(Mapper):
         # Extract gender (375)
         df375_data = self.extract_datafields(root, '375', ['a', '0'])
         genders = []
-        for uri in df375_data.get('0',[]):
+        for uri in df375_data.get('0',[None]):
             if "wikidata" in uri or uri == "http://id.loc.gov/authorities/subjects/sh2007005819":
                 genders.append(vocab.Gender(ident=uri))
-        for gender in df375_data.get('a', []):
+        for gender in df375_data.get('a', [None]):
             if gender.lower() in ("male", "males"):
                 genders.append(vocab.instances['male'])
             elif gender.lower() in ("female", "females"):
@@ -310,15 +306,15 @@ class FastMapper(Mapper):
 
         # Set gender
         if genders:
-            rec.classified_as = getattr(rec, "classified_as", []) + genders
+            rec.classified_as = getattr(rec, "classified_as", [None]) + genders
         
         # Extract biographical note (500)
         df500_data = self.extract_datafields(root, '500', ['a'])
-        biographies = [model.LinguisticObject(content=bio) for bio in df500_data.get('a', [])]
+        biographies = [model.LinguisticObject(content=bio) for bio in df500_data.get('a', [None])]
 
         # Set biographical note
         if biographies:
-            rec.referred_to_by = getattr(rec, "referred_to_by", []) + biographies
+            rec.referred_to_by = getattr(rec, "referred_to_by", [None]) + biographies
         
         # Send to process_agent for common fields
         self.process_agent(root, rec) 
@@ -337,8 +333,8 @@ class FastMapper(Mapper):
 
         # Extract primary (110)
         if df110_data.get('a'):
-            org_name = df110_data.get('a', [])[0]
-            sub_unit = df110_data.get('b', [])[0]
+            org_name = df110_data.get('a', [None])[0]
+            sub_unit = df110_data.get('b', [None])[0]
             primary_name = f"{org_name}, {sub_unit}" if sub_unit else org_name
             rec.identified_by = [vocab.PrimaryName(content=primary_name)]
             primary = True
@@ -349,7 +345,7 @@ class FastMapper(Mapper):
         # Set one as primary if 110 did not exist
 
         for data in [df410_data, df710_data, df411_data]:
-            for org_name, sub_unit in zip(data.get('a', []), data.get('b', [])):
+            for org_name, sub_unit in zip(data.get('a', [None]), data.get('b', [None])):
                 name = f"{org_name}, {sub_unit}" if sub_unit else org_name
                 if not primary:
                     rec.identified_by = [vocab.PrimaryName(content=name)]
@@ -365,11 +361,11 @@ class FastMapper(Mapper):
 
         # Extract and set classification (368)
         df368_data = self.extract_datafields(root, '368', ['a'])
-        for classification in df368_data.get('a',[]):
+        for classification in df368_data.get('a',[None]):
             try:
                 reconciled_uri = self.build_recs_and_reconcile(classification, "concept")
                 if reconciled_uri:
-                    rec.classified_as = getattr(rec, "classified_as", []) + [model.Type(ident=reconciled_uri, label=classification)]
+                    rec.classified_as = getattr(rec, "classified_as", [None]) + [model.Type(ident=reconciled_uri, label=classification)]
             except:
                 continue
 

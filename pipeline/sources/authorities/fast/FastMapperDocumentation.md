@@ -219,15 +219,27 @@ Based on the occurrences of MARC21 fields across the available FAST XML files, t
   - Identifies an address associated with the Person. In the existing data, this is largely email addresses (and thus not used by LUX), or residences already found in **370**.
 ---
 
+## Corporate:
+**Maps to:** Linked.art `Group` Class
+
+**Good identifiers for testing:** ``,``,``
+
+---
+### Field 710
+- **Occurrences:** `801,923`
+- **Mapped:** `Y`
+- **Subfields used:** `'a', 'b'`
+- **Usage:**
+  - **'a'**
+    - Preferred primary name, part 1
+  - **'b'**
+    - Preferred primary name, part 2
+
+---
 
 
-Corporate
 
 
-Fields with mapping decisions, by number of occurrences:
-Field 710: 801923 occurrences
-Mapped to:
-Primary Name
 
 Dates are extracted if possible.
 
