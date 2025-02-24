@@ -91,6 +91,7 @@ class FastMapper(Mapper):
         # Extract occupations (374)
         classifications = []
         occupations = self.extract_datafields(root, '374',['a','0'])
+        print(f"occupations is {occupations}")
         for uri in occupations.get('0',[]):
             if uri:
                 classifications.append(model.Type(ident=uri))
@@ -316,7 +317,6 @@ class FastMapper(Mapper):
         # Set gender
         if genders:
             rec.classified_as = getattr(rec, "classified_as", []) + genders
-
         
         # Extract biographical note (500)
         df500_data = self.extract_datafields(root, '500', ['a'])
