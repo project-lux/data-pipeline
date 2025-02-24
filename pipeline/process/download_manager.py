@@ -132,8 +132,8 @@ class DownloadManager:
         for cfg in self.configs.internal.values():
             self.prepare_download(cfg)
 
-    def download_all(self) -> bool:
-        self.start_status_display()
+    def download_all(self, verbose=None) -> bool:
+        self._start_status_display()
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = [
                 executor.submit(self._download_file, url)

@@ -364,6 +364,14 @@ class Config(object):
                     else:
                         path = os.path.join(pfx, pth)
                     cfg[k] = path
+
+        if 'input_files' in cfg:
+            # step through all paths and join with dumps_dir
+            for v in cfg['input_files'].values():
+                for entry in v:
+                    if 'path' in entry:
+                        entry['path'] = os.path.join(self.dumps_dir, entry['path'])
+
         # Add self to config
         cfg["all_configs"] = self
 
@@ -440,6 +448,13 @@ class Config(object):
                     else:
                         path = os.path.join(pfx, pth)
                     cfg[k] = path
+
+        if 'input_files' in cfg:
+            # step through all paths and join with dumps_dir
+            for v in cfg['input_files'].values():
+                for entry in v:
+                    if 'path' in entry:
+                        entry['path'] = os.path.join(self.dumps_dir, entry['path'])
 
         # Add self to config
         cfg["all_configs"] = self
@@ -521,6 +536,13 @@ class Config(object):
                 cfg["loader"] = ldrcls(cfg)
             else:
                 cfg["loader"] = None
+
+            dldr = cfg.get("downloaderClass", None)
+            if dldr:
+                dldrcls = importObject(dldr)
+                cfg["downloader"] = dldrcls(cfg)
+            else:
+                cfg["downloader"] = None
 
             rcc2 = cfg.get("recordcache2Class", "storage.cache.postgres.RecordCache")
             if rcc2:
