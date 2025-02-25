@@ -2,11 +2,12 @@
 from .abstract import AbstractCache
 from github import Github, Auth
 from base64 import b64decode
-import json
+import ujson as json
 
 
 ### NOTE WELL: Git has a limit of 1000 files per directory.
 ### To have an actual record cache in git, we would need a PairTree
+### Also, there's a rate limiter which relegates this to toy status
 
 class GithubCache(AbstractCache):
 
@@ -23,7 +24,6 @@ class GithubCache(AbstractCache):
         self.repo = self.conn.get_repo(config.get('repository', "project-lux/pipeline-configs"))
         self.directory = config.get('path', 'configs/subs/sources_cache')
         self.suffix = ".json"
-
         self.memory_cache = {}
 
     def _manage_key_in(self, key):
@@ -36,15 +36,16 @@ class GithubCache(AbstractCache):
             key = key.replace(self.suffix, '')
         return key
 
-
     def _add_to_memory(self, ct):
         # Add the github content object to our in-memory cache
         # Only do this for small caches!
+        self.memory_cache[ct.name] = ct
 
     def iter_keys(self):
         cts = self.repo.get_contents(self.directory)
         for c in cts:
-            yield
+            self._add_to_memory(c)
+            yield self._manage_key_out(c.name)
         return cts
 
     def iter_records(self):
@@ -53,12 +54,15 @@ class GithubCache(AbstractCache):
 
     def get(self, key):
         key2 = self._manage_key_in(key)
-        ct = self.repo.get_contents(f"{self.directory}/{key2}")
+        if key2 in self.memory_cache:
+            print(f"Getting from memory cache: {key2}")
+            ct = self.memory_cache[key2]
+        else:
+            print(f'github fetching {key2}')
+            ct = self.repo.get_contents(f"{self.directory}/{key2}")
         jstr = b64decode(ct.content)
         data = json.loads(jstr)
         return {"identifier": key, "data": data, "source": self.config['name']}
-
-
 
 
 class PairTreeGithubCache(GithubCache):
