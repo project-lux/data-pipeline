@@ -252,6 +252,7 @@ class FastMapper(Mapper):
             birth = model.Birth()
             birth.timespan = ts
             rec.born = birth
+            print("born set")
         
         if death_dates:
             ts = model.TimeSpan()
@@ -263,6 +264,7 @@ class FastMapper(Mapper):
         
         if not test_birth_death(rec):
             rec.born = None
+            print("born removed from test birth death")
             rec.died = None
 
         # Extract birth and death places (370)
@@ -274,9 +276,7 @@ class FastMapper(Mapper):
         if birth_place:
             bpid = self.build_recs_and_reconcile(birth_place, "place")
             if bpid:
-                print(bpid)
                 if not hasattr(rec, "born"):
-                    print("no born")
                     rec.born = model.Birth()
                 rec.born.took_place_at = model.Place(ident=bpid, label=birth_place)
         
