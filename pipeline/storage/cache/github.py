@@ -41,28 +41,29 @@ class GithubCache(AbstractCache):
         # Only do this for small caches!
         self.memory_cache[ct.name] = ct
 
+    def _content_to_record(self, ct):
+        key = self._manage_key_out(ct.name)
+        jstr = b64decode(ct.content)
+        data = json.loads(jstr)
+        return {"identifier": key, "data": data, "source": self.config['name']}
+
     def iter_keys(self):
         cts = self.repo.get_contents(self.directory)
         for c in cts:
             self._add_to_memory(c)
             yield self._manage_key_out(c.name)
-        return cts
 
     def iter_records(self):
-        pass
-
+        for k in self.iter_keys():
+            yield self._content_to_record(self.memory_cache[self._manage_key_in(k)])
 
     def get(self, key):
         key2 = self._manage_key_in(key)
         if key2 in self.memory_cache:
-            print(f"Getting from memory cache: {key2}")
             ct = self.memory_cache[key2]
         else:
-            print(f'github fetching {key2}')
             ct = self.repo.get_contents(f"{self.directory}/{key2}")
-        jstr = b64decode(ct.content)
-        data = json.loads(jstr)
-        return {"identifier": key, "data": data, "source": self.config['name']}
+        return self._content_to_record(ct)
 
 
 class PairTreeGithubCache(GithubCache):
