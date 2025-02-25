@@ -1,6 +1,6 @@
 from pipeline.process.base.mapper import Mapper
 from cromulent import model, vocab
-from pipeline.process.utils.mapper_utils import make_datetime, test_birth_death
+from pipeline.process.utils.mapper_utils import make_datetime, test_birth_death, get_wikidata_qid
 from lxml import etree
 import re
 
@@ -296,7 +296,7 @@ class FastMapper(Mapper):
             if uri:
                 # Wikidata and LCNAF
                 if "wikipedia.org" in uri:
-                    wikidata_qid = self.config['all_configs'].external['wikidata']['reconciler'].get_wikidata_qid(uri)
+                    wikidata_qid = get_wikidata_qid(uri)
                     if wikidata_qid:
                         wikiuri = self.config['all_configs'].external['wikidata']['namespace'] + wikidata_qid
                         equivalents.append(model.Person(ident=wikiuri))
@@ -351,16 +351,16 @@ class FastMapper(Mapper):
         alternate_names = []
 
         # Extract primary (110)
-        if df110_data.get('a'):
-            org_name = df110_data.get('a', [None])[0]
-            sub_unit = df110_data.get('b', [None])[0]
+        
+        org_name = df110_data.get('a', [None])[0]
+        sub_unit = df110_data.get('b', [None])[0]
+        if org_name or sub_unit:
             primary_name = f"{org_name}, {sub_unit}" if sub_unit else org_name
             rec.identified_by = [vocab.PrimaryName(content=primary_name)]
             primary = True
-        else:
-            rec.identified_by = []
 
-        # Extract alternates (410, 710, 411, 378)
+
+        # Extract alternates (410, 710, 411)
         # Set one as primary if 110 did not exist
 
         for data in [df410_data, df710_data, df411_data]:
