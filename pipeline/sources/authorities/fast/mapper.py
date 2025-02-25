@@ -226,7 +226,10 @@ class FastMapper(Mapper):
         for potential_dates in [df100_data.get('d',[None]), df400_data.get('d',[None])]:
             for date in potential_dates:
                 if date and "-" in date:
-                    b, e = date.split("-")
+                    try:
+                        b, e = date.split("-")
+                    except: 
+                        b = e = None
                     try:
                         birth_tmps = make_datetime(b)
                     except:
