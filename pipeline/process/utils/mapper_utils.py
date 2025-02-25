@@ -1,5 +1,7 @@
 import re
 import time
+import requests
+from urllib.parse import urlparse, unquote
 from dateutil import parser
 from dateparser.date import DateDataParser
 from edtf import parse_edtf, text_to_edtf, struct_time_to_datetime
@@ -50,6 +52,31 @@ time_rectype = {
 }
 timestamp_props = ["begin_of_the_begin", "end_of_the_begin", "begin_of_the_end", "end_of_the_end"]
 
+
+def get_wikidata_qid(wikipedia_url):
+    """Extracts the Wikidata QID from a Wikipedia URL using sitelinks."""
+    parsed_url = urlparse(wikipedia_url)
+    
+    if "wikipedia.org" not in parsed_url.netloc:
+        return None  # Not a Wikipedia URL
+    
+    title = parsed_url.path.split("/")[-1]  # Extract last part of URL
+    title = unquote(title).replace("_", " ").strip()  # Decode and format title
+
+    # Query Wikidata directly using Wikipedia sitelinks
+    wikidata_api_url = f"https://www.wikidata.org/w/api.php?action=wbgetentities&sites=enwiki&titles={title}&format=json"
+
+    try:
+        response = requests.get(wikidata_api_url)
+        if response.status_code == 200:
+            data = response.json()
+            entities = data.get("entities", {})
+            for entity_id, entity in entities.items():
+                if entity_id.startswith("Q"):  # Ensure it's a valid QID
+                    return entity_id
+    except:
+        #urllib or requests failure, etc. could add considerably more error handling and retry logic here if we want.
+        return None
 
 def walk_for_timespan(nodes):
     if type(nodes) != list:

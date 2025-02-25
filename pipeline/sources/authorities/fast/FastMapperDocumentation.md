@@ -186,11 +186,21 @@ Based on the occurrences of MARC21 fields across the available FAST XML files, t
 
 ## Corporate:
 **Maps to:** Linked.art `Group` Class
-**Good identifiers for testing:** ``,``,``
+**Good identifiers for testing:** `544497`,`1892632`,`520318`
 
 ---
 ### Field 710
-- **Occurrences:** `801,923`
+- **Mapped:** `Y`
+- **Subfields used:** `'a', 'b'`
+- **Usage:**
+  - **'a'**
+    - Alternate primary name, part 1
+    - Preferred alternate name, part 1
+  - **'b'**
+    - Alternate primary name, part 2
+    - Preferred alternate name, part 2
+---
+### Field 110
 - **Mapped:** `Y`
 - **Subfields used:** `'a', 'b'`
 - **Usage:**
@@ -199,16 +209,40 @@ Based on the occurrences of MARC21 fields across the available FAST XML files, t
   - **'b'**
     - Preferred primary name, part 2
 ---
+### Field 410
+- **Mapped:** `Y`
+- **Subfields used:** `'a', 'b'`
+- **Usage:**
+  - **'a'**
+    - Alternate primary name, part 1
+    - Preferred alternate name, part 1
+  - **'b'**
+    - Alternate primary name, part 2
+    - Preferred alternate name, part 2
+---
+### Field 411
+- **Mapped:** `Y`
+- **Subfields used:** `'a', 'b'`
+- **Usage:**
+  - **'a'**
+    - Alternate primary name, part 1
+    - Preferred alternate name, part 1
+  - **'b'**
+    - Alternate primary name, part 2
+    - Preferred alternate name, part 2
+---
+### Field 688
+- **Mapped:** `Y`
+- **Subfields used:** `'a', 'b'`
+- **Usage:**
+  - **'a'**
 
-
-
-
+---
 
 Dates are extracted if possible.
 
 Field 688: 755570 occurrences
 
-Field 410: 643979 occurrences
 
 Field 016: 405827 occurrences
 
@@ -216,7 +250,6 @@ Field 024: 405827 occurrences
 
 Field 040: 405827 occurrences
 
-Field 110: 405827 occurrences
 
 Field 510: 116360 occurrences
 
@@ -244,4 +277,3 @@ Field 373: 2409 occurrences
 
 Field 700: 815 occurrences
 
-Field 411: 806 occurrences

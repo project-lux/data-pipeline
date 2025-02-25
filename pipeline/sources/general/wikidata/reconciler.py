@@ -1,7 +1,4 @@
-
-import requests
 from .base import WdConfigManager
-from urllib.parse import urlparse, unquote
 from pipeline.process.base.reconciler import LmdbReconciler
 
 class WdReconciler(LmdbReconciler, WdConfigManager):
@@ -55,27 +52,6 @@ class WdReconciler(LmdbReconciler, WdConfigManager):
             return True
         else:
             return False
-
-    def get_wikidata_qid(self, wikipedia_url):
-        parsed_url = urlparse(wikipedia_url)
-        
-        if "wikipedia.org" not in parsed_url.netloc:
-            return None  # Not a Wikipedia URL
-        
-        title = parsed_url.path.split("/")[-1]  # Extract last part of URL
-        title = unquote(title).replace("_", " ").strip()  # Decode and format title
-
-        # Query Wikidata directly using Wikipedia sitelinks
-        wikidata_api_url = f"https://www.wikidata.org/w/api.php?action=wbgetentities&sites=enwiki&titles={title}&format=json"
-        response = requests.get(wikidata_api_url)
-        
-        if response.status_code == 200:
-            data = response.json()
-            entities = data.get("entities", {})
-            for entity_id, entity in entities.items():
-                if entity_id.startswith("Q"):  # Ensure it's a valid QID
-                    return entity_id
-        return None
 
     def reconcile(self, rec, reconcileType="all"):
         if not reconcileType in ['all', 'uri']:
