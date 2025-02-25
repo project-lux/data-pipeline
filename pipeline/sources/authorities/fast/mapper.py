@@ -251,6 +251,7 @@ class FastMapper(Mapper):
             ts.end_of_the_end = birth_dates[1]
             birth = model.Birth()
             birth.timespan = ts
+            print(birth_dates)
             rec.born = birth
             print("born set")
         
