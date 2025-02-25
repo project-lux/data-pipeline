@@ -274,7 +274,9 @@ class FastMapper(Mapper):
         if birth_place:
             bpid = self.build_recs_and_reconcile(birth_place, "place")
             if bpid:
+                print(bpid)
                 if not hasattr(rec, "born"):
+                    print("no born")
                     rec.born = model.Birth()
                 rec.born.took_place_at = model.Place(ident=bpid, label=birth_place)
         
