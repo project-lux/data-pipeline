@@ -274,14 +274,14 @@ class FastMapper(Mapper):
         if birth_place:
             bpid = self.build_recs_and_reconcile(birth_place, "place")
             if bpid:
-                if rec.born is None:
+                if not hasattr(rec, "born") or rec.born is None:
                     rec.born = model.Birth()
                 rec.born.took_place_at = model.Place(ident=bpid, label=birth_place)
         
         if death_place:
             dpid = self.build_recs_and_reconcile(death_place, "place")
             if dpid:
-                if rec.died is None:
+                if not hasattr(rec, "died") or rec.died is None:
                     rec.died = model.Death()
                 rec.died.took_place_at = model.Place(ident=dpid, label=death_place)
 
