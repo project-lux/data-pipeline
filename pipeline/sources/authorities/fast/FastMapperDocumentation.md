@@ -151,10 +151,7 @@ Based on the occurrences of MARC21 fields across the available FAST XML files, t
 - **Mapped:** `N`
 - **Notes:**  
   - This field documents the application history of the heading and **does not map to Linked.art**.
-
 ---
-
-
 ### Field 016
 - **Occurrences:** `843,383`
 - **Mapped:** `N`
@@ -166,7 +163,7 @@ Based on the occurrences of MARC21 fields across the available FAST XML files, t
 - **Mapped:** `N`
 - **Notes:**  
   - Identifies **standard identifiers**.  
-  - LUX uses control number `001` to build the URI.
+  - LUX uses control number `001` to build the identifier/URI.
 ---
 ### Field 040
 - **Occurrences:** `843,383`
@@ -189,7 +186,6 @@ Based on the occurrences of MARC21 fields across the available FAST XML files, t
 
 ## Corporate:
 **Maps to:** Linked.art `Group` Class
-
 **Good identifiers for testing:** ``,``,``
 
 ---
@@ -202,7 +198,6 @@ Based on the occurrences of MARC21 fields across the available FAST XML files, t
     - Preferred primary name, part 1
   - **'b'**
     - Preferred primary name, part 2
-
 ---
 
 
