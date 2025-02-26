@@ -1,12 +1,9 @@
-from typing import List
 from dataclasses import dataclass
 from pathlib import Path
-import json
 import threading
 import requests
 from tqdm.auto import tqdm
 from concurrent.futures import ThreadPoolExecutor
-from importlib import import_module
 import time
 
 @dataclass
