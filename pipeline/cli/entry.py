@@ -2,9 +2,7 @@ import os
 import sys
 from argparse import ArgumentParser
 from dotenv import load_dotenv
-
-sys.path = [os.getcwd(), *sys.path]
-
+import importlib
 from pipeline.config import Config
 
 load_dotenv()
@@ -22,16 +20,16 @@ def main():
     parser.add_argument("--max_workers", type=int, default=0, help="Number of processes to use")
     args = parser.parse_args()
 
-    if args.command == "download":
-        from pipeline.process.download_manager import DownloadManager
-        manager = DownloadManager(cfgs)
-        sources = args.source.split(',')
-        if sources == ['all']:
-            manager.prepare_all()
-        else:
-            for s in sources:
-                manager.prepare_single(s)
-        manager.download_all(verbose=args.verbose)
+    try:
+        mod = importlib.import_module(f'pipeline.cli.{args.command}')
+    except Exception as e:
+        print(f"Failed to import command {args.command}: {e}")
+        sys.exit(0)
+
+    try:
+        result = mod.handle_command(cfgs, args)
+    except:
+        print(f"Failed to process command: {args}")
 
 if __name__ == "__main__":
     main()
