@@ -65,7 +65,7 @@ class FastMapper(Mapper):
             for subfield in subfields:
                 sf_list = field.findall(f"mx:subfield[@code='{subfield}']", self.nss)
                 for sf in sf_list:
-                    if sf is not None:
+                    if sf.text is not None:
                         data.setdefault(subfield, []).append(self.to_plain_string(sf.text.rstrip(',')))
         return data
 
@@ -107,6 +107,8 @@ class FastMapper(Mapper):
         # Extract residence (370 or 551)
         # Prefer 370
         locations = self.extract_datafields(root, '370', ['c','e'])
+        assoc_places = locations.get('c',[])
+
         if locations.get('c') or locations.get('e'):
             for assoc_place, residence in zip(locations.get('c',['']), locations.get('e',[''])):
                 if residence:
@@ -120,7 +122,7 @@ class FastMapper(Mapper):
         else:
         # Try 551
             locations = self.extract_datafields(root, '551',['a'])
-            for place in locations.get('a',['']):
+            for place in locations.get('a',[]):
                 if place:
                     rpid = self.build_recs_and_reconcile(place, "place")
                     if rpid:
@@ -129,9 +131,13 @@ class FastMapper(Mapper):
         # Extract and set professional activity (372)
         activities = self.extract_datafields(root, '372',['a','s','t'])
         carried_out_activities = []
-        for i, field_of_activity in enumerate(activities.get('a',[])):
-            work_start = activities.get('s', [None])[i] if i < len(activities.get('s', [])) else None
-            work_end = activities.get('t', [None])[i] if i < len(activities.get('t', [])) else None
+        fields_of_activity = activities.get('a',[''])
+        work_starts = activities.get('s',[])
+        work_end = activities.get('t',[])
+
+        for i, field_of_activity in enumerate(fields_of_activity):
+            work_start = work_starts[i] if i < len(work_starts) else None
+            work_end = work_ends[i] if i < len(work_ends) else None
             if field_of_activity:
                 fpid = self.build_recs_and_reconcile(field_of_activity.lower(), "type")
                 if fpid:
@@ -143,12 +149,12 @@ class FastMapper(Mapper):
                     if work_start or work_end:
                         ts = model.TimeSpan()
                         try:
-                            bstart, bend = make_datetime(work_start) if work_start else (None, None)
+                            bstart, bend = make_datetime(work_start)
                         except:
                             bstart, bend = None, None
 
                         try:
-                            dstart, dend = make_datetime(work_end) if work_end else (None, None)
+                            dstart, dend = make_datetime(work_end)
                         except:
                             dstart, dend = None, None
 
@@ -176,7 +182,7 @@ class FastMapper(Mapper):
         df410_data = self.extract_datafields(root, '410', ['a'])
 
         # Extract primary name
-        primary_name = df100_data.get('a',[None])[0]
+        primary_name = next(iter(df100_data.get('a',[])), None)
         if primary_name is None:
             primary_name = ""
 
@@ -223,7 +229,7 @@ class FastMapper(Mapper):
             death_dates = None
 
         # Extract birth and death dates (100, 400) if not set      
-        for potential_dates in [df100_data.get('d',[None]), df400_data.get('d',[None])]:
+        for potential_dates in [df100_data.get('d',[]), df400_data.get('d',[])]:
             for date in potential_dates:
                 if date and "-" in date:
                     try:
@@ -272,8 +278,8 @@ class FastMapper(Mapper):
         df370_data = self.extract_datafields(root, '370', ['a', 'b'])
 
         # Set birth and death places
-        birth_place = df370_data.get('a', [None])[0]
-        death_place = df370_data.get('b', [None])[0]
+        birth_place = next(iter(df370_data.get('a', [])), None)
+        death_place = next(iter(df370_data.get('b', [])), None)
         if birth_place:
             bpid = self.build_recs_and_reconcile(birth_place, "place")
             if bpid:
@@ -289,7 +295,7 @@ class FastMapper(Mapper):
                 rec.died.took_place_at = model.Place(ident=dpid, label=death_place)
 
         # Extract equivalents (700)
-        uri_0 = df700_data.get('0', [None])
+        uri_0 = df700_data.get('0', [])
 
         equivalents = []
         for uri in uri_0:
@@ -305,7 +311,7 @@ class FastMapper(Mapper):
                     lcnaf_uri = self.config["all_configs"].external['lcnaf']['namespace'] + "".join(uri.split(")")[1].split())
                     equivalents.append(model.Person(ident=lcnaf_uri))
         # VIAF
-        equivalents.extend(model.Person(ident=uri) for uri in df700_data.get('1', [None]) if uri)
+        equivalents.extend(model.Person(ident=uri) for uri in df700_data.get('1', []) if uri)
 
         # Set equivalents
         if equivalents:
@@ -329,7 +335,7 @@ class FastMapper(Mapper):
         
         # Extract biographical note (500)
         df500_data = self.extract_datafields(root, '500', ['a'])
-        biographies = [model.LinguisticObject(content=bio) for bio in df500_data.get('a', [None]) if bio]
+        biographies = [model.LinguisticObject(content=bio) for bio in df500_data.get('a', []) if bio]
 
         # Set biographical note
         if biographies:
@@ -346,33 +352,35 @@ class FastMapper(Mapper):
         df710_data = self.extract_datafields(root, '710', ['a', 'b'])
         df411_data = self.extract_datafields(root, '411', ['a'])
 
-
         primary = False
         alternate_names = []
 
-        # Extract primary (110)
+        # Extract primary (110), if there are multiple 110 values take the first.
         
-        org_name = df110_data.get('a', [None])[0]
-        sub_unit = df110_data.get('b', [None])[0]
+        org_name = next(iter(df110_data.get('a', [])), None)
+        sub_unit = next(iter(df110_data.get('b', [])), None)
         if org_name or sub_unit:
-            primary_name = f"{org_name}, {sub_unit}" if sub_unit else org_name
+            primary_name = ", ".join(filter(None, [org_name, sub_unit]))
             rec.identified_by = [vocab.PrimaryName(content=primary_name)]
             primary = True
-
 
         # Extract alternates (410, 710, 411)
         # Set one as primary if 110 did not exist
 
+        alternate_names = set()
+
         for data in [df410_data, df710_data, df411_data]:
             for org_name, sub_unit in zip(data.get('a', ['']), data.get('b', [''])):
-                name = f"{org_name}, {sub_unit}" if sub_unit else org_name
-                if not primary:
-                    rec.identified_by = [vocab.PrimaryName(content=name)]
-                    primary = True
-                else:
-                    alternate_names.append(vocab.AlternateName(content=name))
-        
-        rec.identified_by.extend(alternate_names)
+                name = ", ".join(filter(None, [org_name, sub_unit]))
+                if name:
+                    if not primary:
+                        rec.identified_by = [vocab.PrimaryName(content=name)]
+                        primary = True
+                    else:
+                        alternate_names.add(name)
+
+        for alt in alternate_names:
+            rec.identified_by.extend([vocab.AlternateName(content=alt)])
 
         # If no names remain, return None
         if not rec.identified_by:
