@@ -50,6 +50,8 @@ class BaseDownloader:
         except json.JSONDecodeError:
             raise ValueError(f"Error: Failed to parse JSON response for {source_name}")
 
+        if '/' in data_key and not '.' in data_key:
+            data_key = data_key.replace('/', '.')
         keys = data_key.split('.')
         download_url = page_data
 
