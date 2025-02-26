@@ -154,7 +154,7 @@ def check_file_timestamps():
 
     try:
         for file in Path(filepath).iterdir():
-            if file.is_file() and file.suffix == '.jsonl.gz':
+            if file.is_file() and file.suffix == '.gz':
                 timestamp = file.stat().st_mtime
                 datestamp = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
 
