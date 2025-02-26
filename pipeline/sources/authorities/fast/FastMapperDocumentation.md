@@ -189,17 +189,6 @@ Based on the occurrences of MARC21 fields across the available FAST XML files, t
 **Good identifiers for testing:** `544497`,`1892632`,`520318`
 
 ---
-### Field 710
-- **Mapped:** `Y`
-- **Subfields used:** `'a', 'b'`
-- **Usage:**
-  - **'a'**
-    - Alternate primary name, part 1
-    - Preferred alternate name, part 1
-  - **'b'**
-    - Alternate primary name, part 2
-    - Preferred alternate name, part 2
----
 ### Field 110
 - **Mapped:** `Y`
 - **Subfields used:** `'a', 'b'`
@@ -221,6 +210,17 @@ Based on the occurrences of MARC21 fields across the available FAST XML files, t
     - Preferred alternate name, part 2
 ---
 ### Field 411
+- **Mapped:** `Y`
+- **Subfields used:** `'a', 'b'`
+- **Usage:**
+  - **'a'**
+    - Alternate primary name, part 1
+    - Preferred alternate name, part 1
+  - **'b'**
+    - Alternate primary name, part 2
+    - Preferred alternate name, part 2
+---
+### Field 710
 - **Mapped:** `Y`
 - **Subfields used:** `'a', 'b'`
 - **Usage:**
