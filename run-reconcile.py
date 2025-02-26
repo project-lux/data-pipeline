@@ -70,7 +70,7 @@ else:
         sys.argv.pop(idx)
         sys.argv.pop(idx)
 
-    if len(to_do) > 1:
+    if recids and len(to_do) > 1:
         print("Can only build individual records from a single source")
         sys.exit(0)
     to_do[0][2] = recids
