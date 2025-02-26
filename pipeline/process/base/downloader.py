@@ -1,4 +1,7 @@
 import os
+import requests
+import ujson as json
+
 
 class BaseDownloader:
     """
@@ -42,7 +45,7 @@ class BaseDownloader:
             str: The download URL, or exits with an error message.
         """
 
-        response = fetch_webpage(base_url)
+        response = self.fetch_webpage(base_url)
         try:
             page_data = json.loads(response)
             if not page_data:
