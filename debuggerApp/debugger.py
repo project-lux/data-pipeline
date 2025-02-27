@@ -43,13 +43,13 @@ def extract_names(cacherec, identifier):
         names = cacherec['data']['identified_by']
         return [n.get("content") for n in names if "content" in n]
     except KeyError:
-        print(f"Could not fetch names from {identifier}")
+        print(f".....Could not fetch names from {identifier}")
         return []
 
 def process_equivalents(equivs, typ, option1, option2, option3, recnames, recequivs):
     for e in equivs:
         ident = e.get("id", "")
-        print(f"idents for base uri are {ident}\n")
+        print(f".....Processing equivalent: {e.get('id', 'Unknown ID')}")
         if not ident:
             continue
         src, identifier = cfgs.split_uri(ident)
@@ -74,7 +74,7 @@ def process_nested_equivalents(cacherec, ident, typ, recequivs):
         try:
         	src, identifier = cfgs.split_uri(cid)
         except:
-        	print(f".....can't split {cid} in nested equivs")
+       		print(f".....can't split {cid} in nested equivs")
         	continue
         cacherec = fetch_cache_record(src, identifier, typ)
         if cacherec:
