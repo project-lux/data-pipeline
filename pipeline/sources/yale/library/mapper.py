@@ -70,6 +70,8 @@ class YulMapper(Mapper):
         if os.path.exists(fn):
             with open(fn) as fh:
                 okay = json.load(fh)
+        else:
+            okay = {}
         self.okay_place_parts = okay
 
         self.wiki_recon = {}
@@ -79,6 +81,8 @@ class YulMapper(Mapper):
                 reader = csv.reader(fh)
                 for row in reader:
                     self.wiki_recon[row[0]] = row[1]
+        else:
+            self.wiki_recon = []
 
         fn = os.path.join(data_dir, "parenthetical_places.json")
         if os.path.exists(fn):

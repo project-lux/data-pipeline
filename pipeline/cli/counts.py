@@ -1,4 +1,4 @@
-def handle_command(cfgs, args):
+def handle_command(cfgs, args, rest):
 
     if not args.source:
         args.source = "all"

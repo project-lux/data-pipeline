@@ -105,7 +105,6 @@ class DownloadManager:
         okay = False
         if downloader is not None:
             urls = downloader.get_urls()
-            print(urls)
             for pair in urls:
                 url = pair["url"]
                 path = pair["path"]

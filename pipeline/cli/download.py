@@ -1,7 +1,7 @@
 
 from pipeline.process.download_manager import DownloadManager
 
-def handle_command(cfgs, args):
+def handle_command(cfgs, args, rest):
     manager = DownloadManager(cfgs)
     sources = args.source.split(',')
     if sources == ['all']:

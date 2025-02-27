@@ -135,7 +135,11 @@ class IdMap(RedisCache):
         self.memory_cache = {}
         self.clean_on_remove = False
 
-        with open(os.path.join(self.configs.data_dir, 'idmap_update_token.txt')) as fh:
+        fn = os.path.join(self.configs.data_dir, 'idmap_update_token.txt')
+        if not os.path.exists(fn):
+            with open(fn, 'w') as fh:
+                fh.write("__initial__")
+        with open(fn) as fh:
             token = fh.read()
         token = token.strip()
         if not token.startswith('__') or not token.endswith('__'):
