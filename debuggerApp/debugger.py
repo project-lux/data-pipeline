@@ -53,13 +53,15 @@ def process_uri(uri, option1=False, option2=False):
 						(src, identifier) = cfgs.split_uri(ident)
 					except:
 						print(f"...could not split {ident}")
-					if (src, identifier) is not None:
+						continue
+					if src is not None and identifier is not None:
 						cache = src['recordcache']
 						cachename = src['name']
 						if src['type'] == "external":
 							if option1:
 								continue
 							else:
+								print(f"...type for {ident} is {typ}")
 								identqua = identifier + "##qua" + typ
 						else:
 							identqua = identifier
