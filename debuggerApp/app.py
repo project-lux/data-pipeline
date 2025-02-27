@@ -60,7 +60,7 @@ def index():
 
 
         #call function to process URI
-        result = process_uri(uri, option1, option2)
+        result = process_base_uri(uri, option1, option2)
 
         #pass result to template
         return render_template('result.html', result=result)

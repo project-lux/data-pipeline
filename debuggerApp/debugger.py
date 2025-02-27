@@ -19,152 +19,152 @@ reconciler = Reconciler(cfgs, idmap , networkmap)
 
 #given a uri, get the equivalents, check them in the recordcache, spit out the primary names
 
-def process_uri(uri, option1=False, option2=False):
+TYPE_MAP = {
+	"object": "HumanMadeObject",
+	"digital":"DigitalObject",
+	"concept": "Type",
+	"text": "LinguisticObject",
+	"visual": "VisualWork",
+	"person": "Person",
+	"group": "Group"
+}
+
+def get_idents_to_check(rec):
+	idents_to_check = []
+	equivs = rec.get("equivalent",[])
+	if equivs:
+		for e in equivs:
+			ident = e.get("id","")
+			if ident not in idents_to_check:
+				idents_to_check.append(ident)
+	return idents_to_check
+
+def get_cache_data(ident, option1=False):
+	(src, identifier) = cfgs.split_uri(ident)
+	cache = src['recordcache']
+	cachename = src['name']
+	if src['type'] == "external":
+		if option1:
+			continue
+		else:
+			identqua = identifier + "##qua" + typ
+	else:
+		identqua = identifier
+
+	cacherec = cache[identqua]
+	data = cacherec['data']
+
+	return data
+
+
+def get_names(data, ident, recnames):
+	names = data.get("identified_by",[])
+	if not names:
+		print(f"could not fetch names from {ident}")
+		return ""
+	for n in names:
+		cont = n.get("content","")
+		if ident in recnames:
+			recnames[ident].append(cont)
+		else:
+			recnames[ident] = [cont]
+
+
+def process_base_uri(uri, option1=False, option2=False):
+	recnames = {}
+	recequivs = {}
 	results = []
 
 	try: 
-		rec = requests.get(uri).json()
+		base_rec = requests.get(uri).json()
 	except:
 		return {"records": [], "error": f"Failure: could not fetch uri {uri}"}
 
-	TYPE_MAP = {
-		"object": "HumanMadeObject",
-		"digital":"DigitalObject",
-		"concept": "Type",
-		"text": "LinguisticObject",
-		"visual": "VisualWork",
-		"person": "Person",
-		"group": "Group"
-	}
 
 	uri_typ = uri.rsplit("/",2)[-2]
 	typ = TYPE_MAP.get(uri_typ, None)
 
-	recnames = {}
-	recequivs = {}
+	if typ is None:
+		return None
 
-	if rec:
-		equivs = rec.get("equivalent",[])
-		if equivs:
-			for e in equivs:
-				ident = e.get("id","")
-				if ident:
-					try:
-						(src, identifier) = cfgs.split_uri(ident)
-					except:
-						print(f"...could not split {ident}")
-						continue
-					if src is not None and identifier is not None:
-						cache = src['recordcache']
-						cachename = src['name']
-						if src['type'] == "external":
-							if option1:
-								continue
-							else:
-								print(f"...type for {ident} is {typ}")
+
+	idents = get_idents_to_check(base_rec)
+	for i in idents:
+		data = get_cache_data(ident, option1)
+		get_names(data, ident, recnames)
+		new_idents = get_idents_to_check(data)
+		for n in new_idents:
+			data = get_cache_data(n, option1=False)
+
+			try:
+				names = data['identified_by']
+			except:
+				names = None
+				print(f"could not fetch names from {cid}")
+				continue
+			cont = names[0]['content']
+			if ident not in recequivs:
+				recequivs[ident] = [{
+					"uri": cid,
+					"name": cont,
+					"added_by_reconciliation": False  
+				}]
+			elif ident in recequivs:
+				recequivs[ident].append({
+					"uri": cid,
+					"name": cont,
+					"added_by_reconciliation": False  
+				})
+			if not equivlst and not option2:
+				if ident not in recequivs:
+					recequivs[ident] = []
+
+			if option2:
+				#do name-based reconciliation
+				try:
+					reconrec = reconciler.reconcile(cacherec)
+				except:
+					reconrec = None
+				if reconrec:
+					#copy of rec with all reconcilation done
+					reconlist = reconrec['data']['equivalent']
+					for c in reconlist:
+						cid = c.get("id","")
+						if cid:
+							try:
+								(src, identifier) = cfgs.split_uri(cid)
+								cache = src['recordcache']
+								cachename = src['name']
 								identqua = identifier + "##qua" + typ
-						else:
-							identqua = identifier
-						cacherec = cache[identqua]
-						if cacherec:
-							data = cacherec['data']
-							try:
-								names = data['identified_by']
+								cacherec = cache[identqua]
 							except:
-								names = None
-								print(f"could not fetch names from {ident}")
+								cacherec = None
 								continue
-							for n in names:
-								cont = n.get("content")
-								if ident in recnames:
-									recnames[ident].append(cont)
-								else:
-									recnames[ident] = [cont]
-							equivlst = data.get("equivalent",[])
-							if equivlst:
-								for v in equivlst:
-									cid = v.get("id","")
-									try:
-										(src, identifier) = cfgs.split_uri(cid)
-										#these are all external
-										cache = src['recordcache']
-										cachename = src['name']
-										identqua = identifier + "##qua" + typ
-										cacherec = cache[identqua]
-									except:
-										cacherec = None
-										continue
-									if cacherec:
-										data = cacherec['data']
-										try:
-											names = data['identified_by']
-										except:
-											names = None
-											print(f"could not fetch names from {cid}")
-											continue
-										cont = names[0]['content']
-										if ident not in recequivs:
-											recequivs[ident] = [{
-												"uri": cid,
-												"name": cont,
-												"added_by_reconciliation": False  
-											}]
-										elif ident in recequivs:
-											recequivs[ident].append({
-												"uri": cid,
-												"name": cont,
-												"added_by_reconciliation": False  
-											})
-							if not equivlst and not option2:
+							if cacherec:
+								data = cacherec['data']
+								try:
+									names = data['identified_by']
+								except:
+									print(f"can't get names from {cache} {identqua}")
+									continue
+								cont = names[0]['content']
 								if ident not in recequivs:
-									recequivs[ident] = []
-
-						if option2:
-							#do name-based reconciliation
-							try:
-								reconrec = reconciler.reconcile(cacherec)
-							except:
-								reconrec = None
-							if reconrec:
-								#copy of rec with all reconcilation done
-								reconlist = reconrec['data']['equivalent']
-								for c in reconlist:
-									cid = c.get("id","")
-									if cid:
-										try:
-											(src, identifier) = cfgs.split_uri(cid)
-											cache = src['recordcache']
-											cachename = src['name']
-											identqua = identifier + "##qua" + typ
-											cacherec = cache[identqua]
-										except:
-											cacherec = None
-											continue
-										if cacherec:
-											data = cacherec['data']
-											try:
-												names = data['identified_by']
-											except:
-												print(f"can't get names from {cache} {identqua}")
-												continue
-											cont = names[0]['content']
-											if ident not in recequivs:
-												recequivs[ident] = [{
-													"uri": cid,
-													"name": cont,
-													"added_by_reconciliation": True
-												}]
-											elif ident in recequivs:
-												recequivs[ident].append({
-													"uri": cid,
-													"name": cont,
-													"added_by_reconciliation": True
-												})
+									recequivs[ident] = [{
+										"uri": cid,
+										"name": cont,
+										"added_by_reconciliation": True
+									}]
+								elif ident in recequivs:
+									recequivs[ident].append({
+										"uri": cid,
+										"name": cont,
+										"added_by_reconciliation": True
+									})
 
 	#recnames: key: each equivalent uri from original record: their PNs
 	#recequivs: key: each equivalent uri from original record: their equivalents uris + PN
 		else:
-			return {"records": [], "error": f"No equivalents found for the original URI: {uri}"}
+			return {"records": [], "error": f"No URI equivalents found for {uri}"}
 
 	for rec, names in recnames.items():
 		record_data = {
