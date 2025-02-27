@@ -3,7 +3,7 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from debugger import process_base_uri
+from debugger import process_uri
 
 from dotenv import load_dotenv
 from pipeline.config import Config
@@ -60,7 +60,7 @@ def index():
 
 
         #call function to process URI
-        result = process_base_uri(uri, option1, option2)
+        result = process_uri(uri, option1, option2)
 
         #pass result to template
         return render_template('result.html', result=result)
