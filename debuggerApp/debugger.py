@@ -46,13 +46,15 @@ def extract_names(cacherec, identifier):
         print(f"Could not fetch names from {identifier}")
         return []
 
-def process_equivalents(equivs, typ, option1, option2, recnames, recequivs):
+def process_equivalents(equivs, typ, option1, option2, option3, recnames, recequivs):
     for e in equivs:
         ident = e.get("id", "")
         if not ident:
             continue
         src, identifier = cfgs.split_uri(ident)
-        if src['type'] == "external" and option1:
+        if option1 and src['type'] == "external":
+            continue
+        if option2 and src['type'] != "external":
             continue
         cacherec = fetch_cache_record(src, identifier, typ)
         if not cacherec:
@@ -60,7 +62,7 @@ def process_equivalents(equivs, typ, option1, option2, recnames, recequivs):
         names = extract_names(cacherec, ident)
         recnames[ident] = recnames.get(ident, []) + names
         process_nested_equivalents(cacherec, ident, typ, recequivs)
-        if option2:
+        if option3:
             process_reconciliation(cacherec, ident, typ, recequivs)
 
 def process_nested_equivalents(cacherec, ident, typ, recequivs):
@@ -101,7 +103,7 @@ def process_reconciliation(cacherec, ident, typ, recequivs):
     except Exception:
         print(f"Error during reconciliation for {ident}")
 
-def process_uri(uri, option1=False, option2=False):
+def process_uri(uri, option1=False, option2=False, option3=False):
     results = []
     rec = fetch_json(uri)
     if "error" in rec:
@@ -109,10 +111,8 @@ def process_uri(uri, option1=False, option2=False):
     
     uri_typ = uri.rsplit("/", 2)[-2]
     typ = TYPE_MAP.get(uri_typ, None)
-    if typ is None:
-    	print(f" {uri} has none type")
     recnames, recequivs = {}, {}
-    process_equivalents(rec.get("equivalent", []), typ, option1, option2, recnames, recequivs)
+    process_equivalents(rec.get("equivalent", []), typ, option1, option2, option3, recnames, recequivs)
     
     if not recnames:
         return {"records": [], "error": f"No equivalents found for the original URI: {uri}"}

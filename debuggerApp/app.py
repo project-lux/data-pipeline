@@ -57,6 +57,7 @@ def index():
         # Check the status of the checkboxes
         option1 = 'option1' in request.form
         option2 = 'option2' in request.form
+        option3 = 'option3' in request.form
 
 
         #call function to process URI
