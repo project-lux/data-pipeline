@@ -70,7 +70,11 @@ def process_nested_equivalents(cacherec, ident, typ, recequivs):
         cid = v.get("id", "")
         if not cid:
             continue
-        src, identifier = cfgs.split_uri(cid)
+        try:
+        	src, identifier = cfgs.split_uri(cid)
+        except:
+        	print(f".....can't split {cid} in nested equivs")
+        	continue
         cacherec = fetch_cache_record(src, identifier, typ)
         if cacherec:
             names = extract_names(cacherec, cid)
