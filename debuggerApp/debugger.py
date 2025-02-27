@@ -45,11 +45,9 @@ def get_cache_data(ident, option1=False):
 	cachename = src['name']
 	if src['type'] == "external":
 		if option1:
-			continue
+			identqua = identifier
 		else:
 			identqua = identifier + "##qua" + typ
-	else:
-		identqua = identifier
 
 	cacherec = cache[identqua]
 	data = cacherec['data']
