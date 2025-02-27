@@ -6,5 +6,9 @@ class RorDownloader(BaseDownloader):
         url1 = self.config['downloadMdUrl']
         xpath = self.config['downloadXPath']
         url2 = self.get_value_from_json(url1, xpath)
-        p = os.path.join(self.dumps_dir, url2.rsplit('/')[-2])
+        if 'dumpFilePath' in self.config:
+            dfn = self.config['dumpFilePath']
+        else:
+            dfn = url2.rsplit('/')[-2]
+        p = os.path.join(self.dumps_dir, dfn)
         return [{"url": url2, "path": p}]

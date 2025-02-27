@@ -9,4 +9,4 @@ def handle_command(cfgs, args, rest):
     else:
         for s in sources:
             manager.prepare_single(s)
-    manager.download_all(verbose=args.verbose)
+    manager.download_all(disable_tqdm=args.no_tqdm, verbose=args.verbose)

@@ -7,6 +7,36 @@ import gzip
 import zipfile
 import ujson as json
 
+
+class NewLoader:
+
+    def __init__(self, config):
+        self.config = config
+        self.out_cache = config['datacache']
+        self.total = config.get('totalRecords', -1)
+        self.my_slice = 0
+        self.max_slice = 0
+        self.my_files = []
+
+    def prepare_for_load(self, my_slice=0, max_slice=0):
+        self.my_slice = my_slice
+        self.max_slice = max_slice
+
+        files = []
+        if (ifs := self.config.get('input_files', {})):
+            for p in self.in_paths['records']:
+                files.append({"path": p['path'], "type": p['type']})
+        if not files and (dfp := self.config.get('dumpFilePath')):
+            # look in dfp
+            files.append({"path": dfp, "type": config.get("dumpFileType", "")})
+        self.my_files = files
+
+    def load(self):
+        pass
+
+
+
+
 class Loader(object):
 
     def __init__(self, config):
@@ -121,3 +151,6 @@ class Loader(object):
                 ttls = total / xps
                 print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
         zh.close()
+
+
+

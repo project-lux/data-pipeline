@@ -13,8 +13,6 @@ def handle_command(cfgs, args, rest):
     if not rest:
         rest = ['.']
     where = os.path.abspath(rest[0])
-
-    print(where)
     os.chdir(where)
 
     p = Path(where)
@@ -26,10 +24,8 @@ def handle_command(cfgs, args, rest):
     (p / 'output').mkdir()
     (p / 'system_config').mkdir()
 
-
     # Try to use git clone to fetch main
     # Then it can stay in sync
-
     try:
         result = subprocess.run(["git", "clone", "https://github.com/project-lux/pipeline-configs.git"])
         worked = True
@@ -73,3 +69,6 @@ def handle_command(cfgs, args, rest):
     # in the current directory?
     with open('.env', 'w') as fh:
         fh.write(f"LUX_BASEPATH={p / 'system_config'}")
+
+    print("Installed basic configuration and file system layout")
+    print("Please make sure that postgres and redis are available and configured via the files in system_config/config_cache")
