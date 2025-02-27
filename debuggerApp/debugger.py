@@ -20,7 +20,8 @@ TYPE_MAP = {
     "text": "LinguisticObject",
     "visual": "VisualWork",
     "person": "Person",
-    "group": "Group"
+    "group": "Group",
+    "place": "Place"
 }
 
 def fetch_json(uri):
