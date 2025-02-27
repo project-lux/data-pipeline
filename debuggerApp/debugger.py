@@ -108,7 +108,7 @@ def process_uri(uri, option1=False, option2=False):
     
     uri_typ = uri.rsplit("/", 2)[-2]
     typ = TYPE_MAP.get(uri_typ, None)
-    if typ in None:
+    if typ is None:
     	print(f" {uri} has none type")
     recnames, recequivs = {}, {}
     process_equivalents(rec.get("equivalent", []), typ, option1, option2, recnames, recequivs)
