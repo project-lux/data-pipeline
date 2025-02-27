@@ -35,7 +35,7 @@ def handle_command(cfgs, args):
                 if est < 100000:
                     est = len(cache)
                     pref = "="
-                ttl = f"{s}/{c}:".ljust(36)
+                ttl = f"{s.rjust(16)}/{c}:".ljust(36)
                 print(f"{ttl} {pref}{est}")
                 total += est
     ttl = "Total Records Seen:".rjust(36)
