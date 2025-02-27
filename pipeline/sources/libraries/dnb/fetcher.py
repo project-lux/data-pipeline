@@ -22,7 +22,7 @@ class DnbFetcher(Fetcher):
 
             # FIXME: This should also be more robust
             try:
-                print(f"Fetching {newurl}")
+                #print(f"Fetching {newurl}")
                 resp = requests.get(newurl)
             except:
                 # FIXME: Log network failure

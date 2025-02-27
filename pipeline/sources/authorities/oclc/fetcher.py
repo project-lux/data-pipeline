@@ -10,7 +10,7 @@ class ViafFetcher(Fetcher):
 
         url = self.make_fetch_uri(identifier)
         try:
-            print(f"Fetching {url}")
+            #print(f"Fetching {url}")
             resp = self.session.get(url, allow_redirects=False)
         except:
             # Failed to open network, resolve DNS, or similar

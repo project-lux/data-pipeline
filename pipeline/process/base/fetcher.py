@@ -58,7 +58,7 @@ class Fetcher(object):
             resp = self.session.get(url, allow_redirects=self.allow_redirects, timeout=self.timeout)
         except:
             # Failed to open network, resolve DNS, or similar
-            print(f"Failed to get response from {url}")
+            #print(f"Failed to get response from {url}")
             self.networkmap[url] = 0
             return None
         if resp.status_code == 200:
@@ -77,7 +77,7 @@ class Fetcher(object):
             data = self.post_process(data, identifier)
         else:
             # URL returned fail status
-            print(f"Got failure {resp.status_code} from {url}")
+            #print(f"Got failure {resp.status_code} from {url}")
             self.networkmap[url] = resp.status_code
             return None
 

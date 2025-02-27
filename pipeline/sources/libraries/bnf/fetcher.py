@@ -81,7 +81,7 @@ class BnfFetcher(Fetcher):
             return None
 
         try:
-            print(f"Fetching {url}")
+            #print(f"Fetching {url}")
             resp = requests.get(url, headers=self.headers, 
                 allow_redirects=self.allow_redirects, timeout=self.timeout)
         except:

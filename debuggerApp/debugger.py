@@ -49,6 +49,7 @@ def extract_names(cacherec, identifier):
 def process_equivalents(equivs, typ, option1, option2, option3, recnames, recequivs):
     for e in equivs:
         ident = e.get("id", "")
+        print(f"idents for base uri are {ident}\n")
         if not ident:
             continue
         src, identifier = cfgs.split_uri(ident)

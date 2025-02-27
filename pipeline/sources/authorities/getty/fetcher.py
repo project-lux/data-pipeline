@@ -67,7 +67,7 @@ class GettyFetcher(Fetcher):
                 return None
 
             try:
-                print(f"Fetching {newurl}")
+                #print(f"Fetching {newurl}")
                 resp = self.session.get(newurl)
             except Exception as e:
                 # FIXME: Log network failure
