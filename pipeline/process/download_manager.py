@@ -125,7 +125,7 @@ class DownloadManager:
 
     def prepare_all(self) -> bool:
         for cfg in self.configs.external.values():
-            self.preparse_download(cfg)
+            self.prepare_download(cfg)
         for cfg in self.configs.internal.values():
             self.prepare_download(cfg)
 
