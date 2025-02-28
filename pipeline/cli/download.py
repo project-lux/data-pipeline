@@ -17,7 +17,10 @@ def handle_command(cfgs, args, rest):
         for s in sources:
             manager.prepare_single(s)
 
-    okay = manager.download_all(disable_tqdm=args.no_tqdm, verbose=args.verbose)
-    if not okay:
-        # at least one failed
-        print(manager.downloads)
+    if not manager.downloads:
+        print("Could not find anything to download!")
+    else:
+        okay = manager.download_all(disable_tqdm=args.no_tqdm, verbose=args.verbose)
+        if not okay:
+            # at least one failed
+            print(manager.downloads)

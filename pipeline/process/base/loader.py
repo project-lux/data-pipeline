@@ -1,11 +1,16 @@
 
+import io
 import os
 import requests
 import shutil
 import time
 import gzip
 import zipfile
+import tarfile
 import ujson as json
+import tqdm
+
+
 
 try:
     import magic
@@ -44,27 +49,28 @@ class NewLoader:
 
     def __init__(self, config):
         self.config = config
-        self.out_cache = config['datacache']
+        self.out_cache = config.get('datacache', {})
         self.total = config.get('totalRecords', -1)
         self.my_slice = 0
         self.max_slice = 0
+        self.seen = 0
         self.my_files = []
+        self.progress_bar = None
+
         self.fmt_containers = ['dir', 'dirh', 'pair', 'zip', 'tar', 'lines', 'dict', 'array']
         self.fmt_formats = ['json', 'jsonstr', 'other']
-        self.fmt_compressions = ['gz', 'bz']
-
+        self.fmt_compressions = ['gz', 'bz2']
         self.step_functions = {
             'dir': self.iterate_directory,
-            'dirh': self.iterate_directories,
+            'dirs': self.iterate_directories,
             'pair': self.iterate_directories,
             'zip': self.iterate_zip,
             'tar': self.iterate_tar,
             'lines': self.iterate_lines,
             'dict': self.iterate_dict,
             'array': self.iterate_array,
-            'json': self.process_json,
-            'jsonstr': self.process_jsonstr,
-            'other': self.process_other
+            'json': self.make_json,
+            'other': self.make_other
         }
 
     def guess_fmt(self, path):
@@ -121,7 +127,7 @@ class NewLoader:
                 spec = [fmt]
             if compression:
                 spec.append(compression)
-        return spec
+        return [spec]
 
 
     def process_fmt(self, fmt):
@@ -148,13 +154,177 @@ class NewLoader:
         return spec
 
 
+    def iterate_directory(self, path, comp):
+        # ignore comp
+        for f in os.listdir(path):
+            full = os.path.join(path, f)
+            if os.path.isfile(full):
+                yield full
+
+    def iterate_directories(self, path, comp):
+        # still ignore comp
+        for f in os.listdir(path):
+            full = os.path.join(path, f)
+            if os.path.isfile(full):
+                yield full
+            else:
+                self.iterate_directories(full, comp)
+
+    def iterate_zip(self, path, comp):
+        if comp == 'bz2':
+            compression = zipfile.ZIP_BZIP2
+        elif comp == 'gz':
+            compression = zipfile.ZIP_DEFLATED
+        else:
+            compression = zipfile.ZIP_STORED
+
+        with zipfile.ZipFile(path, compression=compression) as zh:
+            for n in zh.namelist():
+                if not n.endswith('/'):
+                    # can't get back to this, so need to yield a file handle like object
+                    yield zh.open(n)
+
+    def iterate_tar(self, path, comp):
+        if comp:
+            mode = f"r:{comp}"
+        else:
+            mode = "r"
+        with tarfile.open(path, mode) as th:
+            ti = th.next()
+            while ti is not None:
+                if ti.isfile():
+                    yield th.extractfile(ti)
+                ti = th.next()
+
+    def file_opener(self, path, comp):
+        if isinstance(path, io.IOBase):
+            # already a file handle
+            return path
+        if comp == 'gz':
+            return gzip.open(path)
+        elif comp == 'bz2':
+            return bz2.open(path)
+        elif not comp:
+            return open(path)
+        else:
+            # Dunno what this is
+            return None
+
+    def iterate_lines(self, path, comp):
+        with self.file_opener(path, comp) as fh:
+            l = fh.readline()
+            while l:
+                if type(l) == str:
+                    yield io.StringIO(l)
+                elif type(l) == bytes:
+                    yield io.BytesIO(l)
+                l = fh.readline()
+
+    def iterate_dict(self, path, comp):
+        with self.file_opener(path, comp) as fh:
+            data = json.load(fh)
+            for v in data.values():
+                yield v
+
+    def iterate_array(self, path, comp):
+        with self.file_opener(path, comp) as fh:
+            data = json.load(fh)
+            for v in data:
+                yield v
+
+    def make_json(self, path, comp, parent):
+        ident = self.make_identifier(path)
+        with self.file_opener(path, comp) as fh:
+            data = json.load(fh)
+        data = self.post_process_json(data)
+        if not ident:
+            ident = self.extract_identifier(data)
+            if not ident:
+                raise ValueError(f"Could not get an identifier in {self.config['name']} while in {parent}/{path}")
+        return {'identifier': ident, 'data': data}
+
+    def make_other(self, path, comp, parent):
+        ident = self.make_identifier(path)
+        with self.file_opener(path, comp) as fh:
+            data = fh.read()
+        data = self.post_process_other(data)
+        if not type(data) == dict:
+            data = {'data': data}
+        if not ident:
+            ident = self.extract_identifier(data)
+            if not ident:
+                raise ValueError(f"Could not get an identifier in {self.config['name']} while in {parent}/{path}")
+        return {'identifier': ident, 'data': data}
+
+    def make_identifier(self, value):
+        # assume a filepath with the last component as the identifier
+        if hasattr(value, 'name'):
+            value = value.name
+        try:
+            return value.split('/')[-1]
+        except:
+            return None
+
+    def extract_identifier(self, data):
+        # Could be anywhere, but at least check 'id'
+        if type(data) == dict and 'id' in data:
+            return self.make_identifier(data['id'])
+        return None
+
+    def post_process_json(self, data):
+        return data
+
+    def post_process_other(self, data):
+        return data
+
+    def should_make_record(self, path):
+        if self.max_slice > 1 and self.seen % self.max_slice != self.my_slice:
+            return False
+        return True
+
+    def should_store_record(self, data):
+        return True
+
+    def store_record(self, record):
+        identifier = record['identifier']
+        data = record['data']
+        self.out_cache[identifier] = data
+        if self.progress_bar is not None:
+            self.progress_bar.update(1)
+
+    def process_step(self, steps, path, parent):
+        step = steps[0]
+        comp = step[1] if len(step) > 1 else None
+        handler = self.step_functions[step[0]]
+        if step[0] in self.fmt_containers:
+            for child in handler(path, comp):
+                self.process_step(steps[1:], child, step)
+        elif step[0] in self.fmt_formats:
+            # if we don't need to process it, then don't
+            self.seen += 1
+            if self.should_make_record(path):
+                record = handler(path, comp, parent)
+                if self.should_store_record(record):
+                    self.store_record(record)
+        else:
+            raise ValueError(f"Unknown step type {step} in {self.config['name']}")
+
+    def make_progress_bar(self):
+        ttl = self.total
+        if self.max_slice > 1:
+            ttl = ttl // self.max_slice
+        self.progress_bar = tqdm.tqdm(total=ttl,
+            desc=f'{self.config['name']}/{self.my_slice}',
+            position=self.my_slice,
+            leave=True)
+
     def prepare_for_load(self, my_slice=0, max_slice=0):
         self.my_slice = my_slice
         self.max_slice = max_slice
 
         files = []
         if (ifs := self.config.get('input_files', {})):
-            for p in self.in_paths['records']:
+            for p in ifs['records']:
                 fmt = p.get('type', None)
                 if fmt:
                     fmtspec = self.process_fmt(fmt)
@@ -165,7 +335,7 @@ class NewLoader:
 
         if not files and (dfp := self.config.get('dumpFilePath')):
             # look in dfp
-            fmt = config.get('dumpFileType', None)
+            fmt = self.config.get('dumpFileType', None)
             if fmt:
                 fmtspec = self.process_fmt(fmt)
             else:
@@ -175,54 +345,15 @@ class NewLoader:
         self.my_files = files
 
 
-
-    def iterate_directory(self, path, comp):
-        pass
-
-    def iterate_directories(self, path, comp):
-        pass
-
-    def iterate_zip(self, path, comp):
-        pass
-
-    def iterate_tar(self, path, comp):
-        pass
-
-    def iterate_lines(self, path, comp):
-        pass
-
-    def iterate_dict(self, path, comp):
-        pass
-
-    def iterate_array(self, path, comp):
-        pass
-
-
-
-    def process_step(self, steps, path, parent):
-        step = steps[0]
-        comp = step[1] if len(step) > 1 else None
-        handler = self.step_functions[step[0]]
-        if step[0] in self.fmt_containers:
-            for child in handler(path, comp):
-                self.process_step(steps[1:], child, step)
-        elif step[0] in self.fmt_formats:
-            handler(path, comp, parent)
-        else:
-            raise ValueError(f"Unknown step type {step} in {self.config['name']}")
-
-    def make_identifier(self, value):
-        # assume a filepath with the last component as the identifier
-        return value.split('/')[-1]
-
-
-    def load(self):
-
+    def load(self, disable_tqdm=False):
         for info in self.my_files:
-            path = info['path']
-            fmt = info['type']
-            self.process_step(steps, path, None)
-
+            if not disable_tqdm:
+                self.make_progress_bar()
+            self.process_step(info['fmt'], info['path'], None)
+        try:
+            self.out_cache.commit()
+        except:
+            pass
 
 
 class Loader(object):
