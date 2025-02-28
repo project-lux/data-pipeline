@@ -322,7 +322,7 @@ class Config(object):
 
     def instantiate_map(self, key):
         if not key or not key in self.map_stores:
-            raise ValueError("No such map store config")
+            raise ValueError(f"Could not find map config: {key}")
         else:
             cfg = self.map_stores[key]
         if "store" in cfg and cfg["store"] is not None:
@@ -338,7 +338,7 @@ class Config(object):
 
     def instantiate_config(self, key):
         if not key or not key in self.subconfig_stores:
-            raise ValueError("No such map store config")
+            raise ValueError(f"Could not find sub configuration: {key}")
         else:
             cfg = self.subconfig_stores[key]
         if "datacache" in cfg and cfg["datacache"] is not None:
