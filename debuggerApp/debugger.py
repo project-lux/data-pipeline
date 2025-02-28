@@ -124,12 +124,12 @@ def process_uri(uri, option1=False, option2=False, option3=False):
     
     if not recnames:
         return {"records": [], "error": f"No equivalents found for the original URI: {uri}"}
-    
+
     for rec, names in recnames.items():
         record_data = {
             "uri": rec,
             "names": names,
-            "equivalents": recequivs.get(rec, [])
+            "equivalents": [eq for eq in recequivs.get(rec,[]) if eq['uri'] != rec]
         }
         results.append(record_data)
     
