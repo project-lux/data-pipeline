@@ -176,7 +176,23 @@ lcfgs = [
 
 for lc in lcfgs:
     ldr = NewLoader(lc)
-    ldr.prepare_for_load()
+    ldr.prepare_load()
     ldr.load()
     assert(len(ldr.out_cache) == 1)
 
+
+mcfg = {
+    "name": "jsonl",
+    "totalRecords": 20,
+    "input_files": {
+        "records": [
+            {"path": base + "multi/records.jsonl", "type": "lines/json"}
+        ]
+    }
+}
+
+ldr = NewLoader(mcfg)
+ldr.prepare_load(0, 5)
+ldr.load()
+assert(len(ldr.out_cache) == 4)
+assert('5' in ldr.out_cache)

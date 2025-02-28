@@ -332,7 +332,7 @@ class NewLoader:
         if self.progress_bar is not None:
             self.progress_bar.close()
 
-    def prepare_for_load(self, my_slice=0, max_slice=0):
+    def prepare_load(self, my_slice=0, max_slice=0):
         self.my_slice = my_slice
         self.max_slice = max_slice
 

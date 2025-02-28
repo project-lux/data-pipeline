@@ -61,7 +61,7 @@ class LoadManager:
 
     def prepare_all(self) -> bool:
         for cfg in self.configs.external.values():
-            self.preparse_load(cfg)
+            self.prepare_load(cfg)
         for cfg in self.configs.internal.values():
             self.prepare_load(cfg)
 
