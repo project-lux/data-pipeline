@@ -25,6 +25,26 @@ def handle_command(cfgs, args, rest):
             print(f"Couldn't build Config at from files at {basepath}")
             return
 
+        try:
+            idmap = cfgs.get_idmap()
+        except Exception as e:
+            print(f"Failed to build an idmap")
+            print(e)
+            return
+
+        try:
+            cfgs.cache_globals()
+        except Exception as e:
+            print(f"Failed to build globals")
+            print(e)
+            return
+
+        try:
+            cfgs.instantiate_all()
+        except:
+            print(f"Failed to build all...")
+            print(e)
+            return
 
         # Try and load everything up individually
 
