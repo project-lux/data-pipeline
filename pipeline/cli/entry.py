@@ -35,8 +35,8 @@ def main():
     parser.add_argument("--no-tqdm", action='store_true', help="If set, then disable TQDM progress bars")
     args, rest = parser.parse_known_args()
 
-    if cfgs is None and args.command != "initialize":
-        print("Please use 'lux initialize <base directory>' first to create your installation")
+    if cfgs is None and args.command not in ['initialize', 'testinstall']:
+        print("Please use 'lux initialize <base directory>' first to create your installation or lux testinstall to diagnose issues")
         sys.exit(0)
     elif args.command == 'initialize' and cfgs is not None:
         print(f"You have already initialized your LUX pipeline. The configs are at: {basepath}")
