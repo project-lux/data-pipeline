@@ -41,7 +41,7 @@ def handle_command(cfgs, args, rest):
 
         try:
             cfgs.instantiate_all()
-        except:
+        except Exception as e:
             print(f"Failed to build all...")
             print(e)
             return
