@@ -21,6 +21,7 @@ base = "/Users/rs2668/Development/lux/data-pipeline/tests/loader_tests/"
 lcfgs = [
     {
         "name": "json",
+        "totalRecords": 1,
         "input_files": {
             "records": [
                 {"path": base + "json/record.json", "type": "json"}
@@ -28,7 +29,17 @@ lcfgs = [
         }
     },
     {
+        "name": "json.gz",
+        "totalRecords": 1,
+        "input_files": {
+            "records": [
+                {"path": base + "json/record.json.gz", "type": "json.gz"}
+            ]
+        }
+    },
+    {
         "name": "other",
+        "totalRecords": 1,
         "input_files": {
             "records": [
                 {"path": base + "other/record.xml", "type": "other"}
@@ -37,6 +48,7 @@ lcfgs = [
     },
     {
         "name": "zip_json",
+        "totalRecords": 1,
         "input_files": {
             "records": [
                 {"path": base + "zip_json/records.zip", "type": "zip/json"}
@@ -45,6 +57,7 @@ lcfgs = [
     },
     {
         "name": "tar",
+        "totalRecords": 1,
         "input_files": {
             "records": [
                 {"path": base + "tar/records.tar", "type": "tar/json"}
@@ -53,6 +66,7 @@ lcfgs = [
     },
     {
         "name": "tgz",
+        "totalRecords": 1,
         "input_files": {
             "records": [
                 {"path": base + "tar/records.tgz", "type": "tar.gz/json"}
@@ -60,7 +74,17 @@ lcfgs = [
         }
     },
     {
+        "name": "tgz_l",
+        "totalRecords": 1,
+        "input_files": {
+            "records": [
+                {"path": base + "tar/records.tgz", "type": "tar.gz/lines/json"}
+            ]
+        }
+    },
+    {
         "name": "tbz",
+        "totalRecords": 1,
         "input_files": {
             "records": [
                 {"path": base + "tar/records.tar.bz2", "type": "tar.bz2/json"}
@@ -69,6 +93,7 @@ lcfgs = [
     },
     {
         "name": "jsonl",
+        "totalRecords": 1,
         "input_files": {
             "records": [
                 {"path": base + "lines/records.jsonl", "type": "lines/json"}
@@ -77,6 +102,7 @@ lcfgs = [
     },
     {
         "name": "jsonl.gz",
+        "totalRecords": 1,
         "input_files": {
             "records": [
                 {"path": base + "lines/records.jsonl.gz", "type": "lines.gz/json"}
@@ -85,6 +111,7 @@ lcfgs = [
     },
     {
         "name": "zip_jsonl",
+        "totalRecords": 1,
         "input_files": {
             "records": [
                 {"path": base + "zip_json/records.zip", "type": "zip/lines/json"}
@@ -93,12 +120,58 @@ lcfgs = [
     },
     {
         "name": "dir_zip_jsonl",
+        "totalRecords": 1,
         "input_files": {
             "records": [
                 {"path": base + "zip_json", "type": "dir/zip/lines/json"}
             ]
         }
-    }
+    },
+    {
+        "name": "dir_jsonl",
+        "totalRecords": 1,
+        "input_files": {
+            "records": [
+                {"path": base + "dir", "type": "dir/lines/json"}
+            ]
+        }
+    },
+    {
+        "name": "dir_json",
+        "totalRecords": 1,
+        "input_files": {
+            "records": [
+                {"path": base + "dir", "type": "dir/json"}
+            ]
+        }
+    },
+    {
+        "name": "array_json",
+        "totalRecords": 1,
+        "input_files": {
+            "records": [
+                {"path": base + "array/records.json", "type": "array/raw"}
+            ]
+        }
+    },
+    {
+        "name": "dict_json",
+        "totalRecords": 1,
+        "input_files": {
+            "records": [
+                {"path": base + "dict/records.json", "type": "dict/raw"}
+            ]
+        }
+    },
+    {
+        "name": "tgz_lgz",
+        "totalRecords": 1,
+        "input_files": {
+            "records": [
+                {"path": base + "tar/records-gz.tar.gz", "type": "tar.gz/lines.gz/json"}
+            ]
+        }
+    },
 ]
 
 for lc in lcfgs:

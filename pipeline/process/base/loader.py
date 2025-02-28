@@ -58,7 +58,7 @@ class NewLoader:
         self.progress_bar = None
 
         self.fmt_containers = ['dir', 'dirh', 'pair', 'zip', 'tar', 'lines', 'dict', 'array']
-        self.fmt_formats = ['json', 'jsonstr', 'other']
+        self.fmt_formats = ['json', 'raw', 'other']
         self.fmt_compressions = ['gz', 'bz2']
         self.step_functions = {
             'dir': self.iterate_directory,
@@ -70,6 +70,7 @@ class NewLoader:
             'dict': self.iterate_dict,
             'array': self.iterate_array,
             'json': self.make_json,
+            'raw': self.make_raw,
             'other': self.make_other
         }
 
@@ -197,7 +198,7 @@ class NewLoader:
                 ti = th.next()
 
     def file_opener(self, path, comp):
-        if isinstance(path, io.IOBase):
+        if not comp and isinstance(path, io.IOBase):
             # already a file handle
             return path
         if comp == 'gz':
@@ -229,8 +230,17 @@ class NewLoader:
     def iterate_array(self, path, comp):
         with self.file_opener(path, comp) as fh:
             data = json.load(fh)
+            # This is yield actual json, not a file/string of json
             for v in data:
                 yield v
+
+    def make_raw(self, path, comp, parent):
+        # path is the actual native JSON record
+        data = self.post_process_json(path)
+        ident = self.extract_identifier(data)
+        if not ident:
+            raise ValueError(f"Could not get an identifier in {self.config['name']} while in {parent}")
+        return {'identifier': ident, 'data': data}
 
     def make_json(self, path, comp, parent):
         ident = self.make_identifier(path)
@@ -309,7 +319,7 @@ class NewLoader:
         else:
             raise ValueError(f"Unknown step type {step} in {self.config['name']}")
 
-    def make_progress_bar(self):
+    def open_progress_bar(self):
         ttl = self.total
         if self.max_slice > 1:
             ttl = ttl // self.max_slice
@@ -317,6 +327,10 @@ class NewLoader:
             desc=f'{self.config['name']}/{self.my_slice}',
             position=self.my_slice,
             leave=True)
+
+    def close_progress_bar(self):
+        if self.progress_bar is not None:
+            self.progress_bar.close()
 
     def prepare_for_load(self, my_slice=0, max_slice=0):
         self.my_slice = my_slice
@@ -348,8 +362,11 @@ class NewLoader:
     def load(self, disable_tqdm=False):
         for info in self.my_files:
             if not disable_tqdm:
-                self.make_progress_bar()
+                self.open_progress_bar()
             self.process_step(info['fmt'], info['path'], None)
+            if not disable_tqdm:
+                self.close_progress_bar()
+
         try:
             self.out_cache.commit()
         except:
