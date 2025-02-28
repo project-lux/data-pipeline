@@ -49,10 +49,11 @@ def extract_names(cacherec, identifier):
 def process_equivalents(equivs, typ, option1, option2, option3, recnames, recequivs):
     for e in equivs:
         ident = e.get("id", "")
-        print(f".....Processing equivalent: {e.get('id', 'Unknown ID')}")
         if not ident:
             continue
         src, identifier = cfgs.split_uri(ident)
+        if option1 and option2:
+        	pass
         if option1 and src['type'] == "external":
             continue
         if option2 and src['type'] != "external":
@@ -91,9 +92,10 @@ def process_reconciliation(cacherec, ident, typ, recequivs):
         reconrec = reconciler.reconcile(cacherec)
         if not reconrec:
             return
+        existing_uris = {entry['uri'] for entry in recequivs.get(ident,[])}
         for c in reconrec['data']['equivalent']:
             cid = c.get("id", "")
-            if not cid:
+            if not cid or cid in existing_uris:
                 continue
             src, identifier = cfgs.split_uri(cid)
             cacherec = fetch_cache_record(src, identifier, typ)
@@ -105,6 +107,7 @@ def process_reconciliation(cacherec, ident, typ, recequivs):
                         "name": names[0],
                         "added_by_reconciliation": True
                     })
+                existing_uris.add(cid)
     except Exception:
         print(f"Error during reconciliation for {ident}")
 
