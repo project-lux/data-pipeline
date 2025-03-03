@@ -518,6 +518,7 @@ class PooledCache(object):
             params = {}
             if 'identifier' in value and what != value['identifier']:
                 raise ValueError("Record's identifier value and key given to set are different")
+            params[self.key] = what
             for v in ['identifier', 'yuid', 'format', 'valid', 'change', 'record_time']:
                 if v in value:
                     params[v] = value[v]

@@ -349,7 +349,7 @@ class NewLoader:
     def open_temp_files(self):
         if 'reconcileDbPath' in self.config:
             lblfn = os.path.join(self.configs.temp_dir, f"{self.config['name']}_labels_{self.my_slice}.tsv")
-            lbl = open(llblfn, 'w')
+            lbl = open(lblfn, 'w')
             self.temp_file_handles['label'] = lbl
         if 'inverseEquivDbPath' in self.config:
             eqfn = os.path.join(self.configs.temp_dir, f"{self.config['name']}_equivs_{self.my_slice}.tsv")
@@ -371,7 +371,8 @@ class NewLoader:
         data = record['data']
         try:
             self.out_cache[identifier] = data
-        except:
+        except Exception as e:
+            print(e)
             return False
         if self.progress_bar is not None:
             self.progress_bar.update(1)

@@ -16,7 +16,7 @@ def handle_command(cfgs, args, rest):
         # default to non data caches
         caches = ["recordcache", "reconciledRecordcache", "recordcache2"]
     else:
-        caches = caches.split(',')
+        caches = args.cache.split(',')
 
     for s in sources:
         if s in cfgs.internal:
@@ -30,6 +30,6 @@ def handle_command(cfgs, args, rest):
             print(f"Could not find cache to clear: {s}")
         for c in caches:
             cache = cfg.get(c, None)
-            if cache and hasattr(cache, 'clear'):
+            if cache is not None and hasattr(cache, 'clear'):
                 print(f"Clearing {c} for {s} ")
                 cache.clear()

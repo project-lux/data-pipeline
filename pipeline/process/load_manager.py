@@ -17,60 +17,38 @@ class LoadManager:
             self.max_workers = max_workers
         else:
             self.max_workers = configs.max_workers
-        self.progress_bars = {}
-        self.status_thread = None
-        self.should_stop = False
+        self.sources = []
 
-    def _update_progress_bars(self):
-        """Update all progress bars"""
-        for url, download in self.downloads.items():
-            if url not in self.progress_bars and download.total_size > 0:
-                self.progress_bars[url] = tqdm(
-                    total=download.total_size,
-                    initial=download.downloaded_size,
-                    unit='iB',
-                    unit_scale=True,
-                    desc=f"{download.filename} ({download.status})",
-                    position=len(self.progress_bars),
-                    leave=True
-                )
-            elif url in self.progress_bars:
-                self.progress_bars[url].n = download.downloaded_size
-                self.progress_bars[url].set_description(
-                    f"{download.filename} ({download.status})"
-                )
-                self.progress_bars[url].refresh()
+    def _load(self, n):
+        for ldr in self.sources:
+            ldr.prepare_load(n, self.max_workers)
+            ldr.load()
 
-    def _load_file(self, url: str) -> bool:
-
-
-    def prepare_load(self, cfg) -> bool:
-        loader = cfg.get('loader', None)
-        okay = False
-        if loader is not None:
-            pass
-        return okay
+    def maybe_add(self, cfg):
+        if 'loader' in cfg:
+            ldr = cfg['loader']
+            self.sources.append(ldr)
 
     def prepare_single(self, name) -> bool:
         if name in self.configs.internal:
-            self.prepare_load(self.configs.internal[name])
+            self.maybe_add(self.configs.internal[name])
         elif name in self.configs.external:
-            self.prepare_load(self.configs.external[name])
+            self.maybe_add(self.configs.external[name])
         else:
             raise ValueError(f"Unknown source: {name}")
 
     def prepare_all(self) -> bool:
         for cfg in self.configs.external.values():
-            self.prepare_load(cfg)
+            self.maybe_add(cfg)
         for cfg in self.configs.internal.values():
-            self.prepare_load(cfg)
+            self.maybe_add(cfg)
 
     def load_all(self, verbose=None) -> bool:
 
         with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
             futures = [
-                executor.submit(self._load_file, f)
-                for f in self.files.keys()
+                executor.submit(self._load, n)
+                for n in range(self.max_workers)
             ]
             results = [f.result() for f in futures]
         return all(results)
