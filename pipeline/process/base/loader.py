@@ -41,6 +41,26 @@ And compression, on anything apart from dir and zip is one of:
 dir/tar.gz/lines.bz/json = directory of tgz files, each entry is a jsonl file compressed by bzip2
 """
 
+class Pointer:
+    def __init__(self, parent, info):
+        self.parent = parent
+        self.info = info
+
+class TarPointer(Pointer):
+    # parent is a TarFile
+    # info is a TarInfo
+    def get_name(self):
+        return self.info.name
+    def get_handle(self):
+        return self.parent.extractfile(self.info)
+
+class ZipPointer(Pointer):
+    # parent is ZipFile
+    # info is a string
+    def get_name(self):
+        return self.info
+    def get_handle(self):
+        return self.parent.open(self.info)
 
 
 class NewLoader:
@@ -186,7 +206,7 @@ class NewLoader:
             for n in zh.namelist():
                 if not n.endswith('/'):
                     # can't get back to this, so need to yield a file handle like object
-                    yield zh.open(n)
+                    yield ZipPointer(zh, n)
 
     def iterate_tar(self, path, comp):
         if comp:
@@ -197,13 +217,19 @@ class NewLoader:
             ti = th.next()
             while ti is not None:
                 if ti.isfile():
-                    yield th.extractfile(ti)
+                    yield TarPointer(th, ti)
                 ti = th.next()
 
     def file_opener(self, path, comp):
-        if not comp and isinstance(path, io.IOBase):
-            # already a file handle
-            return path
+        if not comp:
+            if isinstance(path, io.IOBase):
+                # already a file handle
+                return path
+            elif isinstance(path, Pointer):
+                return path.get_handle()
+        elif isinstance(path, Pointer):
+            path = path.get_handle()
+
         if comp == 'gz':
             return gzip.open(path)
         elif comp == 'bz2':
@@ -271,10 +297,16 @@ class NewLoader:
 
     def make_identifier(self, value):
         # assume a filepath with the last component as the identifier
-        if hasattr(value, 'name'):
+        if isinstance(value, Pointer):
+            value = value.get_name()
+        elif hasattr(value, 'name'):
             value = value.name
+        elif isinstance(value, bytes):
+            value = value.decode('utf-8')
+
         try:
-            return value.split('/')[-1]
+            last = value.split('/')[-1]
+            return last.split('.')[0]
         except:
             return None
 
@@ -361,7 +393,6 @@ class NewLoader:
                     okay = self.store_record(record)
                     if okay:
                         self.post_store_record(record)
-
         else:
             raise ValueError(f"Unknown step type {step} in {self.config['name']}")
 

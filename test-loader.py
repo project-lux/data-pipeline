@@ -175,6 +175,7 @@ lcfgs = [
 ]
 
 for lc in lcfgs:
+    lc['all_configs'] = cfgs
     ldr = NewLoader(lc)
     ldr.prepare_load()
     ldr.load()
@@ -183,6 +184,7 @@ for lc in lcfgs:
 
 mcfg = {
     "name": "jsonl",
+    'all_configs': cfgs,
     "totalRecords": 20,
     "input_files": {
         "records": [
