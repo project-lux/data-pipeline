@@ -39,6 +39,9 @@ def handle_command(cfgs, args, rest):
             print(e)
             return
 
+
+
+
         try:
             cfgs.instantiate_all()
         except Exception as e:

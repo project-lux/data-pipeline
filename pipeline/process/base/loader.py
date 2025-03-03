@@ -10,8 +10,6 @@ import tarfile
 import ujson as json
 import tqdm
 
-
-
 try:
     import magic
 except:
@@ -49,12 +47,15 @@ class NewLoader:
 
     def __init__(self, config):
         self.config = config
+        self.configs = config['all_configs']
         self.out_cache = config.get('datacache', {})
+        self.mapper = config.get('mapper', None)
         self.total = config.get('totalRecords', -1)
         self.my_slice = 0
         self.max_slice = 0
         self.seen = 0
         self.my_files = []
+        self.temp_file_handles = {}
         self.progress_bar = None
 
         self.fmt_containers = ['dir', 'dirh', 'pair', 'zip', 'tar', 'lines', 'dict', 'array']
@@ -75,6 +76,8 @@ class NewLoader:
         }
 
     def guess_fmt(self, path):
+        # FIXME: This needs more work...
+
         spec = []
         container = None
         compression = None
@@ -282,9 +285,11 @@ class NewLoader:
         return None
 
     def post_process_json(self, data):
+        # This is called after discovering JSON and before extracting identifier
         return data
 
     def post_process_other(self, data):
+        # This is called after discovering the record and before extracting the identifier
         return data
 
     def should_make_record(self, path):
@@ -295,12 +300,50 @@ class NewLoader:
     def should_store_record(self, data):
         return True
 
+    def post_store_record(self, record):
+        # This is called after successfully storing the record
+        # Handle index data extraction here
+        entries = 0
+        if self.temp_file_handles:
+            fields = self.mapper.extract_index_data(record)
+            for (f, vals) in fields.items():
+                if f in self.temp_file_handles:
+                    for (a,b) in vals:
+                        valstr = f"{a}\t{b}\n"
+                        self.temp_file_handle[f].write(valstr)
+                        entries += 1
+        return entries
+
+    def open_temp_files(self):
+        if 'reconcileDbPath' in self.config:
+            lblfn = os.path.join(self.configs.temp_dir, f"{self.config['name']}_labels_{self.my_slice}.tsv")
+            lbl = open(llblfn, 'w')
+            self.temp_file_handles['label'] = lbl
+        if 'inverseEquivDbPath' in self.config:
+            eqfn = os.path.join(self.configs.temp_dir, f"{self.config['name']}_equivs_{self.my_slice}.tsv")
+            eq = open(eqfn, 'w')
+            self.temp_file_handles['equiv'] = eq
+        if 'hasDifferentFrom' in self.config:
+            diffn = os.path.join(self.configs_temp_dir, f"{self.config['name']}_diffs_{self.my_slice}.tsv")
+            diff = open(diffn, 'w')
+            self.temp_file_handles['diff'] = diff
+
+
+    def close_temp_files(self):
+        for t in ['label', 'equiv', 'diff']:
+            if t in self.temp_file_handles and (fh := self.temp_file_handles[t]) and not fh.closed:
+                fh.close()
+
     def store_record(self, record):
         identifier = record['identifier']
         data = record['data']
-        self.out_cache[identifier] = data
+        try:
+            self.out_cache[identifier] = data
+        except:
+            return False
         if self.progress_bar is not None:
             self.progress_bar.update(1)
+        return True
 
     def process_step(self, steps, path, parent):
         step = steps[0]
@@ -315,7 +358,10 @@ class NewLoader:
             if self.should_make_record(path):
                 record = handler(path, comp, parent)
                 if self.should_store_record(record):
-                    self.store_record(record)
+                    okay = self.store_record(record)
+                    if okay:
+                        self.post_store_record(record)
+
         else:
             raise ValueError(f"Unknown step type {step} in {self.config['name']}")
 
@@ -360,17 +406,19 @@ class NewLoader:
 
 
     def load(self, disable_tqdm=False):
+
+        self.open_temp_files()
         for info in self.my_files:
             if not disable_tqdm:
                 self.open_progress_bar()
             self.process_step(info['fmt'], info['path'], None)
             if not disable_tqdm:
                 self.close_progress_bar()
-
         try:
             self.out_cache.commit()
         except:
             pass
+        self.close_temp_files()
 
 
 class Loader(object):
@@ -452,10 +500,8 @@ class Loader(object):
         fh.close()
         self.out_cache.commit()
 
-
-
     def load_export(self):
-        where = self.config['all_configs'].dumps_dir
+        where = self.configs.dumps_dir
         zipfn = os.path.join(where, f'export_{self.config["name"]}.zip')
         if not os.path.exists(zipfn):
             zipfn = os.path.join(where, f'{self.config["name"]}.zip')

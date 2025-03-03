@@ -21,6 +21,10 @@ else:
     except:
         cfgs = None
 
+def handle_command(cfgs, args, rest):
+    print("There isn't an 'entry' command, please see 'lux help' for the list")
+    return False
+
 def main():
 
     # FIXME: This could use subparser? But the self-containedness of the dynamic command import

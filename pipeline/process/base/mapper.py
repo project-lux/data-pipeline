@@ -270,6 +270,11 @@ class Mapper(object):
     def to_plain_string(self, value):
         return str(value) if isinstance(value, etree._ElementUnicodeResult) else value
 
+    def extract_index_data(self, data):
+        # From the raw data, extract fields for indexing
+        # default fields:  label, equiv, diff
+        return {}
+
     def get_reference(self, identifier):
         if not self.acquirer:
             self.acquirer = self.config["acquirer"]
