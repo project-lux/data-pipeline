@@ -516,7 +516,7 @@ class Config(object):
             else:
                 cfg["mapper"] = None
 
-            ldr = cfg.get("loaderClass", "process.base.loader.Loader")
+            ldr = cfg.get("loaderClass", None)
             if ldr:
                 ldrcls = importObject(ldr)
                 cfg["loader"] = ldrcls(cfg)
