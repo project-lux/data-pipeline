@@ -1,6 +1,7 @@
 import ujson as json
 from tqdm.auto import tqdm
 from concurrent.futures import ProcessPoolExecutor
+from pipeline.process.base.loader import Loader
 
 from pipeline.cli.entry import cfgs
 
@@ -15,21 +16,23 @@ class LoadManager:
                  ):
         self.configs = configs
         self.verbose = False
+        self.disable_tqdm = False
         if max_workers > 0:
             self.max_workers = max_workers
         else:
             self.max_workers = configs.max_workers
         self.sources = []
+        self.overwrite = True
 
     def _load(self, n):
         self.configs = cfgs
         for (which, src) in self.sources:
             ldr = getattr(self.configs, which)[src]['loader']
             ldr.prepare_load(n, self.max_workers)
-            ldr.load()
+            ldr.load(disable_tqdm=self.disable_tqdm, verbose=self.verbose, overwrite=self.overwrite)
 
     def maybe_add(self, which, cfg):
-        if 'loader' in cfg:
+        if 'loader' in cfg and isinstance(cfg['loader'], Loader):
             self.sources.append((which, cfg['name']))
 
     def prepare_single(self, name) -> bool:
@@ -46,8 +49,10 @@ class LoadManager:
         for cfg in self.configs.internal.values():
             self.maybe_add('internal', cfg)
 
-    def load_all(self, verbose=None) -> bool:
+    def load_all(self, disable_tqdm=False, verbose=None) -> bool:
         self.configs = None
+        self.disable_tqdm = disable_tqdm
+        self.overwrite = overwrite
         with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
             futures = [
                 executor.submit(self._load, n)

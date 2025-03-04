@@ -3,9 +3,16 @@ import os
 import ujson as json
 import gzip
 import time
-from pipeline.process.base.loader import Loader
+from pipeline.process.base.loader import Loader, OldLoader
+
 
 class DnbLoader(Loader):
+    def extract_identifier(self, record):
+        uri = record['@id']
+        return uri.rsplit('/', 1)[1]
+
+
+class OldDnbLoader(OldLoader):
 
     def __init__(self, config):
         Loader.__init__(self, config)
@@ -57,8 +64,6 @@ class DnbLoader(Loader):
 
 
     def load(self):
-        # ensure we have the dump file
-        # self.fetch_dump()
 
         # load the subject headings
         self.load_sachbegriff()

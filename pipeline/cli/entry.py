@@ -33,10 +33,11 @@ def main():
     parser = ArgumentParser()
     parser.add_argument("command", type=str, help="Function to execute, see 'lux help' for the list")
     parser.add_argument("--source", type=str, help="Source(s) to download separated by commas, or 'all'")
-    parser.add_argument("--verbose", type=str, help="Enable verbose output")
     parser.add_argument("--max_workers", type=int, default=0, help="Number of processes to use")
     parser.add_argument("--cache", type=str, help="Types of cache separated by commas, or 'all'")
     parser.add_argument("--no-tqdm", action='store_true', help="If set, then disable TQDM progress bars")
+    parser.add_argument("--verbose", type=str, help="Enable verbose output")
+    parser.add_argument("--no-overwrite", action='store_false', help="Do not overwrite existing files/records")
     args, rest = parser.parse_known_args()
 
     if cfgs is None and args.command not in ['initialize', 'testinstall']:

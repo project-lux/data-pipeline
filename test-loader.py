@@ -6,7 +6,7 @@ import datetime
 import gzip
 from dotenv import load_dotenv
 from pipeline.config import Config
-from pipeline.process.base.loader import NewLoader
+from pipeline.process.base.loader import Loader
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")
@@ -176,7 +176,7 @@ lcfgs = [
 
 for lc in lcfgs:
     lc['all_configs'] = cfgs
-    ldr = NewLoader(lc)
+    ldr = Loader(lc)
     ldr.prepare_load()
     ldr.load()
     assert(len(ldr.out_cache) == 1)
@@ -193,7 +193,7 @@ mcfg = {
     }
 }
 
-ldr = NewLoader(mcfg)
+ldr = Loader(mcfg)
 ldr.prepare_load(0, 5)
 ldr.load()
 assert(len(ldr.out_cache) == 4)

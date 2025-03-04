@@ -39,6 +39,8 @@ And compression, on anything apart from dir and zip is one of:
   bz = bzip2'd
 
 dir/tar.gz/lines.bz/json = directory of tgz files, each entry is a jsonl file compressed by bzip2
+datacache exports are "zip.bz2/json"
+
 """
 
 class Pointer:
@@ -63,7 +65,7 @@ class ZipPointer(Pointer):
         return self.parent.open(self.info)
 
 
-class NewLoader:
+class Loader:
 
     def __init__(self, config):
         self.config = config
@@ -77,6 +79,7 @@ class NewLoader:
         self.my_files = []
         self.temp_file_handles = {}
         self.progress_bar = None
+        self.overwrite = False
 
         self.fmt_containers = ['dir', 'dirh', 'pair', 'zip', 'tar', 'lines', 'dict', 'array']
         self.fmt_formats = ['json', 'raw', 'other']
@@ -263,6 +266,28 @@ class NewLoader:
             for v in data:
                 yield v
 
+    def iterate_arraylines(self, path, comp):
+        # Assumptions:  array of json, where each record is a line
+        with self.file_opener(path, comp) as fh:
+            l = True
+            while l:
+                l = fh.readline()
+                if not l:
+                    break
+                if type(l) == bytes:
+                    l = l.decode("utf-8")
+                l = l.strip()
+                if l[0] in ['[', ',']:
+                    l = l[1:]
+                elif l[-1] in [']', ',']:
+                    l = l[:-1]
+                l = l.strip()
+                if len(l) < 2:
+                    continue
+                elif l[0] != '{' or l[-1] != '}':
+                    continue
+                yield io.StringIO(l)
+
     def make_raw(self, path, comp, parent):
         # path is the actual native JSON record
         data = self.post_process_json(path)
@@ -303,7 +328,6 @@ class NewLoader:
             value = value.name
         elif isinstance(value, bytes):
             value = value.decode('utf-8')
-
         try:
             last = value.split('/')[-1]
             return last.split('.')[0]
@@ -330,6 +354,8 @@ class NewLoader:
         return True
 
     def should_store_record(self, data):
+        if not self.overwrite and data['identifier'] in self.out_cache:
+            return False
         return True
 
     def post_store_record(self, record):
@@ -437,8 +463,8 @@ class NewLoader:
         self.my_files = files
 
 
-    def load(self, disable_tqdm=False):
-
+    def load(self, disable_tqdm=False, verbose=False, overwrite=True):
+        self.overwrite = overwrite
         self.open_temp_files()
         for info in self.my_files:
             if not disable_tqdm:
@@ -453,7 +479,7 @@ class NewLoader:
         self.close_temp_files()
 
 
-class Loader(object):
+class OldLoader(object):
 
     def __init__(self, config):
         self.config = config
@@ -532,39 +558,6 @@ class Loader(object):
         fh.close()
         self.out_cache.commit()
 
-    def load_export(self):
-        where = self.configs.dumps_dir
-        zipfn = os.path.join(where, f'export_{self.config["name"]}.zip')
-        if not os.path.exists(zipfn):
-            zipfn = os.path.join(where, f'{self.config["name"]}.zip')
-        if os.path.exists(zipfn):
-            zh = zipfile.ZipFile(zipfn, 'r', compression=zipfile.ZIP_BZIP2)
-        else:
-            print("Could not find export zip")
-            return None
-        start = time.time()
-        x = 0
-        idents = zh.namelist()
-        total = len(idents)
-        print(total)
-        for ident in idents:
-            fh = zh.open(ident)
-            data = fh.read()
-            fh.close()
-            try:
-                data = data.decode('utf-8')
-                js = json.loads(data)
-            except Exception as e:
-                print(e)
-                continue
-            x += 1
-            self.out_cache[ident] = js['data']
-            if not x % 10000:
-                t = time.time() - start
-                xps = x/t
-                ttls = total / xps
-                print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-        zh.close()
 
 
 
