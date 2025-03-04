@@ -23,12 +23,13 @@ class LoadManager:
             self.max_workers = configs.max_workers
         self.sources = []
         self.overwrite = True
+        self.load_type = "records"
 
     def _load(self, n):
         self.configs = cfgs
         for (which, src) in self.sources:
             ldr = getattr(self.configs, which)[src]['loader']
-            ldr.prepare_load(n, self.max_workers)
+            ldr.prepare_load(n, self.max_workers, self.load_type)
             ldr.load(disable_tqdm=self.disable_tqdm, verbose=self.verbose, overwrite=self.overwrite)
 
     def maybe_add(self, which, cfg):
@@ -49,10 +50,11 @@ class LoadManager:
         for cfg in self.configs.internal.values():
             self.maybe_add('internal', cfg)
 
-    def load_all(self, disable_tqdm=False, verbose=None) -> bool:
+    def load_all(self, disable_tqdm=False, verbose=None, overwrite=True, which="records") -> bool:
         self.configs = None
         self.disable_tqdm = disable_tqdm
         self.overwrite = overwrite
+        self.load_type = which
         with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
             futures = [
                 executor.submit(self._load, n)

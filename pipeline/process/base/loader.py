@@ -73,6 +73,9 @@ class Loader:
         self.out_cache = config.get('datacache', {})
         self.mapper = config.get('mapper', None)
         self.total = config.get('totalRecords', -1)
+        self.dumps_dir = config['all_configs'].dumps_dir
+        if 'dumps_dir' in config:
+            self.dumps_dir = os.path.join(self.dumps_dir, config['dumps_dir'])
         self.my_slice = 0
         self.max_slice = 0
         self.seen = 0
@@ -436,22 +439,25 @@ class Loader:
         if self.progress_bar is not None:
             self.progress_bar.close()
 
-    def prepare_load(self, my_slice=0, max_slice=0):
+    def prepare_load(self, my_slice=0, max_slice=0, which="records"):
         self.my_slice = my_slice
         self.max_slice = max_slice
 
         files = []
         if (ifs := self.config.get('input_files', {})):
-            for p in ifs['records']:
+            for p in ifs[which]:
                 fmt = p.get('type', None)
                 if fmt:
                     fmtspec = self.process_fmt(fmt)
                 else:
                     # gotta guess
                     fmtspec = self.guess_fmt(p['path'])
-                files.append({"path": p['path'], "fmt": fmtspec})
 
-        if not files and (dfp := self.config.get('dumpFilePath')):
+                if not '/' in (path := p['path']):
+                    path = os.path.join(self.dumps_dir, p['path'])
+                files.append({"path": path, "fmt": fmtspec})
+
+        if not files and which == "records" and (dfp := self.config.get('dumpFilePath')):
             # look in dfp
             fmt = self.config.get('dumpFileType', None)
             if fmt:

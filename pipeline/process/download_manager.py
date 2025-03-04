@@ -59,20 +59,21 @@ class DownloadManager:
     def _update_progress_bars(self):
         """Update all progress bars"""
         for url, download in self.downloads.items():
+            dfn = download.filename.replace(self.configs.base_dir, '')
             if url not in self.progress_bars and download.total_size > 0:
                 self.progress_bars[url] = tqdm(
                     total=download.total_size,
                     initial=download.downloaded_size,
                     unit='iB',
                     unit_scale=True,
-                    desc=f"{download.filename} ({download.status})",
+                    desc=f"{dfn} ({download.status})",
                     position=len(self.progress_bars),
                     leave=True
                 )
             elif url in self.progress_bars:
                 self.progress_bars[url].n = download.downloaded_size
                 self.progress_bars[url].set_description(
-                    f"{download.filename} ({download.status})"
+                    f"{dfn} ({download.status})"
                 )
                 self.progress_bars[url].refresh()
     

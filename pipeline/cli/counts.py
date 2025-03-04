@@ -1,3 +1,5 @@
+from argparse import ArgumentParser
+
 def handle_command(cfgs, args, rest):
 
     if not args.source:
@@ -8,6 +10,10 @@ def handle_command(cfgs, args, rest):
         sources = list(getattr(cfgs, args.source).keys())
     else:
         sources = args.source.split(',')
+
+    ap = ArgumentParser()
+    ap.add_argument("--cache", type=str, help="Types of cache separated by commas, or 'all'")
+    ap.parse_args(rest, namespace=args)
 
     if not args.cache:
         # default to non data caches

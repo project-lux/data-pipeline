@@ -1,9 +1,15 @@
 
 from pipeline.process.load_manager import LoadManager
+from argparse import ArgumentParser
 
 def handle_command(cfgs, args, rest):
     wks = args.max_workers
-    overwrite = args.no_overwrite
+
+    if rest:
+        ap = ArgumentParser()
+        ap.add_argument('--type', type=str, default="record")
+        ap.add_argument("--no-overwrite", action='store_false', help="Do not overwrite existing files/records")
+        ap.parse_args(rest, namespace=args)
 
     if not args.source:
         args.source = "all"
@@ -14,7 +20,9 @@ def handle_command(cfgs, args, rest):
     else:
         sources = args.source.split(',')
 
+    print(args)
+
     lm = LoadManager(cfgs, wks)
     for s in sources:
         lm.prepare_single(s)
-    lm.load_all(disable_tqdm=args.no_tqdm, verbose=args.verbose, overwrite=overwrite)
+    lm.load_all(disable_tqdm=args.no_tqdm, verbose=args.verbose, overwrite=args.no_overwrite, which=args.type)
