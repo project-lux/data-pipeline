@@ -428,7 +428,7 @@ class Loader:
         if self.max_slice > 1:
             ttl = ttl // self.max_slice
         self.progress_bar = tqdm.tqdm(total=ttl,
-            desc=f'{self.config['name']}/{self.my_slice}',
+            desc=f"{self.config['name']}/{self.my_slice}",
             position=self.my_slice,
             leave=True)
 
