@@ -79,6 +79,10 @@ class ReferenceManager(object):
                         uri = uri.split("|", 1)
                         yield uri
 
+
+    def get_len_refs(self):
+        return len(self.all_refs)
+
     def pop_ref(self):
         return self.all_refs.popitem()
 

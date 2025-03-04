@@ -1,8 +1,7 @@
-import ujson as json
+
 from tqdm.auto import tqdm
 from concurrent.futures import ProcessPoolExecutor
 from pipeline.process.base.loader import Loader
-
 from pipeline.cli.entry import cfgs
 
 class LoadManager:

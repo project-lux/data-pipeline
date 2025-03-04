@@ -24,6 +24,7 @@ class DnbLoader(Loader):
                     yield item
 
 
+
 class OldDnbLoader(OldLoader):
 
     def __init__(self, config):

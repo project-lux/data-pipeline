@@ -20,8 +20,6 @@ def handle_command(cfgs, args, rest):
     else:
         sources = args.source.split(',')
 
-    print(args)
-
     lm = LoadManager(cfgs, wks)
     for s in sources:
         lm.prepare_single(s)

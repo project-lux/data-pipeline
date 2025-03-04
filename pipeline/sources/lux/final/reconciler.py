@@ -14,9 +14,11 @@ class GlobalReconciler(LmdbReconciler):
             if fn2:
                 self.diff_index = TabLmdb.open(fn2, 'r', readahead=False, writemap=True)
             else:
-                print(f"No differentDbPath in merged for global differents index?")
+                # print(f"No differentDbPath in merged for global differents index?")
+                pass
         except:
-            print(f"No differentDbPath in merged for global differents index?")
+            #print(f"No differentDbPath in merged for global differents index?")
+            pass
 
     def reconcile(self, record, reconcileType="uri"):
 

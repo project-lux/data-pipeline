@@ -160,17 +160,19 @@ class Mapper(object):
                                 yuid = None
                             if not yuid:
                                 if idmap_has_data:
-                                    print(f"Failed to find record for equivalent: {qua}")
+                                    # print(f"Failed to find record for equivalent: {qua}")
+                                    pass
                             else:
                                 yuids.append(yuid)
                         if len(set(yuids)) != 1:
                             if idmap_has_data:
-                                print(f"Failed to find single YUID for {qua}: {yuids}")
+                                # print(f"Failed to find single YUID for {qua}: {yuids}")
+                                pass
                         else:
                             ident = yuids[0][-36:]
 
                     if not ident and idmap_has_data:
-                        print(f"{self.name} xpath fix has no identifier or equivalent: {f}")
+                        # print(f"{self.name} xpath fix has no identifier or equivalent: {f}")
                         continue
                     if not f["path"]:
                         print(f"{self.name} xpath fix has no xpath: {f}")
