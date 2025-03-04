@@ -7,9 +7,21 @@ from pipeline.process.base.loader import Loader, OldLoader
 
 
 class DnbLoader(Loader):
+    # Main file is arraylines.gz/json
+    # Sachbegriff is not a normal structure: sachbegriff.gz/json
+
     def extract_identifier(self, record):
         uri = record['@id']
         return uri.rsplit('/', 1)[1]
+
+    def iterate_sachbegriff(self, path, comp, parent):
+        # sbg is array but items can also be arrays OR dicts
+        for member in self.iterate_array(path, comp, parent):
+            if type(member) == dict:
+                yield member
+            elif type(member) == list:
+                for item in member:
+                    yield item
 
 
 class OldDnbLoader(OldLoader):
