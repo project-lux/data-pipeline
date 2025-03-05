@@ -72,10 +72,10 @@ Based on the occurrences of MARC21 fields across the available FAST XML files, t
 ---
 ### Field 500
 - **Mapped:** `Y`
-- **Subfields used:** `'a'`
+- **Subfields used:** `'a'`,`'i'`
 - **Usage:**
-  - **'a'**
-    - Biographical note
+  - **'i','a'**
+    - (combined) Biographical note
 ---
 ### Field 510
 - **Mapped:** `Y`

@@ -209,9 +209,11 @@ class FastMapper(Mapper):
                 rec.referred_to_by = model.LinguisticObject(content=note)
 
         # Extract equivalents (700)
-        df700_data = self.extract_datafields(root, '700', ['a', '0', '1'])
-        uri_0 = df700_data.get('0', [])
+        df700_data = self.extract_datafields(root, '700', ['0','1'])
+        df710_data = self.extract_datafields(root, '710', ['0','1'])
 
+        
+        uri_0 = [df700_data.get('0', []) + df710_data.get('0',[])]
         equivalents = []
         for uri in uri_0:
             if uri:
@@ -227,6 +229,7 @@ class FastMapper(Mapper):
                     equivalents.append(lcnaf_uri)
         # VIAF
         equivalents.extend(uri for uri in df700_data.get('1', []) if uri)
+        equivalents.extend(uri for uri in df710_data.get('1', []) if uri)
 
         # Set equivalents
         if equivalents and rec.__class__ == model.Person:
@@ -238,8 +241,8 @@ class FastMapper(Mapper):
 
         # Extract birth/formation and death/dissolution dates (046)
         df046_data = self.extract_datafields(root, '046', ['f', 'g'])
-        df100_data = self.extract_datafields(root, '100', ['a', 'd'])
-        df400_data = self.extract_datafields(root, '400', ['a', 'q', 'd'])
+        df100_data = self.extract_datafields(root, '100', ['d'])
+        df400_data = self.extract_datafields(root, '400', ['d'])
         try:
             begin_dates = make_datetime(df046_data.get('f', [''])[0])
         except:
@@ -310,9 +313,9 @@ class FastMapper(Mapper):
         self.process_agent(root, rec)  
 
         """Process Person-only fields"""
-        df100_data = self.extract_datafields(root, '100', ['a', 'd'])
-        df400_data = self.extract_datafields(root, '400', ['a', 'q', 'd'])
-        df700_data = self.extract_datafields(root, '700', ['a', '0', '1'])
+        df100_data = self.extract_datafields(root, '100', ['a'])
+        df400_data = self.extract_datafields(root, '400', ['a', 'q'])
+        df700_data = self.extract_datafields(root, '700', ['a'])
         df378_data = self.extract_datafields(root, '378', ['a', 'q'])
         df450_data = self.extract_datafields(root, '450', ['a'])
         df410_data = self.extract_datafields(root, '410', ['a'])
@@ -396,7 +399,7 @@ class FastMapper(Mapper):
         """Processes organizational details, including names and classifications."""
         df110_data = self.extract_datafields(root, '110', ['a', 'b'])
         df410_data = self.extract_datafields(root, '410', ['a', 'b'])
-        df710_data = self.extract_datafields(root, '710', ['a', 'b'])
+        df710_data = self.extract_datafields(root, '710', ['a', 'b', '0'])
         df411_data = self.extract_datafields(root, '411', ['a'])
 
         primary = False
