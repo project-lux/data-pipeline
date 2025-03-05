@@ -28,6 +28,7 @@ def handle_command(cfgs, args, rest):
 def main():
 
     parser = ArgumentParser()
+    parser.add_argument("-i", action="store_true", help="If provided, drop to interactive console after the command")
     parser.add_argument("command", type=str, help="Function to execute, see 'lux help' for the list")
     parser.add_argument("--source", type=str, help="Source(s) to download separated by commas, or 'all'")
     parser.add_argument("--max_workers", type=int, default=0, help="Number of processes to use")
@@ -53,6 +54,10 @@ def main():
         result = mod.handle_command(cfgs, args, rest)
     except Exception as e:
         print(f"Failed to process command: {args}\n{e}")
+
+    if args.i and args.command != "interactive":
+        mod = importlib.import_module(f'pipeline.cli.interactive')
+        mod.handle_command(cfgs, args, rest)
 
 if __name__ == "__main__":
     main()

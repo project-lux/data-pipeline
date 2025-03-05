@@ -27,7 +27,6 @@ class ReconcileManager:
         self.total = 0
 
     def open_progress_bar(self, name):
-        print(self.total)
         self.progress_bar = tqdm.tqdm(
             total=self.total,
             desc=f"{name}/{self.my_slice}",
@@ -104,7 +103,7 @@ class ReconcileManager:
             self.open_progress_bar("references")
         item = 1
         while item:
-            item = ref_mgr.pop_ref()
+            item = self.ref_mgr.pop_ref()
             try:
                 (uri, dct) = item
                 distance = dct["dist"]
