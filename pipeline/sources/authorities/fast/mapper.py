@@ -304,7 +304,7 @@ class FastMapper(Mapper):
                 primary = True
 
         # Extract potential alternate names (400, 700)
-        names.add(
+        names.update(
             df400_data.get('a', []) + 
             df400_data.get('q', []) + 
             df700_data.get('a', []) + 
