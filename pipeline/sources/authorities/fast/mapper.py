@@ -213,7 +213,7 @@ class FastMapper(Mapper):
         df710_data = self.extract_datafields(root, '710', ['0','1'])
 
         
-        uri_0 = [df700_data.get('0', []) + df710_data.get('0',[])]
+        uri_0 = df700_data.get('0', []) + df710_data.get('0',[])
         equivalents = []
         for uri in uri_0:
             if uri:
