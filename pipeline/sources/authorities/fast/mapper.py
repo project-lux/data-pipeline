@@ -211,6 +211,7 @@ class FastMapper(Mapper):
                 rec.referred_to_by = model.LinguisticObject(content=b)
 
         # Extract equivalents (700)
+        df700_data = self.extract_datafields(root, '700', ['a', '0', '1'])
         uri_0 = df700_data.get('0', [])
 
         equivalents = []
