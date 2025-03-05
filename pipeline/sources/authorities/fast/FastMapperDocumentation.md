@@ -146,6 +146,8 @@ Based on the occurrences of MARC21 fields across the available FAST XML files, t
 - **Usage:**
   - **'a'**  
     - Preferred primary name
+  - **'d'**
+    - Alternate birth or death date
 ---
 ### Field 700
 - **Mapped:** `Y`
@@ -164,6 +166,8 @@ Based on the occurrences of MARC21 fields across the available FAST XML files, t
   - **'a'** and **'q'**  
     - Alternate primary name 
     - Preferred alternate name  
+  - **'d'**
+    - Alternate birth or death date
 ---
 ### Field 378
 - **Mapped:** `Y`
