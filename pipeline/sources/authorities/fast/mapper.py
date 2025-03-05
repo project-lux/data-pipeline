@@ -239,6 +239,7 @@ class FastMapper(Mapper):
                 rec.equivalent = model.Group(ident=e)
 
         # Extract birth/formation and death/dissolution dates (046)
+        df046_data = self.extract_datafields(root, '046', ['f', 'g'])
         try:
             begin_dates = make_datetime(df046_data.get('f', [''])[0])
         except:
@@ -247,32 +248,6 @@ class FastMapper(Mapper):
             end_dates = make_datetime(df046_data.get('g', [''])[0])
         except: 
             end_dates = None
-
-        # Extract birth and death dates (100, 400) if not set
-        # People only      
-        for potential_dates in [df100_data.get('d',[]), df400_data.get('d',[])]:
-            for date in potential_dates:
-                if date and "-" in date:
-                    try:
-                        b, e = date.split("-")
-                    except: 
-                        b = e = None
-                    try:
-                        begin_tmps = make_datetime(b)
-                    except:
-                        begin_tmps = None
-                    try:
-                        end_tmps = make_datetime(e)
-                    except:
-                        end_tmps = None
-
-                    if not begin_dates and begin_tmps:
-                        begin_dates = begin_tmps
-                    if not end_dates and end_tmps:
-                        end_dates = end_tmps
-                    
-                    if begin_dates and end_dates:
-                        break
 
         # Set begin and end timespans
         if begin_dates:
@@ -312,7 +287,6 @@ class FastMapper(Mapper):
 
         """Process Person-only fields"""
         df100_data = self.extract_datafields(root, '100', ['a', 'd'])
-        df046_data = self.extract_datafields(root, '046', ['f', 'g'])
         df400_data = self.extract_datafields(root, '400', ['a', 'q', 'd'])
         df700_data = self.extract_datafields(root, '700', ['a', '0', '1'])
         df378_data = self.extract_datafields(root, '378', ['a', 'q'])
@@ -351,7 +325,6 @@ class FastMapper(Mapper):
         # If no names remain, return None
         if not rec.identified_by:
             return None
-
         
         # Extract birth and death places (370)
         df370_data = self.extract_datafields(root, '370', ['a', 'b'])
