@@ -363,6 +363,8 @@ class FastMapper(Mapper):
 
         # Set gender
         if gender:
+            print(f"gender is {gender}")
+            print(f"type of gender is {type(gender)}")
             rec.classified_as = getattr(rec, "classified_as", []) + gender
 
     def process_group(self, root, rec):
