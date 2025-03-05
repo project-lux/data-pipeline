@@ -351,20 +351,18 @@ class FastMapper(Mapper):
         df375_data = self.extract_datafields(root, '375', ['a', '0'])
         for uri in df375_data.get('0',['']):
             if "wikidata" in uri or uri == "http://id.loc.gov/authorities/subjects/sh2007005819":
-                gender = model.Type(ident=uri)
+                gender = [model.Type(ident=uri)]
                 break
         for gen in df375_data.get('a', ['']):
             if gen.lower() in ("male", "males"):
-                gender = vocab.instances['male']
+                gender = [vocab.instances['male']]
                 break
             elif gen.lower() in ("female", "females"):
-                gender = vocab.instances['female']
+                gender = [vocab.instances['female']]
                 break
 
         # Set gender
         if gender:
-            print(f"gender is {gender}")
-            print(f"type of gender is {type(gender)}")
             rec.classified_as = getattr(rec, "classified_as", []) + gender
 
     def process_group(self, root, rec):
