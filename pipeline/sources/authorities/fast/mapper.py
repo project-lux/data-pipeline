@@ -201,14 +201,12 @@ class FastMapper(Mapper):
         if carried_out_activities:
             rec.carried_out = carried_out_activities
 
-        # Extract biographical note (500)
-        df500_data = self.extract_datafields(root, '500', ['a'])
-        biographies = [bio for bio in df500_data.get('a', []) if bio]
-
-        # Set biographical note
-        if biographies:
-            for b in biographies:
-                rec.referred_to_by = model.LinguisticObject(content=b)
+        # Extract and set biographical note (500)
+        df500_data = self.extract_datafields(root, '500', ['a','i'])
+        for sub_i, sub_a in zip(df500_data.get('i',['']), df500_data.get('a',[''])):
+            note = ": ".join(filter(None, [sub_i, sub_a]))
+            if note:
+                rec.referred_to_by = model.LinguisticObject(content=note)
 
         # Extract equivalents (700)
         df700_data = self.extract_datafields(root, '700', ['a', '0', '1'])
