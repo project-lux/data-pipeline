@@ -5,7 +5,11 @@ from rich.live import Live
 from rich.console import Console
 from rich.panel import Panel
 from rich import box
+import logging
+from rich.logging import RichHandler
 
+import multiprocessing, logging
+logger = multiprocessing.get_logger()
 
 class ConsolePanel(Console):
     def __init__(self,*args,**kwargs):
@@ -48,8 +52,16 @@ def get_layout(cfgs, max_workers):
     cp = ConsolePanel()
     layout['log'].update(Panel(cp, title="Log Messages"))
 
+
+    logging.basicConfig(
+        level="INFO",
+        format="%(message)s",
+        datefmt="[%X]",
+        handlers=[RichHandler(console=cp)]
+    )
+    logger.addHandler(RichHandler(console=cp))
+
     layout._lux_bars = bars
-    layout._lux_log = cp
     return layout
 
 

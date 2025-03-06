@@ -5,6 +5,9 @@ import sys
 from pipeline.process.reconciler import Reconciler
 from pipeline.process.reference_manager import ReferenceManager
 
+import logging
+from multiprocessing import get_logger
+
 class ReconcileManager(TaskUiManager):
     """
     manages reconcilation phase
@@ -37,7 +40,7 @@ class ReconcileManager(TaskUiManager):
             self.ref_mgr.manage_identifiers(rec2)
 
         if not self.disable_ui:
-            self.update_progress_bar(self.my_slice, advance=1)
+            self.update_progress_bar(advance=1)
 
     def _pool_reconcile_records(self, n):
         # Configure ourselves from global configs and CLI args
@@ -47,6 +50,8 @@ class ReconcileManager(TaskUiManager):
         self.reconciler = Reconciler(cfgs, idmap, networkmap)
         self.ref_mgr = ReferenceManager(cfgs, idmap)
         self.my_slice = n
+
+        self.log(logging.ERROR, f"Starting records in {n}")
 
         # Now're we're set up again, do reconcilation as slice n out of self.max_workers
         for (which, name, recids) in self.sources:
@@ -63,7 +68,7 @@ class ReconcileManager(TaskUiManager):
                 self.total = len(recids)
 
             if not self.disable_ui:
-                self.update_progress_bar(self.my_slice, description=name, total=self.total)
+                self.update_progress_bar(description=name, total=self.total)
             for recid in recids:
                 self._handle_record(recid, cfg)
 
@@ -75,7 +80,7 @@ class ReconcileManager(TaskUiManager):
 
         self.total = self.ref_mgr.get_len_refs() // self.max_workers
         if not self.disable_ui:
-            self.update_progress_bar(self.my_slice, description="references", total=self.total)
+            self.update_progress_bar(description="references", total=self.total)
         item = 1
         while item:
             item = self.ref_mgr.pop_ref()
@@ -103,8 +108,8 @@ class ReconcileManager(TaskUiManager):
                 raise ValueError(f"Got internal reference! {uri}")
             self._handle_record(recid, cfg, rectype, distance)
 
-    def _distributed(self, bars, n):
-        super()._distributed(bars, n)
+    def _distributed(self, bars, messages, n):
+        super()._distributed(bars, messages, n)
         if self.phase == 1:
             self._pool_reconcile_records(n)
         elif self.phase == 2:
@@ -116,6 +121,8 @@ class ReconcileManager(TaskUiManager):
 
     def process(self, layout, **args) -> bool:
         self.phase = 1
+        logger = get_logger()
+        logger.log(logging.ERROR, "test from main thread pre-pools")
         super().process(layout, **args)
 
         if not self.no_refs:

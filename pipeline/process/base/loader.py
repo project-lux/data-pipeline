@@ -8,6 +8,7 @@ import gzip
 import zipfile
 import tarfile
 import ujson as json
+import logging
 
 try:
     import magic
@@ -487,10 +488,10 @@ class Loader:
         if self.max_slice > 1:
             ttl = ttl // self.max_slice
         desc = f"{self.config['name']}/{self.my_slice}"
-        self.load_manager.update_progress_bar(self.my_slice, total=ttl, description=desc)
+        self.load_manager.update_progress_bar(total=ttl, description=desc)
 
     def increment_progress_bar(self, amount):
-        self.load_manager.update_progress_bar(self.my_slice, advance=1)
+        self.load_manager.update_progress_bar(advance=1)
 
     def close_progress_bar(self):
         # Could set visibility to false or something but better to just leave it
@@ -534,6 +535,7 @@ class Loader:
     def load(self, disable_ui=False, verbose=False, overwrite=True):
         self.overwrite = overwrite
         self.increment_total = self.total < 0
+        self.load_manager.log(logging.WARNING, f"[green]Test from {self.my_slice}")
 
         self.open_temp_files()
         for info in self.my_files:

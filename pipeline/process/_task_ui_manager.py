@@ -3,6 +3,7 @@ import time
 from concurrent.futures import ProcessPoolExecutor
 from pipeline.cli.entry import cfgs
 from pipeline.cli._rich import get_bar_from_layout
+import logging
 
 class TaskUiManager:
     """
@@ -16,26 +17,29 @@ class TaskUiManager:
         else:
             self.max_workers = configs.max_workers
         self.bars = {}
+        self.messages = []
         self.sources = []
 
-    def _distributed(self, bars, n):
+    def _distributed(self, bars, messages, n):
         self.bars = bars
+        self.messages = messages
         self.configs = cfgs
+        self.my_slice = n
         # And do any other initial, non-task specific set up
 
-    def update_progress_bar(self, which, advance=None, total=None, description=None, completed=None):
-        curr = self.bars[which]
-        new = curr.copy()
+    def update_progress_bar(self, advance=None, total=None, description=None, completed=None):
+        curr = self.bars
         if total is not None:
-            new['total'] = total
+            curr['total'] = total
         if completed is not None:
-            new['completed'] = completed
+            curr['completed'] = completed
         if description is not None:
-            new['description'] = description
+            curr['description'] = description
         if advance is not None:
-            new['completed'] = new['completed'] + advance
-        self.bars[which] = new
+            curr['completed'] = curr['completed'] + advance
 
+    def log(self, level, message):
+        self.messages.append((level, message))
 
     def maybe_add(self, which, cfg):
         # SubClasses should re-define this to actually test
@@ -64,24 +68,28 @@ class TaskUiManager:
                 setattr(self, a, v)
 
         with multiprocessing.Manager() as manager:
-            if not self.disable_ui:
-                bars = manager.dict() # keep track of tasks across Processes
-                for b in range(self.max_workers):
-                    bars[b] = {'total': 1000000, 'completed': 0}
-            else:
-                bars = {}
+
+            bars = {} # keep track of tasks across Processes
+            messages = {}
+            for b in range(self.max_workers):
+                bars[b] = manager.dict({'total': 1000000, 'completed': 0})
+            for b in range(self.max_workers):
+                messages[b] = manager.list([])
 
             futures = []
-
             with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
                 for n in range(self.max_workers):
-                    futures.append(executor.submit(self._distributed, bars, n))
+                    futures.append(executor.submit(self._distributed, bars[n], messages[n], n))
                 if not self.disable_ui:
                     while (n_finished := sum([future.done() for future in futures])) < len(futures):
                         for (k,v) in bars.items():
                             if v:
                                 bar = get_bar_from_layout(layout, k)
                                 bar[0].update(bar[1], **v)
+                        for (k,v) in messages.items():
+                            while v:
+                                lvl, msg = v.pop(0)
+                                logging.log(lvl, msg)
                         time.sleep(0.25)
                 for future in futures:
                     future.result()

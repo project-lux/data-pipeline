@@ -10,8 +10,8 @@ class LoadManager(TaskUiManager):
         self.overwrite = True
         self.load_type = "records"
 
-    def _distributed(self, bars, n):
-        super()._distributed(bars, n)
+    def _distributed(self, bars, messages, n):
+        super()._distributed(bars, messages, n)
         for (which, src) in self.sources:
             ldr = getattr(self.configs, which)[src]['loader']
             ldr.prepare_load(self, n, self.max_workers, self.load_type)
