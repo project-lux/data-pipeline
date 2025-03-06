@@ -1,41 +1,20 @@
-import tqdm
+
+
+from pipeline.process._task_ui_manager import TaskUiManager
 import sys
-from concurrent.futures import ProcessPoolExecutor
-from pipeline.cli.entry import cfgs
 from pipeline.process.reconciler import Reconciler
 from pipeline.process.reference_manager import ReferenceManager
 
-class ReconcileManager:
+class ReconcileManager(TaskUiManager):
     """
     manages reconcilation phase
     """
-    def __init__(self,
-                 configs,
-                 max_workers: int = 0
-                 ):
-        self.configs = configs
-        self.verbose = False
-        self.disable_tqdm = False
-        if max_workers > 0:
-            self.max_workers = max_workers
-        else:
-            self.max_workers = configs.max_workers
-        self.my_slice = -1
-        self.sources = []
+    def __init__(self, configs, max_workers: int = 0):
+        super().__init__(configs, max_workers)
+        self.no_refs = False
         self.ref_mgr = None
         self.reconciler = None
         self.total = 0
-
-    def open_progress_bar(self, name):
-        self.progress_bar = tqdm.tqdm(
-            total=self.total,
-            desc=f"{name}/{self.my_slice}",
-            position=self.my_slice,
-            leave=True)
-
-    def close_progress_bar(self):
-        if self.progress_bar is not None:
-            self.progress_bar.close()
 
     def _handle_record(self, recid, cfg, rectype=None, distance=0):
         acquirer = cfg['acquirer']
@@ -56,14 +35,13 @@ class ReconcileManager:
             mapper.post_reconcile(rec2)
             self.ref_mgr.walk_top_for_refs(rec2["data"], distance)
             self.ref_mgr.manage_identifiers(rec2)
-        if self.progress_bar is not None:
-            self.progress_bar.update(1)
-        #sys.stdout.write('.');sys.stdout.flush()
 
+        if not self.disable_ui:
+            self.update_progress_bar(self.my_slice, advance=1)
 
     def _pool_reconcile_records(self, n):
         # Configure ourselves from global configs and CLI args
-        self.configs = cfgs
+        cfgs = self.configs
         idmap = cfgs.get_idmap()
         networkmap = cfgs.instantiate_map("networkmap")["store"]
         self.reconciler = Reconciler(cfgs, idmap, networkmap)
@@ -84,23 +62,20 @@ class ReconcileManager:
             else:
                 self.total = len(recids)
 
-            if not self.disable_tqdm:
-                self.open_progress_bar(name)
+            if not self.disable_ui:
+                self.update_progress_bar(self.my_slice, description=name, total=self.total)
             for recid in recids:
                 self._handle_record(recid, cfg)
-            if not self.disable_tqdm:
-                self.close_progress_bar()
-
 
     def _pool_reconcile_refs(self, n):
-        self.configs = cfgs
+        cfgs = self.configs
         idmap = cfgs.get_idmap()
         self.ref_mgr = ReferenceManager(cfgs, idmap)
         self.my_slice = n
 
-        self.total = self.ref_mgr.get_len_refs()
-        if not self.disable_tqdm:
-            self.open_progress_bar("references")
+        self.total = self.ref_mgr.get_len_refs() // self.max_workers
+        if not self.disable_ui:
+            self.update_progress_bar(self.my_slice, description="references", total=self.total)
         item = 1
         while item:
             item = self.ref_mgr.pop_ref()
@@ -127,45 +102,23 @@ class ReconcileManager:
             if not source["type"] == "external":
                 raise ValueError(f"Got internal reference! {uri}")
             self._handle_record(recid, cfg, rectype, distance)
-        if not self.disable_tqdm:
-            self.close_progress_bar()
 
+    def _distributed(self, bars, n):
+        super()._distributed(bars, n)
+        if self.phase == 1:
+            self._pool_reconcile_records(n)
+        elif self.phase == 2:
+            self._pool_reconcile_refs(n)
 
     def maybe_add(self, which, cfg):
         # Test if we should add it?
         self.sources.append((which, cfg['name'], []))
 
-    def prepare_single(self, name) -> bool:
-        if name in self.configs.internal:
-            self.maybe_add('internal', self.configs.internal[name])
-        elif name in self.configs.external:
-            self.maybe_add('external', self.configs.external[name])
-        else:
-            raise ValueError(f"Unknown source: {name}")
+    def process(self, layout, **args) -> bool:
+        self.phase = 1
+        super().process(layout, **args)
 
-    def prepare_all(self) -> bool:
-        for cfg in self.configs.external.values():
-            self.maybe_add('external', cfg)
-        for cfg in self.configs.internal.values():
-            self.maybe_add('internal', cfg)
+        if not self.no_refs:
+            self.phase = 2
+            super().process(layout, **args)
 
-    def reconcile(self, disable_tqdm=False, verbose=None, no_refs=False) -> bool:
-        self.configs = None
-        self.disable_tqdm = disable_tqdm
-        self.verbose = verbose
-        with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = [
-                executor.submit(self._pool_reconcile_records, n)
-                for n in range(self.max_workers)
-            ]
-            results = [f.result() for f in futures]
-
-        if not no_refs:
-            with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
-                futures = [
-                    executor.submit(self._pool_reconcile_refs, n)
-                    for n in range(self.max_workers)
-                ]
-                results = [f.result() for f in futures]
-
-        return all(results)

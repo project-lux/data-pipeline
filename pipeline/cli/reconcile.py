@@ -1,5 +1,6 @@
 from argparse import ArgumentParser
 from pipeline.process.reconcile_manager import ReconcileManager
+from ._rich import Live, get_layout
 
 def handle_command(cfgs, args, rest):
     wks = args.max_workers
@@ -21,4 +22,11 @@ def handle_command(cfgs, args, rest):
     rm = ReconcileManager(cfgs, wks)
     for s in sources:
         rm.prepare_single(s)
-    rm.reconcile(disable_tqdm=args.no_tqdm, verbose=args.verbose, no_refs=args.no_refs)
+
+    if args.no_ui:
+        layout = None
+    else:
+        layout = get_layout(cfgs, wks)
+    with Live(layout, screen=True, refresh_per_second=4) as live:
+        # And calling this will manage the multiprocessing
+        rm.process(layout, disable_ui=args.no_ui, verbose=args.verbose, no_refs=args.no_refs)

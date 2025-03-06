@@ -1,10 +1,8 @@
-
 import multiprocessing
 import time
 from concurrent.futures import ProcessPoolExecutor
 from pipeline.cli.entry import cfgs
 from pipeline.cli._rich import get_bar_from_layout
-
 
 class TaskUiManager:
     """
@@ -74,12 +72,6 @@ class TaskUiManager:
                 bars = {}
 
             futures = []
-
-            # hide unnecessary bars
-            if len(self.sources) < self.max_workers:
-                for n in range(len(self.sources), self.max_workers):
-                    bar = get_bar_from_layout(layout, n)
-                    bar[0].update(bar[1], visible=False)
 
             with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
                 for n in range(self.max_workers):
