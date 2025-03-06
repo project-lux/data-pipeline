@@ -4,6 +4,7 @@ import readline
 import rlcompleter
 import os
 
+
 def handle_command(cfgs, args, rest):
     # Nicer print and inspect
     from rich import print, inspect
@@ -26,3 +27,4 @@ def handle_command(cfgs, args, rest):
 
     # Launch the console
     code.InteractiveConsole(vars).interact()
+    #code.interact(readfunc=read_input, local=vars)

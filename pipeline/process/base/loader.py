@@ -8,7 +8,6 @@ import gzip
 import zipfile
 import tarfile
 import ujson as json
-import tqdm
 
 try:
     import magic
@@ -73,6 +72,7 @@ class Loader:
         self.out_cache = config.get('datacache', {})
         self.mapper = config.get('mapper', None)
         self.total = config.get('totalRecords', -1)
+        self.increment_total = self.total < 0
         self.dumps_dir = config['all_configs'].dumps_dir
         if 'dumps_dir' in config:
             self.dumps_dir = os.path.join(self.dumps_dir, config['dumps_dir'])
@@ -81,8 +81,8 @@ class Loader:
         self.seen = 0
         self.my_files = []
         self.temp_file_handles = {}
-        self.progress_bar = None
         self.overwrite = False
+        self.load_manager = None
 
         self.fmt_containers = ['dir', 'dirh', 'pair', 'zip', 'tar', 'lines', 'dict', 'array']
         self.fmt_formats = ['json', 'raw', 'other']
@@ -184,23 +184,28 @@ class Loader:
         return spec
 
 
-    def iterate_directory(self, path, comp):
+    def iterate_directory(self, path, comp, remaining):
         # ignore comp
-        for f in os.listdir(path):
+        files = os.listdir(path)
+        if self.increment_total and len(remaining) == 1:
+            self.update_progress_bar(increment_total=len(files))
+        for f in files:
             full = os.path.join(path, f)
             if os.path.isfile(full):
                 yield full
 
-    def iterate_directories(self, path, comp):
+    def iterate_directories(self, path, comp, remaining):
         # still ignore comp
         for f in os.listdir(path):
             full = os.path.join(path, f)
             if os.path.isfile(full):
+                if self.increment_total and len(remaining) == 1:
+                    self.update_progress_bar(increment_total=len(files))
                 yield full
             else:
-                self.iterate_directories(full, comp)
+                self.iterate_directories(full, comp, remaining)
 
-    def iterate_zip(self, path, comp):
+    def iterate_zip(self, path, comp, remaining):
         if comp == 'bz2':
             compression = zipfile.ZIP_BZIP2
         elif comp == 'gz':
@@ -209,17 +214,24 @@ class Loader:
             compression = zipfile.ZIP_STORED
 
         with zipfile.ZipFile(path, compression=compression) as zh:
-            for n in zh.namelist():
+            names = zh.namelist()
+            if self.increment_total and len(remaining) == 1:
+                self.update_progress_bar(increment_total=len(names))
+            for n in names:
                 if not n.endswith('/'):
                     # can't get back to this, so need to yield a file handle like object
                     yield ZipPointer(zh, n)
 
-    def iterate_tar(self, path, comp):
+    def iterate_tar(self, path, comp, remaining):
         if comp:
             mode = f"r:{comp}"
         else:
             mode = "r"
         with tarfile.open(path, mode) as th:
+            if self.increment_total and len(remaining) == 1:
+                names = th.namelist()
+                self.update_progress_bar(increment_total=len(names))
+                del names
             ti = th.next()
             while ti is not None:
                 if ti.isfile():
@@ -246,8 +258,35 @@ class Loader:
             # Dunno what this is
             return None
 
-    def iterate_lines(self, path, comp):
+    def count_lines(self, fh):
+        # Simple method of just read in the lines
+        # mmap doesn't work on compressed
+        # And have already opened the file, so no point using binary read
+        # Could read in chunks for some time saving
+
+        try:
+            length = fh.seek(0, os.SEEK_END)
+            fh.seek(0)
+        except:
+            # No seek? :(
+            return -1
+        lines = 0
+        if length < 100000000:
+            for l in fh:
+                lines += 1
+            fh.seek(0)
+            return lines
+        else:
+            return -1
+
+    def iterate_lines(self, path, comp, remaining):
         with self.file_opener(path, comp) as fh:
+
+            if self.increment_total:
+                lines = self.count_lines(fh)
+                if lines > 0:
+                    self.update_progress_bar(increment_total=lines)
+
             l = fh.readline()
             while l:
                 if type(l) == str:
@@ -256,22 +295,33 @@ class Loader:
                     yield io.BytesIO(l)
                 l = fh.readline()
 
-    def iterate_dict(self, path, comp):
+    def iterate_dict(self, path, comp, remaining):
         with self.file_opener(path, comp) as fh:
             data = json.load(fh)
+            if self.increment_total and len(remaining) == 1:
+                self.update_progress_bar(increment_total=len(data))
             for v in data.values():
                 yield v
 
-    def iterate_array(self, path, comp):
+    def iterate_array(self, path, comp, remaining):
         with self.file_opener(path, comp) as fh:
             data = json.load(fh)
+            if self.increment_total and len(remaining) == 1:
+                self.update_progress_bar(increment_total=len(data))
             # This is yield actual json, not a file/string of json
             for v in data:
                 yield v
 
-    def iterate_arraylines(self, path, comp):
+    def iterate_arraylines(self, path, comp, remaining):
         # Assumptions:  array of json, where each record is a line
         with self.file_opener(path, comp) as fh:
+
+            if self.increment_total:
+                lines = self.count_lines(fh)
+                if lines > 0:
+                    self.update_progress_bar(increment_total=lines)
+
+            # And this is the same hard case
             l = True
             while l:
                 l = fh.readline()
@@ -403,8 +453,7 @@ class Loader:
         except Exception as e:
             print(e)
             return False
-        if self.progress_bar is not None:
-            self.progress_bar.update(1)
+        self.increment_progress_bar(1)
         return True
 
     def process_step(self, steps, path, parent):
@@ -412,7 +461,7 @@ class Loader:
         comp = step[1] if len(step) > 1 else None
         handler = self.step_functions[step[0]]
         if step[0] in self.fmt_containers:
-            for child in handler(path, comp):
+            for child in handler(path, comp, steps[1:]):
                 self.process_step(steps[1:], child, step)
         elif step[0] in self.fmt_formats:
             # if we don't need to process it, then don't
@@ -426,26 +475,39 @@ class Loader:
         else:
             raise ValueError(f"Unknown step type {step} in {self.config['name']}")
 
-    def open_progress_bar(self):
-        ttl = self.total
+    def update_progress_bar(self, total=-1, increment_total=-1):
+        if total > 0:
+            ttl = total
+            self.total = ttl
+        elif increment_total > 0:
+            self.total += increment_total
+            ttl = self.total
+        else:
+            ttl = self.total
         if self.max_slice > 1:
             ttl = ttl // self.max_slice
-        self.progress_bar = tqdm.tqdm(total=ttl,
-            desc=f"{self.config['name']}/{self.my_slice}",
-            position=self.my_slice,
-            leave=True)
+        desc = f"{self.config['name']}/{self.my_slice}"
+        self.load_manager.update_progress_bar(self.my_slice, total=ttl, description=desc)
+
+    def increment_progress_bar(self, amount):
+        self.load_manager.update_progress_bar(self.my_slice, advance=1)
 
     def close_progress_bar(self):
-        if self.progress_bar is not None:
-            self.progress_bar.close()
+        # Could set visibility to false or something but better to just leave it
+        pass
 
-    def prepare_load(self, my_slice=0, max_slice=0, which="records"):
+    def prepare_load(self, mgr, my_slice=0, max_slice=0, load_type="records"):
+        self.load_manager = mgr
         self.my_slice = my_slice
         self.max_slice = max_slice
 
+        if load_type == "export":
+            # Unknown calculate from file
+            self.total = -1
+
         files = []
         if (ifs := self.config.get('input_files', {})):
-            for p in ifs[which]:
+            for p in ifs[load_type]:
                 fmt = p.get('type', None)
                 if fmt:
                     fmtspec = self.process_fmt(fmt)
@@ -457,7 +519,7 @@ class Loader:
                     path = os.path.join(self.dumps_dir, p['path'])
                 files.append({"path": path, "fmt": fmtspec})
 
-        if not files and which == "records" and (dfp := self.config.get('dumpFilePath')):
+        if not files and load_type == "records" and (dfp := self.config.get('dumpFilePath')):
             # look in dfp
             fmt = self.config.get('dumpFileType', None)
             if fmt:
@@ -469,14 +531,17 @@ class Loader:
         self.my_files = files
 
 
-    def load(self, disable_tqdm=False, verbose=False, overwrite=True):
+    def load(self, bars, disable_ui=False, verbose=False, overwrite=True):
         self.overwrite = overwrite
+        self.bars = bars
+        self.increment_total = self.total < 0
+
         self.open_temp_files()
         for info in self.my_files:
-            if not disable_tqdm:
-                self.open_progress_bar()
+            if not disable_ui:
+                self.update_progress_bar()
             self.process_step(info['fmt'], info['path'], None)
-            if not disable_tqdm:
+            if not disable_ui:
                 self.close_progress_bar()
         try:
             self.out_cache.commit()

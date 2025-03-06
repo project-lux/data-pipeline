@@ -23,6 +23,7 @@ def handle_command(cfgs, args, rest):
     (p / 'input').mkdir()
     (p / 'output').mkdir()
     (p / 'system_config').mkdir()
+    (p / 'temp').mkdir()
 
     # Try to use git clone to fetch main
     # Then it can stay in sync

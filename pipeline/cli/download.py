@@ -26,7 +26,7 @@ def handle_command(cfgs, args, rest):
     if not manager.downloads:
         print("Could not find anything to download!")
     else:
-        okay = manager.download_all(disable_tqdm=args.no_tqdm, verbose=args.verbose)
+        okay = manager.download_all(disable_ui=args.no_ui, verbose=args.verbose)
         if not okay:
             # at least one failed
             print(manager.downloads)
