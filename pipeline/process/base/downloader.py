@@ -1,6 +1,7 @@
 import os
 import requests
 import ujson as json
+from pathlib import Path
 
 
 class BaseDownloader:
@@ -12,7 +13,10 @@ class BaseDownloader:
         self.dumps_dir = config['all_configs'].dumps_dir
         if 'dumps_dir' in config:
             self.dumps_dir = os.path.join(self.dumps_dir, config['dumps_dir'])
-        # self.urls = self.get_urls()
+        self.my_slice = -1
+        self.manager = None
+        self.max_slice = -1
+
 
     def fetch_webpage(self, url: str) -> str:
         """Fetch the webpage content from the given URL.
@@ -83,7 +87,6 @@ class BaseDownloader:
         # FIXME: Implement a basic "splash page" reader from XML
         pass
 
-
     def get_urls(self):
         """
         Download files from specified source(s). Returns a list of urls and paths as a list of dictionaries.
@@ -111,3 +114,58 @@ class BaseDownloader:
                 else:
                     raise ValueError(f"No download path for input file: {record}")
         return urls
+
+
+    def _download_file(self, url: str) -> bool:
+        download = self.downloads[url]
+        try:
+            response = requests.get(url, stream=True, verify=False)
+            response.raise_for_status()
+
+            # Create parent directories if they don't exist
+            Path(download.filename).parent.mkdir(parents=True, exist_ok=True)
+
+            download.total_size = int(response.headers.get('content-length', 0))
+            download.status = "downloading"
+
+            with open(download.filename, 'wb') as f:
+                for data in response.iter_content(chunk_size=1024):
+                    size = f.write(data)
+                    download.downloaded_size += size
+
+            download.status = "completed"
+            return True
+
+        except Exception as e:
+            download.status = f"error: {str(e)}"
+            return False
+
+    def prepare_download(self, mgr, n, max_workers):
+        self.manager = mgr
+        self.my_slice = n
+        self.max_slice = max_workers
+
+    def download(self, download, disable_ui=False, verbose=False):
+        url = download['url']
+        path = download['path']
+
+        response = requests.get(url, stream=True, verify=False)
+        response.raise_for_status()
+
+        # Create parent directories if they don't exist
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        total_size = int(response.headers.get('content-length', 0))
+        filename = os.path.split(path)[-1]
+        self.manager.update_progress_bar(self.my_slice, total=total_size, description=f"{self.config['name']}/{filename}")
+        with open(path, 'wb') as f:
+            for data in response.iter_content(chunk_size=1024):
+                size = f.write(data)
+                self.manager.update_progress_bar(self.my_slice, advance=size)
+
+
+
+
+
+
+
+

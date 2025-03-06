@@ -35,7 +35,7 @@ class TaskUiManager:
         if description is not None:
             new['description'] = description
         if advance is not None:
-            new['completed'] = new['completed'] + 1
+            new['completed'] = new['completed'] + advance
         self.bars[which] = new
 
 
@@ -74,6 +74,13 @@ class TaskUiManager:
                 bars = {}
 
             futures = []
+
+            # hide unnecessary bars
+            if len(self.sources) < self.max_workers:
+                for n in range(len(self.sources), self.max_workers):
+                    bar = get_bar_from_layout(layout, n)
+                    bar[0].update(bar[1], visible=False)
+
             with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
                 for n in range(self.max_workers):
                     futures.append(executor.submit(self._distributed, bars, n))

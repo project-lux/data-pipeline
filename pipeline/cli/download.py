@@ -1,8 +1,10 @@
 
 from pipeline.process.download_manager import DownloadManager
 from argparse import ArgumentParser
+from ._rich import Live, get_layout
 
 def handle_command(cfgs, args, rest):
+    wks = args.max_workers if args.max_workers > 0 else cfgs.max_workers
     manager = DownloadManager(cfgs)
 
     if not args.source:
@@ -23,10 +25,13 @@ def handle_command(cfgs, args, rest):
         for s in sources:
             manager.prepare_single(s)
 
-    if not manager.downloads:
+    if not manager.sources:
         print("Could not find anything to download!")
     else:
-        okay = manager.download_all(disable_ui=args.no_ui, verbose=args.verbose)
-        if not okay:
-            # at least one failed
-            print(manager.downloads)
+        if args.no_ui:
+            layout = None
+        else:
+            layout = get_layout(cfgs, wks)
+        with Live(layout, screen=True, refresh_per_second=4) as live:
+            # And calling this will manage the multiprocessing
+            manager.process(layout, disable_ui=args.no_ui, verbose=args.verbose)

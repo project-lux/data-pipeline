@@ -15,7 +15,7 @@ class LoadManager(TaskUiManager):
         for (which, src) in self.sources:
             ldr = getattr(self.configs, which)[src]['loader']
             ldr.prepare_load(self, n, self.max_workers, self.load_type)
-            ldr.load(bars, disable_ui=self.disable_ui, verbose=self.verbose, overwrite=self.overwrite)
+            ldr.load(disable_ui=self.disable_ui, verbose=self.verbose, overwrite=self.overwrite)
 
     def maybe_add(self, which, cfg):
         if 'loader' in cfg and isinstance(cfg['loader'], Loader):
