@@ -114,8 +114,17 @@ Based on the occurrences of MARC21 fields across the available FAST XML files, t
 - **Usage:**
   - **'a'**
     - See Personal mapping.
-  - **'0'** and **'1'**
-    - Equivalent relationships to **LCNAF, Wikidata and VIAF**
+  - **'0' & '1'**
+    - Equivalent relationships to external authorities.
+---
+### Field 710
+- **Mapped:** `Y`
+- **Subfields used:** `'a', 'b', '0'`
+- **Usage:**
+  - **'a' & 'b'**
+    - See Group mapping
+  - **'0' & '1'**
+    - Equivalent relationships to external authorities.
 ---
 ### Field 016
 - **Mapped:** `N`
@@ -248,7 +257,7 @@ Based on the occurrences of MARC21 fields across the available FAST XML files, t
 ---
 ### Field 710
 - **Mapped:** `Y`
-- **Subfields used:** `'a', 'b'`
+- **Subfields used:** `'a', 'b', '0'`
 - **Usage:**
   - **'a'**
     - Alternate primary name, part 1
@@ -256,4 +265,40 @@ Based on the occurrences of MARC21 fields across the available FAST XML files, t
   - **'b'**
     - Alternate primary name, part 2
     - Preferred alternate name, part 2
+  - **'0'**
+    - Equivalent relationships to external authorities.
 ---
+
+## Topical:
+**Maps to:** Linked.art `Type` Class
+**Good identifiers for testing:** `1754987`,`826218`,`941961`
+
+---
+### Field 688
+- **Mapped:** `N`
+- **Notes:**  
+  - This field documents the application history of the heading and **does not map to Linked.art**.
+---
+### Field 750 & 710
+- **Mapped:** `Y`
+- **Subfields used:** `'0','1'` 
+  - Equivalent relationships to external authorities.
+
+
+Tag 040: 486766 occurrences
+Tag 016: 486765 occurrences
+Tag 024: 486765 occurrences
+Tag 150: 486765 occurrences
+Tag 450: 273688 occurrences
+Tag 550: 230156 occurrences
+Tag 780: 177206 occurrences
+Tag 053: 95585 occurrences
+Tag 682: 45913 occurrences
+Tag 755: 31026 occurrences
+Tag 551: 19721 occurrences
+Tag 072: 2046 occurrences
+Tag 555: 1352 occurrences
+Tag 680: 826 occurrences
+Tag 751: 730 occurrences
+Tag 748: 631 occurrences
+Tag 700: 569 occurrences
