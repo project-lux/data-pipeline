@@ -47,20 +47,19 @@ def main():
     try:
         mod = importlib.import_module(f'lux_pipeline.cli.{args.command}')
     except Exception as e:
-        okay = 0
         if '.' in args.command:
-            # Try to import an extension command
+            # Try to import an extension command from anywhere
+            if '-' in args.command:
+                args.command = args.command.replace('-', '_')
             try:
                 mod = importlib.import_module(args.command)
-                if hasattr(mod, 'handle_command'):
-                    # likely to be a command :)
-                    okay = 1
-                else:
+                if not hasattr(mod, 'handle_command'):
                     print(f"Could not find a command for {args.command}")
                     sys.exit(0)
-            except:
-                pass
-        if not okay:
+            except Exception as e:
+                print(f"Failed to import command {args.command}:\n{e}")
+                sys.exit(0)
+        else:
             print(f"Failed to import command {args.command}:\n{e}")
             sys.exit(0)
 
