@@ -1,5 +1,5 @@
 
-from pipeline.process.download_manager import DownloadManager
+from lux_pipeline.process.download_manager import DownloadManager
 from argparse import ArgumentParser
 from ._rich import Live, get_layout
 

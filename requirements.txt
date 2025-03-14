@@ -17,4 +17,6 @@ numpy
 bs4
 python-dotenv
 pyluach
-tqdm
+PyGithub
+rich
+
