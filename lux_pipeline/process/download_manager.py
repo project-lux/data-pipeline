@@ -1,6 +1,6 @@
 
 from ._task_ui_manager import TaskUiManager
-from pipeline.cli._rich import get_bar_from_layout
+from lux_pipeline.cli._rich import get_bar_from_layout
 
 class DownloadManager(TaskUiManager):
     """

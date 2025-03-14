@@ -5,7 +5,7 @@ import ujson as json
 import pathlib
 import tarfile
 
-from pipeline.process.base.loader import Loader
+from lux_pipeline.process.base.loader import Loader
 
 class YcbaLoader(Loader):
 
