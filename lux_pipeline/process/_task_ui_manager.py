@@ -83,8 +83,14 @@ class TaskUiManager:
             if hasattr(local_configs, 'log_file'):
                 log_fh = open(local_configs.log_file, 'a')
             else:
-                log_fh = open('lux_message_log.txt', 'w')
+                fn = "lux_log_command.txt"  # FIXME: replace command with CLI command
+                if hasattr(local_configs, 'log_dir'):
+                    fn = os.path.join(local_configs.log_dir, fn)
+                log_fh = open(fn, 'w')
 
+
+            logging.log(logging.INFO, "[green]Starting...")
+            log_fh.write("----- Starting -----\n")
             futures = []
             with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
                 for n in range(self.max_workers):

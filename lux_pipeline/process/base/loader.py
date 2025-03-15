@@ -69,6 +69,7 @@ class Loader:
 
     def __init__(self, config):
         self.config = config
+        self.name = config['name']
         self.configs = config['all_configs']
         self.out_cache = config.get('datacache', {})
         self.mapper = config.get('mapper', None)
@@ -169,19 +170,19 @@ class Loader:
         for b in bits:
             bb = b.split('.')
             if not bb[0] in self.fmt_containers:
-                raise ValueError(f"Cannot process container type {bb[0]} in {self.config['name']} loader")
+                raise ValueError(f"Cannot process container type {bb[0]} in {self.name} loader")
             if len(bb) == 2 and bb[1] not in self.fmt_compressions:
-                raise ValueError(f"Cannot process compression type {bb[1]} in {self.config['name']} loader")
+                raise ValueError(f"Cannot process compression type {bb[1]} in {self.name} loader")
             if len(bb) > 2:
-                raise ValueError(f"Badly specified container: {bb} in {self.config['name']} loader")
+                raise ValueError(f"Badly specified container: {bb} in {self.name} loader")
             spec.append(bb)
         fmts = fmt.split('.')
         if not fmts[0] in self.fmt_formats:
-            raise ValueError(f"Cannot process format type {fmts[0]} in {self.config['name']} loader")
+            raise ValueError(f"Cannot process format type {fmts[0]} in {self.name} loader")
         if len(fmts) == 2 and fmts[1] not in self.fmt_compressions:
-            raise ValueError(f"Cannot process compression type {fmts[1]} in {self.config['name']} loader")
+            raise ValueError(f"Cannot process compression type {fmts[1]} in {self.name} loader")
         if len(fmts) > 2:
-            raise ValueError(f"Badly specified container: {fmts} in {self.config['name']} loader")
+            raise ValueError(f"Badly specified container: {fmts} in {self.name} loader")
         spec.append(fmts)
         return spec
 
@@ -251,7 +252,7 @@ class Loader:
             path = path.get_handle()
         elif isinstance(path, dict):
             # URGH
-            self.load_manager.log(logging.ERROR, f"[red]Got a dict as path in file_opener: {path}")
+            self.load_manager.log(logging.ERROR, f"[red]Got a dict as path in file_opener for {self.name}: {path}")
             return None
 
         if comp == 'gz':
@@ -262,7 +263,7 @@ class Loader:
             try:
                 return open(path)
             except:
-                self.load_manager.log(logging.ERROR, f"[red]Got something we couldn't open: {path}")
+                self.load_manager.log(logging.ERROR, f"[red]Got something we couldn't open for {self.name}: {path}")
                 return None
         else:
             # Dunno what this is
@@ -356,7 +357,7 @@ class Loader:
         data = self.post_process_json(path)
         ident = self.extract_identifier(data)
         if not ident:
-            raise ValueError(f"Could not get an identifier in {self.config['name']} while in {parent}")
+            raise ValueError(f"Could not get an identifier in {self.name} while in {parent}")
         return {'identifier': ident, 'data': data}
 
     def make_json(self, path, comp, parent):
@@ -367,7 +368,7 @@ class Loader:
         if not ident:
             ident = self.extract_identifier(data)
             if not ident:
-                raise ValueError(f"Could not get an identifier in {self.config['name']} while in {parent}/{path}")
+                raise ValueError(f"Could not get an identifier in {self.name} while in {parent}/{path}")
         return {'identifier': ident, 'data': data}
 
     def make_other(self, path, comp, parent):
@@ -380,7 +381,7 @@ class Loader:
         if not ident:
             ident = self.extract_identifier(data)
             if not ident:
-                raise ValueError(f"Could not get an identifier in {self.config['name']} while in {parent}/{path}")
+                raise ValueError(f"Could not get an identifier in {self.name} while in {parent}/{path}")
         return {'identifier': ident, 'data': data}
 
     def make_identifier(self, value):
@@ -437,15 +438,15 @@ class Loader:
 
     def open_temp_files(self):
         if 'reconcileDbPath' in self.config:
-            lblfn = os.path.join(self.configs.temp_dir, f"{self.config['name']}_labels_{self.my_slice}.tsv")
+            lblfn = os.path.join(self.configs.temp_dir, f"{self.name}_labels_{self.my_slice}.tsv")
             lbl = open(lblfn, 'w')
             self.temp_file_handles['label'] = lbl
         if 'inverseEquivDbPath' in self.config:
-            eqfn = os.path.join(self.configs.temp_dir, f"{self.config['name']}_equivs_{self.my_slice}.tsv")
+            eqfn = os.path.join(self.configs.temp_dir, f"{self.name}_equivs_{self.my_slice}.tsv")
             eq = open(eqfn, 'w')
             self.temp_file_handles['equiv'] = eq
         if 'hasDifferentFrom' in self.config:
-            diffn = os.path.join(self.configs_temp_dir, f"{self.config['name']}_diffs_{self.my_slice}.tsv")
+            diffn = os.path.join(self.configs_temp_dir, f"{self.name}_diffs_{self.my_slice}.tsv")
             diff = open(diffn, 'w')
             self.temp_file_handles['diff'] = diff
 
@@ -483,7 +484,7 @@ class Loader:
                     if okay:
                         self.post_store_record(record)
         else:
-            raise ValueError(f"Unknown step type {step} in {self.config['name']}")
+            raise ValueError(f"Unknown step type {step} in {self.name}")
 
     def update_progress_bar(self, total=-1, increment_total=-1):
         if total > 0:
@@ -496,7 +497,7 @@ class Loader:
             ttl = self.total
         if self.max_slice > 1:
             ttl = ttl // self.max_slice
-        desc = f"{self.config['name']}/{self.my_slice}"
+        desc = f"{self.name}/{self.my_slice}"
         self.load_manager.update_progress_bar(total=ttl, description=desc)
 
     def increment_progress_bar(self, amount):
@@ -517,6 +518,8 @@ class Loader:
 
         files = []
         if (ifs := self.config.get('input_files', {})):
+            if not load_type in ifs:
+                self.log(logging.WARNING, "[red]No configured file for load type {load_type} in {self.name}")
             for p in ifs[load_type]:
                 fmt = p.get('type', None)
                 path = p.get('path', None)
@@ -556,7 +559,7 @@ class Loader:
         for info in self.my_files:
             if not disable_ui:
                 self.update_progress_bar()
-            self.load_manager.log(logging.INFO, f"[green]Loading {info['path']} in {self.my_slice}")
+            self.load_manager.log(logging.INFO, f"[green]Loading {info['path']} for {self.name} in {self.my_slice}")
             try:
                 self.process_step(info['fmt'], info['path'], None)
             except Exception as e:
@@ -569,87 +572,3 @@ class Loader:
         except:
             pass
         self.close_temp_files()
-
-
-class OldLoader(object):
-
-    def __init__(self, config):
-        self.config = config
-        self.in_url = config.get('remoteDumpFile', '')
-        self.in_path = config.get('dumpFilePath', '')
-        self.out_cache = config['datacache']
-        self.total = config.get('totalRecords', -1)
-
-    def get_identifier_raw(self, line):
-        # Find identifier from raw line
-        return None
-
-    def get_identifier_json(self, js):
-        return None
-
-    def post_process_json(self, js):
-        return js
-
-    def filter_line(self, line):
-        return False
-
-    def load(self):
-        # default is to assume gzipped JSONL
-        # without headers/footers or other wrapping
-        # Dump in raw without parsing
-
-        if self.in_path.endswith('.gz'):
-            fh = gzip.open(self.in_path)
-        elif self.in_path.endswith('.zip'):
-            zh = zipfile.ZipFile(self.in_path)
-            # Assume a single zipped file
-            names = zh.namelist()
-            if len(names) != 1:
-                raise ValueError("Too many zipped files")
-            else:
-                fh = zh.open(names[0])
-
-        start = time.time()
-        x = 0 
-        done_x = 0
-        l = 1
-        while l:
-            l = fh.readline()
-            if not l:
-                break
-            # Find id and check if already exists before processing JSON
-            what = self.get_identifier_raw(l)
-            if what and what in self.out_cache:
-                done_x += 1
-                if not done_x % 10000:
-                    print(f"Skipping past {done_x} {time.time() - start}")
-                continue
-            # Cache assumes JSON as input, so need to parse it
-            try:
-                js = json.loads(l)
-            except:
-                raise    
-            x += 1
-            try:
-                new = self.post_process_json(js)
-            except:
-                print(f"Failed to process {l}")
-                raise
-            if new is not None:
-                if not what:
-                    what = self.get_identifier_json(new)
-                    if not what:
-                        print(l)
-                        raise NotImplementedError(f"is get_identifier_raw or _json implemented for {self.__class__.__name__}?")
-                self.out_cache[what] = new
-            if not x % 10000:
-                t = time.time() - start
-                xps = x/t
-                ttls = self.total / xps
-                print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-        fh.close()
-        self.out_cache.commit()
-
-
-
-

@@ -5,7 +5,7 @@ from ._rich import Live, get_layout
 
 def handle_command(cfgs, args, rest):
     wks = args.max_workers if args.max_workers > 0 else cfgs.max_workers
-    manager = DownloadManager(cfgs)
+    manager = DownloadManager(cfgs, max_workers=wks)
 
     if not args.source:
         args.source = "all"
