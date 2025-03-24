@@ -2,7 +2,6 @@ from pipeline.process.base.mapper import Mapper
 from cromulent import model, vocab
 from pipeline.process.utils.mapper_utils import make_datetime, test_birth_death, get_wikidata_qid
 from lxml import etree
-import re
 
 class FastMapper(Mapper):
     """
@@ -433,6 +432,9 @@ class FastMapper(Mapper):
         # If no names remain, return None
         if not rec.identified_by:
             return None
+        
+    def process_concepts(self, root, rec):
+        
 
     def transform(self, record, rectype=None, reference=False):
         """Transforms a MARC record into Linked.art JSON."""
