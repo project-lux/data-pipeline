@@ -190,6 +190,16 @@ if "--write-refs" in sys.argv:
     ref_mgr.write_done_refs()
     done_refs.clear()
 
+### quick export subsection
+
+if "--places" in sys.argv:
+    rc = cfgs.results['merged']['recordcache']
+    print("Starting")
+    with open('places.jsonl', 'w') as fh:
+        for rec in rc.iter_records_type('Place'):
+            fh.write(json.dumps(rec.data, separators=(",", ":")))
+            fh.write("\n")
+    print("Done")
 
 ### EXPORT AS NTRIPLES
 if "--nt" in sys.argv:
