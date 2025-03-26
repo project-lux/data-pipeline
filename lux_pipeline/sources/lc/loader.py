@@ -9,7 +9,7 @@ class LcLoader(Loader):
     # 2024-04: Data is still missing from dump files
     # but present in the individual records from LC
     # this code syncs the dump file records with the online record
-    def load(self):
+    def old_load(self):
         self.extAuths = {}
         # https://id.loc.gov/download/externallinks.nt.zip 
         elp = self.config.get('externalLinksPath', 'external_links.nt')

@@ -7,10 +7,13 @@ class DownloadManager(TaskUiManager):
     DownloadManager is responsible for downloading files from the internet.
     Each source configuration file contains a Downloader class. The Downloader class is responsible for preparing a list of urls that need to be downloaded. To see an example, see the BaseDownloader class.
     """
+    def __init__(self, configs, max_workers: int = 0):
+        self.download_type = "all"
+        super().__init__(configs, max_workers)
 
     def _distributed(self, bars, messages, n):
         super()._distributed(bars, messages, n)
-        # this process should fetch ever %n file
+        # this process should fetch every % n file
 
         for (which, src, url) in self.sources[n::self.max_workers]:
             try:
@@ -24,7 +27,7 @@ class DownloadManager(TaskUiManager):
     def maybe_add(self, which, cfg):
         downloader = cfg.get('downloader', None)
         if downloader is not None:
-            urls = downloader.get_urls()
+            urls = downloader.get_urls(self.download_type)
             if urls:
                 for u in urls:
                     self.sources.append((which, cfg['name'], u))

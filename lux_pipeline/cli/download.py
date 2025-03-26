@@ -11,10 +11,11 @@ def handle_command(cfgs, args, rest):
         args.source = "all"
 
     ap = ArgumentParser()
-    ap.add_argument('--type', type=str, default="record")
+    ap.add_argument('--type', type=str, default="all", help="all|records|export for which type to download")
     ap.add_argument("--no-overwrite", action='store_false', help="Do not overwrite existing files/records")
     ap.parse_args(rest, namespace=args)
 
+    manager.download_type = args.type
     if args.source == "all":
         manager.prepare_all()
     else:
@@ -30,8 +31,9 @@ def handle_command(cfgs, args, rest):
     else:
         if args.no_ui:
             layout = None
+            manager.process(layout, disable_ui=args.no_ui, verbose=args.verbose)
         else:
             layout = get_layout(cfgs, wks)
-        with Live(layout, screen=True, refresh_per_second=4) as live:
-            # And calling this will manage the multiprocessing
-            manager.process(layout, disable_ui=args.no_ui, verbose=args.verbose)
+            with Live(layout, screen=True, refresh_per_second=4) as live:
+                # And calling this will manage the multiprocessing
+                manager.process(layout, disable_ui=args.no_ui, verbose=args.verbose)

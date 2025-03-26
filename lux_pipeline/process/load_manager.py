@@ -1,6 +1,6 @@
 
 from ._task_ui_manager import TaskUiManager
-from lux_pipeline.process.base.loader import Loader
+from lux_pipeline.process.base.loader import Loader, MultiLoader
 import logging
 
 class LoadManager(TaskUiManager):
@@ -26,4 +26,3 @@ class LoadManager(TaskUiManager):
     def maybe_add(self, which, cfg):
         if 'loader' in cfg and isinstance(cfg['loader'], Loader):
             self.sources.append((which, cfg['name']))
-

@@ -87,7 +87,7 @@ class BaseDownloader:
         # FIXME: Implement a basic "splash page" reader from XML
         pass
 
-    def get_urls(self):
+    def get_urls(self, type="all"):
         """
         Download files from specified source(s). Returns a list of urls and paths as a list of dictionaries.
         """
@@ -97,22 +97,23 @@ class BaseDownloader:
         if 'dumpFilePath' in self.config and 'remoteDumpFile' in self.config:
             urls.append({"url": self.config['remoteDumpFile'], 'path': self.config['dumpFilePath']})
 
-        for records in self.config.get('input_files', {}).values():
-            for record in records:
-                url = record.get("url", None)
-                if not url:
-                    raise ValueError(f"URL not found for input file: {record}")
-                if (p := record.get("path", None)):
-                    if not '/' in p:
-                        # just the filename
-                        p = os.path.join(self.dumps_dir, p)
-                    urls.append({"url": url, "path": p})
-                elif self.dumps_dir:
-                    # find the filename and dump it in the path
-                    np = os.path.join(self.dumps_dir, url.rsplit('/', 1)[-1])
-                    urls.append({"url": url, "path": np})
-                else:
-                    raise ValueError(f"No download path for input file: {record}")
+        for rt, records in self.config.get('input_files', {}).items():
+            if type in ["all", rt]:
+                for record in records:
+                    url = record.get("url", None)
+                    if not url:
+                        raise ValueError(f"URL not found for input file: {record}")
+                    if (p := record.get("path", None)):
+                        if not '/' in p:
+                            # just the filename
+                            p = os.path.join(self.dumps_dir, p)
+                        urls.append({"url": url, "path": p})
+                    elif self.dumps_dir:
+                        # find the filename and dump it in the path
+                        np = os.path.join(self.dumps_dir, url.rsplit('/', 1)[-1])
+                        urls.append({"url": url, "path": np})
+                    else:
+                        raise ValueError(f"No download path for input file: {record}")
         return urls
 
     def prepare_download(self, mgr, n, max_workers):
