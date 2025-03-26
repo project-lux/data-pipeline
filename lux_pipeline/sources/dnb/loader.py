@@ -3,7 +3,7 @@ import os
 import ujson as json
 import gzip
 import time
-from lux_pipeline.process.base.loader import Loader, OldLoader
+from lux_pipeline.process.base.loader import Loader
 
 
 class DnbLoader(Loader):
