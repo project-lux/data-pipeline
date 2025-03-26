@@ -5,6 +5,7 @@ import requests
 import shutil
 import time
 import gzip
+import bz2
 import zipfile
 import tarfile
 import ujson as json
