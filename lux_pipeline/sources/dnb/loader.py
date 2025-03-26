@@ -25,7 +25,7 @@ class DnbLoader(Loader):
 
 
 
-class OldDnbLoader(OldLoader):
+class OldDnbLoader:
 
     def __init__(self, config):
         Loader.__init__(self, config)

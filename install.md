@@ -1,6 +1,9 @@
 
 # INSTALL
 
+
+## Install system (Ubuntu)
+
 From a brand new server (e.g. an instance in spinup if you're at Yale)
 
 As root:
@@ -12,10 +15,23 @@ As root:
 * apt install python3-pip
 * apt install python3.10-venv
 * pip install --upgrade pip
-
 * su - postgres
 * createuser <user>
 * createdb <user>
+
+
+## Install system (Mac)
+
+Or on Macos:
+
+* Install postgres: I use https://postgresapp.com/
+* Install pgadmin: I use https://www.pgadmin.org/download/pgadmin-4-macos/
+* Install homebrew: I use the .pkg installer linked from https://brew.sh/
+* Update homebrew: brew update
+* Install redis:  brew install redis
+* Set both postgres and redis to start at login
+
+## Install LUX
 
 As user:
 
