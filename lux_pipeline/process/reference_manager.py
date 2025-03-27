@@ -30,19 +30,49 @@ class ReferenceManager(object):
         self.ref_cache = {}
 
     def write_metatypes(self, my_slice):
-        # write out our slice of metatypes
+        # write out our slice of metatypes to temp dir
         if my_slice > -1:
             fn = f"metatypes-{my_slice}.json"
         else:
             fn = f"metatypes-single.json"
+        fn = os.path.join(self.configs.temp_dir, fn)
         with open(fn, "w") as fh:
             fh.write(json.dumps(self.metatypes_seen))
+
+    def merge_metatypes(self):
+        # Merge all the metatype slices together
+        all_files = os.listdir(self.configs.temp_dir)
+        mt = {}
+        for f in all_files:
+            if f.startswith("metatypes-") and f.endswith('.json'):
+                fn = os.path.join(self.configs.temp_dir, f)
+                with open(fn) as fh:
+                    data = fh.read()
+                js = json.loads(data)
+                # Delete the file we've read
+                os.remove(fn)
+                if not mt:
+                    mt = js
+                else:
+                    for k,v in js.items():
+                        if not k in mt:
+                            mt[k] = v
+                        else:
+                            for i in v:
+                                if not i in mt[k]:
+                                    mt[k].append(i)
+        with open(os.path.join(self.configs.data_dir, 'metatypes.json'), 'w') as fh:
+            outstr = json.dumps(mt)
+            fh.write(outstr)
+
 
     def write_done_refs(self):
         # step through all entries in done_refs and write URI
         # to a file, if distance <= MAX_DISTANCE
+        # Then clear the db to save memory
         maxd = self.configs.max_distance
-        with open("reference_uris.txt", "w") as fh:
+        fn = os.path.join(self.configs.temp_dir, "reference_uris.txt")
+        with open(fn, "w") as fh:
             x = 0
             for k in self.done_refs.iter_keys():
                 x += 1
@@ -54,9 +84,11 @@ class ReferenceManager(object):
                     continue
                 if k["dist"] <= maxd:
                     fh.write(f"{k['dist']}|{k.pkey}\n")
+        self.done_refs.clear()
 
     def iter_done_refs(self, my_slice, max_slice):
-        with open("reference_uris.txt", "r") as fh:
+        fn = os.path.join(self.configs.temp_dir, "reference_uris.txt")
+        with open(fn, "r") as fh:
             if my_slice < 0 or max_slice < 0:
                 # just read the whole file
                 line = fh.readline()

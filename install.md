@@ -54,5 +54,15 @@ This won't work yet. Currently
 * lux initialize
 * lux testinstall
 
+### Download data
+
+* Download exported LUX baseline: lux download --source all --type export --max_workers 10
+* Download source datasets: lux download --source all --type records --max_workers 10
+*     Use at least 10, more if the CPU and network can handle it
+
+
+### Load data to cache
+
+* lux load --source all --type export --max_workers 10
 
 

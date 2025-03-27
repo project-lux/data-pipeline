@@ -1,6 +1,6 @@
 
 from ._task_ui_manager import TaskUiManager
-from lux_pipeline.process.base.loader import Loader, MultiLoader
+from lux_pipeline.process.base.loader import Loader
 import logging
 
 class LoadManager(TaskUiManager):
@@ -15,7 +15,6 @@ class LoadManager(TaskUiManager):
         super()._distributed(bars, messages, n)
         for (which, src) in self.sources:
             ldr = getattr(self.configs, which)[src]['loader']
-            self.log(logging.INFO, f"[green]Loading {src}")
             try:
                 ldr.prepare_load(self, n, self.max_workers, self.load_type)
                 ldr.load(disable_ui=self.disable_ui, verbose=self.verbose, overwrite=self.overwrite)

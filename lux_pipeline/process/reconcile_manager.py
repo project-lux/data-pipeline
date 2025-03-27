@@ -1,9 +1,10 @@
-
+import sys
+import logging
 
 from ._task_ui_manager import TaskUiManager
-import sys
 from .reconciler import Reconciler
 from .reference_manager import ReferenceManager
+
 
 class ReconcileManager(TaskUiManager):
     """
@@ -104,6 +105,7 @@ class ReconcileManager(TaskUiManager):
             if not source["type"] == "external":
                 raise ValueError(f"Got internal reference! {uri}")
             self._handle_record(recid, cfg, rectype, distance)
+        self.ref_mgr.write_metatypes(self.my_slice)
 
     def _distributed(self, bars, messages, n):
         super()._distributed(bars, messages, n)
@@ -122,11 +124,17 @@ class ReconcileManager(TaskUiManager):
 
     def process(self, layout, **args) -> bool:
         self.phase = 1
-        logger = get_logger()
-        logger.log(logging.ERROR, "test from main thread pre-pools")
         super().process(layout, **args)
 
         if not self.no_refs:
             self.phase = 2
             super().process(layout, **args)
+
+        # Now tidy up
+        ref_mgr = ReferenceManager(cfgs, idmap)
+        logging.log(logging.INFO, "[green]Merging metatypes")
+        ref_mgr.merge_metatypes()
+        logging.log(logging.INFO, "[green]Writing done refs to file from redis")
+        ref_mgr.write_done_refs()
+        logging.log(logging.INFO, "[green]Done, ready to merge")
 
