@@ -65,6 +65,8 @@ class TaskUiManager:
 
     def process(self, layout, disable_ui=False, verbose=None, **args) -> bool:
         local_configs = self.configs
+        # This is necessary to set to None so it can be pickled to send to
+        # remote tasks
         self.configs = None
         self.disable_ui = disable_ui
         self.verbose = verbose

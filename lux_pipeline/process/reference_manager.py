@@ -17,16 +17,20 @@ class ReferenceManager(object):
             self.internal_uris.append(c["namespace"])
 
         # XXX FIXME: This should be a CSV or sane JSON
-        with open(os.path.join(configs.data_dir, "replacements.json")) as fh:
-            data = fh.read()
-        js = json.loads(data)
-        getty_redirects = {}
-        res = js["results"]["bindings"]
-        for r in res:
-            f = r["from"]["value"]
-            t = r["to"]["value"]
-            getty_redirects[f] = t
-        self.redirects = getty_redirects
+        replfn = os.path.join(configs.data_dir, "replacements.json")
+        if os.path.exists(replfn):
+            with open(replfn) as fh:
+                data = fh.read()
+            js = json.loads(data)
+            getty_redirects = {}
+            res = js["results"]["bindings"]
+            for r in res:
+                f = r["from"]["value"]
+                t = r["to"]["value"]
+                getty_redirects[f] = t
+            self.redirects = getty_redirects
+        else:
+            self.redirects = {}
         self.ref_cache = {}
 
     def write_metatypes(self, my_slice):
