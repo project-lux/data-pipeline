@@ -9,6 +9,9 @@ from edtf.parser.parser_classes import (
     PartialUncertainOrApproximate as PUOA)
 import numpy as np
 
+import logging
+logger = logging.getLogger("lux_pipeline")
+
 # Note -- MaskedPrecision was removed from edtf, so removing as fuzzy parser
 
 try:
@@ -67,16 +70,16 @@ def walk_for_timespan(nodes):
                         (b, e) = make_datetime(dt)
                     except:
                         if not dt.startswith("9999"):
-                            print(f"Failed to make a date from {dt} ; stripping")
+                            logger.warning(f"Failed to make a date from {dt} ; stripping")
                         del ts[tsp]
                         continue
                     if tsp.startswith("begin"):
                         if dt != b:
-                            # print(f"make datetime suggests: {b} for {dt}")
+                            # logger.debug(f"make datetime suggests: {b} for {dt}")
                             ts[tsp] = b
                     elif tsp.startswith("end"):
                         if dt != e:
-                            # print(f"make datetime suggests: {e} for {dt}")
+                            # logger.debug(f"make datetime suggests: {e} for {dt}")
                             ts[tsp] = e
         if "part" in node:
             # descend
@@ -90,7 +93,7 @@ def walk_for_timespan(nodes):
 
 def validate_timespans(rec):
     if not rec["type"] in time_rectype:
-        print(f"Couldn't find timespan paths for {rec['type']} in mapper_utils")
+        logger.debug(f"Couldn't find timespan paths for {rec['type']} in mapper_utils")
     else:
         props = time_rectype[rec["type"]]
         for p in props:
@@ -361,7 +364,7 @@ def make_datetime(value, precision=""):
                     begin = dt.lower_strict()
                     end = dt.upper_strict()
                 except Exception as e:
-                    print(f"EDTF couldn't process {ed_value}; ignoring")
+                    logger.debug(f"EDTF couldn't process {ed_value}; ignoring")
                     return None
             if end.tm_year == 9999 or begin.tm_year == 0:
                 # garbage
@@ -398,13 +401,13 @@ def make_datetime(value, precision=""):
                     begin = dt3.date_obj
                     end = begin + timedelta(days=1)
                 elif dt2:
-                    print(f"dateparser found: {dt3} from {value} ?")
+                    logger.debug(f"dateparser found: {dt3} from {value} ?")
                     return None
                 else:
-                    print(f"Failed to parse date: {initialValue} --> {value}")
+                    logger.debug(f"Failed to parse date: {initialValue} --> {value}")
                     return None
             except:
-                print(f"Failed to parse date: {initialValue} --> {value}")
+                logger.debug(f"Failed to parse date: {initialValue} --> {value}")
                 return None
 
     if not precision:

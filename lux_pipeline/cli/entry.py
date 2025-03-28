@@ -7,6 +7,19 @@ from ..config import Config
 import multiprocessing
 import logging
 
+logger = logging.getLogger("lux_pipeline")
+oh = logging.StreamHandler(stream=sys.stdout)
+
+# Trap --log here and set it before instantiate_all, which is before the arg parser
+if '--log' in sys.argv:
+    lvl = sys.argv[sys.argv.index('--log')+1]
+    lvl = lvl.upper()
+    if hasattr(logging, lvl):
+        oh.setLevel(getattr(logging, lvl))
+else:
+    oh.setLevel(logging.ERROR)
+logger.addHandler(oh)
+
 fn = find_dotenv(usecwd=True)
 if fn:
     load_dotenv(fn)
@@ -23,8 +36,6 @@ else:
     except:
         cfgs = None
 
-logger = logging.getLogger("lux_pipeline")
-
 def handle_command(cfgs, args, rest):
     print("There isn't an 'entry' command, please see 'lux help' for the list")
     return False
@@ -39,7 +50,7 @@ def main():
     parser.add_argument("--max_workers", type=int, default=0, help="Number of processes to use")
     parser.add_argument("--no-ui", action='store_true', help="If set, then disable the user interface")
     parser.add_argument("--verbose", type=str, help="Enable verbose output")
-
+    parser.add_argument("--log", type=str, help="Log level to log messages at")
     args, rest = parser.parse_known_args()
 
     if cfgs is None and args.command not in ['initialize', 'testinstall']:

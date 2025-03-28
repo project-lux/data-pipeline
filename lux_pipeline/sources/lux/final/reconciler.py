@@ -1,12 +1,14 @@
 
 from lux_pipeline.process.base.reconciler import LmdbReconciler, TabLmdb
+import logging
+logger = logging.getLogger("lux_pipeline")
 
 class GlobalReconciler(LmdbReconciler):
 
     def __init__(self, config):
         super().__init__(config)
         if self.id_index is None:
-            print(f"Could not find global equivalents index?")
+            logger.warning(f"Could not find global equivalents index?")
 
         self.diff_index = None
         fn2 = config.get("differentDbPath", "")
@@ -35,7 +37,7 @@ class GlobalReconciler(LmdbReconciler):
                 if 'id' in record['data']:
                     ids.append(record['data']['id'])
                 else:
-                    print(f"No id in {record}")
+                    logger.error(f"No id in {record}")
                     return []
             except:
                 ids = None
