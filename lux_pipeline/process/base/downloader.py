@@ -2,7 +2,8 @@ import os
 import requests
 import ujson as json
 from pathlib import Path
-
+import logging
+logger = logging.getLogger("lux_pipeline")
 
 class BaseDownloader:
     """
@@ -34,7 +35,7 @@ class BaseDownloader:
             response.raise_for_status()
             return response.text
         except requests.RequestException as e:
-            print(f"Error fetching the URL '{url}': {e}")
+            logger.error(f"Error fetching the URL '{url}': {e}")
             return None
 
     def get_value_from_json(self, base_url: str, data_key: str) -> str:
@@ -74,7 +75,7 @@ class BaseDownloader:
             return download_url if isinstance(download_url, str) else None
 
         except (IndexError, KeyError, TypeError) as e:
-            print(f"Error accessing JSON path '{data_key}': {e}")
+            logger.error(f"Error accessing JSON path '{data_key}': {e}")
             return None
         except Exception as e:
             raise ValueError(f"Unexpected error fetching {source_name} data: {e}")

@@ -5,6 +5,7 @@ from dotenv import load_dotenv, find_dotenv
 import importlib
 from ..config import Config
 import multiprocessing
+import logging
 
 fn = find_dotenv(usecwd=True)
 if fn:
@@ -21,6 +22,8 @@ else:
         cfgs.instantiate_all()
     except:
         cfgs = None
+
+logger = logging.getLogger("lux_pipeline")
 
 def handle_command(cfgs, args, rest):
     print("There isn't an 'entry' command, please see 'lux help' for the list")

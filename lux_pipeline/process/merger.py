@@ -3,7 +3,8 @@ from shapely import wkt
 from shapely.geometry import shape
 from datetime import datetime, timedelta
 from .reidentifier import Reidentifier
-
+import logging
+logger = logging.getLogger("lux_pipeline")
 
 class MergeHandler(object):
     def __init__(self, config, idmap, ref_mgr=None):
@@ -50,13 +51,13 @@ class MergeHandler(object):
             try:
                 (ext_src, ident) = self.config.split_uri(eq)
             except:
-                print(f" --- Failed to split uri: {eq}")
+                logger.debug(f" --- Failed to split uri: {eq}")
                 continue
             if ext_src["type"] == "internal":
                 ident = ident.split("#")[0]
             ext_rec = ext_src["recordcache"][ident]
             if not ext_rec:
-                print(f"Reference to non-existent record {ident} in {ext_src['name']}")
+                logger.warning(f"Reference to non-existent record {ident} in {ext_src['name']}")
                 continue
             to_do.append((ext_src, ext_rec))
 
@@ -75,11 +76,11 @@ class MergeHandler(object):
                         # This returns record, but it's mutated directly so no need to assign it
                         self.merger.merge(record, ext_rec2)
                     except:
-                        raise
                         try:
-                            print(f"****** Failed to merge {record['data']['id']}")
+                            logger.error(f"****** Failed to merge {record['data']['id']}")
                         except:
-                            print(f"****** Failed to merge {to_do}")
+                            logger.error(f"****** Failed to merge {to_do}")
+                        raise
 
         return record
 
@@ -112,17 +113,17 @@ class RecordMerger(object):
                 mc = merge["created_by"]["influenced_by"]
                 rc = rec["created_by"]["influenced_by"]
                 if len(mc) != len(rc):
-                    print(
+                    logger.warning(
                         f"In {rec['id']} - Strange creation influences - different counts!"
                     )
-                    print(f"    {mc}\n    {rc}")
+                    logger.warning(f"    {mc}\n    {rc}")
                 else:
                     infs = []
                     for i in range(len(mc)):
                         if mc[i] != rc[i]:
                             if not "id" in mc[i] or not "id" in rc[i]:
                                 # uh-oh!
-                                print(
+                                logger.debug(
                                     f"Missing URI for concept components in {rec.get('id', '-')} / {merge.get('id', '-')}"
                                 )
                             elif mc[i]["id"] == rc[i]["id"]:
@@ -146,7 +147,7 @@ class RecordMerger(object):
                                 ):
                                     infs.append(mc[i])
                                 else:
-                                    # print(f" {rec['id']} Df type: {mc[i]}\n          {rc[i]}")
+                                    # logger.debug(f" {rec['id']} Df type: {mc[i]}\n          {rc[i]}")
                                     # Arbitrarily keep the largest record definition
                                     # XXX This should try to check consensus upstream:
                                     #    if there's 100 records for Person, and 1 for Group, then use Person
@@ -154,14 +155,14 @@ class RecordMerger(object):
                                     infs.append(rc[i])
                             else:
                                 # ???
-                                # print(f" {rec['id']} ???????: {mc[i]}\n          {rc[i]}")
+                                # logger.debug(f" {rec['id']} ???????: {mc[i]}\n          {rc[i]}")
                                 pass
 
                         else:
                             infs.append(rc[i])
                     rec["created_by"]["influenced_by"] = infs
             else:
-                print("--- merge of Type creation needs work")
+                logger.debug("--- merge of Type creation needs work")
                 # One example -- sets created by a group that isn't apparently reconciled
                 # for now just keep the record
 
@@ -197,13 +198,13 @@ class RecordMerger(object):
                                 ftr = ftrs[0]
                             else:
                                 # Multiple features in the collection?
-                                print(f"Found multiple features: {ftrs}")
+                                logger.debug(f"Found multiple features: {ftrs}")
                                 ftr = ftrs[0]
                             shapes.append(shape(ftr["geometry"]))
                     elif x.startswith("POINT") or x.startswith("POLYGON"):
                         shapes.append(wkt.loads(x))
                     else:
-                        print(f"Unknown place.defined_by value: {x}")
+                        logger.debug(f"Unknown place.defined_by value: {x}")
                         shapes.append(None)
 
                 awkt = shapes[0].wkt if shapes[0] else None
@@ -247,7 +248,7 @@ class RecordMerger(object):
                     # Nope
                     pass
                 else:
-                    print(f"Failed to compare {awkt} and {bwkt}")
+                    logger.debug(f"Failed to compare {awkt} and {bwkt}")
 
         for rp in ["part_of", "approximated_by"]:
             if rp in merge and not rp in skip:
@@ -408,7 +409,7 @@ class RecordMerger(object):
         values = ["content", "format"]
         for vp in values:
             if vp in merge and not vp in skip and rec[vp].strip() != merge[vp].strip():
-                print(f"Can't merge {rec[vp]} and {merge[vp]} in {rec['id']}")
+                logger.debug(f"Can't merge {rec[vp]} and {merge[vp]} in {rec['id']}")
 
         # Single Event - created_by
         part_skips = ["carried_out_by", "took_place_at", "influenced_by", "caused_by"]
@@ -580,9 +581,9 @@ class RecordMerger(object):
                     mts["end_of_the_end"] = f"{int(me[:4])-1}-12-31T23:59:59Z"
                     me = mts["end_of_the_end"]
             except Exception:
-                print(rec)
-                print(rb)
-                print(re)
+                logger.debug(rec)
+                logger.debug(rb)
+                logger.debug(re)
 
             # Throw out estimated
             done = False
@@ -617,7 +618,7 @@ class RecordMerger(object):
                     except Exception:
                         rdelta = timedelta(100000)
                 else:
-                    print(f"Record's timespan: {rts}")
+                    logger.debug(f"Record's timespan: {rts}")
                     rdelta = timedelta(100000)
 
                 if mb and me:
@@ -632,7 +633,7 @@ class RecordMerger(object):
                     except Exception:
                         mdelta = None
                 else:
-                    # print(f"Merge's timespan: {mts}")
+                    # logger.debug(f"Merge's timespan: {mts}")
                     mdelta = None
 
                 if mdelta and mdelta < rdelta:
@@ -679,7 +680,7 @@ class RecordMerger(object):
                 self.merge_exhibition_parts(rec, merge, msource, skip)
             else:
                 # FIXME: WTF is this record?
-                print(f"Unknown activity record type with parts: {rec['id']}")
+                logger.debug(f"Unknown activity record type with parts: {rec['id']}")
 
     def merge_provenance_parts(self, rec, merge, msource, skip):
         # FIXME: do something with parts
@@ -708,7 +709,7 @@ class RecordMerger(object):
             ):
                 rec["type"] = merge["type"]
             else:
-                # print(f"Trying to merge records with different classes: {rec.get('id', '')}={rec['type']} / {merge.get('id', '')}={merge['type']}")
+                # logger.debug(f"Trying to merge records with different classes: {rec.get('id', '')}={rec['type']} / {merge.get('id', '')}={merge['type']}")
                 # Just don't do it
                 return []
         del merge["type"]
@@ -870,7 +871,7 @@ class RecordMerger(object):
                 conts = [x.get("content", "").strip() for x in rec["referred_to_by"]]
             except:
                 # if this breaks, everything else will too
-                print(f"Broken ref_to_by in {rec}")
+                logger.debug(f"Broken ref_to_by in {rec}")
                 conts = []
             if conts:
                 has_ai = any(["AI generated" in x for x in conts])
@@ -934,7 +935,7 @@ class RecordMerger(object):
                 try:
                     rap = rep["digitally_shown_by"][0]["access_point"][0]["id"]
                 except:
-                    print(f" -- no dsb or access_point in {rep}")
+                    logger.debug(f" -- no dsb or access_point in {rep}")
                     continue
                 if rap and not rap in curr:
                     rec["representation"].append(rep)
@@ -955,7 +956,7 @@ class RecordMerger(object):
         elif base_src in self.configs.external:
             base_config = self.configs.external[base_src]
         else:
-            print(f"Unknown base source in merge: {base_src}")
+            logger.debug(f"Unknown base source in merge: {base_src}")
             return True
 
         if merge_src in self.configs.internal:
@@ -963,7 +964,7 @@ class RecordMerger(object):
         elif merge_src in self.configs.external:
             merge_config = self.configs.external[merge_src]
         else:
-            print(f"Unknown merge source in merge: {merge_src}")
+            logger.debug(f"Unknown merge source in merge: {merge_src}")
             return True
 
         if "mapper" in base_config:
@@ -992,7 +993,7 @@ class RecordMerger(object):
         if "data" in base:
             rec = base["data"]
         else:
-            print(base)
+            logger.debug(base)
             raise ValueError("Passed in a non-record as base")
 
         if "data" in to_merge and "source" in to_merge:
@@ -1007,7 +1008,7 @@ class RecordMerger(object):
                 try:
                     eqid = merge["equivalent"][0]["id"]
                 except:
-                    print(f"No id in equivalent[0]: {merge['equivalent']}")
+                    logger.debug(f"No id in equivalent[0]: {merge['equivalent']}")
                     return rec
                 if "equivalent" in rec:
                     reqs = [x["id"] for x in rec["equivalent"]]
@@ -1020,10 +1021,10 @@ class RecordMerger(object):
                     # Still good
                     merge["id"] = rec["id"]
                 else:
-                    print("Failed to detect identifier merge:")
-                    print(f"Main record: {rec['id']} = {reqs}")
-                    print(f"Merging: {merge['id']} = {eqid}")
-                    # print(f"Merge eq in idmap: {self.idmap[eqid]}")
+                    logger.debug("Failed to detect identifier merge:")
+                    logger.debug(f"Main record: {rec['id']} = {reqs}")
+                    logger.debug(f"Merging: {merge['id']} = {eqid}")
+                    # logger.debug(f"Merge eq in idmap: {self.idmap[eqid]}")
                     # Something has gone HORRIBLY wrong
                     # raise ValueError()
                     return rec
@@ -1040,7 +1041,7 @@ class RecordMerger(object):
             # No need to debug this
             pass
             # try:
-            #    print(f"Did not merge {to_merge['identifier']} into {base['yuid']}")
+            #    logger.debug(f"Did not merge {to_merge['identifier']} into {base['yuid']}")
             # except:
-            #    print(f"Skipped merging {to_merge} into {base}")
+            #    logger.debug(f"Skipped merging {to_merge} into {base}")
         return base

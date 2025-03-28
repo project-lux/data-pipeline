@@ -3,6 +3,8 @@ import ujson as json
 import sys
 from lxml import etree
 import datetime
+import logging
+logger = logging.getLogger("lux_pipeline")
 
 class Harvester(object):
 
@@ -24,12 +26,12 @@ class Harvester(object):
 		try:
 			resp = self.session.get(uri)
 		except Exception as e:
-			print(f"Failed to get anything from {typ} at {uri}: {e}")
+			logger.error(f"Failed to get anything from {typ} at {uri}: {e}")
 			return {}
 		try:
 			what = json.loads(resp.text)
 		except Exception as e:
-			print(f"Failed to get JSON from {typ} at {uri}: {e}")
+			logger.error(f"Failed to get JSON from {typ} at {uri}: {e}")
 			return {}
 		return what
 
@@ -126,11 +128,11 @@ class ASHarvester(Harvester):
 			self.page = coll['last']['id']		
 		except:
 			self.page = None
-			print(f"Failed to get last page from collection {uri}")
+			logger.error(f"Failed to get last page from collection {uri}")
 
 	def fetch_page(self):
 		# fetch page in self.page
-		print(f"    {self.page}")
+		logger.debug(f"    {self.page}")
 		if self.cache_okay and self.page_cache is not None and self.page in self.page_cache:
 			rec = self.page_cache[self.page]
 			page = rec['data']
@@ -151,7 +153,7 @@ class ASHarvester(Harvester):
 			items = page['orderedItems']
 			items.reverse()
 		except:
-			print(f"Failed to get items from page {self.page}")
+			logger.error(f"Failed to get items from page {self.page}")
 			items = []
 		try:
 			prev = page.get('prev', {'id': ''})['id']
@@ -171,11 +173,11 @@ class ASHarvester(Harvester):
 			try:
 				dt = it['endTime']
 			except:
-				print(f"Missing endTime for item:\n{it}")
+				logger.error(f"Missing endTime for item:\n{it}")
 				continue
 			if type(dt) != str:
 				# urgh what is this?
-				print(f"Couldn't understand endTime: {dt}")
+				logger.error(f"Couldn't understand endTime: {dt}")
 				dt = datetime.datetime.utcnow().isoformat()
 			elif dt < self.last_harvest:
 				# We're done with the stream, not just this page
@@ -194,14 +196,14 @@ class ASHarvester(Harvester):
 				# FIXME: Process refresh markers for deletes; for now just stop
 				# This isn't in the AS from the units yet
 				self.page = None
-				print("Saw refresh token")
+				logger.debug("Saw refresh token")
 				break
 
 			try:
 				uri = it['object']['id']
 			except:
 				# FIXME: update state to flag bad entry
-				print("no item id: {it}")
+				logger.warning("no item id: {it}")
 				continue
 
 			# smush http/https to match namespace
@@ -230,7 +232,7 @@ class ASHarvester(Harvester):
 
 			if chg == 'delete':
 				yield (chg, ident, {}, "")
-				sys.stdout.write('X');sys.stdout.flush()
+				# sys.stdout.write('X');sys.stdout.flush()
 				continue
 
 			# only fetch if insert_time on the datacache for the record is < dt
@@ -256,7 +258,7 @@ class ASHarvester(Harvester):
 					continue
 			if not itjs:
 				# Could have gotten None
-				print(f"Harvester got {itjs} from {ident}")
+				logger.error(f"Harvester got {itjs} from {ident}")
 				continue
 			yield (chg, ident, itjs, dt)
 			sys.stdout.write('.');sys.stdout.flush()
@@ -269,7 +271,7 @@ class ASHarvester(Harvester):
 		while self.collection_index < len(self.collections):
 			if not self.page:
 				collection = self.collections[self.collection_index]
-				print(f" {collection}")
+				logger.debug(f" {collection}")
 				self.fetch_collection(collection)
 			while self.page:
 				items = self.fetch_page()

@@ -4,6 +4,8 @@ import redis
 import uuid
 import sys
 import random
+import logging
+logger = logging.getLogger("lux_pipeline")
 
 class RedisCache(object):
 
@@ -59,9 +61,6 @@ class RedisCache(object):
         x = 0
         for (k, v) in state.items():
             self.set(k, v)
-            x += 1
-            if not x % 100000:
-                print(f'{x}'); sys.stdout.flush()
         self._restoring_data_state = False
 
     def clear(self):
@@ -143,7 +142,7 @@ class IdMap(RedisCache):
             token = fh.read()
         token = token.strip()
         if not token.startswith('__') or not token.endswith('__'):
-            print("Idmap Update Token is badly formed, should be 8 character date with leading/trailing __")
+            logger.critical("Idmap Update Token is badly formed, should be 8 character date with leading/trailing __")
             raise ValueError("update token")
         else:
             self.update_token = token
@@ -253,13 +252,13 @@ class IdMap(RedisCache):
         if t == 'string':
             val = self.conn.get(key)
             if not val:
-                print(f"idmap was asked for {key} but got {val}")
+                logger.error(f"idmap was asked for {key} but got {val}")
                 return None
             out = self._manage_value_out(val)
         elif t == 'set':
             val = self.conn.smembers(key)
             if not val:
-                print(f"idmap was asked for {key} but got {val}")
+                logger.error(f"idmap was asked for {key} but got {val}")
                 return None
             out = {self._manage_value_out(x) for x in val}
         elif t == 'none':
@@ -298,11 +297,11 @@ class IdMap(RedisCache):
             old = self.conn.get(ikey)
             if old is None or old == ivalue:
                 return
-            print(f"key: {key} old: {old} new value: {value}")
+            logger.debug(f"key: {key} old: {old} new value: {value}")
             # Nope, we're changing to a different yuid!
             # keep all keys assigned to old_yuid assigned to new_yuid
             all_vals = self.conn.smembers(old)
-            print(f"all vals: {all_vals}")
+            logger.debug(f"all vals: {all_vals}")
             for av in all_vals:
                 # print(f"Resetting {av} from {old} -> {ivalue} due to {key}")
                 self.conn.set(av, ivalue)
@@ -312,7 +311,7 @@ class IdMap(RedisCache):
                 # delete old yuid
                 self.conn.delete(old)
             else:
-                print(f"Requested members for {old} and got [] ???")
+                logger.error(f"Requested members for {old} and got [] ???")
 
         self._add(value, key)
         return self.conn.set(ikey, ivalue)
@@ -348,7 +347,7 @@ class IdMap(RedisCache):
         elif t == 'set':
             raise ValueError(f"{key} is a YUID ({t}) and cannot be manually deleted")
         else:
-            print(f"Got {t} as type of key in idmap?")
+            logger.error(f"Got {t} as type of key in idmap?")
         return None
 
 

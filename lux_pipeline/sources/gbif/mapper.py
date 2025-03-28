@@ -2,6 +2,7 @@
 from lux_pipeline.process.base.mapper import Mapper
 from cromulent import model, vocab
 
+
 class GbifMapper(Mapper):
 
     def __init__(self, config):

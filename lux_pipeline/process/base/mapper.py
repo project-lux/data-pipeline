@@ -7,6 +7,9 @@ from lxml import etree
 from lux_pipeline.process.utils.mapper_utils import make_datetime
 from lux_pipeline.process.utils.xpath_ops import process_operation
 
+import logging
+logger = logging.getLogger("lux_pipeline")
+
 model.ExternalResource._write_override = None
 # monkey patch in members_exemplified_by for Set and Group
 mebInfo = model.PropInfo("members_exemplified_by", "la:members_exemplified_by", model.CRMEntity, "", None, 1, 1)
@@ -160,27 +163,25 @@ class Mapper(object):
                                 yuid = None
                             if not yuid:
                                 if idmap_has_data:
-                                    # print(f"Failed to find record for equivalent: {qua}")
-                                    pass
+                                    logger.debug(f"XPath fixes failed to find record for equivalent: {qua}")
                             else:
                                 yuids.append(yuid)
                         if len(set(yuids)) != 1:
                             if idmap_has_data:
-                                # print(f"Failed to find single YUID for {qua}: {yuids}")
-                                pass
+                                logger.debug(f"XPath fixes failed to find single YUID for {qua}: {yuids}")
                         else:
                             ident = yuids[0][-36:]
 
                     if not ident and idmap_has_data:
-                        # print(f"{self.name} xpath fix has no identifier or equivalent: {f}")
+                        logger.debug(f"{self.name} xpath fix has no identifier or equivalent: {f}")
                         continue
                     if not f["path"]:
-                        print(f"{self.name} xpath fix has no xpath: {f}")
+                        logger.debug(f"{self.name} xpath fix has no xpath: {f}")
                         continue
                     try:
                         eg.xpath(f["path"])
                     except:
-                        print(f"{self.name} xpath is not parsable: {f}")
+                        logger.debug(f"{self.name} xpath is not parsable: {f}")
                         continue
                     try:
                         self.xpath_fixes[ident].append(f)
@@ -299,7 +300,7 @@ class Mapper(object):
             uri = self.configs.canonicalize(node["id"])
             if uri != node["id"]:
                 if not uri:
-                    # print(f"Unsetting bad node id: {node['id']} in {topid}")
+                    logger.debug(f"Unsetting bad node id: {node['id']} in {topid}")
                     del node["id"]
                 else:
                     node["id"] = uri
@@ -336,7 +337,7 @@ class Mapper(object):
                 if "id" in data:
                     self._walk_fix_links(data, data["id"])
                 else:
-                    print(f"Found record without a URI?? {data}")
+                    logger.error(f"Found record without a URI?? {data}")
         return record
 
     def break_cycles(self, record, xformtype):
@@ -362,7 +363,7 @@ class Mapper(object):
                 for remove in self.cycle_breaks[qrecid]:
                     for p in record["data"][prop][:]:
                         if "id" in p and p["id"] == remove:
-                            print(f"Broke a cycle: {p} from {recid}")
+                            logger.debug(f"Broke a cycle: {p} from {recid}")
                             record["data"][prop].remove(p)
                             break
                 if not record["data"][prop]:
@@ -381,7 +382,7 @@ class Mapper(object):
             diffs = self.global_reconciler.reconcile(recid, "diffs")
             for d in diffs:
                 if d in hsh:
-                    print(f"Removed a different from: {d} from {recid}")
+                    logger.debug(f"Removed a different from: {d} from {recid}")
                     record["data"]["equivalent"].remove(hsh[d])
         return record
 
@@ -411,16 +412,16 @@ class Mapper(object):
     def post_mapping(self, record, xformtype=None):
         record = self.fix_links(record)
         if record is None and self.debug:
-            print(f"fix_links killed record")
+            logger.warning(f"fix_links killed record")
         record = self.break_cycles(record, xformtype)
         if record is None and self.debug:
-            print(f"break_cycles killed record")
+            logger.warning(f"break_cycles killed record")
         record = self.trash_different_from(record)
         if record is None and self.debug:
-            print(f"trash_different killed record")
+            logger.warning(f"trash_different killed record")
         record = self.process_xpath_fixes(record)
         if record is None:
-            print(f"xpath_fixes trashed the record :(")
+            logger.warning(f"xpath_fixes trashed the record :(")
         return record
 
     def post_reconcile(self, record):

@@ -1,10 +1,8 @@
 from lux_pipeline.process.base.mapper import Mapper
 from cromulent import model, vocab
 from lxml import etree
-
-#<rdf:RDF>
-#  <gn:Feature>
-#    <properties here>
+import logging
+logger = logging.getLogger("lux_pipeline")
 
 class GnMapper(Mapper):
 
@@ -23,7 +21,6 @@ class GnMapper(Mapper):
 
     def transform(self, record, rectype, reference=False):
         if rectype != "Place":
-            # print(f"GeoNames asked for a non-Place: {rectype}; nothing to do")
             return None
         try:
             xml = record['data']['value']
@@ -38,7 +35,7 @@ class GnMapper(Mapper):
         try:
             dom = etree.XML(xml.encode('utf-8'))
         except:
-            # print(f"Broken XML in geonames {record['identifier']}")
+            logger.debug(f"Broken XML in geonames {record['identifier']}")
             return None
         nss = self.namespaces
         feature = dom.xpath('/rdf:RDF/gn:Feature', namespaces=nss)[0] # if doesn't exist, v broken
@@ -96,7 +93,7 @@ class GnMapper(Mapper):
                 # random aname
                 name = anames.values()[0][0]
             else:
-                print(f"No name found for {ident}")
+                pass
 
         top = model.Place(ident=ident,label=name)
 

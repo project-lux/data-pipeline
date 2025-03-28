@@ -5,7 +5,8 @@ import time
 import datetime
 import sys
 import threading
-
+import logging
+logger = logging.getLogger("lux_pipeline")
 #
 # How to index into JSONB arrays:
 # SELECT identifier FROM ycba_record_cache, 
@@ -99,7 +100,7 @@ class PooledCache(object):
             res = cursor.fetchone()
             if res is None:
                 # No such table, build it.
-                print(f"Making cache table {self.name}")
+                logger.warning(f"Making cache table {self.name}")
                 self._make_table()
 
     def shutdown(self):
@@ -165,7 +166,7 @@ class PooledCache(object):
                 cursor.execute(idxQry)
                 self.conn.commit()
             except Exception as e:
-                print(f"Make table failed: {e}")
+                logger.error(f"Make table failed: {e}")
                 self.conn.rollback()
 
     def len(self):
@@ -180,7 +181,7 @@ class PooledCache(object):
         if _key_type is None:
             _key_type = self.key
         if _key_type == 'yuid' and len(key) != 36:
-            print(f"{self.name} has UUIDs as keys")
+            logger.error(f"{self.name} has UUIDs as keys")
             return None
         if not field in ["insert_time", "record_time", "refresh_time", "valid", "change"]:
             raise ValueError(f"Unknown metadata field in cache: {field}")
@@ -195,7 +196,7 @@ class PooledCache(object):
         if _key_type is None:
             _key_type = self.key
         if _key_type == 'yuid' and len(key) != 36:
-            print(f"{self.name} has UUIDs as keys")
+            logger.error(f"{self.name} has UUIDs as keys")
             return None
         if not field in ["record_time", "refresh_time", "valid", "change"]:
             raise ValueError(f"Attempt to set unsettable metadata field in cache: {field}")        
@@ -223,7 +224,7 @@ class PooledCache(object):
                 cursor.execute(qry)
                 res = cursor.fetchone()        
             except:
-                # print(f"Called len_estimate, didn't get any hits, rolling back")
+                # logger.debug(f"Called len_estimate, didn't get any hits, rolling back")
                 self.conn.rollback()
                 res = {'count':0}
         return int(res['count'])
@@ -233,7 +234,7 @@ class PooledCache(object):
         if _key_type is None:
             _key_type = self.key
         if _key_type == 'yuid' and len(key) != 36:
-            print(f"{self.name} has UUIDs as keys")
+            logger.error(f"{self.name} has UUIDs as keys")
             return None
 
         qry = f"SELECT * FROM {self.name} WHERE {_key_type} = %s"
@@ -251,7 +252,7 @@ class PooledCache(object):
         if _key_type is None:
             _key_type = self.key
         if _key_type == 'yuid' and len(key) != 36:
-            print(f"{self.name} has UUIDs as keys")
+            logger.error(f"{self.name} has UUIDs as keys")
             return None
 
         # ORDER BY here is in case we have multiple copies from different times
@@ -406,8 +407,8 @@ class PooledCache(object):
                     self.conn.commit()
                 except Exception as e:
                     # Could be a psycopg2.errors.UniqueViolation if we're trying to insert without delete
-                    print(f"DATA: {data}")
-                    print(f"Failed to upsert!: {e}?\n{qpstr} = {qvs}")
+                    logger.critical(f"DATA: {data}")
+                    logger.critical(f"Failed to upsert!: {e}?\n{qpstr} = {qvs}")
                     self.conn.rollback()                
             else:
                 try:
@@ -416,7 +417,7 @@ class PooledCache(object):
                     self.conn.commit()
                 except Exception as e:
                     # Could be a psycopg2.errors.UniqueViolation if we're trying to insert without delete
-                    print(f"Duplicate key for {identifier}/{yuid} in {self.name}: {e}?")
+                    logger.critical(f"Duplicate key for {identifier}/{yuid} in {self.name}: {e}?")
                     self.conn.rollback()                
         # sys.stdout.write('S');sys.stdout.flush()
 
@@ -542,7 +543,7 @@ class PooledCache(object):
     def __bool__(self):
         # Don't let it go through to len
         # and warn that the code shouldn't do this
-        print(f"*** code somewhere is asking for a cache as a boolean value and shouldn't ***")
+        logger.critical(f"*** code somewhere is asking for a cache as a boolean value and shouldn't ***")
         return True
 
 

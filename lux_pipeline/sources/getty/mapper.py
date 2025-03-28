@@ -2,7 +2,8 @@ from cromulent import model, vocab
 from lux_pipeline.process.base.mapper import Mapper
 from lux_pipeline.process.utils.mapper_utils import make_datetime, test_birth_death
 import datetime
-
+import logging
+logger = logging.getLogger("lux_pipeline")
 
 class GettyMapper(Mapper):
     # Core functions
@@ -59,7 +60,7 @@ class GettyMapper(Mapper):
                 elif c["id"].startswith("http://vocab.getty.edu/term/POS/"):
                     pass
                 else:
-                    print(f"Unknown name type: {c['id']}")
+                    logger.debug(f"Unknown name type: {c['id']}")
 
         nm = nmcls(content=js["content"])
         if "language" in js:
@@ -81,7 +82,7 @@ class GettyMapper(Mapper):
                     # Actually just drop it on the floor if it's a lang we don't map
                     return None
             except:
-                print(ll)
+                logger.debug(f"Getty name language saw ll: {ll}")
                 return None
         return nm
 
@@ -107,9 +108,9 @@ class GettyMapper(Mapper):
                     elif code in self.ignore_statements:
                         continue
                     else:
-                        print(f"Unknown statement type: {code}")
+                        logger.debug(f"Getty mapper saw unknown statement type: {code}")
         if st == None:
-            print(f"Classified: {js.get('classified_as', None)}")
+            logger.debug(f"Getty mapper saw classified: {js.get('classified_as', None)}")
             st = vocab.Note(content=js["content"])
         if "language" in js:
             lang = js["language"][0]["_label"]
@@ -125,7 +126,7 @@ class GettyMapper(Mapper):
                 if ll in self.process_langs:
                     st.language = self.process_langs[ll]
             except:
-                print(f"language on statement: {ll}")
+                logger.debug(f"Getty mapper saw language on statement: {ll}")
         return st
 
     def fix_getty_timestamp(self, value, which=None):
@@ -134,7 +135,7 @@ class GettyMapper(Mapper):
             try:
                 b, e = make_datetime(value)
             except:
-                print(f"Got unfixable datestamp: {value}")
+                logger.debug(f"Getty mapper got unfixable datestamp: {value}")
                 return ""
             if which and which.startswith("end_"):
                 value = e
@@ -199,11 +200,11 @@ class GettyMapper(Mapper):
                     top._label = top.identified_by[0].content
             else:
                 # Didn't find any names?
-                print(f"Found no names for {rec['id']}")
+                logger.debug(f"Getty mapper found no names for {rec['id']}")
                 return None
         else:
             # We're pretty broken
-            print(f"Found no names in {rec['id']}")
+            logger.debug(f"Getty mapper found no names in {rec['id']}")
             return None
 
         mstmts = rec.get("referred_to_by", [])
@@ -356,7 +357,7 @@ class UlanMapper(GettyMapper):
     def guess_type(self, data):
         typ = data.get("type", None)
         if not typ or not typ in ["Person", "Group"]:
-            print(f"Data from {data.get('id', '???')} has no useful type")
+            logger.warning(f"Getty data from {data.get('id', '???')} has no useful type")
             return None
         return getattr(model, data["type"], None)
 
@@ -365,7 +366,7 @@ class UlanMapper(GettyMapper):
         try:
             myid = rec["id"].rsplit("/", 1)[1]
         except:
-            print(rec)
+            logger.error(f"Getty mapper got: {rec}")
             raise
         # get the numeric and reapply to the namespace :(
         myid = f"http://vocab.getty.edu/{self.name}/{myid}"
@@ -408,7 +409,7 @@ class UlanMapper(GettyMapper):
                         elif cx2id == self.role_flag:
                             top.classified_as = vocab.Occupation(ident=cxid, label=cxlbl)
                         else:
-                            print(f"Unknown meta-class: {cx2id} in {myid}")
+                            logger.error(f"Unknown meta-class: {cx2id} in {myid}")
 
         if topcls in [model.Person, model.Group]:
             if "born" in rec:
@@ -466,11 +467,11 @@ class UlanMapper(GettyMapper):
                         active = vocab.Active()
                         if len(cxns) > 1:
                             # FIXME: copy in other types
-                            print("Found more cxns on active")
+                            logger.debug("Getty mapper found more cxns on active")
                         self.do_common_event(act, active)
                         top.carried_out = active
                     else:
-                        print(f"Found non active dates carried_out in ulan:{myid}")
+                        logger.debug(f"Getty mapper found non active dates carried_out in ulan:{myid}")
 
         data = model.factory.toJSON(top)
         return {"identifier": record["identifier"], "data": data, "source": "ulan"}

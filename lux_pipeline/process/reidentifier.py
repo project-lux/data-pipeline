@@ -1,6 +1,7 @@
 import ujson as json
 import os
-
+import logging
+logger = logging.getLogger("lux_pipeline")
 
 class Reidentifier(object):
     def __init__(self, configs, idmap):
@@ -87,7 +88,7 @@ class Reidentifier(object):
                     if myqeq is not None:
                         equiv_map[eq] = myqeq
                     else:
-                        # print(f"{qeq} not in idmap, but in equivs of {recid}")
+                        # logger.debug(f"{qeq} not in idmap, but in equivs of {recid}")
                         # ISNI, FAST, WC Entities etc
                         pass
 
@@ -101,7 +102,7 @@ class Reidentifier(object):
             if not equiv_map:
                 # Don't know anything at all, ask for a new yuid??
                 # This shouldn't happen if previous phases have worked
-                print(f"\n!!! reidentifier couldn't find YUID for {recid} --> {qrecid} / {equivs}")
+                logger.debug(f"\n!!! reidentifier couldn't find YUID for {recid} --> {qrecid} / {equivs}")
                 return result
             else:
                 # We have something from the data
@@ -110,12 +111,12 @@ class Reidentifier(object):
                 if len(uus):
                     # This also shouldn't happen
                     if self.debug:
-                        print(f"Found more than one YUID for {recid} / {equivs}")
+                        logger.debug(f"Found more than one YUID for {recid} / {equivs}")
                 elif not recid in equiv_map:
                     # If recid not in equiv map, then this is a new main id for the same entity
                     # Seems unlikely, but possible
                     if self.debug:
-                        print(f"Found YUID only via equivs, not recid {recid} / {equivs}")
+                        logger.debug(f"Found YUID only via equivs, not recid {recid} / {equivs}")
                     self.idmap[qrecid] = uu
 
             # And set on way out
@@ -124,7 +125,7 @@ class Reidentifier(object):
             if top:
                 all_equivs = self.idmap[uu]
                 if not all_equivs:
-                    print(f"\n!!! Found missing yuid: {uu} from: {recid} / {equivs}")
+                    logger.debug(f"\n!!! Found missing yuid: {uu} from: {recid} / {equivs}")
                     all_equivs = []
                     return result
                 all_equivs = [self.configs.split_qua(x)[0] for x in all_equivs]
@@ -195,13 +196,13 @@ class Reidentifier(object):
         try:
             res = self._reidentify(rec, rectype, top=True)
         except:
-            print(f"Reidentifier Broke processing rec: {recid}")
+            logger.debug(f"Reidentifier Broke processing rec: {recid}")
             raise
 
         try:
             new_id = res["id"]
         except:
-            print(f"Couldn't find YUID for record {recid}")
+            logger.debug(f"Couldn't find YUID for record {recid}")
             return None
         uu = new_id[new_id.rfind("/") + 1 :]
         record2 = {

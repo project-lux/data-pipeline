@@ -1,6 +1,7 @@
 import os
 import sys
-
+import logging
+logger = logging.getLogger("lux_pipeline")
 
 class UpdateManager(object):
     def __init__(self, configs, idmap):
@@ -64,8 +65,8 @@ class UpdateManager(object):
                     storage.set(record["data"], identifier=ident, record_time=changeTime)
                     self.changed.append((record, ident, config))
                 except:
-                    print(f"Failed to process {ident}")
-                    print(f"Got: {record['data']}")
+                    logger.debug(f"Failed to process {ident}")
+                    logger.debug(f"Got: {record['data']}")
 
     def harvest_all(self, store_only=False):
         self.changed = []
@@ -96,7 +97,7 @@ class UpdateManager(object):
         harvester = config["harvester"]
         if harvester.last_harvest[:4] == "0001":
             harvester.last_harvest = storage.latest()
-        print(f"Harvesting until {harvester.last_harvest}")
+        logger.debug(f"Harvesting until {harvester.last_harvest}")
         for change, ident, record, changeTime in harvester.crawl():
             self.process_change(config, change, ident, record, changeTime)
 
@@ -105,11 +106,11 @@ class UpdateManager(object):
         harvester.fetcher.enabled = True
         storage = config["datacache"]
         if storage is None:
-            print(f"No datacache for {config['name']}? Can't harvest")
+            logger.debug(f"No datacache for {config['name']}? Can't harvest")
             return
         fn = os.path.join(self.configs.temp_dir, f"all_{config['name']}_uris.txt")
         if not os.path.exists(fn):
-            print(f"No uri/change list to harvest for {config['name']}. Run get_record_list()")
+            logger.debug(f"No uri/change list to harvest for {config['name']}. Run get_record_list()")
             return
 
         with open(fn, "r") as fh:
@@ -134,7 +135,7 @@ class UpdateManager(object):
                 try:
                     itjs = harvester.fetcher.fetch(ident)
                     if itjs is None:
-                        print(f"Got None for {ident}")
+                        logger.debug(f"Got None for {ident}")
                         continue
                 except:
                     sys.stdout.write("-")
@@ -150,7 +151,7 @@ class UpdateManager(object):
 
         harvester = config["harvester"]
         harvester.last_harvest = until
-        print(f"Gathering all from stream until {until}")
+        logger.debug(f"Gathering all from stream until {until}")
         records = {}
         deleted = {}
         for change, ident, record, changeTime in harvester.crawl(refsonly=True):
@@ -160,7 +161,7 @@ class UpdateManager(object):
             elif ident in records:
                 if change == "delete":
                     # This is a recreate?
-                    print(f"Saw record {ident} at {records[ident]} then got delete at {changeTime}")
+                    logger.debug(f"Saw record {ident} at {records[ident]} then got delete at {changeTime}")
             elif change == "delete":
                 # haven't seen a ref, so most recent is delete
                 deleted[ident] = changeTime

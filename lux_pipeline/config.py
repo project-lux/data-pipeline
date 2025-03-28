@@ -2,7 +2,8 @@ import os
 from .storage.cache.filesystem import FsCache
 import importlib
 import multiprocessing
-
+import logging
+logger = logging.getLogger('lux_pipeline')
 
 def importObject(objectType):
     if not objectType:
@@ -17,10 +18,10 @@ def importObject(objectType):
     try:
         m = importlib.import_module(modName)
     except ModuleNotFoundError as mnfe:
-        print(f"Could not find module {modName}: {mnfe}")
+        logger.critical(f"Could not find module {modName}: {mnfe}")
         raise
     except Exception as e:
-        print(f"Failed to import {modName}: {e}")
+        logger.critical(f"Failed to import {modName}: {e}")
         raise
     try:
         parentClass = getattr(m, className)
@@ -131,8 +132,8 @@ class Config(object):
             self.subconfig_stores[k] = rec
             self.instantiate_config(k)
         else:
-            print(f"Unknown config type: {rec['type']} in {k}")
-            print(rec)
+            logger.critical(f"Unknown config type: {rec['type']} in {k}")
+            logger.critical(rec)
 
     def process_base(self, rec):
         vcls = None
@@ -195,7 +196,7 @@ class Config(object):
             identifier = identifier.replace(".html", "")
 
         if not "mapper" in source:
-            print(f"Could not fix identifier {identifier} from {source} as no mapper")
+            logger.error(f"Could not fix identifier {identifier} from {source} as no mapper")
         elif source["mapper"]:
             identifier = source["mapper"].fix_identifier(identifier)
         return identifier
@@ -229,7 +230,7 @@ class Config(object):
             try:
                 identifier = uri.rsplit(m, 1)[1]
             except:
-                print(f"Failed in split_uri() m: {m} source: {s['name']}")
+                logger.error(f"Failed in split_uri() m: {m} source: {s['name']}")
                 return None
             if identifier.startswith("http://") or identifier.startswith("https://"):
                 # Urgh, fix double wrapping
@@ -256,7 +257,7 @@ class Config(object):
             # Trash them
             # print(f" No split, no match: {uri}")
             return None
-        # print(f" Canon: {uri} -> {source['namespace']}{identifier}")
+        #(f" Canon: {uri} -> {source['namespace']}{identifier}")
         return f"{source['namespace']}{identifier}"
 
     def merge_configs(self, base, overlay):
@@ -410,7 +411,7 @@ class Config(object):
             else:
                 cfg["downloader"] = None
         except Exception as e:
-            print(f"Failed to build configuration for {cfg['name']}")
+            logger.critical(f"Failed to build configuration for {cfg['name']}")
             raise
 
         return cfg
@@ -556,7 +557,7 @@ class Config(object):
             else:
                 cfg["tester"] = None
         except Exception as e:
-            print(f"Failed to build component for {cfg['name']}")
+            logger.critical(f"Failed to build component for {cfg['name']}")
             raise
 
         return cfg

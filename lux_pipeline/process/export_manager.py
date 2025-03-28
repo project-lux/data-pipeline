@@ -99,7 +99,7 @@ class ExportManager(TaskUiManager):
                             try:
                                 rec2 = mapper.transform(rec, rec["data"]["type"])
                             except Exception as e:
-                                print(f"{yuid} errored in marklogic mapper: {e}")
+                                self.log(logging.ERROR, f"{yuid} errored in marklogic mapper: {e}")
                                 continue
                             if export_cache is not None:
                                 export_cache[yuid] = rec2

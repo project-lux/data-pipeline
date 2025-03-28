@@ -10,7 +10,7 @@ import zipfile
 import tarfile
 import ujson as json
 import logging
-
+logger = logging.getLogger("lux_pipeline")
 try:
     import magic
 except:
@@ -463,7 +463,7 @@ class Loader:
         try:
             self.out_cache[identifier] = data
         except Exception as e:
-            print(e)
+            logger.error(e)
             return False
         self.increment_progress_bar(1)
         return True

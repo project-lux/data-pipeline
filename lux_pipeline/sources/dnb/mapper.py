@@ -2,6 +2,8 @@ from lux_pipeline.process.base.mapper import Mapper
 from lux_pipeline.process.utils.mapper_utils import make_datetime, test_birth_death
 from cromulent import model, vocab
 import os
+import logging
+logger = logging.getLogger("lux_pipeline")
 
 ### Documentation
 # https://d-nb.info/standards/elementset/gnd 
@@ -114,8 +116,10 @@ class DnbMapper(Mapper):
                 try:
                     bs,es = doa.split('-')
                 except:
-                    # multiple -s??
-                    print(doa)
+                    # multiple or no -s??
+                    logger.warning(f"DNB period of activity: {doa}")
+                    bs = doa
+                    es = ""
                 try:
                     b,be = make_datetime(bs)
                 except:
@@ -263,9 +267,9 @@ class DnbMapper(Mapper):
                 if gt == "Point":
                     top.defined_by = f"POINT ( {lng} {lat} )"
                 else:
-                    print(f"Got geometry: {gt} in {rec['@id']}")
+                    logger.debug(f"Got DNB geometry: {gt} in {rec['@id']}")
             else:
-                print(f"No geometry in {rec['@id']}")
+                logger.debug(f"No geometry in DNB {rec['@id']}")
 
         if 'associatedCountry' in rec:
             # probably part_of this?
@@ -476,7 +480,7 @@ class DnbMapper(Mapper):
                 try:
                     do.access_point = model.DigitalObject(ident=h)
                 except:
-                    print(f"Failed to build a DigitalObject with URI: {h}")
+                    logger.debug(f"Failed to build a DigitalObject with URI: {h}")
                     continue
                 lo.digitally_carried_by = do
                 top.subject_of = lo
@@ -509,7 +513,7 @@ class DnbMapper(Mapper):
                 try:
                     suri = s['@id']
                 except:
-                    print(f"Non dict / unidentified sameAs in DNB {rec['@id']}: {s}")
+                    logger.debug(f"Non dict / unidentified sameAs in DNB {rec['@id']}: {s}")
                     continue
                 top.equivalent = topcls(ident=suri, label=lbl)
 
@@ -521,7 +525,7 @@ class DnbMapper(Mapper):
         unknowns = []
         for u in unknowns:
             if u in rec:
-                print(f"Found {u}: {rec[u]} in {rec['@id']}")
+                logger.debug(f"Found {u}: {rec[u]} in {rec['@id']}")
 
         #boilerplate/factory/record builder
         data = model.factory.toJSON(top)

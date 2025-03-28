@@ -45,7 +45,6 @@ class BnfXmlMapper(Mapper):
             top = dom.xpath('/rdf:RDF', namespaces=nss)[0]
         except:
             # Likely a redirection record
-            # print(f"No cluster: {xml}")
             return None
         return top
 

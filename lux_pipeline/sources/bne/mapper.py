@@ -1,6 +1,8 @@
 from lux_pipeline.process.base.mapper import Mapper
 from lux_pipeline.process.utils.mapper_utils import make_datetime, test_birth_death
 from cromulent import model, vocab
+import logging
+logger = logging.getLogger("lux_pipeline")
 
 #sparql endpoint: https://datos.bne.es/sparql
 #ontology: https://datos.bne.es/def/index-es.html
@@ -43,7 +45,7 @@ class BneMapper(Mapper):
                     nm.language = lang
                 top.identified_by = nm
             else:
-                print(f"No preflabel in {rec['id']}")
+                logger.error(f"No preflabel in {rec['id']}")
   
         altlbls = rec.get("altLabel",[])
         if type(altlbls) != list:
@@ -99,7 +101,7 @@ class BneMapper(Mapper):
         try:
             rec = record['data']['@graph'][0]
         except:
-            print(f"BNE record {record['identifier']} doesn't have @graph")
+            logger.error(f"BNE record {record['identifier']} doesn't have @graph")
             return None
         if rectype:
             topcls = getattr(model, rectype)
@@ -157,7 +159,7 @@ class BneMapper(Mapper):
         for same in sames:
             if same:
                 if type(same) in [dict, list]:
-                    print(f"Expected string in BNE person same as, got {same}")
+                    logger.warning(f"Expected string in BNE person same-as, got {same}")
                 else:
                     top.equivalent = topcls(ident=same)
 

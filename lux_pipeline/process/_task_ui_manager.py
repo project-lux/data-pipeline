@@ -7,6 +7,14 @@ from lux_pipeline.cli._rich import get_bar_from_layout
 import logging
 import traceback
 
+class TaskLogHandler(logging.Handler):
+    def __init__(self, manager):
+        super().__init__()
+        self.manager = manager
+
+    def emit(self, record):
+        self.manager.log(record.levelno, record.getMessage())
+
 class TaskUiManager:
     """
     """
@@ -27,6 +35,8 @@ class TaskUiManager:
         self.messages = messages
         self.configs = cfgs
         self.my_slice = n
+        logger = logging.getLogger("lux_pipeline")
+        logger.addHandler(TaskLogHandler(self))
         # And do any other initial, non-task specific set up
 
     def update_progress_bar(self, advance=None, total=None, description=None, completed=None):
