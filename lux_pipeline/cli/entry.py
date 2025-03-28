@@ -15,8 +15,10 @@ if '--log' in sys.argv:
     lvl = sys.argv[sys.argv.index('--log')+1]
     lvl = lvl.upper()
     if hasattr(logging, lvl):
+        print(f"Setting log lvl to {lvl}")
         oh.setLevel(getattr(logging, lvl))
 else:
+    print(f"Setting log lvl to default ERROR")
     oh.setLevel(logging.ERROR)
 logger.addHandler(oh)
 
@@ -88,7 +90,9 @@ def main():
     multiprocessing.set_start_method("spawn")
 
     if args.log:
-        logger.setLevel(args.log.upper())
+        oh2 = logging.StreamHandler(stream=sys.stdout)
+        oh2.setLevel(args.log.upper())
+
 
     try:
         result = mod.handle_command(cfgs, args, rest)

@@ -29,6 +29,11 @@ def handle_command(cfgs, args, rest):
             cfg = cfgs.external[s]
         elif s in cfgs.results:
             cfg = cfgs.results[s]
+        elif s in ['all_refs', 'done_refs', 'networkmap']:
+            refs = cfgs.instantiate_map(s)["store"]
+            print(f"Clearing map {s}")
+            refs.clear()
+            continue
         else:
             # uhh...
             print(f"Could not find cache to clear: {s}")

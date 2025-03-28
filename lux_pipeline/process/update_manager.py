@@ -138,12 +138,12 @@ class UpdateManager(object):
                         logger.debug(f"Got None for {ident}")
                         continue
                 except:
-                    sys.stdout.write("-")
-                    sys.stdout.flush()
+                    #sys.stdout.write("-")
+                    #sys.stdout.flush()
                     continue
                 storage[ident] = itjs
-                sys.stdout.write(".")
-                sys.stdout.flush()
+                #sys.stdout.write(".")
+                #sys.stdout.flush()
 
     def get_record_list(self, config, until="0001-01-01T00:00:00"):
         # build the set of records that should be in the cache

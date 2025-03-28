@@ -101,7 +101,7 @@ class BneMapper(Mapper):
         try:
             rec = record['data']['@graph'][0]
         except:
-            logger.error(f"BNE record {record['identifier']} doesn't have @graph")
+            logger.debug(f"BNE record {record['identifier']} doesn't have @graph")
             return None
         if rectype:
             topcls = getattr(model, rectype)

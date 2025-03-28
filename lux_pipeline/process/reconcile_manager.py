@@ -69,7 +69,13 @@ class ReconcileManager(TaskUiManager):
         item = True
         done = 0
         while item:
-            item = self.ref_mgr.pop_ref()
+            try:
+                item = self.ref_mgr.pop_ref()
+            except:
+                item = False
+                continue
+            if not item:
+                continue
             done += 1
             if done >= self.total-1:
                 self.total += (self.ref_mgr.get_len_refs() //self.max_workers)
@@ -93,8 +99,9 @@ class ReconcileManager(TaskUiManager):
             if not source["type"] == "external":
                 raise ValueError(f"Got internal reference! {uri}")
             self._handle_record(recid, source, rectype, distance)
-
+        self.log(logging.INFO, f"Writing metatypes in {n}")
         self.ref_mgr.write_metatypes(self.my_slice)
+        return True
 
     def _distributed(self, bars, messages, n):
         super()._distributed(bars, messages, n)
@@ -109,8 +116,8 @@ class ReconcileManager(TaskUiManager):
             elif self.phase == 2:
                 self._pool_reconcile_refs(n)
         except Exception as e:
-            self.log(logging.ERROR, "Caught Exception:")
-            self.log(logging.ERROR, e)
+            self.log(logging.CRITICAL, "Caught Exception:")
+            self.log(logging.CRITICAL, e)
 
     def maybe_add(self, which, cfg):
         # Test if we should add it?

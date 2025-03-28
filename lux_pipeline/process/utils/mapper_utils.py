@@ -8,6 +8,8 @@ from edtf.parser.parser_classes import (
     UncertainOrApproximate as UOA,
     PartialUncertainOrApproximate as PUOA)
 import numpy as np
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 
 import logging
 logger = logging.getLogger("lux_pipeline")
@@ -157,6 +159,7 @@ def test_birth_death(person):
         else:
             return True
 
+    # This can generate a UserWarning
     try:
         start = np.datetime64(b)
         end = np.datetime64(d)
@@ -379,6 +382,8 @@ def make_datetime(value, precision=""):
             if is_bce_date and start[1:].find("-") == 3:
                 start = "-0" + start[1:]
             # need to -1 sec from end
+
+            # This can also generate a UserWarning
             try:
                 enddt = np.datetime64(end)
                 enddt = enddt - np.timedelta64(1, "s")
