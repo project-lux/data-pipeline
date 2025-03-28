@@ -1,15 +1,15 @@
 import os
-from rich import progress
+import logging
+from rich import progress, box
 from rich.layout import Layout
 from rich.live import Live
 from rich.console import Console
 from rich.panel import Panel
-from rich import box
-import logging
 from rich.logging import RichHandler
+from rich.text import Text
+from rich.style import Style
 
-import multiprocessing, logging
-logger = multiprocessing.get_logger()
+logger = logging.getLogger("lux_pipeline")
 
 class ConsolePanel(Console):
     def __init__(self,*args,**kwargs):
@@ -21,6 +21,24 @@ class ConsolePanel(Console):
         for line in texts[-options.height:]:
             yield line
 
+class LuxHandler(RichHandler):
+
+    def render_message(self, record: logging.LogRecord, message: str):
+        #if record.levelname in ["ERROR", "CRITICAL"]:
+        #    message = f":warning: {message}"
+        return super().render_message(record, message)
+
+    def get_level_text(self, record):
+        level_name = record.levelname
+        color = {
+            "DEBUG": "white",
+            "INFO": "green",
+            "WARNING": "yellow",
+            "ERROR": "bright_red",
+            "CRITICAL": "bright_magenta"
+        }
+        level_text = Text(f"[{color[level_name]}]{level_name.ljust(8)}")
+        return level_text
 
 def get_layout(cfgs, max_workers):
 
@@ -51,15 +69,13 @@ def get_layout(cfgs, max_workers):
 
     cp = ConsolePanel()
     layout['log'].update(Panel(cp, title="Log Messages"))
-
-
-    logging.basicConfig(
-        level="INFO",
-        format="%(message)s",
-        datefmt="[%X]",
-        handlers=[RichHandler(console=cp)]
-    )
-    logger.addHandler(RichHandler(console=cp, markup=True, rich_tracebacks=True))
+    if logger.handlers:
+        logger.removeHandler(logger.handlers[0])
+    # markup=False lets [...] be parsed by Text()
+    # show_path=False because 99% of the calls are from _task_ui_manager, which
+    #           receives them from the remote processes and re-logs them
+    handler = LuxHandler(console=cp, show_path=False)
+    logger.addHandler(handler)
 
     layout._lux_bars = bars
     return layout

@@ -5,6 +5,7 @@ from concurrent.futures import ProcessPoolExecutor
 from lux_pipeline.cli.entry import cfgs
 from lux_pipeline.cli._rich import get_bar_from_layout
 import logging
+logger = logging.getLogger("lux_pipeline")
 import traceback
 
 class TaskLogHandler(logging.Handler):
@@ -36,6 +37,8 @@ class TaskUiManager:
         self.configs = cfgs
         self.my_slice = n
         logger = logging.getLogger("lux_pipeline")
+        if logger.handlers:
+            logger.removeHandler(logger.handlers[0])
         logger.addHandler(TaskLogHandler(self))
         # And do any other initial, non-task specific set up
 
@@ -74,7 +77,7 @@ class TaskUiManager:
             self.maybe_add('internal', cfg)
 
     def process(self, layout, disable_ui=False, verbose=None, **args) -> bool:
-        local_configs = self.configs
+        # local_configs = self.configs
         # This is necessary to set to None so it can be pickled to send to
         # remote tasks
         self.configs = None
@@ -93,16 +96,16 @@ class TaskUiManager:
             for b in range(self.max_workers):
                 messages[b] = manager.list([])
 
-            if hasattr(local_configs, 'log_file'):
-                log_fh = open(local_configs.log_file, 'a')
+            if hasattr(cfgs, 'log_file'):
+                log_fh = open(cfgs.log_file, 'a')
             else:
                 fn = "lux_log_command.txt"  # FIXME: replace command with CLI command
-                if hasattr(local_configs, 'log_dir'):
-                    fn = os.path.join(local_configs.log_dir, fn)
+                if hasattr(cfgs, 'log_dir'):
+                    fn = os.path.join(cfgs.log_dir, fn)
                 log_fh = open(fn, 'w')
 
 
-            logging.log(logging.INFO, "[green]Starting...")
+            logger.info("Starting...")
             log_fh.write("----- Starting -----\n")
             futures = []
             with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
@@ -117,7 +120,7 @@ class TaskUiManager:
                         for (k,v) in messages.items():
                             while v:
                                 lvl, msg = v.pop(0)
-                                logging.log(lvl, msg)
+                                logger.log(lvl, msg)
                                 log_fh.write(msg + "\n")
                             log_fh.flush()
                         time.sleep(0.25)
@@ -132,7 +135,7 @@ class TaskUiManager:
                         for (k,v) in messages.items():
                             while v:
                                 lvl, msg = v.pop(0)
-                                logging.log(lvl, msg)
+                                logger.log(lvl, msg)
                                 log_fh.write(msg + "\n")
                             log_fh.flush()
                     time.sleep(5)

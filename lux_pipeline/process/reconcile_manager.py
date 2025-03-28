@@ -4,8 +4,8 @@ import logging
 from ._task_ui_manager import TaskUiManager
 from .reconciler import Reconciler
 from .reference_manager import ReferenceManager
-
 from lux_pipeline.cli.entry import cfgs
+logger = logging.getLogger("lux_pipeline")
 
 class ReconcileManager(TaskUiManager):
     """
@@ -30,7 +30,7 @@ class ReconcileManager(TaskUiManager):
             else:
                 recs = []
         if not recs:
-            self.log(logging.ERROR, f"[red]Failed to acquire any record for {cfg['name']}/{recid} ***")
+            self.log(logging.ERROR, f"Failed to acquire any record for {cfg['name']}/{recid} ***")
         for rec in recs:
             # Reconcile it
             rec2 = self.reconciler.reconcile(rec)
@@ -66,9 +66,14 @@ class ReconcileManager(TaskUiManager):
         self.total = self.ref_mgr.get_len_refs() // self.max_workers
         if not self.disable_ui:
             self.update_progress_bar(description="references", total=self.total)
-        item = 1
+        item = True
+        done = 0
         while item:
             item = self.ref_mgr.pop_ref()
+            done += 1
+            if done >= self.total-1:
+                self.total += (self.ref_mgr.get_len_refs() //self.max_workers)
+                self.update_progress_bar(total=self.total)
             try:
                 (uri, dct) = item
                 distance = dct["dist"]
@@ -88,6 +93,7 @@ class ReconcileManager(TaskUiManager):
             if not source["type"] == "external":
                 raise ValueError(f"Got internal reference! {uri}")
             self._handle_record(recid, source, rectype, distance)
+
         self.ref_mgr.write_metatypes(self.my_slice)
 
     def _distributed(self, bars, messages, n):
@@ -103,7 +109,7 @@ class ReconcileManager(TaskUiManager):
             elif self.phase == 2:
                 self._pool_reconcile_refs(n)
         except Exception as e:
-            self.log(logging.ERROR, "[red]Caught Exception:")
+            self.log(logging.ERROR, "Caught Exception:")
             self.log(logging.ERROR, e)
 
     def maybe_add(self, which, cfg):
@@ -120,10 +126,10 @@ class ReconcileManager(TaskUiManager):
 
         # Now tidy up
         self.idmap = cfgs.get_idmap()
-        ref_mgr = ReferenceManager(self.configs, self.idmap)
-        logging.log(logging.INFO, "[green]Merging metatypes")
+        ref_mgr = ReferenceManager(cfgs, self.idmap)
+        logger.info("Merging metatypes")
         ref_mgr.merge_metatypes()
-        logging.log(logging.INFO, "[green]Writing done refs to file from redis")
+        logger.info("Writing done refs to file from redis")
         ref_mgr.write_done_refs()
-        logging.log(logging.INFO, "[green]Done, ready to merge")
+        logger.info("Done, ready to merge")
 

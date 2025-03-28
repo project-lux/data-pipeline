@@ -43,10 +43,10 @@ class ExportManager(TaskUiManager):
             try:
                 clss = importObject(self.export_type)
             except:
-                self.log(logging.CRITICAL, f"[red]Could not create a mapper for {self.export_type}")
+                self.log(logging.CRITICAL, f"Could not create a mapper for {self.export_type}")
                 return None
         else:
-            self.log(logging.CRITICAL, f"[red]Unknown mapper for: {self.export_type}")
+            self.log(logging.CRITICAL, f"Unknown mapper for: {self.export_type}")
             return None
 
     def _distributed(bars, messages, n):
@@ -68,7 +68,7 @@ class ExportManager(TaskUiManager):
             try:
                 export_cache = self.results[self.out_config]['recordcache']
             except:
-                logging.log(logging.ERROR, f"[red]Could not get a recordcache from {self.out_config}; cannot cache results")
+                logging.log(logging.ERROR, f"Could not get a recordcache from {self.out_config}; cannot cache results")
                 export_cache = None
         else:
             export_cache = None
@@ -78,7 +78,7 @@ class ExportManager(TaskUiManager):
                 fn = mapper.make_export_filename(src['name'], n)
             else:
                 fn = "lux_{src['name']}_{n}.json"
-            self.log(logging.INFO, f"[green]Exporting {fn}")
+            self.log(logging.INFO, f"Exporting {fn}")
             cache = src[self.cache]
             ttl = cache.len_estimate()
             if l < 1000000:
@@ -125,10 +125,10 @@ class ExportManager(TaskUiManager):
                                 js.append(jr)
                             jstr = "\n".join(js)
                         else:
-                            self.log(logging.CRITICAL, f"[red]Expected dict,str, or list of dict/str, but got list of {type(rec2[0])}")
+                            self.log(logging.CRITICAL, f"Expected dict,str, or list of dict/str, but got list of {type(rec2[0])}")
                             continue
                     else:
-                        self.log(logging.CRITICAL, f"[red]Expected dict,str, or list of dict/str, but got {type(rec2[0])}")
+                        self.log(logging.CRITICAL, f"Expected dict,str, or list of dict/str, but got {type(rec2[0])}")
                         continue
                     outh.write(jstr)
                     outh.write("\n")

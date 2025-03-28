@@ -19,7 +19,7 @@ class LoadManager(TaskUiManager):
                 ldr.prepare_load(self, n, self.max_workers, self.load_type)
                 ldr.load(disable_ui=self.disable_ui, verbose=self.verbose, overwrite=self.overwrite)
             except Exception as e:
-                self.log(logging.ERROR, f"[red]Failed to load")
+                self.log(logging.ERROR, f"Failed to load")
                 self.log(logging.ERROR, e)
 
     def maybe_add(self, which, cfg):

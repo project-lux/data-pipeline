@@ -23,13 +23,13 @@ class MergeManager(TaskUiManager):
     def _handle_record(self, recid, cfg, distance=0):
         rec = cfg['recordcache'][recid]
         if not rec:
-            self.log(logging.WARNING, f"[orange]Couldn't find {cfg['name']} / {recid}")
+            self.log(logging.WARNING, f"Couldn't find {cfg['name']} / {recid}")
             return None
         recuri = f"{cfg['namespace']}{recid}"
         qrecid = self.configs.make_qua(recuri, rec['data']['type'])
         yuid = self.idmap[qrecid]
         if not yuid:
-            self.log(logging.ERROR, f"[red]Couldn't find YUID for record {qrecid}")
+            self.log(logging.ERROR, f"Couldn't find YUID for record {qrecid}")
             return None
         yuid = yuid.rsplit('/', 1)[1]
 
@@ -51,7 +51,7 @@ class MergeManager(TaskUiManager):
         try:
             rec3 = self.final_mapper.transform(rec3, rec3['data']['type'])
         except:
-            self.log(logging.CRITICAL, f"[red]Final transform raised exception for {rec2['identifier']}")
+            self.log(logging.CRITICAL, f"Final transform raised exception for {rec2['identifier']}")
             raise
         if rec3 is not None:
             try:
@@ -60,7 +60,7 @@ class MergeManager(TaskUiManager):
                 pass
             self.merged_cache[rec3['yuid']] = rec3
         else:
-            self.log(logging.WARNING, f"[orange]Final transform returned None for {rec2['identifier']}")
+            self.log(logging.WARNING, f"Final transform returned None for {rec2['identifier']}")
         return rec3
 
 
@@ -90,7 +90,7 @@ class MergeManager(TaskUiManager):
         for dist, ext_uri in self.ref_mgr.iter_done_refs(self.my_slice, self.max_workers):
             uri = self.idmap[ext_uri]
             if not uri:
-                self.log(logging.WARNING, f"[orange]No YUID for reference {ext_uri} from done_refs")
+                self.log(logging.WARNING, f"No YUID for reference {ext_uri} from done_refs")
                 continue
 
             # find the best record to start from
@@ -100,7 +100,7 @@ class MergeManager(TaskUiManager):
                 for eq in equivs:
                     if pref in eq:
                         (cfg, recid) = self.configs.split_uri(eq)
-                        if recid in src['recordcache']:
+                        if recid in cfg['recordcache']:
                             rec = self._handle_record(recid, cfg)
                             if rec is not None:
                                 stop = True
@@ -128,7 +128,7 @@ class MergeManager(TaskUiManager):
             elif self.phase == 2:
                 self._pool_merge_refs(n)
         except Exception as e:
-            self.log(logging.CRITICAL, "[red]Caught Exception:")
+            self.log(logging.CRITICAL, "Caught Exception:")
             self.log(logging.CRITICAL, e)
 
     def maybe_add(self, which, cfg):

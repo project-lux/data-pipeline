@@ -21,7 +21,7 @@ class DownloadManager(TaskUiManager):
                 ldr.prepare_download(self, n, self.max_workers)
                 ldr.download(url, disable_ui=self.disable_ui, verbose=self.verbose)
             except Exception as e:
-                self.log(logging.ERROR, "[red]Caught Exception:")
+                self.log(logging.ERROR, "Caught Exception:")
                 self.log(logging.ERROR, e)
 
     def maybe_add(self, which, cfg):
