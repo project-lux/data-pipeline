@@ -69,7 +69,6 @@ class MlMapper(Mapper):
         non_global_excludes = [idmap[x][-36:] for x in non_global_externals if x in idmap]
         self.ref_ctr_excludes.update(set(non_global_excludes))
 
-
     def _walk_node_ref(self, node, refs, all_refs, top=False, ignore=False):
         if (
             not top

@@ -1,5 +1,5 @@
 from argparse import ArgumentParser
-from ..process.reconcile_manager import ReconcileManager
+from ..process.merge_manager import MergeManager
 from ._rich import Live, get_layout
 
 def handle_command(cfgs, args, rest):
@@ -19,15 +19,15 @@ def handle_command(cfgs, args, rest):
     else:
         sources = args.source.split(',')
 
-    rm = ReconcileManager(cfgs, wks)
+    mm = MergeManager(cfgs, wks)
     for s in sources:
-        rm.prepare_single(s)
+        mm.prepare_single(s)
 
     if args.no_ui:
         layout = None
-        rm.process(layout, disable_ui=args.no_ui, verbose=args.verbose, no_refs=args.no_refs)
+        mm.process(layout, disable_ui=args.no_ui, verbose=args.verbose, no_refs=args.no_refs)
     else:
         layout = get_layout(cfgs, wks)
         with Live(layout, screen=False, refresh_per_second=4) as live:
             # And calling this will manage the multiprocessing
-            rm.process(layout, disable_ui=args.no_ui, verbose=args.verbose, no_refs=args.no_refs)
+            mm.process(layout, disable_ui=args.no_ui, verbose=args.verbose, no_refs=args.no_refs)

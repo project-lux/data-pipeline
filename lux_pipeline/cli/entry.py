@@ -4,6 +4,7 @@ from argparse import ArgumentParser
 from dotenv import load_dotenv, find_dotenv
 import importlib
 from ..config import Config
+import multiprocessing
 
 fn = find_dotenv(usecwd=True)
 if fn:
@@ -63,6 +64,10 @@ def main():
         else:
             print(f"Failed to import command {args.command}:\n{e}")
             sys.exit(0)
+
+    # Ensure that we're using spawn and not relying on fork
+    # fork is only available in posix, not windows or other environments
+    multiprocessing.set_start_method("spawn")
 
     try:
         result = mod.handle_command(cfgs, args, rest)

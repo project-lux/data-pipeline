@@ -193,6 +193,9 @@ class Mapper(object):
             r"(early|mid|late)?\s*(\d{1,2})(?:st|nd|rd|th) century\s*-\s*(early|mid|late)?\s*(\d{1,2})(?:st|nd|rd|th) century",
             re.IGNORECASE)
 
+    def make_export_filename(self, name, my_slice):
+        return f"export_{name}_{my_slice}.jsonl"
+
     def process_period_record(self, record):
         # Add AAT classification
         record.setdefault("classified_as", []).append({

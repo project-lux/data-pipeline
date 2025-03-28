@@ -212,6 +212,7 @@ class IdMap(RedisCache):
         self.memory_cache_enabled = True
     def disable_memory_cache(self):
         self.memory_cache_enabled = False
+        self.memory_cache = {}
 
     def mint(self, key, slug, typ=""):
         if typ in self.configs.ok_record_types:
@@ -273,6 +274,11 @@ class IdMap(RedisCache):
 
     def set(self, key, value, typ=""):
 
+        if self.memory_cache_enabled:
+            # This shouldn't happen...
+            logging.log(logging.ERROR, "Idmap tried to set a value while memory cache was enabled; disabling")
+            self.disable_memory_cache()
+
         if typ in self.configs.ok_record_types:
             key = self.configs.make_qua(key, typ)
         elif typ:
@@ -286,9 +292,6 @@ class IdMap(RedisCache):
             raise ValueError(f"Unknown YUID {value}")
         ikey = self._manage_key_in(key)
         ivalue = self._manage_value_in(value)
-
-        if self.memory_cache_enabled and ikey.startswith('aat:'):
-            self.memory_cache[ikey] = value
 
         if self.conn.exists(ikey):
             # Could be just setting to the same value

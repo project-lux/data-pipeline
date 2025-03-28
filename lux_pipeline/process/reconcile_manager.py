@@ -42,18 +42,13 @@ class ReconcileManager(TaskUiManager):
 
     def _pool_reconcile_records(self, n):
         # Configure ourselves from global configs and CLI args
-        cfgs = self.configs
-        idmap = cfgs.get_idmap()
-        networkmap = cfgs.instantiate_map("networkmap")["store"]
-        self.reconciler = Reconciler(cfgs, idmap, networkmap)
-        self.ref_mgr = ReferenceManager(cfgs, idmap)
-        self.my_slice = n
-
+        networkmap = self.configs.instantiate_map("networkmap")["store"]
+        self.reconciler = Reconciler(self.configs, self.idmap, networkmap)
         self.log(logging.INFO, f"Starting records in {n}")
 
         # Now're we're set up again, do reconcilation as slice n out of self.max_workers
         for (which, name, recids) in self.sources:
-            cfg = getattr(cfgs, which)[name]
+            cfg = getattr(self.configs, which)[name]
             if not recids:
                 in_db = cfg["datacache"]
                 if n > -1:
@@ -71,11 +66,8 @@ class ReconcileManager(TaskUiManager):
                 self._handle_record(recid, cfg)
 
     def _pool_reconcile_refs(self, n):
-        cfgs = self.configs
-        idmap = cfgs.get_idmap()
-        self.ref_mgr = ReferenceManager(cfgs, idmap)
-        self.my_slice = n
 
+        self.log(logging.INFO, f"Starting references in {n}")
         self.total = self.ref_mgr.get_len_refs() // self.max_workers
         if not self.disable_ui:
             self.update_progress_bar(description="references", total=self.total)
@@ -91,15 +83,15 @@ class ReconcileManager(TaskUiManager):
                 maptype = dct["type"]
             except:
                 continue
-            if distance > cfgs.max_distance:
+            if distance > self.configs.max_distance:
                 continue
             self.ref_mgr.did_ref(uri, distance)
             if cfgs.is_qua(uri):
-                uri, rectype = cfgs.split_qua(uri)
+                uri, rectype = self.configs.split_qua(uri)
             else:
                 raise ValueError(f"No qua in referenced {uri} and needed")
             try:
-                (source, recid) = cfgs.split_uri(uri)
+                (source, recid) = self.configs.split_uri(uri)
             except:
                 continue
             if not source["type"] == "external":
@@ -109,6 +101,9 @@ class ReconcileManager(TaskUiManager):
 
     def _distributed(self, bars, messages, n):
         super()._distributed(bars, messages, n)
+        self.idmap = self.configs.get_idmap()
+        self.ref_mgr = ReferenceManager(self.configs, self.idmap)
+
         try:
             if self.phase == 1:
                 self._pool_reconcile_records(n)
