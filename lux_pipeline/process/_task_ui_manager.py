@@ -7,6 +7,8 @@ from lux_pipeline.cli._rich import get_bar_from_layout
 import logging
 logger = logging.getLogger("lux_pipeline")
 import traceback
+import os
+
 
 class TaskLogHandler(logging.Handler):
     def __init__(self, manager):

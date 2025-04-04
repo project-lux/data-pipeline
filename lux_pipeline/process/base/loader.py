@@ -1,16 +1,15 @@
-
+import re
 import io
 import os
 import requests
 import shutil
 import time
 import gzip
-import bz2
 import zipfile
 import tarfile
 import ujson as json
 import logging
-logger = logging.getLogger("lux_pipeline")
+
 try:
     import magic
 except:
@@ -233,7 +232,7 @@ class Loader:
             mode = "r"
         with tarfile.open(path, mode) as th:
             if self.increment_total and len(remaining) == 1:
-                names = th.namelist()
+                names = th.getnames()
                 self.update_progress_bar(increment_total=len(names))
                 del names
             ti = th.next()
@@ -373,6 +372,7 @@ class Loader:
         return {'identifier': ident, 'data': data}
 
     def make_other(self, path, comp, parent):
+        print(f"path is {path}")
         ident = self.make_identifier(path)
         with self.file_opener(path, comp) as fh:
             data = fh.read()
@@ -393,6 +393,11 @@ class Loader:
             value = value.name
         elif isinstance(value, bytes):
             value = value.decode('utf-8')
+
+        # end of file name is invalid for xml files
+        if isinstance(value, str) and value.endswith(".xml"):
+            return None
+
         try:
             last = value.split('/')[-1]
             return last.split('.')[0]
@@ -411,7 +416,30 @@ class Loader:
 
     def post_process_other(self, data):
         # This is called after discovering the record and before extracting the identifier
-        return data
+        if isinstance(data, bytes):
+            try:
+                data = data.decode("utf-8")
+            except UnicodeDecodeError:
+                data = data.decode("utf-8", errors="replace")
+
+        match = re.search(
+            r'''
+            rdf:about="https?://data\.bnf\.fr/ark:/12148/(?P<bnf>cb\d{9})"(?!"|#) |
+            <mx:controlfield\s+tag="001">(?P<fast>[^<]+)</mx:controlfield>
+            ''',
+            data,
+            re.VERBOSE,
+        )
+
+        if match:
+            ident = match.group("bnf") or match.group("fast")
+            print(f"ident is {ident}")
+
+        result = {"raw": data}
+        if ident:
+            result["id"] = ident
+
+        return result
 
     def should_make_record(self, path):
         if self.max_slice > 1 and self.seen % self.max_slice != self.my_slice:
@@ -463,7 +491,7 @@ class Loader:
         try:
             self.out_cache[identifier] = data
         except Exception as e:
-            logger.error(e)
+            print(e)
             return False
         self.increment_progress_bar(1)
         return True
