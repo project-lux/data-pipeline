@@ -5,10 +5,13 @@ import requests
 import shutil
 import time
 import gzip
+import bz2
 import zipfile
 import tarfile
 import ujson as json
 import logging
+
+logger = logging.getLogger("lux_pipeline")
 
 try:
     import magic
@@ -372,7 +375,6 @@ class Loader:
         return {'identifier': ident, 'data': data}
 
     def make_other(self, path, comp, parent):
-        print(f"path is {path}")
         ident = self.make_identifier(path)
         with self.file_opener(path, comp) as fh:
             data = fh.read()
@@ -433,7 +435,6 @@ class Loader:
 
         if match:
             ident = match.group("bnf") or match.group("fast")
-            print(f"ident is {ident}")
 
         result = {"raw": data}
         if ident:
@@ -491,7 +492,7 @@ class Loader:
         try:
             self.out_cache[identifier] = data
         except Exception as e:
-            print(e)
+            logger.error(e)
             return False
         self.increment_progress_bar(1)
         return True
