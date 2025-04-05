@@ -27,7 +27,10 @@ class WdLoader(WdFetcher, WdConfigManager, Loader):
 
     def filter_line(self, line):
         # Filter out properties
-        return line[:100].find(b'"type":"property",') > 0
+        try:
+            return line[:100].find('"type":"property",') > 0
+        except:
+            return line[:100].find(b'"type":"property",') > 0
 
     def post_process_json(self, js, identifier):
         # Call on Fetcher parent class
