@@ -64,7 +64,10 @@ class WdLoader(WdFetcher, WdConfigManager, Loader):
                 if self.filter_line(l):
                     continue
                 done_x += 1
-                l = l.decode('utf-8').strip()
+                try:
+                    l = l.decode('utf-8').strip()
+                except:
+                    l = l.strip()
                 what = self.get_identifier_raw(l)
                 if l.endswith(','):
                     js = json.loads(l[:-1])
