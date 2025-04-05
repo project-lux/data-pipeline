@@ -27,7 +27,8 @@ def handle_command(cfgs, args, rest):
         layout = None
         rm.process(layout, disable_ui=args.no_ui, verbose=args.verbose, no_refs=args.no_refs)
     else:
-        layout = get_layout(cfgs, wks)
+        layout = get_layout(cfgs, wks, args.log)
+
         with Live(layout, screen=False, refresh_per_second=4) as live:
             # And calling this will manage the multiprocessing
             rm.process(layout, disable_ui=args.no_ui, verbose=args.verbose, no_refs=args.no_refs)

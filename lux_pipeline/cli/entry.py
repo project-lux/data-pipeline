@@ -8,18 +8,18 @@ import multiprocessing
 import logging
 
 logger = logging.getLogger("lux_pipeline")
-oh = logging.StreamHandler(stream=sys.stdout)
+# Send /everything/ to the logger
+logger.setLevel(logging.DEBUG)
 
+oh = logging.StreamHandler(stream=sys.stdout)
 # Trap --log here and set it before instantiate_all, which is before the arg parser
 if '--log' in sys.argv:
     lvl = sys.argv[sys.argv.index('--log')+1]
     lvl = lvl.upper()
     if hasattr(logging, lvl):
-        print(f"Setting log lvl to {lvl}")
         oh.setLevel(getattr(logging, lvl))
 else:
-    print(f"Setting log lvl to default ERROR")
-    oh.setLevel(logging.ERROR)
+    oh.setLevel(logging.INFO)
 logger.addHandler(oh)
 
 fn = find_dotenv(usecwd=True)
@@ -88,11 +88,6 @@ def main():
     # Ensure that we're using spawn and not relying on fork
     # fork is only available in posix, not windows or other environments
     multiprocessing.set_start_method("spawn")
-
-    if args.log:
-        oh2 = logging.StreamHandler(stream=sys.stdout)
-        oh2.setLevel(args.log.upper())
-
 
     try:
         result = mod.handle_command(cfgs, args, rest)

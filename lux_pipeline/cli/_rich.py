@@ -40,7 +40,7 @@ class LuxHandler(RichHandler):
         level_text = Text(f"[{color[level_name]}]{level_name.ljust(8)}")
         return level_text
 
-def get_layout(cfgs, max_workers):
+def get_layout(cfgs, max_workers, log_level):
 
     layout = Layout()
     layout.split_column(
@@ -69,12 +69,18 @@ def get_layout(cfgs, max_workers):
 
     cp = ConsolePanel()
     layout['log'].update(Panel(cp, title="Log Messages"))
-    if logger.handlers:
+    # remove stream handler
+    while logger.handlers:
         logger.removeHandler(logger.handlers[0])
     # markup=False lets [...] be parsed by Text()
     # show_path=False because 99% of the calls are from _task_ui_manager, which
     #           receives them from the remote processes and re-logs them
+
     handler = LuxHandler(console=cp, show_path=False)
+    log_level = log_level.upper()
+    if not log_level or not log_level in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']:
+        log_level = "INFO"
+    handler.setLevel(getattr(logging, log_level))
     logger.addHandler(handler)
 
     layout._lux_bars = bars

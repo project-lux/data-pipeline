@@ -1,7 +1,7 @@
 import os
 import multiprocessing
 import time
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from lux_pipeline.cli.entry import cfgs
 from lux_pipeline.cli._rich import get_bar_from_layout
 import logging
@@ -76,6 +76,10 @@ class TaskUiManager:
         for cfg in self.configs.internal.values():
             self.maybe_add('internal', cfg)
 
+
+    def process_single(self, layout, disable_ui=False, verbose=None, **args):
+
+
     def process(self, layout, disable_ui=False, verbose=None, **args) -> bool:
         # local_configs = self.configs
         # This is necessary to set to None so it can be pickled to send to
@@ -87,6 +91,10 @@ class TaskUiManager:
             if hasattr(self, a):
                 setattr(self, a, v)
 
+        if self.max_workers == 1:
+            # Don't make a single thread
+            # instead just attach the logger directly
+
         with multiprocessing.Manager() as manager:
 
             bars = {} # keep track of tasks across Processes
@@ -96,13 +104,14 @@ class TaskUiManager:
             for b in range(self.max_workers):
                 messages[b] = manager.list([])
 
+            # FIXME: This should be a StreamHandler on the logger
             if hasattr(cfgs, 'log_file'):
                 log_fh = open(cfgs.log_file, 'a')
             else:
                 fn = "lux_log_command.txt"  # FIXME: replace command with CLI command
                 if hasattr(cfgs, 'log_dir'):
                     fn = os.path.join(cfgs.log_dir, fn)
-                log_fh = open(fn, 'w')
+                log_fh = open(fn, 'a')
 
 
             logger.info("Starting...")
@@ -124,7 +133,7 @@ class TaskUiManager:
                                 log_fh.write(msg + "\n")
                             log_fh.flush()
                         time.sleep(0.25)
-                for future in futures:
+                for future in as_completed(futures):
                     future.result()
                 if not self.disable_ui:
                     time.sleep(1)
