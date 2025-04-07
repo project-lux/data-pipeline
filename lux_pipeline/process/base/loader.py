@@ -556,6 +556,8 @@ class Loader:
         self.overwrite = overwrite
         self.increment_total = self.total < 0
 
+        print(self.my_files)
+
         self.open_temp_files()
         for info in self.my_files:
             if not disable_ui:

@@ -5,6 +5,8 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from lux_pipeline.cli.entry import cfgs
 from lux_pipeline.cli._rich import get_bar_from_layout
 import logging
+import ray
+
 logger = logging.getLogger("lux_pipeline")
 import traceback
 
