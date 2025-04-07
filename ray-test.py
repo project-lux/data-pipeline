@@ -7,15 +7,20 @@ ray.init(
     logging_config=ray.LoggingConfig(encoding="JSON", log_level="INFO", additional_log_standard_attrs=['name'])
 )
 
-logger = logging.getLogger("test")
+
+def init_logger():
+    return logging.getLogger("foo")
+
+logger = init_logger()
 
 class Process:
 
-    @ray.remote(num_returns="dynamic")
+    @ray.remote
     def squares(self, x):
-        for y in range(random.randint(1, 10)):
-            time.sleep(y/10.0)
-            yield f"Log Message for {x}/{y}"
+        logger = init_logger()
+        for y in range(random.randint(5, 10)):
+            logger.warning(f"Log Message for {x}/{y}")
+            time.sleep(2)
         return x*x
 
     def process(self):
@@ -23,15 +28,15 @@ class Process:
         done = 0
         logger = logging.getLogger("test")
         logger.info("Starting")
-        while done < 10:
+        while futures:
             ready_refs, futures = ray.wait(futures, num_returns=1, timeout=None)
             # ready_refs has one result in it
             res = ray.get(ready_refs[0])
-            for i, ref in enumerate(res):
-                print(ray.get(ref))
-            #print(res)
-            done += 1
-
+            if type(res) == int:
+                print(f"   --> ANSWER: {res}")
+            else:
+                for ref in res:
+                    print(ray.get(ref))
 
 p = Process()
 p.process()
