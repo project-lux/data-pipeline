@@ -26,7 +26,6 @@ class DnbLoader(Loader):
 
 
 class OldDnbLoader:
-
     def __init__(self, config):
         Loader.__init__(self, config)
         d = config['all_configs'].data_dir

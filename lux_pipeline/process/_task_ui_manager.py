@@ -9,6 +9,8 @@ import ray
 
 logger = logging.getLogger("lux_pipeline")
 import traceback
+import os
+
 
 class TaskLogHandler(logging.Handler):
     def __init__(self, manager):
