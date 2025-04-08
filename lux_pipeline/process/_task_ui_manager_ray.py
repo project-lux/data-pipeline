@@ -4,17 +4,19 @@ from lux_pipeline.cli.entry import cfgs
 from lux_pipeline.cli._rich import get_bar_from_layout
 import logging
 import ray
-
-logger = logging.getLogger("lux_pipeline")
 import traceback
 
-class TaskLogHandler(logging.Handler):
+def init_logger():
+    return logging.getLogger("lux_pipeline")
+
+class DriverLogHandler(logging.Handler):
     def __init__(self, manager):
         super().__init__()
         self.manager = manager
 
     def emit(self, record):
-        self.manager.log(record.levelno, record.getMessage())
+        #self.manager.log(record.levelno, record.getMessage())
+        print(f" ||| {record.getMessage()}")
 
 class TaskUiManager:
     """
@@ -34,34 +36,31 @@ class TaskUiManager:
     def _distributed(self,n):
         self.configs = cfgs
         self.my_slice = n
-        #logger = logging.getLogger("lux_pipeline")
-        #if logger.handlers:
-        #    logger.removeHandler(logger.handlers[0])
-        #logger.addHandler(TaskLogHandler(self))
-        # And do any other initial, non-task specific set up
+        self.last_log_time = time.time()
+        self.logger = init_logger()
+        while self.logger.handlers:
+            self.logger.handlers.remove(self.logger.handlers[0])
+        self.bars = {'total': -1, 'completed': 0, 'description': '', 'n': self.my_slice}
 
     def update_progress_bar(self, advance=None, total=None, description=None, completed=None):
         curr = self.bars
-        try:
-            if total is not None:
-                curr['total'] = total
-            if completed is not None:
-                curr['completed'] = completed
-            if description is not None:
-                curr['description'] = description
-            if advance is not None:
-                curr['completed'] = curr['completed'] + advance
-        except:
-            # no bars
-            pass
+        if total is not None:
+            curr['total'] = total
+        if completed is not None:
+            curr['completed'] = completed
+        if description is not None:
+            curr['description'] = description
+        if advance is not None:
+            curr['completed'] = curr['completed'] + advance
+
+        if time.time() > self.last_log_time + 1:
+            self.last_log_time = time.time()
+            self.logger.info(curr)
 
     def log(self, level, message):
         if isinstance(message, Exception):
             message = "".join(traceback.format_exception(type(message), message, message.__traceback__))
-        #self.messages.append((level, message))
-        #print(message)
-        logger = logging.getLogger("lux_pipeline")
-        logger.log(level, message)
+        self.logger.log(level, message)
 
     def maybe_add(self, which, cfg):
         # SubClasses should re-define this to actually test
@@ -91,6 +90,11 @@ class TaskUiManager:
             if hasattr(self, a):
                 setattr(self, a, v)
 
+        logger = init_logger()
+        while logger.handlers:
+            logger.removeHandler(logger.handlers[0])
+        logger.addHandler(DriverLogHandler(self))
+
         if self.max_workers == 1:
             # Just do it in our main process
             pass
@@ -99,11 +103,21 @@ class TaskUiManager:
             print("Sending tasks")
             for n in range(self.max_workers):
                 futures.append(self._distributed.remote(self, n))
-            done = 0
-            while done < self.max_workers:
+            while futures:
                 ready_refs, futures = ray.wait(futures, num_returns=1, timeout=None)
                 # ready_refs has one result in it
                 res = ray.get(ready_refs)
-                done += 1
+                for ref in res:
+                    if type(ref) == int:
+                        print("got int")
+                    else:
+                        txt = ray.get(ref)
+                        print(f"Got txt from remote: {txt}")
+                        n = txt['n']
+                        del txt['n']
+                        logger.info(txt)
+                        bar = get_bar_from_layout(layout, n)
+                        bar[0].update(bar[1], **txt)
+
             print("Done")
 
