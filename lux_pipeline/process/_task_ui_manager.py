@@ -10,6 +10,26 @@ import ray
 logger = logging.getLogger("lux_pipeline")
 import traceback
 
+
+@ray.remote
+class LoggingActor:
+    def __init__(self):
+        self.logs = {}
+    def add_to_log(self, which, txt):
+        try:
+            self.logs[which].append(txt)
+        except:
+            self.logs[which] = [txt]
+    def get_log(self, which):
+        try:
+            l = self.logs[which]
+            self.logs[which] = []
+            return l
+        except:
+            self.logs[which] = []
+            return []
+
+
 class TaskLogHandler(logging.Handler):
     def __init__(self, manager):
         super().__init__()
@@ -18,9 +38,9 @@ class TaskLogHandler(logging.Handler):
     def emit(self, record):
         self.manager.log(record.levelno, record.getMessage())
 
+
+
 class TaskUiManager:
-    """
-    """
     def __init__(self, configs, max_workers: int = 0):
         self.configs = configs
         self.verbose = False
@@ -77,10 +97,6 @@ class TaskUiManager:
             self.maybe_add('external', cfg)
         for cfg in self.configs.internal.values():
             self.maybe_add('internal', cfg)
-
-
-    def process_single(self, layout, disable_ui=False, verbose=None, **args):
-
 
     def process(self, layout, disable_ui=False, verbose=None, **args) -> bool:
         # local_configs = self.configs

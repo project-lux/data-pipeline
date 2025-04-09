@@ -13,13 +13,13 @@ class LoadManager(TaskUiManager):
         self.load_type = "records"
 
     @ray.remote
-    def _distributed(self, n):
-        super()._distributed(n)
+    def _distributed(self, n, actor):
+        super()._distributed(n, actor)
         for (which, src) in self.sources:
             ldr = getattr(self.configs, which)[src]['loader']
             try:
                 ldr.prepare_load(self, n, self.max_workers, self.load_type)
-                ldr.load(disable_ui=self.disable_ui, verbose=self.verbose, overwrite=self.overwrite)
+                ldr.load(disable_ui=self.disable_ui, overwrite=self.overwrite)
             except Exception as e:
                 print(f"Failed to load")
                 raise

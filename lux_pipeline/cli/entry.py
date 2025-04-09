@@ -90,7 +90,7 @@ def main():
     # Ensure that we're using spawn and not relying on fork
     # fork is only available in posix, not windows or other environments
     multiprocessing.set_start_method("spawn")
-    ray.init(logging_config=ray.LoggingConfig(encoding="JSON", log_level="INFO", additional_log_standard_attrs=['name']))
+    ray.init(log_to_driver=False)
 
     try:
         result = mod.handle_command(cfgs, args, rest)

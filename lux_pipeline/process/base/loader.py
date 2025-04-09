@@ -552,11 +552,9 @@ class Loader:
         self.my_files = files
 
 
-    def load(self, disable_ui=False, verbose=False, overwrite=True):
+    def load(self, disable_ui=False, overwrite=True):
         self.overwrite = overwrite
         self.increment_total = self.total < 0
-
-        print(self.my_files)
 
         self.open_temp_files()
         for info in self.my_files:
