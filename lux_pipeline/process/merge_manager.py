@@ -63,7 +63,6 @@ class MergeManager(TaskUiManager):
             self.log(logging.WARNING, f"Final transform returned None for {rec2['identifier']}")
         return rec3
 
-
     def _pool_merge_records(self, n):
         # Configure ourselves from global configs and CLI args
         self.log(logging.INFO, f"Starting records in {n}")
@@ -109,9 +108,8 @@ class MergeManager(TaskUiManager):
                     break # break pref_order
             # next entry to process
 
-
-    def _distributed(self, bars, messages, n):
-        super()._distributed(bars, messages, n)
+    def _distributed(self, n):
+        super()._distributed(n)
         cfgs = self.configs
         self.idmap = cfgs.get_idmap()
         self.idmap.enable_memory_cache()
@@ -142,4 +140,4 @@ class MergeManager(TaskUiManager):
 
         if not self.no_refs:
             self.phase = 2
-            super().process(layout, **args)
+            self.engine.process(layout)

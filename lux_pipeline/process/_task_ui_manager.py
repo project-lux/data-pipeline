@@ -171,6 +171,14 @@ class MpEngine(ProcessingEngine):
 class RayEngine(ProcessingEngine):
     # Use ray to distribute
 
+    def __init__(self, manager):
+        super().__init__(manager)
+        # Only instantiate the environment once
+        # so call init here, not in process
+        # init spits out a print() message
+        # but without log_to_driver, can't capture it?
+        ray.init(log_to_driver=False)
+
     # Entry point for distributed tasks
     @ray.remote
     def _distributed(self, i, log_actor):
@@ -193,9 +201,8 @@ class RayEngine(ProcessingEngine):
                 self.actor.add_to_log.remote(self.my_slice, level, message)
 
     def process(self, layout):
-        ray.init(log_to_driver=False)
-        log_actor = LoggingActor.remote()
 
+        log_actor = LoggingActor.remote()
         logger.info("Sending tasks")
         futures = [self._distributed.remote(self, i, log_actor) for i in range(self.max_workers)]
         while futures:

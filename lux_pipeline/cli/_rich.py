@@ -1,5 +1,6 @@
 import os
 import logging
+from datetime import datetime
 from rich import progress, box
 from rich.layout import Layout
 from rich.live import Live
@@ -8,6 +9,7 @@ from rich.panel import Panel
 from rich.logging import RichHandler
 from rich.text import Text
 from rich.style import Style
+from rich.table import Table
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -41,6 +43,16 @@ class LuxHandler(RichHandler):
         level_text = Text(f"[{color[level_name]}]{level_name.ljust(8)}")
         return level_text
 
+
+class Header:
+    def __rich__(self) -> Panel:
+        grid = Table.grid(expand=True)
+        grid.add_column(justify="center", ratio=1)
+        grid.add_column(justify="right")
+        grid.add_row("[b]LUX Data Pipeline", datetime.now().ctime())
+        hdr = Panel(grid)
+        return hdr
+
 def get_layout(cfgs, max_workers, log_level):
 
     layout = Layout()
@@ -49,6 +61,9 @@ def get_layout(cfgs, max_workers, log_level):
         Layout(name="progress", minimum_size=18),
         Layout(name="log", minimum_size=8)
     )
+
+    hdr = Header()
+    layout['title'].update(hdr)
 
     l2 = Layout()
     layout['progress'].update(Panel(l2, title="Progress"))

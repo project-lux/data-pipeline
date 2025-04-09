@@ -122,8 +122,8 @@ class ReconcileManager(TaskUiManager):
         self.log(logging.INFO, f"Done with metatypes in {n}")
         return True
 
-    def _distributed(self, bars, messages, n):
-        super()._distributed(bars, messages, n)
+    def _distributed(self,n):
+        super()._distributed(n)
         self.idmap = self.configs.get_idmap()
         self.ref_mgr = ReferenceManager(self.configs, self.idmap)
         networkmap = self.configs.instantiate_map("networkmap")["store"]
@@ -137,6 +137,7 @@ class ReconcileManager(TaskUiManager):
         except Exception as e:
             self.log(logging.CRITICAL, "Caught Exception:")
             self.log(logging.CRITICAL, e)
+        return 1
 
     def maybe_add(self, which, cfg):
         # Test if we should add it?
@@ -150,9 +151,10 @@ class ReconcileManager(TaskUiManager):
 
         if not self.no_refs:
             self.phase = 2
-            super().process(layout, **args)
+            # reuse the existing engine
+            self.engine.process(layout)
 
-        # Now tidy up
+        # Now tidy up in main thread
         logger.info("Back from phase 2")
         self.idmap = cfgs.get_idmap()
         ref_mgr = ReferenceManager(cfgs, self.idmap)

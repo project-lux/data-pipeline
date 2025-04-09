@@ -49,8 +49,8 @@ class ExportManager(TaskUiManager):
             self.log(logging.CRITICAL, f"Unknown mapper for: {self.export_type}")
             return None
 
-    def _distributed(bars, messages, n):
-        super()._distributed(bars, messages, n)
+    def _distributed(self, n):
+        super()._distributed(n)
 
         # for each record in sources, transform according to some mapper
         # and write to a file per slice in exports_dir

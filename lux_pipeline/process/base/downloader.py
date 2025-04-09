@@ -122,7 +122,7 @@ class BaseDownloader:
         self.my_slice = n
         self.max_slice = max_workers
 
-    def download(self, download, disable_ui=False, verbose=False):
+    def download(self, download, disable_ui=False):
         url = download['url']
         path = download['path']
 
