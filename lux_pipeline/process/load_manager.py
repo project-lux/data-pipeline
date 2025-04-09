@@ -1,5 +1,5 @@
 
-from ._task_ui_manager_ray import TaskUiManager
+from ._task_ui_manager import TaskUiManager
 from lux_pipeline.process.base.loader import Loader
 import logging
 import ray
@@ -12,9 +12,8 @@ class LoadManager(TaskUiManager):
         self.overwrite = True
         self.load_type = "records"
 
-    @ray.remote
-    def _distributed(self, n, actor):
-        super()._distributed(n, actor)
+    def _distributed(self, n):
+        super()._distributed(n)
         for (which, src) in self.sources:
             ldr = getattr(self.configs, which)[src]['loader']
             try:

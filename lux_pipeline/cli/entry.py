@@ -51,6 +51,7 @@ def main():
     parser.add_argument("command", type=str, help="Function to execute, see 'lux help' for the list")
     parser.add_argument("--source", type=str, help="Source(s) to download separated by commas, or 'all'")
     parser.add_argument("--max_workers", '--max-workers', type=int, default=0, help="Number of processes to use")
+    parser.add_argument("--engine", type=str, help="mp, ray, or null for which task distribution engine to use")
     parser.add_argument("--no-ui", '--no_ui', action='store_true', help="If set, then disable the user interface")
     parser.add_argument("--verbose", type=str, help="Enable verbose output")
 
@@ -60,6 +61,8 @@ def main():
         args.log = "DEBUG"
     elif not args.log:
         args.log = "INFO"
+    if not args.engine:
+        args.engine = "ray"
 
     if cfgs is None and args.command not in ['initialize', 'testinstall']:
         print("Please use 'lux initialize <base directory>' first to create your installation or lux testinstall to diagnose issues")
@@ -90,7 +93,6 @@ def main():
     # Ensure that we're using spawn and not relying on fork
     # fork is only available in posix, not windows or other environments
     multiprocessing.set_start_method("spawn")
-    ray.init(log_to_driver=False)
 
     try:
         result = mod.handle_command(cfgs, args, rest)
