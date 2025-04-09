@@ -52,6 +52,7 @@ class LoggingActor:
             self.bars[which] = {"completed": -1, "total": -1, "description": ""}
             return self.bars[which]
 
+
 class TaskLogHandler(logging.Handler):
     def __init__(self, manager):
         super().__init__()
@@ -74,6 +75,7 @@ class NullEngine(ProcessingEngine):
     # rely on os/shell level parallelization
     pass
 
+
 class MpEngine(ProcessingEngine):
     # Use multiprocessing to distribute
 
@@ -82,21 +84,33 @@ class MpEngine(ProcessingEngine):
         self.bar = log_details[0]
         self.messages = log_details[1]
         self.my_slice = i
+        self.temp_bar = {'total': -1, 'completed': -1, 'description': ''}
+        self.temp_log = []
         return self.manager._distributed(i)
 
     def maybe_update_progress_bar(self, completed, total, description):
         # Shared memory, so no need to batch and send
         if completed > -1:
-            self.bar['completed'] = completed
+            self.temp_bar['completed'] = completed
         if total > -1:
-            self.bar['total'] = total
+            self.temp_bar['total'] = total
         if description:
-            self.bar['description'] = description
+            self.temp_bar['description'] = description
+        if time.time() > self.last_bar_time + 0.5:
+            self.last_bar_time = time.time()
+            self.bar['completed'] = self.temp_bar['completed']
+            self.bar['total'] = self.temp_bar['total']
+            self.bar['description'] = self.temp_bar['description']
 
 
     def maybe_update_log(self, level, message):
         # Shared memory, so no need to batch
-        self.messages.append((level, message))
+        self.temp_log.append((level, message))
+        if time.time() > self.last_log_time + 0.5:
+            self.messages[:] = []
+            for l in self.temp_log:
+                self.messages.append(l)
+            self.temp_log = []
 
     def process(self, layout):
         cfgs = self.manager.configs
@@ -135,7 +149,7 @@ class MpEngine(ProcessingEngine):
                                 logger.log(lvl, msg)
                                 log_fh.write(msg + "\n")
                             log_fh.flush()
-                        time.sleep(0.25)
+                        time.sleep(0.5)
                 for future in as_completed(futures):
                     future.result()
                 if not self.manager.disable_ui:
@@ -156,7 +170,6 @@ class MpEngine(ProcessingEngine):
 
 class RayEngine(ProcessingEngine):
     # Use ray to distribute
-
 
     # Entry point for distributed tasks
     @ray.remote
