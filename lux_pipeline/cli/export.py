@@ -26,9 +26,9 @@ def handle_command(cfgs, args, rest):
 
     # Here we set up the rich UI
     if args.no_ui:
-        xm.process(None, disable_ui=args.no_ui, verbose=args.verbose, export_type=args.type)
+        xm.process(None, disable_ui=args.no_ui, export_type=args.type)
     else:
-        layout = get_layout(cfgs, wks)
+        layout = get_layout(cfgs, wks, args.log)
         with Live(layout, screen=False, refresh_per_second=4) as live:
             # And calling this will manage the multiprocessing
-            xm.process(layout, disable_ui=args.no_ui, verbose=args.verbose, export_type=args.type)
+            xm.process(layout, disable_ui=args.no_ui, export_type=args.type)

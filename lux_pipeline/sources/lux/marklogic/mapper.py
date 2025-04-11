@@ -10,7 +10,6 @@ import numpy as np
 from bs4 import BeautifulSoup
 import re
 
-from lux_pipeline.cli.entry import cfgs
 
 class MlMapper(Mapper):
     def __init__(self, config):

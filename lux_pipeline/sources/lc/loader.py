@@ -59,7 +59,7 @@ class LcLoader(Loader):
             return uri.rsplit('/', 1)[1]            
 
 
-    def post_process_json(self, js):
+    def post_process_json_old(self, js):
 
         ident = self.get_identifier_json(js)
         # idt = js['@id']

@@ -1,6 +1,7 @@
 import logging
 from ._task_ui_manager import TaskUiManager
 from lux_pipeline.cli._rich import get_bar_from_layout
+import logging
 
 class DownloadManager(TaskUiManager):
     """
@@ -11,18 +12,20 @@ class DownloadManager(TaskUiManager):
         self.download_type = "all"
         super().__init__(configs, max_workers)
 
-    def _distributed(self, bars, messages, n):
-        super()._distributed(bars, messages, n)
+    def _distributed(self, n):
+        super()._distributed(n)
         # this process should fetch every % n file
 
         for (which, src, url) in self.sources[n::self.max_workers]:
             try:
                 ldr = getattr(self.configs, which)[src]['downloader']
                 ldr.prepare_download(self, n, self.max_workers)
-                ldr.download(url, disable_ui=self.disable_ui, verbose=self.verbose)
+                ldr.download(url, disable_ui=self.disable_ui)
             except Exception as e:
                 self.log(logging.ERROR, "Caught Exception:")
                 self.log(logging.ERROR, e)
+                raise
+        return 1
 
     def maybe_add(self, which, cfg):
         downloader = cfg.get('downloader', None)
@@ -33,10 +36,10 @@ class DownloadManager(TaskUiManager):
                     self.sources.append((which, cfg['name'], u))
         return False
 
-    def process(self, layout, disable_ui=False, verbose=None, **args) -> bool:
+    def process(self, layout, engine="ray", disable_ui=False, **args) -> bool:
         # hide unnecessary bars
         if len(self.sources) < self.max_workers:
             for n in range(len(self.sources), self.max_workers):
                 bar = get_bar_from_layout(layout, n)
                 bar[0].update(bar[1], visible=False)
-        super().process(layout, disable_ui=disable_ui, verbose=verbose, **args)
+        super().process(layout, engine=engine, disable_ui=disable_ui, **args)

@@ -1,5 +1,6 @@
 import os
 import logging
+from datetime import datetime
 from rich import progress, box
 from rich.layout import Layout
 from rich.live import Live
@@ -8,6 +9,7 @@ from rich.panel import Panel
 from rich.logging import RichHandler
 from rich.text import Text
 from rich.style import Style
+from rich.table import Table
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -26,6 +28,7 @@ class LuxHandler(RichHandler):
     def render_message(self, record: logging.LogRecord, message: str):
         #if record.levelname in ["ERROR", "CRITICAL"]:
         #    message = f":warning: {message}"
+        print("LuxHandler got message")
         return super().render_message(record, message)
 
     def get_level_text(self, record):
@@ -40,7 +43,17 @@ class LuxHandler(RichHandler):
         level_text = Text(f"[{color[level_name]}]{level_name.ljust(8)}")
         return level_text
 
-def get_layout(cfgs, max_workers):
+
+class Header:
+    def __rich__(self) -> Panel:
+        grid = Table.grid(expand=True)
+        grid.add_column(justify="center", ratio=1)
+        grid.add_column(justify="right")
+        grid.add_row("[b]LUX Data Pipeline", datetime.now().ctime())
+        hdr = Panel(grid)
+        return hdr
+
+def get_layout(cfgs, max_workers, log_level):
 
     layout = Layout()
     layout.split_column(
@@ -48,6 +61,9 @@ def get_layout(cfgs, max_workers):
         Layout(name="progress", minimum_size=18),
         Layout(name="log", minimum_size=8)
     )
+
+    hdr = Header()
+    layout['title'].update(hdr)
 
     l2 = Layout()
     layout['progress'].update(Panel(l2, title="Progress"))
@@ -69,12 +85,18 @@ def get_layout(cfgs, max_workers):
 
     cp = ConsolePanel()
     layout['log'].update(Panel(cp, title="Log Messages"))
-    if logger.handlers:
+    # remove stream handler
+    while logger.handlers:
         logger.removeHandler(logger.handlers[0])
     # markup=False lets [...] be parsed by Text()
     # show_path=False because 99% of the calls are from _task_ui_manager, which
     #           receives them from the remote processes and re-logs them
+
     handler = LuxHandler(console=cp, show_path=False)
+    log_level = log_level.upper()
+    if not log_level or not log_level in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']:
+        log_level = "INFO"
+    handler.setLevel(getattr(logging, log_level))
     logger.addHandler(handler)
 
     layout._lux_bars = bars

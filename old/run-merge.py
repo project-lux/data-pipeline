@@ -21,16 +21,6 @@ idmap = cfgs.get_idmap()
 cfgs.cache_globals()
 cfgs.instantiate_all()
 
-with open(os.path.join(cfgs.data_dir, "idmap_update_token.txt")) as fh:
-    token = fh.read()
-token = token.strip()
-if not token.startswith("__") or not token.endswith("__"):
-    print("Idmap Update Token is badly formed, should be 8 character date with leading/trailing __")
-    raise ValueError("update token")
-    sys.exit(0)
-else:
-    idmap.update_token = token
-
 if "--profile" in sys.argv:
     sys.argv.remove("--profile")
     profiling = True

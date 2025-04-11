@@ -6,20 +6,21 @@ import importlib
 from ..config import Config
 import multiprocessing
 import logging
+import ray
 
 logger = logging.getLogger("lux_pipeline")
-oh = logging.StreamHandler(stream=sys.stdout)
+# Send /everything/ to the logger
+logger.setLevel(logging.DEBUG)
 
+oh = logging.StreamHandler(stream=sys.stdout)
 # Trap --log here and set it before instantiate_all, which is before the arg parser
 if '--log' in sys.argv:
     lvl = sys.argv[sys.argv.index('--log')+1]
     lvl = lvl.upper()
     if hasattr(logging, lvl):
-        print(f"Setting log lvl to {lvl}")
         oh.setLevel(getattr(logging, lvl))
 else:
-    print(f"Setting log lvl to default ERROR")
-    oh.setLevel(logging.ERROR)
+    oh.setLevel(logging.INFO)
 logger.addHandler(oh)
 
 fn = find_dotenv(usecwd=True)
@@ -45,19 +46,23 @@ def handle_command(cfgs, args, rest):
 def main():
 
     parser = ArgumentParser()
-    parser.add_argument("-i", action="store_true", help="If provided, drop to interactive console after the command")
     parser.add_argument("--log", type=str, help="Log level to log messages at")
     parser.add_argument("--debug", action="store_true", help="If provided, raise exceptions")
     parser.add_argument("command", type=str, help="Function to execute, see 'lux help' for the list")
     parser.add_argument("--source", type=str, help="Source(s) to download separated by commas, or 'all'")
-    parser.add_argument("--max_workers", type=int, default=0, help="Number of processes to use")
-    parser.add_argument("--no-ui", action='store_true', help="If set, then disable the user interface")
+    parser.add_argument("--max_workers", '--max-workers', type=int, default=0, help="Number of processes to use")
+    parser.add_argument("--engine", type=str, help="mp, ray, or null for which task distribution engine to use")
+    parser.add_argument("--no-ui", '--no_ui', action='store_true', help="If set, then disable the user interface")
     parser.add_argument("--verbose", type=str, help="Enable verbose output")
 
     args, rest = parser.parse_known_args()
 
     if args.debug and not args.log:
         args.log = "DEBUG"
+    elif not args.log:
+        args.log = "INFO"
+    if not args.engine:
+        args.engine = "ray"
 
     if cfgs is None and args.command not in ['initialize', 'testinstall']:
         print("Please use 'lux initialize <base directory>' first to create your installation or lux testinstall to diagnose issues")
@@ -89,21 +94,12 @@ def main():
     # fork is only available in posix, not windows or other environments
     multiprocessing.set_start_method("spawn")
 
-    if args.log:
-        oh2 = logging.StreamHandler(stream=sys.stdout)
-        oh2.setLevel(args.log.upper())
-
-
     try:
         result = mod.handle_command(cfgs, args, rest)
     except Exception as e:
         print(f"Failed to process command: {args}\n{e}")
         if args.debug:
             raise
-
-    if args.i and args.command != "interactive":
-        mod = importlib.import_module(f'lux_pipeline.cli.interactive')
-        mod.handle_command(cfgs, args, rest)
 
 if __name__ == "__main__":
     main()

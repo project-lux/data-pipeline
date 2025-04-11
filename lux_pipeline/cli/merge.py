@@ -25,9 +25,9 @@ def handle_command(cfgs, args, rest):
 
     if args.no_ui:
         layout = None
-        mm.process(layout, disable_ui=args.no_ui, verbose=args.verbose, no_refs=args.no_refs)
+        mm.process(layout, engine=args.engine, disable_ui=args.no_ui, no_refs=args.no_refs)
     else:
-        layout = get_layout(cfgs, wks)
+        layout = get_layout(cfgs, wks, args.log)
         with Live(layout, screen=False, refresh_per_second=4) as live:
             # And calling this will manage the multiprocessing
-            mm.process(layout, disable_ui=args.no_ui, verbose=args.verbose, no_refs=args.no_refs)
+            mm.process(layout, engine=args.engine, disable_ui=args.no_ui, no_refs=args.no_refs)
