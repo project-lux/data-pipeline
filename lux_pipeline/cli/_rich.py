@@ -13,6 +13,9 @@ from rich.table import Table
 
 logger = logging.getLogger("lux_pipeline")
 
+# If we need images (e.g. debugging graphs), consider
+# https://github.com/lnqs/textual-image
+
 class ConsolePanel(Console):
     def __init__(self,*args,**kwargs):
         console_file = open(os.devnull,'w')
