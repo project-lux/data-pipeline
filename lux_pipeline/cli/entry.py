@@ -46,22 +46,29 @@ def handle_command(cfgs, args, rest):
 def main():
 
     parser = ArgumentParser()
+    parser.add_argument("command", type=str, help="Function to execute, see 'lux help' for the list")
     parser.add_argument("--log", type=str, help="Log level to log messages at")
     parser.add_argument("--debug", action="store_true", help="If provided, raise exceptions")
-    parser.add_argument("command", type=str, help="Function to execute, see 'lux help' for the list")
     parser.add_argument("--source", type=str, help="Source(s) to download separated by commas, or 'all'")
     parser.add_argument("--max_workers", '--max-workers', type=int, default=0, help="Number of processes to use")
+    parser.add_argument("--my_worker", '--my-worker', type=int, default=-1, help="Which process this is (null engine)")
     parser.add_argument("--engine", type=str, help="mp, ray, or null for which task distribution engine to use")
     parser.add_argument("--no-ui", '--no_ui', action='store_true', help="If set, then disable the user interface")
-    parser.add_argument("--verbose", type=str, help="Enable verbose output")
-
     args, rest = parser.parse_known_args()
 
     if args.debug and not args.log:
         args.log = "DEBUG"
     elif not args.log:
         args.log = "INFO"
-    if not args.engine:
+
+    if args.my_worker > -1:
+        args.engine = "null"
+        if not args.max_workers:
+            args.max_workers = args.my_worker
+        elif args.max_workers <= args.my_worker:
+            print(f"my_worker ({args.my_worker}) must be lower than max_workers ({args.max_workers}) -- my_worker starts at 0")
+            sys.exit(0)
+    elif not args.engine:
         args.engine = "ray"
 
     if cfgs is None and args.command not in ['initialize', 'testinstall']:

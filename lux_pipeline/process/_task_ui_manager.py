@@ -73,7 +73,29 @@ class ProcessingEngine:
 
 class NullEngine(ProcessingEngine):
     # rely on os/shell level parallelization
-    pass
+    # Here there's only one process, so we'll route straight to _distributed
+    # but if max_workers and my_worker are set, then only do that slice
+    # can still run with the UI to watch the log and a single bar
+
+    def _distributed(self, i, log_details):
+        return self.manager._distributed(i)
+
+    def maybe_update_progress_bar(self, completed, total, description):
+        if time.time() > self.last_bar_time + 0.5:
+            self.last_bar_time = time.time()
+            if self.layout is not None:
+                bar = get_bar_from_layout(self.layout, self.manager.my_slice)
+                bar[0].update(bar[1], completed=completed, total=total, description=description)
+
+    def maybe_update_log(self, level, message):
+        # route directly to logger
+        logger = logging.getLogger("lux_pipeline")
+        logger.log(level, message)
+
+    def process(self, layout):
+        i = self.manager.my_slice
+        self.layout = layout
+        return self._distributed(i, None)
 
 
 class MpEngine(ProcessingEngine):
@@ -86,6 +108,12 @@ class MpEngine(ProcessingEngine):
         self.my_slice = i
         self.temp_bar = {'total': -1, 'completed': -1, 'description': ''}
         self.temp_log = []
+
+        logger = logging.getLogger("lux_pipeline")
+        if logger.handlers:
+            logger.removeHandler(logger.handlers[0])
+        logger.addHandler(TaskLogHandler(self))
+
         return self.manager._distributed(i)
 
     def maybe_update_progress_bar(self, completed, total, description):
@@ -185,6 +213,12 @@ class RayEngine(ProcessingEngine):
         # deal with log_actor here
         self.actor = log_actor
         self.my_slice = i
+
+        logger = logging.getLogger("lux_pipeline")
+        if logger.handlers:
+            logger.removeHandler(logger.handlers[0])
+        logger.addHandler(TaskLogHandler(self))
+
         return self.manager._distributed(i)
 
     def maybe_update_progress_bar(self, completed, total, description):
@@ -248,11 +282,6 @@ class TaskUiManager:
     def _distributed(self, n):
         self.configs = cfgs
         self.my_slice = n
-        logger = logging.getLogger("lux_pipeline")
-        if logger.handlers:
-            logger.removeHandler(logger.handlers[0])
-        logger.addHandler(TaskLogHandler(self))
-
 
     def update_progress_bar(self, advance=-1, total=-1, description=None, completed=-1):
         if total > -1:

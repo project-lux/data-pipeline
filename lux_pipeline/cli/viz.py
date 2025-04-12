@@ -141,53 +141,43 @@ def handle_command(cfgs, args, rest):
 
 
     nx.set_edge_attributes(G, ArrowTip.ARROW, "$end-arrow-tip")
-    nx.set_edge_attributes(G, ArrowTip.NONE, "$end-arrow-tip-0")
+    #nx.set_edge_attributes(G, ArrowTip.NONE, "$end-arrow-tip-0")
     nx.set_edge_attributes(G, lambda zoom: 0 if zoom < 0.5 else 1, "$lod-map")
     nx.set_edge_attributes(G, Style(color=Color.from_rgb(red=20, green=80, blue=10), bold=True), "$style")
-    nx.set_edge_attributes(G, EdgeSegmentDrawingMode.BOX_HEAVY, "$edge-segment-drawing-mode")
     nx.set_edge_attributes(G, EdgeRoutingMode.STRAIGHT, "$edge-routing-mode")
     nx.set_edge_attributes(G, EdgeSegmentDrawingMode.BOX_ROUNDED, "$edge-segment-drawing-mode")
     nx.set_edge_attributes(G, Style(color="yellow", bold=True), "$style")
-    nx.set_edge_attributes(G, True, "$show")
 
     nx.set_node_attributes(G, Style(color="magenta"), "$style")
     nx.set_node_attributes(G, lambda zoom: 0 if zoom < 0.5 else 1, "$lod-map")
     nx.set_node_attributes(G, "box", "$shape")
 
-    #layout = get_layout(cfgs, 1, args.log)
-    #with Live(layout, screen=False, refresh_per_second=4) as live:
-    if True:
+    layout = get_layout(cfgs, 1, args.log)
+    with Live(layout, screen=False, refresh_per_second=4) as live:
+        cg = ConsoleGraph(G, layout_engine=ForceDirectedLayout(), zoom=(AutoZoom.FIT))
+        r_panel = Panel(cg)
+        layout['progress'].update(r_panel)
         #console = Console()
-        cg = ConsoleGraph(G, zoom=(AutoZoom.FIT))
-        cg = ConsoleGraph(G, layout_engine=ForceDirectedLayout())
-        #r_panel = Panel(cg)
-        #layout['progress'].update(r_panel)
         #console.print(cg)
-        print(cg)
 
         if False:
-
             key = []
             inv_ident = {}
             for k, v in idents.items():
                 key.append((v, k))
                 inv_ident[v] = k
-
             key.sort()
             print("  -- Key --")
             for k in key:
                 print(f"  {k[0]:<16}{k[1]}")
-
             print("\nConnected Nodes:")
             for sets in list(nx.connected_components(G)):
                 print(sets)
-
             print(f"\nShortest path from {from_p} to {to_p}")
             print(" --> ".join([inv_ident[x] for x in nx.shortest_path(G, idents[from_p], idents[to_p])]))
 
 
             plt.figure(figsize=(12, 12))
-
             uri_colors = {
                 "id.loc.gov": "#7CFC00",
                 "vocab.getty.edu": "#FFA07A",
@@ -195,11 +185,9 @@ def handle_command(cfgs, args, rest):
                 "yale.edu": "#00BFFF",
                 "viaf.org": "#FFD700",
             }
-
             node_color_values = ["skyblue" for _ in G.nodes()]
             node_labels = {node: node for node in G.nodes()}
             edge_color_values = ["black" for _ in G.edges()]
-
             pos = nx.spring_layout(G, k=1)
             for lbl, n in idents.items():
                 col = "#E0E0FF"
