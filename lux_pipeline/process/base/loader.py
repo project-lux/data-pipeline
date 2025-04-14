@@ -418,29 +418,7 @@ class Loader:
 
     def post_process_other(self, data):
         # This is called after discovering the record and before extracting the identifier
-        if isinstance(data, bytes):
-            try:
-                data = data.decode("utf-8")
-            except UnicodeDecodeError:
-                data = data.decode("utf-8", errors="replace")
-
-        match = re.search(
-            r'''
-            rdf:about="https?://data\.bnf\.fr/ark:/12148/(?P<bnf>cb\d{9})"(?!"|#) |
-            <mx:controlfield\s+tag="001">(?P<fast>[^<]+)</mx:controlfield>
-            ''',
-            data,
-            re.VERBOSE,
-        )
-
-        if match:
-            ident = match.group("bnf") or match.group("fast")
-
-        result = {"raw": data}
-        if ident:
-            result["id"] = ident
-
-        return result
+        return data
 
     def should_make_record(self, path):
         if self.max_slice > 1 and self.seen % self.max_slice != self.my_slice:
