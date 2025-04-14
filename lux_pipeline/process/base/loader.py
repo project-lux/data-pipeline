@@ -1,4 +1,4 @@
-
+import re
 import io
 import os
 import requests
@@ -10,7 +10,9 @@ import zipfile
 import tarfile
 import ujson as json
 import logging
+
 logger = logging.getLogger("lux_pipeline")
+
 try:
     import magic
 except:
@@ -233,7 +235,7 @@ class Loader:
             mode = "r"
         with tarfile.open(path, mode) as th:
             if self.increment_total and len(remaining) == 1:
-                names = th.namelist()
+                names = th.getnames()
                 self.update_progress_bar(increment_total=len(names))
                 del names
             ti = th.next()
@@ -393,6 +395,11 @@ class Loader:
             value = value.name
         elif isinstance(value, bytes):
             value = value.decode('utf-8')
+
+        # end of file name is invalid for xml files
+        if isinstance(value, str) and value.endswith(".xml"):
+            return None
+
         try:
             last = value.split('/')[-1]
             return last.split('.')[0]

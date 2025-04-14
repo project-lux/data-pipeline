@@ -1,4 +1,4 @@
-
+import logging
 from ._task_ui_manager import TaskUiManager
 from lux_pipeline.cli._rich import get_bar_from_layout
 import logging

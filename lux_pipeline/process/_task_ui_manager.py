@@ -9,6 +9,8 @@ import ray
 
 logger = logging.getLogger("lux_pipeline")
 import traceback
+import os
+
 
 @ray.remote
 class LoggingActor:
