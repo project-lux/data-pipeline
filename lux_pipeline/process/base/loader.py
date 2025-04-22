@@ -473,12 +473,14 @@ class Loader:
         comp = step[1] if len(step) > 1 else None
         handler = self.step_functions[step[0]]
         if step[0] in self.fmt_containers:
+            self.load_manager.log(logging.DEBUG, f"processing path {step[0]}")
             for child in handler(path, comp, steps[1:]):
                 self.process_step(steps[1:], child, step)
         elif step[0] in self.fmt_formats:
             # if we don't need to process it, then don't
             self.seen += 1
             if self.should_make_record(path):
+                self.load_manager.log(logging.DEBUG, f"processing record {step[0]}")
                 record = handler(path, comp, parent)
                 if self.should_store_record(record):
                     okay = self.store_record(record)

@@ -135,8 +135,9 @@ class ReconcileManager(TaskUiManager):
             elif self.phase == 2:
                 self._pool_reconcile_refs(n)
         except Exception as e:
-            self.log(logging.CRITICAL, "Caught Exception:")
+            self.log(logging.CRITICAL, f"Caught Exception: {e}")
             self.log(logging.CRITICAL, e)
+            raise
         return 1
 
     def maybe_add(self, which, cfg):

@@ -104,7 +104,7 @@ class Collector(object):
                 if "member_of" in qrec and xrec["id"] in [x.get("id", "") for x in qrec["member_of"]]:
                     okay = False
                 if not okay:
-                    logger.debug("Found cycle in part/broader/member, not adding")
+                    logger.debug(f"Found cycle in part/broader/member ({qrec['id']} / {xrec['id']}), not adding")
         return okay
 
     def collect(self, record):
