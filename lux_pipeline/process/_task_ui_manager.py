@@ -112,7 +112,7 @@ class MpEngine(ProcessingEngine):
         logger = logging.getLogger("lux_pipeline")
         if logger.handlers:
             logger.removeHandler(logger.handlers[0])
-        logger.addHandler(TaskLogHandler(self))
+        logger.addHandler(TaskLogHandler(self.manager))
 
         return self.manager._distributed(i)
 
@@ -217,7 +217,7 @@ class RayEngine(ProcessingEngine):
         logger = logging.getLogger("lux_pipeline")
         if logger.handlers:
             logger.removeHandler(logger.handlers[0])
-        logger.addHandler(TaskLogHandler(self))
+        logger.addHandler(TaskLogHandler(self.manager))
 
         return self.manager._distributed(i)
 
