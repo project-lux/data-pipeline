@@ -87,7 +87,7 @@ def main():
                 args.command = args.command.replace('-', '_')
             try:
                 mod = importlib.import_module(args.command)
-                if not hasattr(mod, 'handle_command'):
+                if not hasattr(mod, 'CommandHandler'):
                     print(f"Could not find a command for {args.command}")
                     sys.exit(0)
             except Exception as e:
@@ -102,7 +102,8 @@ def main():
     multiprocessing.set_start_method("spawn")
 
     try:
-        result = mod.handle_command(cfgs, args, rest)
+        hdlr = mod.CommandHandler(cfgs)
+        result = hdlr.process(args, rest)
     except Exception as e:
         print(f"Failed to process command: {args}\n{e}")
         if args.debug:

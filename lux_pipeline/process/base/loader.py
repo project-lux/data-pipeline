@@ -520,7 +520,7 @@ class Loader:
         files = []
         if (ifs := self.config.get('input_files', {})):
             if not load_type in ifs:
-                self.log(logging.WARNING, "[red]No configured file for load type {load_type} in {self.name}")
+                self.load_manager.log(logging.WARNING, "[red]No configured file for load type {load_type} in {self.name}")
             for p in ifs[load_type]:
                 fmt = p.get('type', None)
                 path = p.get('path', None)

@@ -1,34 +1,16 @@
 
-from ..process.load_manager import LoadManager
-from argparse import ArgumentParser
-from ._rich import Live, get_layout
+from ..process.export_task import ExportManager
+from ._handler import CommandHandler as CH
 
-def handle_command(cfgs, args, rest):
-    wks = args.max_workers if args.max_workers > 0 else cfgs.max_workers
+class CommandHandler(CH):
 
-    ap = ArgumentParser()
-    ap.add_argument("--cache", type=str, default="recordcache", help="Type of cache to export")
-    ap.add_argument('--type', type=str, default="marklogic", help="Which type of export to generate")
-    ap.parse_args(rest, namespace=args)
+    def add_args(self, ap):
+        ap.add_argument("--cache", type=str, default="recordcache", help="Type of cache to export")
+        ap.add_argument('--type', type=str, default="marklogic", help="Which type of export to generate")
+        self.extra_args = {"export_type": "type", "cache": "cache"}
+        self.default_source = "merged"
 
-    if not args.source:
-        args.source = "merged"
-    elif args.source == "all":
-        args.source = "merged"
-    sources = args.source.split(',')
-
-    xm = ExportManager(cfgs, wks)
-    xm.export_type = args.type
-    xm.cache = args.cache
-
-    for s in sources:
-        xm.prepare_single(s)
-
-    # Here we set up the rich UI
-    if args.no_ui:
-        xm.process(None, disable_ui=args.no_ui, export_type=args.type)
-    else:
-        layout = get_layout(cfgs, wks, args.log)
-        with Live(layout, screen=False, refresh_per_second=4) as live:
-            # And calling this will manage the multiprocessing
-            xm.process(layout, disable_ui=args.no_ui, export_type=args.type)
+    def make_manager(self, wks, args):
+        if args.source == "all":
+            args.source = "merged"
+        return ExportManager(self.configs, wks)
