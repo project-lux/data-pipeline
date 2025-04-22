@@ -40,9 +40,6 @@ class CommandHandler(BH):
                 print(e)
                 return
 
-
-
-
             try:
                 cfgs.instantiate_all()
             except Exception as e:

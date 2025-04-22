@@ -17,6 +17,7 @@ from ._handler import BaseHandler as BH
 
 class CommandHandler(BH):
 
+
     def process(self, args, rest):
         ap = ArgumentParser()
         ap.add_argument("--recid", type=str, help="record id to process")

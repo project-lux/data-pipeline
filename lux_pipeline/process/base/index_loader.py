@@ -10,6 +10,7 @@ logger = logging.getLogger("lux_pipeline")
 class IndexLoader(object):
     def __init__(self, config):
         self.config = config
+        self.name = config['name']
         self.configs = config["all_configs"]
         self.in_cache = config["datacache"]
         self.namespace = config["namespace"]
@@ -19,6 +20,12 @@ class IndexLoader(object):
         self.reconciler = config.get("reconciler", None)
         self.acquirer = config.get("acquirer", None)
         self.mapper = config.get("mapper", None)
+
+        self.manager = None
+        self.my_slice = -1
+        self.max_slice = -1
+        self.overwrite = True
+        self.increment_total = False
 
     def extract_names(self, rec):
         return self.reconciler.extract_names(rec)
@@ -31,13 +38,42 @@ class IndexLoader(object):
         res = self.acquirer.acquire(recid, store=False)
         return res
 
-    def load(self):
+
+    def prepare_load(self, manager, my_slice, max_slice):
+        self.manager = manager
+        self.my_slice = my_slice
+        self.max_slice = max_slice
+
+    def update_progress_bar(self, total=-1, increment_total=-1):
+        if total > 0:
+            ttl = total
+            self.total = ttl
+        elif increment_total > 0:
+            self.total += increment_total
+            ttl = self.total
+        else:
+            ttl = self.total
+        if self.max_slice > 1:
+            ttl = ttl // self.max_slice
+        desc = f"{self.name}/{self.my_slice}"
+        self.manager.update_progress_bar(total=ttl, description=desc)
+
+    def increment_progress_bar(self, amount):
+        self.manager.update_progress_bar(advance=1)
+
+    def close_progress_bar(self):
+        # Could set visibility to false or something but better to just leave it
+        pass
+
+
+    def load(self, disable_ui=False, overwrite=True):
+        self.overwrite = overwrite
+        self.increment_total = self.total < 0
+
         (index, eqindex) = self.get_storage()
-
         if index is None and eqindex is None:
-            logger.error(f"{self.name} has no indexes configured")
+            self.manager.log(logging.ERROR, f"{self.name} has no indexes configured")
             return None
-
         if self.reconciler is None:
             self.reconciler = self.config["reconciler"]
         if self.mapper is None:
@@ -45,59 +81,74 @@ class IndexLoader(object):
         if self.acquirer is None:
             self.acquirer = self.config["acquirer"]
 
-        # Clear all current entries
-        if index is not None:
-            index.clear()
-        if eqindex is not None:
-            eqindex.clear()
+        try:
+            self.manager.log(logging.INFO, f"Clearing existing indexes for {self.name}")
+            # Clear all current entries
+            if index is not None:
+                index.clear()
+            if eqindex is not None:
+                eqindex.clear()
+        except Exception as e:
+            self.manager.log(logging.ERROR, f"Error clearing existing indexes for {self.name}")
+            self.manager.log(logging.ERROR, e)
+            return None
 
-        ttl = self.in_cache.len_estimate()
-        n = 0
-        start = time.time()
-        all_names = {}
-        all_uris = {}
-        logger.debug("starting...")
-        for rec in self.in_cache.iter_records():
-            res = self.acquire_record(rec)
-            if res is None:
-                # Mapper might kill it, might not exist, etc
-                # sys.stdout.write('X');sys.stdout.flush()
-                continue
-            recid = rec["identifier"]
-            try:
-                typ = res["data"]["type"]
-            except Exception:
-                typ = self.mapper.guess_type(res["data"])
+        try:
+            ttl = self.in_cache.len_estimate()
+            if not disable_ui:
+                self.update_progress_bar(total=ttl)
+            # Assume can store all names/uris in memory
+            all_names = {}
+            all_uris = {}
+            self.manager.log(logging.INFO, f"Starting to load indexes for {self.config['name']}...")
+            for rec in self.in_cache.iter_records():
+                self.increment_progress_bar()
+                res = self.acquire_record(rec)
+                if res is None:
+                    continue
+                recid = rec["identifier"]
+                try:
+                    typ = res["data"]["type"]
+                except Exception:
+                    typ = self.mapper.guess_type(res["data"])
 
-            if recid and typ:
-                if index is not None:
-                    names = self.extract_names(res["data"])
-                    for nm in names.keys():
-                        # sys.stdout.write('n');sys.stdout.flush()
-                        if nm:
-                            if len(nm) < 500:
-                                all_names[nm.lower()] = [recid, typ]
-                            else:
-                                logger.error(
-                                    f"Dropping name as too long ({len(nm)}>500):\n\t{nm}"
-                                )
-                if eqindex is not None:
-                    eqs = self.extract_uris(res["data"])
-                    for eq in eqs:
-                        if eq:
-                            all_uris[eq] = [recid, typ]
-            # FIXME: add progress bar support
+                if recid and typ:
+                    if index is not None:
+                        names = self.extract_names(res["data"])
+                        for nm in names.keys():
+                            if nm:
+                                if len(nm) < 500:
+                                    all_names[nm.lower()] = [recid, typ]
+                                else:
+                                    self.manager.log(logging.ERROR,
+                                        f"Dropping name as too long ({len(nm)}>500):\n\t{nm}"
+                                    )
+                    if eqindex is not None:
+                        eqs = self.extract_uris(res["data"])
+                        for eq in eqs:
+                            if eq:
+                                all_uris[eq] = [recid, typ]
+
+        except Exception as e:
+            self.manager.log(logging.ERROR, f"[red]Failed to load file:")
+            self.manager.log(logging.ERROR, e)
+            return None
+
 
         if index is not None and all_names:
             start = time.time()
             index.update(all_names)
             durn = time.time() - start
-            logger.debug(f"names insert time: {int(durn)} = {len(all_names)/durn}/sec")
+            self.manager.log(logging.INFO, f"names insert time: {int(durn)} = {len(all_names)/durn}/sec")
         if eqindex is not None and all_uris:
             start = time.time()
             eqindex.update(all_uris)
             durn = time.time() - start
-            logger.debug(f"uris insert time: {int(durn)} = {len(all_names)/durn}/sec")
+            self.manager.log(logging.INFO, f"uris insert time: {int(durn)} = {len(all_uris)/durn}/sec")
+
+        if not disable_ui:
+            self.close_progress_bar()
+
 
 
 class LmdbIndexLoader(IndexLoader):
