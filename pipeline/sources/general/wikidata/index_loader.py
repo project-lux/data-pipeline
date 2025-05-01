@@ -23,7 +23,6 @@ class WdFileIndexLoader(LmdbIndexLoader):
 		lines = []
 		print("Reading...")
 		for fn in files:
-			print(fn)
 			with open(os.path.join(self.configs.temp_dir, fn)) as efh:
 				lines.extend(efh.readlines())
 
