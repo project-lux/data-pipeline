@@ -3,21 +3,18 @@ import requests
 import ujson as json
 from pathlib import Path
 import logging
+from ._managable import Managable
 logger = logging.getLogger("lux_pipeline")
 
-class BaseDownloader:
+class BaseDownloader(Managable):
     """
     The purpose of the downloader is to provide urls to the DownloadManager. These will then be downloaded and placed into the required paths.
     """
     def __init__(self, config):
-        self.config = config
+        super().__init__(config)
         self.dumps_dir = config['all_configs'].dumps_dir
         if 'dumps_dir' in config:
             self.dumps_dir = os.path.join(self.dumps_dir, config['dumps_dir'])
-        self.my_slice = -1
-        self.manager = None
-        self.max_slice = -1
-
 
     def fetch_webpage(self, url: str) -> str:
         """Fetch the webpage content from the given URL.
@@ -117,12 +114,8 @@ class BaseDownloader:
                         raise ValueError(f"No download path for input file: {record}")
         return urls
 
-    def prepare_download(self, mgr, n, max_workers):
-        self.manager = mgr
-        self.my_slice = n
-        self.max_slice = max_workers
 
-    def download(self, download, disable_ui=False):
+    def process(self, download, disable_ui=False):
         url = download['url']
         path = download['path']
 

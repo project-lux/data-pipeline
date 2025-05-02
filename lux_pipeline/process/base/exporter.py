@@ -1,6 +1,8 @@
 import zipfile
 import json
 from lux_pipeline.storage.cache.postgres import DataCache
+from ._managable import Managable
+
 
 class Exporter:
     """
@@ -20,12 +22,6 @@ class Exporter:
                 # Write to the ZIP archive
                 zipf.writestr(filename, data_str)
 
-    def export_to_huggingface(self, data_generator):
-        """
-        Uploads the data to HuggingFace.
-        """
-        pass
-        
 
 class CacheExporter(Exporter):
     def __init__(self, config):

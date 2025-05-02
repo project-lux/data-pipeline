@@ -1,7 +1,6 @@
-from lux_pipeline.process.base.index_loader import LmdbIndexLoader
+from lux_pipeline.process.base.index_loader import IndexLoader
 
-
-class LCIndexLoader(LmdbIndexLoader):
+class LCIndexLoader(IndexLoader):
     def acquire_record(self, record):
         if "data" in record:
             rec = record["data"]

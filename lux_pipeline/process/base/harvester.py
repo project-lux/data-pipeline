@@ -3,10 +3,174 @@ import ujson as json
 import sys
 from lxml import etree
 import datetime
+from ._managable import Managable
+
 import logging
 logger = logging.getLogger("lux_pipeline")
 
-class Harvester(object):
+
+class ASHarvester(Managable):
+
+    def process_change(self, change, ident, record, changeTime):
+        storage = self.config["datacache"]
+        storage2 = self.config["recordcache"]
+        overwrite = self.config.get("harvest_overwrite", True)
+        idmap = self.manager.idmap
+        configs = self.config['all_configs']
+
+        if change == "delete":
+            rec = storage[ident]
+            if rec:
+                uri = rec["data"]["id"]
+                cls = rec["data"]["type"]
+                quaUri = configs.make_qua(uri, cls)
+                del storage[ident]
+                if config["type"] == "internal":
+                    del storage2[ident]
+                else:
+                    del storage2[quaUri.rsplit("/", 1)[-1]]
+                yuid = idmap[quaUri]
+                if not yuid:
+                    # already deleted
+                    return
+                all_ids = idmap[yuid]
+                del idmap[quaUri]
+
+                # Below is rebuild process, not deleting this record
+                has_internal = False
+                for i in all_ids:
+                    for ns in self.internal_nss:
+                        if i.startswith(ns):
+                            has_internal = True
+                            break
+                    if has_internal:
+                        break
+                if has_internal:
+                    # If there are other internal records then just rebuild
+                    # without deleted record
+                    pass
+                else:
+                    has_refs = False
+                    # FIXME: find references from other records to this one
+                    if has_refs:
+                        # still need. Rebuild without deleted record
+                        pass
+                    else:
+                        # no references and the source record is gone.
+                        # keep deleting
+                        pass
+        else:
+            # upsert
+            # if not ident in storage == create
+            if record is not None and (overwrite or not ident in storage):
+                try:
+                    storage.set(record["data"], identifier=ident, record_time=changeTime)
+                    self.changed.append((record, ident, config))
+                except:
+                    logger.debug(f"Failed to process {ident}")
+                    logger.debug(f"Got: {record['data']}")
+
+    def harvest_from_list(self, config, mySlice=None, maxSlice=None):
+        harvester = config["harvester"]
+        harvester.fetcher.enabled = True
+        storage = config["datacache"]
+        if storage is None:
+            logger.debug(f"No datacache for {config['name']}? Can't harvest")
+            return
+        fn = os.path.join(self.configs.temp_dir, f"all_{config['name']}_uris.txt")
+        if not os.path.exists(fn):
+            logger.debug(f"No uri/change list to harvest for {config['name']}. Run get_record_list()")
+            return
+
+        with open(fn, "r") as fh:
+            x = 0
+            l = True
+            while l:
+                l = fh.readline()
+                l = l.strip()
+                if maxSlice is not None and x % maxSlice - mySlice != 0:
+                    x += 1
+                    continue
+                x += 1
+                (ident, dt) = l.split("\t")
+                try:
+                    tm = storage.metadata(ident, "insert_time")["insert_time"]
+                except TypeError:
+                    # NoneType is not subscriptable
+                    tm = None
+                if tm is not None and tm.isoformat() > dt:
+                    # inserted after the change, no need to fetch
+                    continue
+                try:
+                    itjs = harvester.fetcher.fetch(ident)
+                    if itjs is None:
+                        logger.debug(f"Got None for {ident}")
+                        continue
+                except:
+                    #sys.stdout.write("-")
+                    #sys.stdout.flush()
+                    continue
+                storage[ident] = itjs
+                #sys.stdout.write(".")
+                #sys.stdout.flush()
+
+    def get_record_list(self, config, until="0001-01-01T00:00:00"):
+        # build the set of records that should be in the cache
+        # from the activity streams
+
+        harvester = config["harvester"]
+        harvester.last_harvest = until
+        logger.debug(f"Gathering all from stream until {until}")
+        records = {}
+        deleted = {}
+        for change, ident, record, changeTime in harvester.crawl(refsonly=True):
+            if ident in deleted:
+                # already seen a delete, ignore
+                pass
+            elif ident in records:
+                if change == "delete":
+                    # This is a recreate?
+                    logger.debug(f"Saw record {ident} at {records[ident]} then got delete at {changeTime}")
+            elif change == "delete":
+                # haven't seen a ref, so most recent is delete
+                deleted[ident] = changeTime
+            else:
+                records[ident] = changeTime
+
+        # Write URIs to all_{name}_uris.txt and deleted_{name}_uris.txt in temp dir
+        recs = sorted(list(records.keys()))
+        with open(os.path.join(self.configs.temp_dir, f"all_{config['name']}_uris.txt"), "w") as fh:
+            for r in recs:
+                fh.write(f"{r}\t{records[r]}\n")
+
+        recs = sorted(list(deleted.keys()))
+        with open(os.path.join(self.configs.temp_dir, f"deleted_{config['name']}_uris.txt"), "w") as fh:
+            for r in recs:
+                fh.write(f"{r}\t{deleted[r]}\n")
+
+        return records, deleted
+
+    def prepare(self, manager, n, max_workers):
+        super().prepare(manager, n, max_workers)
+        self.harvester = ASProtocol(self.config)
+        self.harvester.manager = self
+        self.divide_by_max_slice = False
+
+    def process(self, collection, disable_ui=False):
+        storage = self.config["datacache"]
+        self.internal_nss = [x["namespace"] for x in self.config['all_configs'].internal.values()]
+        if self.harvester.last_harvest[:4] == "0001":
+            self.harvester.last_harvest = storage.latest()
+        logger.debug(f"Harvesting until {self.harvester.last_harvest}")
+        coll = collection.rsplit('/', 1)[-1]
+        self.update_progress_bar(total=0, desc=f"{self.config['name']}/{coll}")
+        for change, ident, record, changeTime in self.harvester.crawl_single(collection):
+            self.process_change(change, ident, record, changeTime)
+
+
+# A usage independent protocol handler
+# c.f. the processing engines in _task_ui_manager
+class HarvestProtocol:
 
 	def __init__(self, config):
 		self.overwrite = config.get('harvest_overwrite', True)
@@ -20,6 +184,8 @@ class Harvester(object):
 		self.config = config
 		self.session = requests.Session()
 		self.session.headers.update({'Accept-Encoding': 'gzip, deflate'})
+		self.manager = None
+		self.page_cache = None
 
 	def fetch_json(self, uri, typ):
 		# generically useful fallback
@@ -35,7 +201,8 @@ class Harvester(object):
 			return {}
 		return what
 
-	def crawl(self, last_harvest=None):
+	def prepare(self, last_harvest=None):
+		self.page = None
 		self.fetcher = self.config['fetcher']
 		if self.fetcher is not None:
 			self.fetcher.enabled = True
@@ -43,9 +210,10 @@ class Harvester(object):
 		if last_harvest is not None:
 			self.last_harvest = last_harvest
 		self.deleted = {}
+		self.datacache = self.config['datacache']
 
 
-class PmhHarvester(Harvester):
+class PmhProtocol(HarvestProtocol):
 
 	# "fetch": "https://photoarchive.paul-mellon-centre.ac.uk/apis/oai/pmh/v2?verb=GetRecord&metadataPrefix=lido&identifier={identifier}"
 
@@ -110,15 +278,14 @@ class PmhHarvester(Harvester):
 				break
 
 
-class ASHarvester(Harvester):
+class ASProtocol(HarvestProtocol):
 
 	def __init__(self, config):
-		Harvester.__init__(self, config)
+		HarvestProtocol.__init__(self, config)
 		self.change_types = ['update', 'create', 'delete', 'move', 'merge', 'split', 'refresh']
 		self.collections = config['activitystreams']
 		self.collection_index = 0		
 		self.page = config.get('start_page', None)
-		self.page_cache = None
 		self.datacache = None
 		self.cache_okay = False
 
@@ -165,11 +332,11 @@ class ASHarvester(Harvester):
 		except:
 			# This is normal behavior for first page
 			self.page = None
-		sys.stdout.write('P');sys.stdout.flush()
 		return items
 
 	def process_items(self, items, refsonly=False):
 		for it in items:
+			self.manager.increment_progress_bar(1)
 			try:
 				dt = it['endTime']
 			except:
@@ -232,7 +399,6 @@ class ASHarvester(Harvester):
 
 			if chg == 'delete':
 				yield (chg, ident, {}, "")
-				# sys.stdout.write('X');sys.stdout.flush()
 				continue
 
 			# only fetch if insert_time on the datacache for the record is < dt
@@ -261,22 +427,22 @@ class ASHarvester(Harvester):
 				logger.error(f"Harvester got {itjs} from {ident}")
 				continue
 			yield (chg, ident, itjs, dt)
-			sys.stdout.write('.');sys.stdout.flush()
+
+
+	def crawl_single(self, collection, manager=None, last_harvest=None, refsonly=False):
+		if self.manager is None and manager:
+			self.manager = manager
+		self.prepare(last_harvest)
+		self.fetch_collection(collection)
+		while self.page:
+			items = self.fetch_page()
+			self.manager.update_progress_bar(increment_total=len(items))
+			for rec in self.process_items(items, refsonly):
+				yield rec
 
 	# API function for Harvester
-	def crawl(self, last_harvest=None, refsonly=False):
-		Harvester.crawl(self, last_harvest)
-		self.datacache = self.config['datacache']
-		
+	def crawl(self, manager=None, last_harvest=None, refsonly=False):
 		while self.collection_index < len(self.collections):
-			if not self.page:
-				collection = self.collections[self.collection_index]
-				logger.debug(f" {collection}")
-				self.fetch_collection(collection)
-			while self.page:
-				items = self.fetch_page()
-				for rec in self.process_items(items, refsonly):
-					yield rec
+			collection = self.collections[self.collectin_index]
+			self.crawl_single(collection, manager, last_harvest, refsonly)
 			self.collection_index += 1
-			self.page = None
-			

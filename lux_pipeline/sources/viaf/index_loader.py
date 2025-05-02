@@ -1,10 +1,10 @@
-from lux_pipeline.process.base.index_loader import LmdbIndexLoader
+from lux_pipeline.process.base.index_loader import IndexLoader
 import gzip
 import time
 import os
 
 
-class ViafIndexLoader(LmdbIndexLoader):
+class ViafIndexLoader(IndexLoader):
     def load(self):
         viaf_prefixes = {
             "ISNI": "isni",

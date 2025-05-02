@@ -10,7 +10,11 @@ import zipfile
 import tarfile
 import ujson as json
 import logging
+from ._managable import Managable
+
 logger = logging.getLogger("lux_pipeline")
+
+
 try:
     import magic
 except:
@@ -66,12 +70,11 @@ class ZipPointer(Pointer):
         return self.parent.open(self.info)
 
 
-class Loader:
+class Loader(Managable):
 
     def __init__(self, config):
-        self.config = config
+        super().__init__(config)
         self.name = config['name']
-        self.configs = config['all_configs']
         self.out_cache = config.get('datacache', {})
         self.mapper = config.get('mapper', None)
         self.total = config.get('totalRecords', -1)
@@ -79,13 +82,10 @@ class Loader:
         self.dumps_dir = config['all_configs'].dumps_dir
         if 'dumps_dir' in config:
             self.dumps_dir = os.path.join(self.dumps_dir, config['dumps_dir'])
-        self.my_slice = 0
-        self.max_slice = 0
         self.seen = 0
         self.my_files = []
         self.temp_file_handles = {}
         self.overwrite = False
-        self.load_manager = None
 
         self.fmt_containers = ['dir', 'dirh', 'pair', 'zip', 'tar', 'lines', 'dict', 'array', 'arraylines']
         self.fmt_formats = ['json', 'raw', 'other']
@@ -253,7 +253,7 @@ class Loader:
             path = path.get_handle()
         elif isinstance(path, dict):
             # URGH
-            self.load_manager.log(logging.ERROR, f"[red]Got a dict as path in file_opener for {self.name}: {path}")
+            self.manager.log(logging.ERROR, f"[red]Got a dict as path in file_opener for {self.name}: {path}")
             return None
 
         if comp == 'gz':
@@ -264,7 +264,7 @@ class Loader:
             try:
                 return open(path)
             except:
-                self.load_manager.log(logging.ERROR, f"[red]Got something we couldn't open for {self.name}: {path}")
+                self.manager.log(logging.ERROR, f"[red]Got something we couldn't open for {self.name}: {path}")
                 return None
         else:
             # Dunno what this is
@@ -473,14 +473,14 @@ class Loader:
         comp = step[1] if len(step) > 1 else None
         handler = self.step_functions[step[0]]
         if step[0] in self.fmt_containers:
-            self.load_manager.log(logging.DEBUG, f"processing path {step[0]}")
+            self.manager.log(logging.DEBUG, f"processing path {step[0]}")
             for child in handler(path, comp, steps[1:]):
                 self.process_step(steps[1:], child, step)
         elif step[0] in self.fmt_formats:
             # if we don't need to process it, then don't
             self.seen += 1
             if self.should_make_record(path):
-                self.load_manager.log(logging.DEBUG, f"processing record {step[0]}")
+                self.manager.log(logging.DEBUG, f"processing record {step[0]}")
                 record = handler(path, comp, parent)
                 if self.should_store_record(record):
                     okay = self.store_record(record)
@@ -489,31 +489,8 @@ class Loader:
         else:
             raise ValueError(f"Unknown step type {step} in {self.name}")
 
-    def update_progress_bar(self, total=-1, increment_total=-1):
-        if total > 0:
-            ttl = total
-            self.total = ttl
-        elif increment_total > 0:
-            self.total += increment_total
-            ttl = self.total
-        else:
-            ttl = self.total
-        if self.max_slice > 1:
-            ttl = ttl // self.max_slice
-        desc = f"{self.name}/{self.my_slice}"
-        self.load_manager.update_progress_bar(total=ttl, description=desc)
-
-    def increment_progress_bar(self, amount):
-        self.load_manager.update_progress_bar(advance=1)
-
-    def close_progress_bar(self):
-        # Could set visibility to false or something but better to just leave it
-        pass
-
-    def prepare_load(self, mgr, my_slice=0, max_slice=0, load_type="records"):
-        self.load_manager = mgr
-        self.my_slice = my_slice
-        self.max_slice = max_slice
+    def prepare(self, mgr, my_slice=0, max_slice=0, load_type="records"):
+        super().prepare(mgr, my_slice, max_slice)
 
         if load_type == "export":
             # Unknown calculate from file
@@ -522,7 +499,8 @@ class Loader:
         files = []
         if (ifs := self.config.get('input_files', {})):
             if not load_type in ifs:
-                self.load_manager.log(logging.WARNING, "[red]No configured file for load type {load_type} in {self.name}")
+                self.manager.log(logging.ERROR, f"No configured file for load type '{load_type}' in source {self.name}")
+                return False
             for p in ifs[load_type]:
                 fmt = p.get('type', None)
                 path = p.get('path', None)
@@ -554,7 +532,7 @@ class Loader:
         self.my_files = files
 
 
-    def load(self, disable_ui=False, overwrite=True):
+    def process(self, disable_ui=False, overwrite=True):
         self.overwrite = overwrite
         self.increment_total = self.total < 0
 
@@ -562,12 +540,12 @@ class Loader:
         for info in self.my_files:
             if not disable_ui:
                 self.update_progress_bar()
-            self.load_manager.log(logging.INFO, f"[green]Loading {info['path']} for {self.name} in {self.my_slice}")
+            self.manager.log(logging.INFO, f"[green]Loading {info['path']} for {self.name} in {self.my_slice}")
             try:
                 self.process_step(info['fmt'], info['path'], None)
             except Exception as e:
-                self.load_manager.log(logging.ERROR, f"[red]Failed to load file:")
-                self.load_manager.log(logging.ERROR, e)
+                self.manager.log(logging.ERROR, f"[red]Failed to load file:")
+                self.manager.log(logging.ERROR, e)
             if not disable_ui:
                 self.close_progress_bar()
         try:

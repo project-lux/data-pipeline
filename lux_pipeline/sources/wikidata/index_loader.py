@@ -7,10 +7,10 @@ import gzip
 from .loader import WdLoader
 from .fetcher import WdFetcher
 from .base import WdConfigManager
-from lux_pipeline.process.base.index_loader import LmdbIndexLoader
+from lux_pipeline.process.base.index_loader import IndexLoader
 
 
-class WdFileIndexLoader(LmdbIndexLoader):
+class WdFileIndexLoader(IndexLoader):
 	# Load diffs in the normal load-csv-map way
 	def load(self):
 		n = 0

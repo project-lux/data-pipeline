@@ -8,8 +8,8 @@ class IndexLoadManager(TaskUiManager):
         for (which, src) in self.sources:
             ldr = getattr(self.configs, which)[src]['indexLoader']
             try:
-                ldr.prepare_load(self, n, self.max_workers)
-                ldr.load(disable_ui=self.disable_ui, overwrite=self.overwrite)
+                ldr.prepare(self, n, self.max_workers)
+                ldr.process(disable_ui=self.disable_ui, overwrite=self.overwrite)
             except Exception as e:
                 print(f"Failed to load")
                 raise

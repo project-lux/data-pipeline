@@ -31,7 +31,6 @@ class LuxHandler(RichHandler):
     def render_message(self, record: logging.LogRecord, message: str):
         #if record.levelname in ["ERROR", "CRITICAL"]:
         #    message = f":warning: {message}"
-        print("LuxHandler got message")
         return super().render_message(record, message)
 
     def get_level_text(self, record):

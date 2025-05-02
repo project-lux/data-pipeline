@@ -29,7 +29,8 @@ class CommandHandler(BH):
             readline.read_history_file(fn)
 
         # Get idmap into locals
-        idmap = cfgs.get_idmap()
+        cfgs = self.configs
+        idmap = self.configs.get_idmap()
         vars = globals()
         vars.update(locals())
 

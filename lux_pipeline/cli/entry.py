@@ -33,11 +33,16 @@ if not basepath:
 else:
     try:
         cfgs = Config(basepath=basepath)
+    except:
+        cfgs = None
+
+if cfgs is not None:
+    try:
         idmap = cfgs.get_idmap()
         cfgs.cache_globals()
         cfgs.instantiate_all()
     except:
-        cfgs = None
+        idmap = None
 
 def handle_command(cfgs, args, rest):
     print("There isn't an 'entry' command, please see 'lux help' for the list")

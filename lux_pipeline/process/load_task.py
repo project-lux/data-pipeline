@@ -17,13 +17,12 @@ class LoadManager(TaskUiManager):
         for (which, src) in self.sources:
             ldr = getattr(self.configs, which)[src]['loader']
             try:
-                ldr.prepare_load(self, n, self.max_workers, self.load_type)
-                ldr.load(disable_ui=self.disable_ui, overwrite=self.overwrite)
+                ldr.prepare(self, n, self.max_workers, self.load_type)
+                ldr.process(disable_ui=self.disable_ui, overwrite=self.overwrite)
             except Exception as e:
                 print(f"Failed to load")
                 raise
         return 1
-
 
     def maybe_add(self, which, cfg):
         if 'loader' in cfg and isinstance(cfg['loader'], Loader):

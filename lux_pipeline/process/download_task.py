@@ -19,8 +19,8 @@ class DownloadManager(TaskUiManager):
         for (which, src, url) in self.sources[n::self.max_workers]:
             try:
                 ldr = getattr(self.configs, which)[src]['downloader']
-                ldr.prepare_download(self, n, self.max_workers)
-                ldr.download(url, disable_ui=self.disable_ui)
+                ldr.prepare(self, n, self.max_workers)
+                ldr.process(url, disable_ui=self.disable_ui)
             except Exception as e:
                 self.log(logging.ERROR, "Caught Exception:")
                 self.log(logging.ERROR, e)
