@@ -5,8 +5,6 @@ import rlcompleter
 import os
 from ._handler import BaseHandler as BH
 
-
-
 class LUXREPL(code.InteractiveConsole):
 
     def runsource(self, source, filename='<input>', symbol='single'):

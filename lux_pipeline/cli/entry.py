@@ -23,14 +23,14 @@ else:
     oh.setLevel(logging.INFO)
 logger.addHandler(oh)
 
+idmap = None
+cfgs = None
+
 fn = find_dotenv(usecwd=True)
 if fn:
     load_dotenv(fn)
 basepath = os.getenv("LUX_BASEPATH", "")
-idmap = None
-if not basepath:
-    cfgs = None
-else:
+if basepath:
     try:
         cfgs = Config(basepath=basepath)
     except:

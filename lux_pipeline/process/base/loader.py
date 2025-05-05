@@ -492,6 +492,8 @@ class Loader(Managable):
     def prepare(self, mgr, my_slice=0, max_slice=0, load_type="records"):
         super().prepare(mgr, my_slice, max_slice)
 
+        self.manager.log(logging.DEBUG, "Called Prepare")
+
         if load_type == "export":
             # Unknown calculate from file
             self.total = -1
@@ -530,11 +532,21 @@ class Loader(Managable):
                 fmtspec = self.guess_fmt(dfp)
             files.append({"path": dfp, "fmt": fmtspec})
         self.my_files = files
+        self.manager.log(logging.DEBUG, repr(self.my_files))
 
 
     def process(self, disable_ui=False, overwrite=True):
         self.overwrite = overwrite
         self.increment_total = self.total < 0
+        if self.total > 0:
+            self.update_progress_bar(total=self.total)
+
+        self.manager.log(logging.DEBUG, "Called Process")
+
+        if not self.my_files:
+            self.manager.log(logging.WARNING, f"Called process, but no files to load")
+        else:
+            print(self.my_files)
 
         self.open_temp_files()
         for info in self.my_files:

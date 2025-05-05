@@ -5,6 +5,7 @@ from ._handler import BaseHandler as BH
 
 class CommandHandler(BH):
     def process(self, args, rest):
+        cfgs = self.configs
         if cfgs is None:
             # Okay, something went wrong with building the environment
             basepath = os.getenv("LUX_BASEPATH", "")
@@ -24,6 +25,7 @@ class CommandHandler(BH):
                 cfgs = Config(basepath=basepath)
             except Exception as e:
                 print(f"Couldn't build Config at from files at {basepath}")
+                raise
                 return
 
             try:

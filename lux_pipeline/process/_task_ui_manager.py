@@ -132,7 +132,6 @@ class MpEngine(ProcessingEngine):
 
 
     def maybe_update_log(self, level, message):
-        # Shared memory, so no need to batch
         self.temp_log.append((level, message))
         if time.time() > self.last_log_time + 0.5:
             self.messages[:] = []
@@ -228,11 +227,11 @@ class RayEngine(ProcessingEngine):
                 self.actor.update_progress_bar.remote(self.my_slice, completed, total, description)
 
     def maybe_update_log(self, level, message):
-        if time.time() > self.last_log_time + 0.5:
-            self.last_log_time = time.time()
-            if self.actor is not None:
-                # Don't batch log messages?
-                self.actor.add_to_log.remote(self.my_slice, level, message)
+        # Use same technique as MP engine to batch logs?
+        #if time.time() > self.last_log_time + 0.5:
+        #    self.last_log_time = time.time()
+        if self.actor is not None:
+            self.actor.add_to_log.remote(self.my_slice, level, message)
 
     def process(self, layout):
 
@@ -260,6 +259,23 @@ class RayEngine(ProcessingEngine):
                 if type(res) == int:
                     # process response from task
                     pass
+                logger.log(logging.DEBUG, f"Got {res} from task")
+
+        time.sleep(1)
+        for n in range(self.max_workers):
+            resp = ray.get(log_actor.get_log.remote(n))
+            for lvl, msg in resp:
+                # send to log to render
+                logger.log(lvl, msg)
+            resp = ray.get(log_actor.get_progress_bar.remote(n))
+            if resp['completed'] > -1:
+                # process log entry r from process n
+                if layout is not None:
+                    bar = get_bar_from_layout(layout, n)
+                    bar[0].update(bar[1], **resp)
+                else:
+                    print(f"[{n}]: {resp['completed']}/{resp['total']}")
+        time.sleep(1)
         logger.info("Done")
 
 

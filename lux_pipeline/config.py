@@ -106,9 +106,14 @@ class Config(object):
             cache = cfg['datacache']
             for k in cache.iter_keys():
                 rec = cache[k]['data']
-                self.handle_config_record(k, rec)
+                try:
+                    self.handle_config_record(k, rec)
+                except:
+                    print(f"Could not generate a config for {k}")
 
     def handle_config_record(self, k, rec):
+        if not type(rec) == dict:
+            raise ValueError(f"rec is a {type(rec)} not a dict")
         if not 'type' in rec:
             raise ValueError(f"missing 'type' in {k}: {rec}")
         if rec["type"] == "internal":
@@ -558,6 +563,7 @@ class Config(object):
                 cfg["tester"] = None
         except Exception as e:
             logger.critical(f"Failed to build component for {cfg['name']}")
-            raise
+            logger.critical(e)
+            # raise
 
         return cfg

@@ -1,10 +1,10 @@
 import os
 import sys
 import csv
-from lux_pipeline.process.base.index_loader import LmdbIndexLoader, TabLmdb
+from lux_pipeline.process.base.index_loader import IndexLoader, TabLmdb
 
 
-class GlobalIndexLoader(LmdbIndexLoader):
+class GlobalIndexLoader(IndexLoader):
     def get_storage(self):
         mapExp = self.config.get("mapSizeExponent", 30)
 
