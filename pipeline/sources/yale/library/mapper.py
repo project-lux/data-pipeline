@@ -1,6 +1,7 @@
 from pipeline.process.base.mapper import Mapper
 from pipeline.process.utils.mapper_utils import validate_timespans
 from pipeline.process.utils.mapper_utils import make_datetime
+from pipeline.sources.yale.library.index_loader import YulIndexLoader
 import os
 import ujson as json
 import csv
@@ -118,6 +119,8 @@ class YulMapper(Mapper):
                 self.walk_multi(v)
 
     def transform(self, rec, rectype, reference=False):
+        headings_index = YulIndexLoader().load_index()
+
         data = rec["data"]
 
         if data["id"] in self.object_work_mismatch:
@@ -126,6 +129,9 @@ class YulMapper(Mapper):
         # add abouts for ycba exhs & objs
         if data["type"] == "LinguisticObject":
             aboutblock = data.get("about", [])
+            for a in aboutblock:
+                if a.get("id","")
+
             # get yul ID #
             for ident in data["identified_by"]:
                 if ident["content"].startswith("ils:yul:"):
@@ -148,8 +154,6 @@ class YulMapper(Mapper):
             except:
                 pass
 
-            if aboutblock != []:
-                data["about"] = aboutblock
 
         if data["id"] in self.wiki_recon:
             equivs = data.get("equivalent", [])
@@ -407,6 +411,7 @@ class YulMapper(Mapper):
             for c in data.get("classified_as",[]):
                 if c.get("id") == "http://vocab.getty.edu/aat/300311990":
                     c['id'] = "http://vocab.getty.edu/aat/300456764"
+
 
 
         return rec
