@@ -1,8 +1,6 @@
 import os
 import sys
 import csv
-import json
-import time
 from dotenv import load_dotenv
 from pipeline.config import Config
 
@@ -18,7 +16,9 @@ loader = cfgs.internal['ils']['indexLoader']
 
 # Dedicated LMDB index for heading mappings
 heading_index = loader.load_index()
-csvfn = sys.argv[-1]
+filename = sys.argv[-1]
+csvfn = os.path.join(cfgs.data_dir, filename)
+
 
 if "--clear" in sys.argv:
     loader.clear()

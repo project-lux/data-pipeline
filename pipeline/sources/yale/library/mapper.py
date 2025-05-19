@@ -119,7 +119,7 @@ class YulMapper(Mapper):
                 self.walk_multi(v)
 
     def transform(self, rec, rectype, reference=False):
-        headings_index = YulIndexLoader().load_index()
+        #headings_index = YulIndexLoader().load_index()
 
         data = rec["data"]
 
@@ -127,10 +127,16 @@ class YulMapper(Mapper):
             return None
 
         # add abouts for ycba exhs & objs
+        abouts = []
         if data["type"] == "LinguisticObject":
-            aboutblock = data.get("about", [])
-            for a in aboutblock:
-                if a.get("id","")
+        #     current_block = data.get("about", [])
+        #     for a in current_block:
+        #         if a.get("id","") in headings_index:
+        #             del a
+        #             for h in headings_index[a["id"]]:
+        #                 abouts.append({"id": h, "type": ""})
+        #         else:
+        #             abouts.append(a)
 
             # get yul ID #
             for ident in data["identified_by"]:
@@ -142,7 +148,7 @@ class YulMapper(Mapper):
                 for objs in objslist:
                     if objs != "":
                         objsblock = {"id": objs, "type": "HumanMadeObject"}
-                        aboutblock.append(objsblock)
+                        abouts.append(objsblock)
             except:
                 pass
             try:
@@ -150,10 +156,13 @@ class YulMapper(Mapper):
                 for exhs in exhslist:
                     if exhs != "":
                         exhsblock = {"id": exhs, "type": "Activity"}
-                        aboutblock.append(exhsblock)
+                        abouts.append(exhsblock)
             except:
                 pass
-
+            
+            del data["about"]
+            if abouts:
+                data["about"] = abouts
 
         if data["id"] in self.wiki_recon:
             equivs = data.get("equivalent", [])

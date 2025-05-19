@@ -1,5 +1,3 @@
-import os
-import sys
 import csv
 from pipeline.process.base.index_loader import LmdbIndexLoader, TabLmdb
 
@@ -10,7 +8,10 @@ class YulIndexLoader(LmdbIndexLoader):
 
         headings_path = self.config.get("headingsPath", None)
         if headings_path:
-            index = TabLmdb.open(headings_path, "c", map_size=6**mapExp, readahead=False, writemap=True)
+            index = TabLmdb.open(headings_path, "c", map_size=2**mapExp, readahead=False, writemap=True)
+
+            if "__init__" not in index:
+                index["__init__"] = "init"
         else:
             index = None
 
@@ -60,8 +61,6 @@ class YulIndexLoader(LmdbIndexLoader):
                 values = row[1:]
 
                 updates.setdefault(key, []).extend(values)
-
-               for key, new_vals in updates.items():
         
         try:
             existing = headings_index[key]
