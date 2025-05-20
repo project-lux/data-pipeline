@@ -1,6 +1,6 @@
 import os
 import sys
-import csv
+import ujsonjson
 from dotenv import load_dotenv
 from pipeline.config import Config
 
@@ -17,27 +17,36 @@ loader = cfgs.internal['ils']['indexLoader']
 # Dedicated LMDB index for heading mappings
 heading_index = loader.load_index()
 filename = sys.argv[-1]
-csvfn = os.path.join(cfgs.data_dir, filename)
+jsonfn = os.path.join(cfgs.data_dir, filename)
 
 
 if "--clear" in sys.argv:
     loader.clear()
 
 if "--update" in sys.argv:
-    loader.update(csvfn)
+    loader.update(jsonfn)
 
-if not os.path.exists(csvfn):
-    print(f"That file ({csvfn}) does not exist")
+if not os.path.exists(jsonfn):
+    print(f"That file ({jsonfn}) does not exist")
     sys.exit(0)
 
-with open(csvfn, newline='') as fh:
-    rdr = csv.reader(fh)
-    for row in rdr:
-        if not row or len(row) < 2:
-            continue
-        key = row[0].strip()
-        values = [v.strip() for v in row[1:] if v.strip()]
-        loader.set(heading_index, key, values)
+BATCH_SIZE = 10000
+batch = []
 
-print(f"Loaded heading map from {csvfn}")
+with open(jsonfn, encoding='utf-8') as fh:
+    data = ujson.load(fh)
+    for key, value_list in data.items():
+        values = [json.dumps(v, ensure_ascii=False) for v in value_list]
+        batch.append((key, values))
+        if len(batch) >= BATCH_SIZE:
+            for key, values in batch:
+                loader.set(heading_index, key, values)
+            batch = []
+    if batch:
+        # Process any remaining items in the batch
+        for key, values in batch:
+            loader.set(heading_index, key, values)
+
+
+print(f"Loaded heading map from {jsonfn}")
 

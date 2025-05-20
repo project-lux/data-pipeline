@@ -1,7 +1,6 @@
 from pipeline.process.base.mapper import Mapper
 from pipeline.process.utils.mapper_utils import validate_timespans
 from pipeline.process.utils.mapper_utils import make_datetime
-from pipeline.sources.yale.library.index_loader import YulIndexLoader
 import os
 import ujson as json
 import csv
@@ -38,8 +37,8 @@ single_props = [
 class YulMapper(Mapper):
     def __init__(self, config):
         Mapper.__init__(self, config)
-        lccns = {}
         cfgs = config["all_configs"]
+        self.headings_index = cfgs.internal['ils']['indexLoader'].load_index()
         data_dir = cfgs.data_dir
         fn = os.path.join(data_dir, "stupid_table.json")
         self.object_work_mismatch = {}
@@ -119,26 +118,34 @@ class YulMapper(Mapper):
                 self.walk_multi(v)
 
     def transform(self, rec, rectype, reference=False):
-        #headings_index = YulIndexLoader().load_index()
-
         data = rec["data"]
+        headings_index = self.headings_index
 
         if data["id"] in self.object_work_mismatch:
             return None
 
-        # add abouts for ycba exhs & objs
+        # replace compound subject headings with their components
         abouts = []
         if data["type"] == "LinguisticObject":
-        #     current_block = data.get("about", [])
-        #     for a in current_block:
-        #         if a.get("id","") in headings_index:
-        #             del a
-        #             for h in headings_index[a["id"]]:
-        #                 abouts.append({"id": h, "type": ""})
-        #         else:
-        #             abouts.append(a)
+            current_block = data.get("about", [])
+            for a in current_block:
+                a_id = a.get("id", "")
+                if a_id in headings_index:
+                    for h_json in headings_index[a_id]:
+                        try:
+                            h = json.loads(h_json)
+                            abouts.append({
+                                "id": h.get("id", ""),
+                                "type": h.get("type", ""),
+                                "_label": h.get("_label", "")
+                                })
+                        except json.JSONDecodeError:
+                            pass
+                else:
+                    abouts.append(a)
 
-            # get yul ID #
+
+            # add ycba objects/exhibitions
             for ident in data["identified_by"]:
                 if ident["content"].startswith("ils:yul:"):
                     ilsnum = ident["content"].split(":")[-1]
@@ -160,9 +167,15 @@ class YulMapper(Mapper):
             except:
                 pass
             
-            del data["about"]
-            if abouts:
-                data["about"] = abouts
+            if current_block:
+                del data["about"]
+
+            unique = {}
+            for entry in abouts:
+                eid = entry.get("id", "")
+                if eid and eid not in unique:
+                    unique[eid] = entry
+            data["about"] = list(unique.values())
 
         if data["id"] in self.wiki_recon:
             equivs = data.get("equivalent", [])

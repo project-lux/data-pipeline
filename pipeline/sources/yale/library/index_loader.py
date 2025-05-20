@@ -18,7 +18,7 @@ class YulIndexLoader(LmdbIndexLoader):
         return index
 
     def load_index(self):
-        headings_index = self.get_storage()[0]
+        headings_index = self.get_storage()
 
         return headings_index
 
