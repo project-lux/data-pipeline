@@ -1,4 +1,4 @@
-import csv
+import json
 from pipeline.process.base.index_loader import LmdbIndexLoader, TabLmdb
 
 
@@ -51,23 +51,17 @@ class YulIndexLoader(LmdbIndexLoader):
 
         updates = {}
         # new additions to the csv
-        with open(filename) as csvfh:
-            rdr = csv.reader(csvfh, delimiter=",")
-            for row in rdr:
-                if len(row) < 2:
-                    continue
+        with open(filename, encoding="utf-8") as f:
+            updates = json.load(f)
+            for key, new_dicts in updates.items():
+                try:
+                    existing = headings_index[key]
+                    existing_dicts = [json.loads(item) for item in existing]
+                except KeyError:
+                    existing_dicts = []
+            
+        all_dicts = existing_dicts + new_dicts
 
-                key = row[0]
-                values = row[1:]
+        # Serialize to JSON strings and store
+        headings_index[key] = [json.dumps(d, ensure_ascii=False) for d in all_dicts]
 
-                updates.setdefault(key, []).extend(values)
-        
-        try:
-            existing = headings_index[key]
-            if isinstance(existing, str):
-                existing = [existing]
-        except KeyError:
-            existing = []
-
-        merged = list(set(existing + new_vals))
-        headings_index[key] = merged
