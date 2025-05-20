@@ -124,58 +124,57 @@ class YulMapper(Mapper):
         if data["id"] in self.object_work_mismatch:
             return None
 
-        # replace compound subject headings with their components
-        abouts = []
+        # replace compound subject headings with their components on LinguisticObjects
         if data["type"] == "LinguisticObject":
-            current_block = data.get("about", [])
-            for a in current_block:
+            current_about = data.get("about", [])
+            new_about = []
+            compound_subjects = []
+            seen_ids = set()
+
+            for a in current_about:
                 a_id = a.get("id", "")
                 if a_id in headings_index:
                     for h_json in headings_index[a_id]:
                         try:
                             h = json.loads(h_json)
-                            abouts.append({
-                                "id": h.get("id", ""),
-                                "type": h.get("type", ""),
-                                "_label": h.get("_label", "")
-                                })
+                            h_id = h.get("id")
+                            if h_id and h_id not in seen_ids:
+                                seen_ids.add(h_id)
+                                compound_subjects.append({
+                                    "id": h['id'],
+                                    "type": h.get("type", ""),
+                                    "_label": h.get("_label", "")
+                                    })
                         except json.JSONDecodeError:
                             pass
                 else:
-                    abouts.append(a)
+                    new_about.append(a)
 
+            if compound_subjects:
+                new_about.insert(0, {
+                    "type": "Type",
+                    "created_by": {
+                        "type": "Creation",
+                        "influenced_by": compound_subjects
+                    }
+                })
 
             # add ycba objects/exhibitions
-            for ident in data["identified_by"]:
-                if ident["content"].startswith("ils:yul:"):
+            ilsnum = None
+            for ident in data.get("identified_by",[]):
+                if ident.get("content","").startswith("ils:yul:"):
                     ilsnum = ident["content"].split(":")[-1]
                     break
-            try:
-                objslist = self.ycbaobjs[ilsnum]
-                for objs in objslist:
-                    if objs != "":
-                        objsblock = {"id": objs, "type": "HumanMadeObject"}
-                        abouts.append(objsblock)
-            except:
-                pass
-            try:
-                exhslist = self.ycbaexhs[ilsnum]
-                for exhs in exhslist:
-                    if exhs != "":
-                        exhsblock = {"id": exhs, "type": "Activity"}
-                        abouts.append(exhsblock)
-            except:
-                pass
+            if ilsnum:
+                new_about.extend(
+                    {"id": obj_id, "type": "HumanMadeObject"}
+                    for obj_id in self.ycbaobjs.get(ilsnum, []) if obj_id)
+                new_about.extend(
+                    {"id": exh_id, "type": "Activity"}
+                    for exh_id in self.ycbaexhs.get(ilsnum, []) if exh_id)
             
-            if current_block:
-                del data["about"]
-
-            unique = {}
-            for entry in abouts:
-                eid = entry.get("id", "")
-                if eid and eid not in unique:
-                    unique[eid] = entry
-            data["about"] = list(unique.values())
+            if current_about or new_about:
+                data["about"] = new_about
 
         if data["id"] in self.wiki_recon:
             equivs = data.get("equivalent", [])
