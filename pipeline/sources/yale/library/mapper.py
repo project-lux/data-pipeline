@@ -37,8 +37,8 @@ single_props = [
 class YulMapper(Mapper):
     def __init__(self, config):
         Mapper.__init__(self, config)
-        lccns = {}
         cfgs = config["all_configs"]
+        self.headings_index = cfgs.internal['ils']['indexLoader'].load_index()
         data_dir = cfgs.data_dir
         fn = os.path.join(data_dir, "stupid_table.json")
         self.object_work_mismatch = {}
@@ -119,37 +119,62 @@ class YulMapper(Mapper):
 
     def transform(self, rec, rectype, reference=False):
         data = rec["data"]
+        headings_index = self.headings_index
 
         if data["id"] in self.object_work_mismatch:
             return None
 
-        # add abouts for ycba exhs & objs
+        # replace compound subject headings with their components on LinguisticObjects
         if data["type"] == "LinguisticObject":
-            aboutblock = data.get("about", [])
-            # get yul ID #
-            for ident in data["identified_by"]:
-                if ident["content"].startswith("ils:yul:"):
+            current_about = data.get("about", [])
+            new_about = []
+            compound_subjects = []
+            seen_ids = set()
+
+            for a in current_about:
+                a_id = a.get("id", "")
+                if a_id in headings_index:
+                    for h_json in headings_index[a_id]:
+                        try:
+                            h = json.loads(h_json)
+                            h_id = h.get("id")
+                            if h_id and h_id not in seen_ids:
+                                seen_ids.add(h_id)
+                                compound_subjects.append({
+                                    "id": h['id'],
+                                    "type": h.get("type", ""),
+                                    "_label": h.get("_label", "")
+                                    })
+                        except json.JSONDecodeError:
+                            pass
+                else:
+                    new_about.append(a)
+
+            if compound_subjects:
+                new_about.insert(0, {
+                    "type": "Type",
+                    "created_by": {
+                        "type": "Creation",
+                        "influenced_by": compound_subjects
+                    }
+                })
+
+            # add ycba objects/exhibitions
+            ilsnum = None
+            for ident in data.get("identified_by",[]):
+                if ident.get("content","").startswith("ils:yul:"):
                     ilsnum = ident["content"].split(":")[-1]
                     break
-            try:
-                objslist = self.ycbaobjs[ilsnum]
-                for objs in objslist:
-                    if objs != "":
-                        objsblock = {"id": objs, "type": "HumanMadeObject"}
-                        aboutblock.append(objsblock)
-            except:
-                pass
-            try:
-                exhslist = self.ycbaexhs[ilsnum]
-                for exhs in exhslist:
-                    if exhs != "":
-                        exhsblock = {"id": exhs, "type": "Activity"}
-                        aboutblock.append(exhsblock)
-            except:
-                pass
-
-            if aboutblock != []:
-                data["about"] = aboutblock
+            if ilsnum:
+                new_about.extend(
+                    {"id": obj_id, "type": "HumanMadeObject"}
+                    for obj_id in self.ycbaobjs.get(ilsnum, []) if obj_id)
+                new_about.extend(
+                    {"id": exh_id, "type": "Activity"}
+                    for exh_id in self.ycbaexhs.get(ilsnum, []) if exh_id)
+            
+            if current_about or new_about:
+                data["about"] = new_about
 
         if data["id"] in self.wiki_recon:
             equivs = data.get("equivalent", [])
@@ -407,6 +432,7 @@ class YulMapper(Mapper):
             for c in data.get("classified_as",[]):
                 if c.get("id") == "http://vocab.getty.edu/aat/300311990":
                     c['id'] = "http://vocab.getty.edu/aat/300456764"
+
 
 
         return rec
