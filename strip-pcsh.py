@@ -1,3 +1,4 @@
+import os
 from dotenv import load_dotenv
 from pipeline.config import Config
 import json
