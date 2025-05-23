@@ -36,7 +36,7 @@ for recid in idx:
                     okay += 1
     if not okay:
         killed.append(yuid)
-        del merged[yuid]
+        del merged[yuid.rsplit("/", 1)[1]]
     else:
         print(f"{recid} / {yuid} has {okay} equivalents: {equivs}")
         kept.append(yuid)
