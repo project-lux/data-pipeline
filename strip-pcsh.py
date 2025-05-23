@@ -32,7 +32,7 @@ for recid in idx:
     if len(equivs) > 2:
         for e in equivs:
             for s in vocabs:
-                if s in e["id"]:
+                if s in e:
                     okay += 1
     if not okay:
         killed.append(yuid)
