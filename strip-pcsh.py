@@ -1,4 +1,5 @@
 import os
+import sys
 from dotenv import load_dotenv
 from pipeline.config import Config
 import json
@@ -21,6 +22,10 @@ killed = []
 kept = []
 
 for recid in idx:
+    sys.stdout.write(".")
+    sys.stdout.flush()
+    if not len(killed) % 50000:
+        print(len(killed))
     try:
         yuid = idmap[f"{recid}##quaType"]
         equivs = idmap[yuid]
