@@ -30,7 +30,7 @@ for recid in idx:
         yuid = idmap[f"{recid}##quaType"]
         equivs = idmap[yuid]
     except Exception as e:
-        print(f"Error processing {recid}: {e}")
+        # print(f"Error processing {recid}: {e}")
         continue
     okay = 0
     # min is self and token
