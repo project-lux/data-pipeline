@@ -1,0 +1,45 @@
+from dotenv import load_dotenv
+from pipeline.config import Config
+import json
+
+load_dotenv()
+basepath = os.getenv("LUX_BASEPATH", "")
+cfgs = Config(basepath=basepath)
+idmap = cfgs.get_idmap()
+cfgs.cache_globals()
+cfgs.instantiate_all()
+
+# Run through Types in merged and strip out any that are PCSH without other equivalents
+
+merged = cfgs.results["merged"]["recordcache"]
+idx = cfgs.internal["ils"]["indexLoader"].load_index()
+vocabs = ["wikidata.org", "getty.edu", "art.yale", "ycba-lux", "images.peabody"]
+
+
+killed = []
+kept = []
+
+for recid in idx:
+    yuid = idmap[f"{recid}##quaType]
+    equivs = idmap[yuid]
+    okay = 0
+    # min is self and token
+    if len(equivs) > 2:
+        for e in equivs:
+            for s in vocabs:
+                if s in e["id"]:
+                    okay += 1
+    if not okay:
+        killed.append(yuid)
+        del merged[yuid]
+    else:
+        print(f"{recid} / {yuid} has {okay} equivalents: {equivs}")
+        kept.append(yuid)
+
+jstr = json.dumps(killed)
+with open('killed.json', 'w') as f:
+    f.write(jstr)
+
+kstr = json.dumps(kept)
+with open('kept.json', 'w') as f:
+    f.write(kstr)
