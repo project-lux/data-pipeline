@@ -20,8 +20,12 @@ killed = []
 kept = []
 
 for recid in idx:
-    yuid = idmap[f"{recid}##quaType]
-    equivs = idmap[yuid]
+    try:
+        yuid = idmap[f"{recid}##quaType"]
+        equivs = idmap[yuid]
+    except Exception as e:
+        print(f"Error processing {recid}: {e}")
+        continue
     okay = 0
     # min is self and token
     if len(equivs) > 2:
@@ -37,9 +41,9 @@ for recid in idx:
         kept.append(yuid)
 
 jstr = json.dumps(killed)
-with open('killed.json', 'w') as f:
+with open("killed.json", "w") as f:
     f.write(jstr)
 
 kstr = json.dumps(kept)
-with open('kept.json', 'w') as f:
+with open("kept.json", "w") as f:
     f.write(kstr)

@@ -123,6 +123,8 @@ class YulMapper(Mapper):
 
         if data["id"] in self.object_work_mismatch:
             return None
+        elif data['id'] in self.headings:
+            return None
 
         # replace compound subject headings with their components on LinguisticObjects
         if data["type"] == "LinguisticObject":
@@ -172,7 +174,7 @@ class YulMapper(Mapper):
                 new_about.extend(
                     {"id": exh_id, "type": "Activity"}
                     for exh_id in self.ycbaexhs.get(ilsnum, []) if exh_id)
-            
+
             if current_about or new_about:
                 data["about"] = new_about
 
@@ -424,7 +426,7 @@ class YulMapper(Mapper):
                         cxnid = c.get("id", "")
                         if cxnid and cxnid.startswith("https://vocab.getty.edu"):
                             c["id"] = cxnid.replace("https://", "http://")
-                            
+
         if data['type'] == "Period":
             self.process_period_record(data)
 

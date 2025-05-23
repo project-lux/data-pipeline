@@ -4,8 +4,9 @@ import csv
 import json
 import requests
 
-from vertexai.preview.generative_models import GenerativeModel
-import vertexai.preview.generative_models as generative_models
+import vertexai.generative_models as generative_models
+from vertexai.generative_models import GenerativeModel
+
 
 ### The settings are HIGH / NONE as the answers are not dangerous, but the input might be detected as such
 # e.g. a book title that includes the words "child abuse" is not itself child abuse
