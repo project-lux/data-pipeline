@@ -123,7 +123,7 @@ class YulMapper(Mapper):
 
         if data["id"] in self.object_work_mismatch:
             return None
-        elif data["id"] in self.headings:
+        elif data["id"] in headings_index:
             return None
 
         # replace compound subject headings with their components on LinguisticObjects
