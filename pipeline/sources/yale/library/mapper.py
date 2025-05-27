@@ -130,7 +130,6 @@ class YulMapper(Mapper):
         if data["type"] == "LinguisticObject":
             current_about = data.get("about", [])
             new_about = []
-a
             for a in current_about:
                 a_id = a.get("id", "")
                 if a_id in headings_index:
