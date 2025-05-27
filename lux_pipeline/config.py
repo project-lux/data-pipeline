@@ -84,6 +84,8 @@ class Config(object):
             self.temp_dir = os.path.join(self.base_dir, self.temp_dir)
         if hasattr(self, "dumps_dir") and not self.dumps_dir.startswith("/"):
             self.dumps_dir = os.path.join(self.base_dir, self.dumps_dir)
+        if hasattr(self, "indexes_dir") and not self.indexes_dir.startswith("/"):
+            self.indexes_dir = os.path.join(self.base_dir, self.indexes_dir)
 
         if not hasattr(self, "max_workers"):
             # Default to 2/3rds of our CPUs
@@ -353,7 +355,16 @@ class Config(object):
 
         # Smush directories
 
-        for d in ["base_dir", "data_dir", "exports_dir", "log_dir", "tests_dir", "temp_dir", "dumps_dir"]:
+        for d in [
+            "base_dir",
+            "data_dir",
+            "exports_dir",
+            "log_dir",
+            "tests_dir",
+            "temp_dir",
+            "dumps_dir",
+            "indexes_dir",
+        ]:
             if d in cfg and not cfg[d].startswith("/"):
                 cfg[d] = os.path.join(getattr(self, d), cfg[d])
             else:
@@ -450,6 +461,21 @@ class Config(object):
                     else:
                         path = os.path.join(pfx, pth)
                     cfg[k] = path
+
+        if "indexes" in cfg:
+            # Smush index paths
+            for k, v in cfg["indexes"].items():
+                if "path" in v:
+                    path = v["path"]
+                    if path and not path.startswith("/"):
+                        # put the right type of base directory before it
+                        pfx = self.indexes_dir
+                        if not pfx.startswith("/"):
+                            bd = self.base_dir
+                            path = os.path.join(bd, pfx, path)
+                        else:
+                            path = os.path.join(pfx, path)
+                        v["path"] = path
 
         # Add self to config
         cfg["all_configs"] = self

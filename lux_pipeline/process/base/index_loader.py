@@ -15,8 +15,6 @@ class IndexLoader(Managable):
         self.namespace = config["namespace"]
         self.indexes = {}
         self.in_path = config.get("reconcileDumpPath", None)
-        self.out_path = config.get("reconcileDbPath", None)
-        self.inverse_path = config.get("inverseEquivDbPath", None)
         self.reconciler = config.get("reconciler", None)
         self.acquirer = config.get("acquirer", None)
         self.mapper = config.get("mapper", None)
