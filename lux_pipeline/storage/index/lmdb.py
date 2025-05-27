@@ -5,6 +5,7 @@ import ujson as json
 
 ### Storage Layer
 
+
 class StringLmdb(Lmdb):
     # key is string, value is string
     def _pre_key(self, value):
@@ -70,12 +71,17 @@ class JsonLmdb(StringLmdb):
 
 
 ### Pipeline Layer
-
-# open flags:
+#
+# open flags for LMDB:
 # r - read only, w - read/write, c - create if not exists, n - recreate even if exists
-
-
-class LMDBIndex:
+#
+# This is stupid, but the only way to get the configuration to pass through sensibly
+# as open() for the underlying lmdb is a constructor. and thus not reusable
+# Otherwise we need one class per underlying structure (string, tab, json, etc)
+# and per storage mechanism (lmdb, sqlite, etc) If a better way exists, then this API
+# to the index object shouldn't need to change.
+#
+class LmdbIndex:
     def __init__(self, config):
         self.config = config
         self.path = config["path"]

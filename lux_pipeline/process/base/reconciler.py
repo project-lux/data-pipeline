@@ -1,15 +1,17 @@
 from lux_pipeline.process.utils.mapper_utils import get_year_from_timespan
 from sqlitedict import SqliteDict
-from lux_pipeline.storage.idmap.lmdb import TabLmdb
-import re 
+import re
 import logging
+
 logger = logging.getLogger("lux_pipeline")
+
 
 # Abstract class definition, useless without actual data
 class Reconciler(object):
     def __init__(self, config):
         self.config = config
         self.namespace = config["namespace"]
+        self.indexes = {}
         self.configs = config["all_configs"]
         self.debug = config["all_configs"].debug_reconciliation
         self.debug_graph = {}
@@ -25,7 +27,7 @@ class Reconciler(object):
         Returns:
             bool: True if the record should be reconciled, False otherwise.
         """
-        data = rec.get("data",rec)
+        data = rec.get("data", rec)
         if reconcileType == "name":
             if self.name_index is None:
                 return False
@@ -57,7 +59,7 @@ class Reconciler(object):
         return [x["id"] for x in equivs if "id" in x]
 
     def clean_names(self, name):
-        return re.sub(r'[\u200b-\u200f\u202a-\u202e]', '', name).lower().strip()
+        return re.sub(r"[\u200b-\u200f\u202a-\u202e]", "", name).lower().strip()
 
     def extract_names(self, rec):
         ns = self.configs.external["aat"]["namespace"]
@@ -94,11 +96,10 @@ class Reconciler(object):
             if None in cxnids:
                 logger.debug(f"  None in Name classifications: {rec['id']}")
 
-
             # Desired result: lowest numbered language that matches
             # or 2 if no language
             if aat_primaryName in cxnids and "content" in nm:
-                val = self.clean_names(nm['content'])
+                val = self.clean_names(nm["content"])
                 if not langs:
                     # primary name, no language = 2
                     vals[val] = 2
@@ -112,7 +113,7 @@ class Reconciler(object):
                             break
                     if not matched:
                         # base is 1, and 2 is skipped so len()+2 for next one
-                        vals[val] = len(check_langs)+2
+                        vals[val] = len(check_langs) + 2
 
                 if typ == "Person":
                     if "part" in nm:
@@ -125,11 +126,11 @@ class Reconciler(object):
                         for part in parts:
                             cxns = part.get("classified_as", [])
                             if aat_firstName in [cx["id"] for cx in cxns]:
-                                first = self.clean_names(part['content'])
+                                first = self.clean_names(part["content"])
                             elif aat_middleName in [cx["id"] for cx in cxns]:
-                                middle = self.clean_names(part['content'])
+                                middle = self.clean_names(part["content"])
                             elif aat_lastName in [cx["id"] for cx in cxns]:
-                                last = self.clean_names(part['content'])
+                                last = self.clean_names(part["content"])
 
                         if last and first and middle:
                             vals[f"{last}, {first} {middle}"] = 1
@@ -173,23 +174,8 @@ class Reconciler(object):
 class LmdbReconciler(Reconciler):
     def __init__(self, config):
         Reconciler.__init__(self, config)
-
-        fn = config.get("reconcileDbPath", "")
-        fn2 = config.get("inverseEquivDbPath", "")
-        try:
-            if fn:
-                self.name_index = TabLmdb.open(fn, "r", readahead=False, writemap=True)
-            else:
-                self.name_index = None
-        except Exception:
-            self.name_index = None
-        try:
-            if fn2:
-                self.id_index = TabLmdb.open(fn2, "r", readahead=False, writemap=True)
-            else:
-                self.id_index = None
-        except Exception:
-            self.id_index = None
+        self.name_index = config.get("indexes", {}).get("reconcile_label", {}).get("index", None)
+        self.id_index = config.get("indexes", {}).get("reconcile_id", {}).get("index", None)
 
     def get_keys_like(self, which, key):
         # Use set_range()
@@ -197,7 +183,7 @@ class LmdbReconciler(Reconciler):
 
     def reconcile(self, rec, reconcileType="all"):
         # Match by primary name
-        if not reconcileType in ["all", "name", "uri"]:
+        if reconcileType not in ["all", "name", "uri"]:
             return None
         if not self.should_reconcile(rec, reconcileType):
             return None
@@ -209,6 +195,8 @@ class LmdbReconciler(Reconciler):
 
         if reconcileType in ["all", "name"]:
             # Get name from Record
+            if not self.name_index.index:
+                self.name_index.open()
             vals = self.extract_names(rec)
             vals = dict(sorted(vals.items(), key=lambda item: (item[1], -len(item[0]))))
             for nm, num in vals.items():
@@ -225,13 +213,9 @@ class LmdbReconciler(Reconciler):
                             recid = rec.get("id", "")
                             if recid:
                                 try:
-                                    self.debug_graph[rec["id"]].append(
-                                        (f"{self.namespace}{k}", "nm")
-                                    )
+                                    self.debug_graph[rec["id"]].append((f"{self.namespace}{k}", "nm"))
                                 except Exception:
-                                    self.debug_graph[rec["id"]] = [
-                                        (f"{self.namespace}{k}", "nm")
-                                    ]
+                                    self.debug_graph[rec["id"]] = [(f"{self.namespace}{k}", "nm")]
                         try:
                             matches[k].append(nm)
                             if num > 1:
@@ -243,22 +227,20 @@ class LmdbReconciler(Reconciler):
                         break
 
         if reconcileType in ["all", "uri"]:
+            if not self.id_index.index:
+                self.id_index.open()
             for e in self.extract_uris(rec):
                 if e in self.id_index:
                     (uri, typ) = self.id_index[e]
                     if my_type != typ and self.debug:
-                        logger.warning(
-                            f"cross-type match: record has {my_type} and external has {typ}"
-                        )
+                        logger.warning(f"cross-type match: record has {my_type} and external has {typ}")
                     try:
                         matches[uri].append(e)
                     except Exception:
                         matches[uri] = [e]
                     if self.debug:
                         try:
-                            self.debug_graph[e].append(
-                                (f"{self.namespace}{uri}", "uri")
-                            )
+                            self.debug_graph[e].append((f"{self.namespace}{uri}", "uri"))
                         except Exception:
                             self.debug_graph[e] = [(f"{self.namespace}{uri}", "uri")]
 
@@ -287,7 +269,7 @@ class SqliteReconciler(Reconciler):
                 self.name_index = SqliteDict(fn, autocommit=False, flag="r")
             else:
                 self.name_index = None
-        except:
+        except Exception:
             # Can't get a lock, set to None
             self.name_index = None
         try:
@@ -348,12 +330,10 @@ class SqliteReconciler(Reconciler):
                     (uri, typ) = self.id_index[e]
                     if my_type != typ:
                         if self.debug:
-                            logger.warning(
-                                f"cross-type match: record has {my_type} and external has {typ}"
-                            )
+                            logger.warning(f"cross-type match: record has {my_type} and external has {typ}")
                     try:
                         matches[uri].append(e)
-                    except:
+                    except Exception:
                         matches[uri] = [e]
         if len(matches) == 1:
             return f"{self.namespace}{list(matches.keys())[0]}"

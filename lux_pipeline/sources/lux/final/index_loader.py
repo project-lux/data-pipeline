@@ -1,34 +1,10 @@
 import os
 import sys
 import csv
-from lux_pipeline.process.base.index_loader import IndexLoader, TabLmdb
+from lux_pipeline.process.base.index_loader import IndexLoader
 
 
 class GlobalIndexLoader(IndexLoader):
-    def get_storage(self):
-        mapExp = self.config.get("mapSizeExponent", 30)
-
-        diff_path = self.config.get("differentDbPath", None)
-        if diff_path:
-            index = TabLmdb.open(diff_path, "c", map_size=2**mapExp, readahead=False, writemap=True)
-        else:
-            index = None
-
-        if self.inverse_path:
-            eqindex = TabLmdb.open(self.inverse_path, "c", map_size=2**mapExp, readahead=False, writemap=True)
-        else:
-            eqindex = None
-        return (index, eqindex)
-
-    def clear(self, which):
-        (diffindex, eqindex) = self.get_storage()
-        if which == "equivs":
-            eqindex.clear()
-        elif which == "diffs":
-            diffindex.clear()
-        else:
-            print(f"Unknown index to clear {which}; should be equivs or diffs")
-
     def set(self, idx, key, vals):
         if type(vals) != list:
             raise ValueError(f"Called set with string {key}:{vals}, did you mean add()?")
@@ -46,7 +22,8 @@ class GlobalIndexLoader(IndexLoader):
         idx[key] = vals
 
     def load(self, filename, which="equivs"):
-        (diffindex, eqindex) = self.get_storage()
+        diffindex = self.config.get("indexes", {}).get("differents", {}).get("index", None)
+        eqindex = self.config.get("indexes", {}).get("equivalents", {}).get("index", None)
 
         if diffindex is None and eqindex is None:
             print(f"{self.name} has no indexes configured")

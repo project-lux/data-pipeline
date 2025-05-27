@@ -1,17 +1,19 @@
 import os
 import csv
-import sys
 import time
-from lux_pipeline.storage.idmap.lmdb import TabLmdb
+
 from ._managable import Managable
 import logging
+
 logger = logging.getLogger("lux_pipeline")
+
 
 class IndexLoader(Managable):
     def __init__(self, config):
         super().__init__(config)
         self.in_cache = config["datacache"]
         self.namespace = config["namespace"]
+        self.indexes = {}
         self.in_path = config.get("reconcileDumpPath", None)
         self.out_path = config.get("reconcileDbPath", None)
         self.inverse_path = config.get("inverseEquivDbPath", None)
@@ -22,46 +24,29 @@ class IndexLoader(Managable):
         self.overwrite = True
         self.increment_total = False
 
-    def get_storage(self):
-        mapExp = self.config.get("mapSizeExponent", 30)
-        # n = remove and recreate
-        if self.out_path:
-            index = TabLmdb.open(
-                self.out_path, "c", map_size=2**mapExp, readahead=False, writemap=True
-            )
+    def get_index(self, which):
+        if which in self.indexes and "index" in self.indexes[which]:
+            return self.indexes[which]["index"]
         else:
-            index = None
-        if self.inverse_path:
-            eqindex = TabLmdb.open(
-                self.inverse_path,
-                "c",
-                map_size=2**mapExp,
-                readahead=False,
-                writemap=True,
-            )
-        else:
-            eqindex = None
-        return (index, eqindex)
+            try:
+                self.manager.log(logging.ERROR, f"Could not find index {which} in {self.config['name']}")
+            except Exception:
+                pass
+            return None
 
     def export(self):
         # Once loaded, this will export from the LMDB to a CSV for sharing
-
-        if self.out_path is not None:
-            idx = TabLmdb.open(self.out_path, 'r', readahead=False, writemap=True)
-            csvfn = self.out_path.rsplit('/')[-1].replace('lmdb', 'csv')
-            outfn = os.path.join(self.configs.data_dir, csvfn)
-            self.write_csv(idx, outfn)
-        if self.inverse_path is not None:
-            idx = TabLmdb.open(self.inverse_path, 'r', readahead=False, writemap=True)
-            csvfn = self.inverse_path.rsplit('/')[-1].replace('lmdb', 'csv')
+        for name, cfg in self.indexes.items():
+            idx = cfg["index"]
+            csvfn = f"{self.config['name']}_{name}.csv"
             outfn = os.path.join(self.configs.data_dir, csvfn)
             self.write_csv(idx, outfn)
 
     def write_csv(self, idx, outfn):
-        with open(outfn, 'w') as csvh:
-            writer = csv.writer(csvh, delimiter=',')
-            for (k,v) in idx.items():
-                if type(v) == list:
+        with open(outfn, "w") as csvh:
+            writer = csv.writer(csvh, delimiter=",")
+            for k, v in idx.items():
+                if type(v) is list:
                     writer.writerow([k, "\t".join(v)])
                 else:
                     writer.writerow([k, v])
@@ -82,7 +67,7 @@ class IndexLoader(Managable):
 
         try:
             ttl = self.in_cache.len_estimate()
-            if not disable_ui:
+            if not self.disable_ui:
                 self.update_progress_bar(total=ttl)
             # Assume can store all names/uris in memory
             # If not, then override this in a subclass
@@ -108,8 +93,8 @@ class IndexLoader(Managable):
                                 if len(nm) < 500:
                                     all_names[nm.lower()] = [recid, typ]
                                 else:
-                                    self.manager.log(logging.ERROR,
-                                        f"Dropping name as too long ({len(nm)}>500):\n\t{nm}"
+                                    self.manager.log(
+                                        logging.ERROR, f"Dropping name as too long ({len(nm)}>500):\n\t{nm}"
                                     )
                     if uris is not None:
                         eqs = self.extract_uris(res["data"])
@@ -123,12 +108,13 @@ class IndexLoader(Managable):
             self.manager.log(logging.ERROR, e)
             return (None, None)
 
-
     def process(self, disable_ui=False, overwrite=True):
         self.overwrite = overwrite
         self.increment_total = self.total < 0
 
         (index, eqindex) = self.get_storage()
+        index = self.get_index("reconcile_labels")
+        eqindex = self.get_index("reconcile_ids")
         if index is None and eqindex is None:
             self.manager.log(logging.ERROR, f"{self.name} has no indexes configured")
             return None
@@ -154,16 +140,17 @@ class IndexLoader(Managable):
         (all_names, all_uris) = self.index_records(index is not None, eqindex is not None)
 
         if index is not None and all_names:
-            start = time.time()
-            index.update(all_names)
-            durn = time.time() - start
-            self.manager.log(logging.INFO, f"names insert time: {int(durn)} = {len(all_names)/durn}/sec")
+            with index.open("w"):
+                start = time.time()
+                index.update(all_names)
+                durn = time.time() - start
+            self.manager.log(logging.INFO, f"names insert time: {int(durn)} = {len(all_names) / durn}/sec")
         if eqindex is not None and all_uris:
-            start = time.time()
-            eqindex.update(all_uris)
-            durn = time.time() - start
-            self.manager.log(logging.INFO, f"uris insert time: {int(durn)} = {len(all_uris)/durn}/sec")
+            with eqindex.open("w"):
+                start = time.time()
+                eqindex.update(all_uris)
+                durn = time.time() - start
+            self.manager.log(logging.INFO, f"uris insert time: {int(durn)} = {len(all_uris) / durn}/sec")
 
         if not disable_ui:
             self.close_progress_bar()
-
