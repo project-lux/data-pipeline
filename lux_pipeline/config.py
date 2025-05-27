@@ -12,7 +12,7 @@ def importObject(objectType):
         return None
     try:
         (modName, className) = objectType.rsplit(".", 1)
-    except:
+    except Exception:
         raise ValueError("Need module.class instead of %s" % objectType)
     if not modName.startswith("lux_pipeline."):
         modName = f"lux_pipeline.{modName}"
@@ -27,7 +27,7 @@ def importObject(objectType):
         raise
     try:
         parentClass = getattr(m, className)
-    except AttributeError as e:
+    except AttributeError:
         raise
     return parentClass
 
@@ -102,7 +102,7 @@ class Config(object):
 
         for k in configcache.iter_keys():
             rec = configcache[k]["data"]
-            if type(rec) != dict:
+            if type(rec) is not dict:
                 raise ValueError("Could not read JSON from record: {k} --> {rec}")
             self.handle_config_record(k, rec)
 
@@ -112,13 +112,13 @@ class Config(object):
                 rec = cache[k]["data"]
                 try:
                     self.handle_config_record(k, rec)
-                except:
+                except Exception:
                     print(f"Could not generate a config for {k}")
 
     def handle_config_record(self, k, rec):
-        if not type(rec) == dict:
+        if type(rec) is not dict:
             raise ValueError(f"rec is a {type(rec)} not a dict")
-        if not "type" in rec:
+        if "type" not in rec:
             raise ValueError(f"missing 'type' in {k}: {rec}")
         if rec["type"] == "internal":
             self.internal[k] = rec
@@ -145,7 +145,6 @@ class Config(object):
             logger.critical(rec)
 
     def process_base(self, rec):
-        vcls = None
         for k, v in rec.items():
             if k != "type" and not hasattr(self, k):
                 setattr(self, k, v)
@@ -156,11 +155,10 @@ class Config(object):
         return "##qua" in recid
 
     def make_qua(self, recid, typ):
-        concept_subtypes = []
         # No op, don't duplicate
         if "##qua" in recid:
             return recid
-        if not typ in self.ok_record_types:
+        if typ not in self.ok_record_types:
             raise ValueError(f"Unknown type: {typ}")
         if typ in self.parent_record_types:
             typ = self.parent_record_types[typ]
@@ -173,7 +171,7 @@ class Config(object):
         # yuag:obj/12345.json --> (yuag config, "obj/12345.json")
         try:
             (src, recid) = curie.split(":", 1)
-        except:
+        except Exception:
             return None
         if src in self.internal:
             source = self.internal[src]
@@ -204,7 +202,7 @@ class Config(object):
         elif identifier.endswith(".html"):
             identifier = identifier.replace(".html", "")
 
-        if not "mapper" in source:
+        if "mapper" not in source:
             logger.error(f"Could not fix identifier {identifier} from {source} as no mapper")
         elif source["mapper"]:
             identifier = source["mapper"].fix_identifier(identifier)
@@ -227,7 +225,7 @@ class Config(object):
 
         for s in sources:
             ms = s.get("matches", [])
-            if type(ms) != list:
+            if type(ms) is not list:
                 ms = [ms]
             for m in ms:
                 if m in uri:
@@ -238,7 +236,7 @@ class Config(object):
         if source:
             try:
                 identifier = uri.rsplit(m, 1)[1]
-            except:
+            except Exception:
                 logger.error(f"Failed in split_uri() m: {m} source: {s['name']}")
                 return None
             if identifier.startswith("http://") or identifier.startswith("https://"):
@@ -481,6 +479,20 @@ class Config(object):
         cfg["all_configs"] = self
 
         try:
+            if "indexes" in cfg:
+                for idxname, idxcfg in cfg["indexes"].items():
+                    try:
+                        idxcls = importObject(idxcfg["indexClass"])
+                    except Exception as e:
+                        logger.error(f"Failed to import index class {idxcfg['indexClass']}")
+                        idxcfg["index"] = None
+                    idxcfg["name"] = idxname
+                    try:
+                        idxcfg["index"] = idxcls(idxcfg)
+                    except Exception as e:
+                        logger.error(f"Failed to build index {idxname}")
+                        idxcfg["index"] = None
+
             # Harvester needs the datacache to be in config
             dcc = cfg.get("datacacheClass", "storage.cache.postgres.DataCache")
             cls3 = importObject(dcc)
@@ -595,17 +607,4 @@ class Config(object):
             logger.critical(e)
             # raise
 
-        if "indexes" in cfg:
-            for idxname, idxcfg in cfg["indexes"].items():
-                try:
-                    idxcls = importObject(idxcfg["indexClass"])
-                except Exception as e:
-                    logger.error(f"Failed to import index class {idxcfg['indexClass']}")
-                    idxcfg["index"] = None
-                idxcfg["name"] = idxname
-                try:
-                    idxcfg["index"] = idxcls(idxcfg)
-                except Exception as e:
-                    logger.error(f"Failed to build index {idxname}")
-                    idxcfg["index"] = None
         return cfg

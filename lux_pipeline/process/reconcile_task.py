@@ -6,12 +6,15 @@ from ._task_ui_manager import TaskUiManager
 from .reconciler import Reconciler
 from .reference_manager import ReferenceManager
 from lux_pipeline.cli.entry import cfgs
+
 logger = logging.getLogger("lux_pipeline")
+
 
 class ReconcileManager(TaskUiManager):
     """
     manages reconcilation phase
     """
+
     def __init__(self, configs, max_workers: int = 0):
         super().__init__(configs, max_workers)
         self.no_refs = False
@@ -21,10 +24,11 @@ class ReconcileManager(TaskUiManager):
         self.temp_log_h = None
 
     def _handle_record(self, recid, cfg, rectype=None, distance=0):
-        acquirer = cfg['acquirer']
-        mapper = cfg['mapper']
+        acquirer = cfg["acquirer"]
+        mapper = cfg["mapper"]
         if self.temp_log_h:
-            self.temp_log_h.write(f"\n{cfg['name']}:{recid} "); self.temp_log_h.flush()
+            self.temp_log_h.write(f"\n{cfg['name']}:{recid} ")
+            self.temp_log_h.flush()
         if acquirer.returns_multiple():
             recs = acquirer.acquire_all(recid, rectype=rectype)
         else:
@@ -36,26 +40,30 @@ class ReconcileManager(TaskUiManager):
         if not recs:
             self.log(logging.DEBUG, f"Failed to acquire any record for {cfg['name']}/{recid} ***")
         if self.temp_log_h:
-            self.temp_log_h.write('a'); self.temp_log_h.flush()
+            self.temp_log_h.write("a")
+            self.temp_log_h.flush()
         for rec in recs:
             # Reconcile it
             rec2 = self.reconciler.reconcile(rec)
             if self.temp_log_h:
-                self.temp_log_h.write('r'); self.temp_log_h.flush()
+                self.temp_log_h.write("r")
+                self.temp_log_h.flush()
             mapper.post_reconcile(rec2)
             self.ref_mgr.walk_top_for_refs(rec2["data"], distance)
             if self.temp_log_h:
-                self.temp_log_h.write('m'); self.temp_log_h.flush()
+                self.temp_log_h.write("m")
+                self.temp_log_h.flush()
             self.ref_mgr.manage_identifiers(rec2)
             if self.temp_log_h:
-                self.temp_log_h.write('!'); self.temp_log_h.flush()
+                self.temp_log_h.write("!")
+                self.temp_log_h.flush()
 
         if not self.disable_ui:
             self.update_progress_bar(advance=1)
 
     def _pool_reconcile_records(self, n):
         self.log(logging.INFO, f"Starting records in {n}")
-        for (which, name, recids) in self.sources:
+        for which, name, recids in self.sources:
             cfg = getattr(self.configs, which)[name]
             if not recids:
                 in_db = cfg["datacache"]
@@ -80,7 +88,7 @@ class ReconcileManager(TaskUiManager):
             self.update_progress_bar(description="references", total=self.total)
         item = True
         done = 0
-        fh = open(f'temp_log_{n}.txt', 'w')
+        fh = open(f"temp_log_{n}.txt", "w")
         self.temp_log_h = fh
         while item:
             item = self.ref_mgr.pop_ref()
@@ -94,8 +102,8 @@ class ReconcileManager(TaskUiManager):
                     time.sleep(0.5)
                     continue
             done += 1
-            if done >= self.total-1:
-                self.total += (self.ref_mgr.get_len_refs() // self.max_workers)
+            if done >= self.total - 1:
+                self.total += self.ref_mgr.get_len_refs() // self.max_workers
                 self.update_progress_bar(total=self.total)
             try:
                 (uri, dct) = item
@@ -122,7 +130,7 @@ class ReconcileManager(TaskUiManager):
         self.log(logging.INFO, f"Done with metatypes in {n}")
         return True
 
-    def _distributed(self,n):
+    def _distributed(self, n):
         super()._distributed(n)
         self.idmap = self.configs.get_idmap()
         self.ref_mgr = ReferenceManager(self.configs, self.idmap)
@@ -142,9 +150,16 @@ class ReconcileManager(TaskUiManager):
 
     def maybe_add(self, which, cfg):
         # Test if we should add it?
-        self.sources.append((which, cfg['name'], []))
+        self.sources.append((which, cfg["name"], []))
 
     def process(self, layout, **args) -> bool:
+        if "new_token" in args:
+            logger.info("Creating new reconciliation token")
+            idmap = cfgs.get_idmap()
+            idmap.make_update_token()
+        else:
+            logger.info("Rebuilding with existing reconciliation token")
+
         self.phase = 1
         super().process(layout, **args)
 

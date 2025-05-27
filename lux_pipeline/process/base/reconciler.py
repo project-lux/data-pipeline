@@ -173,7 +173,7 @@ class Reconciler(object):
 
 class LmdbReconciler(Reconciler):
     def __init__(self, config):
-        Reconciler.__init__(self, config)
+        super().__init__(config)
         self.name_index = config.get("indexes", {}).get("reconcile_label", {}).get("index", None)
         self.id_index = config.get("indexes", {}).get("reconcile_id", {}).get("index", None)
 

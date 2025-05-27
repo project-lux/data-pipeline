@@ -1,19 +1,18 @@
-
 import os
 import redis
 import uuid
-import sys
-import random
 import logging
+import datetime
+
 logger = logging.getLogger("lux_pipeline")
 
-class RedisCache(object):
 
+class RedisCache(object):
     def __init__(self, config):
-        self.configs = config['all_configs']
-        self.host = config.get('host', 'localhost')
-        self.port = int(config.get('port', 6379))
-        self.db = config.get('db', 0)
+        self.configs = config["all_configs"]
+        self.host = config.get("host", "localhost")
+        self.port = int(config.get("port", 6379))
+        self.db = config.get("db", 0)
         self.conn = redis.Redis(host=self.host, port=self.port, db=self.db, decode_responses=True)
         self._restoring_data_state = False
         self.prefix_map_in = {}
@@ -23,24 +22,24 @@ class RedisCache(object):
     # Manage prefix <--> full URI
     def _manage_key_in(self, key):
         # from str to bytes
-        if key.startswith('http'):
+        if key.startswith("http"):
             # replace full with prefix
-            for (k,v) in self.prefix_map_in.items():
+            for k, v in self.prefix_map_in.items():
                 if key.startswith(k):
                     key = key.replace(k, f"{v}:")
                     break
-        #key = key.encode('utf-8')
+        # key = key.encode('utf-8')
         return key
 
     def _manage_key_out(self, key):
         # from bytes to str
-        #key = key.decode('utf-8')
-        if not key.startswith('http'):
+        # key = key.decode('utf-8')
+        if not key.startswith("http"):
             # replace prefix with full
-            for (k,v) in self.prefix_map_out.items():
+            for k, v in self.prefix_map_out.items():
                 if key.startswith(k):
                     key = key.replace(f"{k}:", v)
-                    break            
+                    break
         return key
 
     _manage_value_in = _manage_key_in
@@ -50,7 +49,7 @@ class RedisCache(object):
     def _export_state(self):
         # return a json dict of the external:yuid values
         state = {}
-        for k in self.iter_keys(type='string'):
+        for k in self.iter_keys(type="string"):
             state[k] = self[k]
         return state
 
@@ -59,7 +58,7 @@ class RedisCache(object):
         self.clear()
         self._restoring_data_state = True
         x = 0
-        for (k, v) in state.items():
+        for k, v in state.items():
             self.set(k, v)
         self._restoring_data_state = False
 
@@ -83,7 +82,7 @@ class RedisCache(object):
     def popitem(self):
         k = self.conn.scan(count=1)
         k = k[1][0]
-        val = self.conn.get(k)        
+        val = self.conn.get(k)
         self.conn.delete(k)
         return (self._manage_key_out(k), self._manage_key_out(val))
 
@@ -122,46 +121,44 @@ class IdMap(RedisCache):
 
     def __init__(self, config):
         RedisCache.__init__(self, config)
-        self.prefix_map_out = {
-            "yuid": self.configs.internal_uri
-        }
+        self.prefix_map_out = {"yuid": self.configs.internal_uri}
         for cf in self.configs.external.values():
-            self.prefix_map_out[cf['name']] = cf['namespace']
+            self.prefix_map_out[cf["name"]] = cf["namespace"]
         self.prefix_map_in = {}
-        for (k,v) in self.prefix_map_out.items():
+        for k, v in self.prefix_map_out.items():
             self.prefix_map_in[v] = k
         self.memory_cache_enabled = False
         self.memory_cache = {}
         self.clean_on_remove = False
 
-        fn = os.path.join(self.configs.data_dir, 'idmap_update_token.txt')
+        fn = os.path.join(self.configs.data_dir, "idmap_update_token.txt")
         if not os.path.exists(fn):
-            with open(fn, 'w') as fh:
+            with open(fn, "w") as fh:
                 fh.write("__initial__")
         with open(fn) as fh:
             token = fh.read()
         token = token.strip()
-        if not token.startswith('__') or not token.endswith('__'):
+        if not token.startswith("__") or not token.endswith("__"):
             logger.critical("Idmap Update Token is badly formed, should be 8 character date with leading/trailing __")
             raise ValueError("update token")
         else:
             self.update_token = token
 
     def _manage_value_in(self, value):
-        if value.startswith('http'):
+        if value.startswith("http"):
             # replace prefixes
-            for (k,v) in self.prefix_map_in.items():
+            for k, v in self.prefix_map_in.items():
                 if value.startswith(k):
                     value = value.replace(k, f"{v}:")
                     break
-        #value = value.encode('utf-8')
+        # value = value.encode('utf-8')
         return value
 
     def _manage_value_out(self, value):
-        #value = value.decode('utf-8')
-        if not value.startswith('http'):
+        # value = value.decode('utf-8')
+        if not value.startswith("http"):
             # replace prefix with full
-            for (k,v) in self.prefix_map_out.items():
+            for k, v in self.prefix_map_out.items():
                 if value.startswith(k):
                     value = value.replace(f"{k}:", v)
                     break
@@ -169,7 +166,7 @@ class IdMap(RedisCache):
 
     # External callers should only interact via external ids
     # so we take care of the yuid set management internally
-    def _add(self, key, *values):     
+    def _add(self, key, *values):
         key = self._manage_key_in(key)
         values = [self._manage_value_in(value) for value in values]
         return self.conn.sadd(key, *values)
@@ -177,7 +174,7 @@ class IdMap(RedisCache):
     def _remove(self, key, value):
         key = self._manage_key_in(key)
         value = self._manage_value_in(value)
-        self.conn.srem(key, value) 
+        self.conn.srem(key, value)
         if self.clean_on_remove:
             # If the only thing left is an update token, then delete
             # Can't enable this yet as rebuilding cleans and reproduces
@@ -185,6 +182,25 @@ class IdMap(RedisCache):
             out = [self._manage_value_out(x) for x in val]
             if len(out) == 1 and out[0].startswith("__"):
                 self._remove(self._manage_value_out(key), out[0])
+
+    def make_update_token(self):
+        now = datetime.datetime.now()
+        mm = f"0{now.month}" if now.month < 10 else now.month
+        dd = f"0{now.day}" if now.day < 10 else now.day
+        stok = f"__{now.year}{mm}{dd}"
+        if self.update_token.startswith(stok):
+            if self.update_token[-3].isalpha():
+                letter = chr(ord(self.update_token[-3]) + 1)
+            else:
+                letter = "a"
+            tok = f"{stok}{letter}__"
+        else:
+            tok = f"{stok}__"
+        fn = os.path.join(self.configs.data_dir, "idmap_update_token.txt")
+        with open(fn, "w") as fh:
+            fh.write(f"{tok}\n")
+        self.update_token = tok
+        return tok
 
     def has_update_token(self, key):
         key = self._manage_key_in(key)
@@ -198,7 +214,7 @@ class IdMap(RedisCache):
         out = {self._manage_value_out(x) for x in val}
         found = False
         for o in out:
-            if o.startswith('__') and o.endswith('__'):
+            if o.startswith("__") and o.endswith("__"):
                 # delete previous tokens
                 if o != self.update_token:
                     self._remove(key, o)
@@ -209,6 +225,7 @@ class IdMap(RedisCache):
 
     def enable_memory_cache(self):
         self.memory_cache_enabled = True
+
     def disable_memory_cache(self):
         self.memory_cache_enabled = False
         self.memory_cache = {}
@@ -232,14 +249,13 @@ class IdMap(RedisCache):
         self.set(key, value)
         return value
 
-
     def get(self, key, typ=""):
         if typ in self.configs.ok_record_types:
             key = self.configs.make_qua(key, typ)
         elif typ:
             raise ValueError(typ)
-        elif not self.configs.is_qua(key) and not self.prefix_map_out['yuid'] in key:
-            raise ValueError(f"Need a type: {key}")            
+        elif not self.configs.is_qua(key) and not self.prefix_map_out["yuid"] in key:
+            raise ValueError(f"Need a type: {key}")
 
         key = self._manage_key_in(key)
 
@@ -249,30 +265,29 @@ class IdMap(RedisCache):
             return self.memory_cache[key]
 
         t = self.conn.type(key)
-        if t == 'string':
+        if t == "string":
             val = self.conn.get(key)
             if not val:
                 logger.error(f"idmap was asked for {key} but got {val}")
                 return None
             out = self._manage_value_out(val)
-        elif t == 'set':
+        elif t == "set":
             val = self.conn.smembers(key)
             if not val:
                 logger.error(f"idmap was asked for {key} but got {val}")
                 return None
             out = {self._manage_value_out(x) for x in val}
-        elif t == 'none':
+        elif t == "none":
             # Asked for a non-existent key
             return None
         else:
             raise ValueError(f"Unknown key type {t}")
 
-        if self.memory_cache_enabled and key.startswith("aat:"): 
+        if self.memory_cache_enabled and key.startswith("aat:"):
             self.memory_cache[key] = out
         return out
 
     def set(self, key, value, typ=""):
-
         if self.memory_cache_enabled:
             # This shouldn't happen...
             logging.log(logging.ERROR, "Idmap tried to set a value while memory cache was enabled; disabling")
@@ -283,7 +298,7 @@ class IdMap(RedisCache):
         elif typ:
             raise ValueError(typ)
         elif not self.configs.is_qua(key):
-            raise ValueError(f"Need a type: {key}")   
+            raise ValueError(f"Need a type: {key}")
 
         # key is external identifier
         # value is an existing yuid
@@ -331,20 +346,20 @@ class IdMap(RedisCache):
         elif typ:
             raise ValueError(typ)
         elif not self.configs.is_qua(key):
-            raise ValueError(f"Need a type: {key}")         
+            raise ValueError(f"Need a type: {key}")
 
         ikey = self._manage_key_in(key)
         t = self.conn.type(ikey)
-        if t == 'string':
+        if t == "string":
             value = self.get(key)
             self.conn.delete(ikey)
             self._remove(value, key)
-            if self.memory_cache_enabled and ikey.startswith('aat:') and ikey in self.memory_cache:
+            if self.memory_cache_enabled and ikey.startswith("aat:") and ikey in self.memory_cache:
                 del self.memory_cache[ikey]
-        elif t == 'none':
+        elif t == "none":
             # Key doesn't exist, already deleted / never existed
             pass
-        elif t == 'set':
+        elif t == "set":
             raise ValueError(f"{key} is a YUID ({t}) and cannot be manually deleted")
         else:
             logger.error(f"Got {t} as type of key in idmap?")
@@ -352,10 +367,9 @@ class IdMap(RedisCache):
 
 
 class NetworkOperationMap(RedisCache):
-
     def __init__(self, config):
-        if not 'db' in config:
-            config['db'] = 2
+        if not "db" in config:
+            config["db"] = 2
         RedisCache.__init__(self, config)
 
     def get(self, key):
@@ -380,23 +394,22 @@ class NetworkOperationMap(RedisCache):
         self.conn.set(ikey, ival)
 
     def delete(self, key):
-        ikey = self._manage_key_in(key)        
+        ikey = self._manage_key_in(key)
         self.conn.delete(ikey)
 
 
 class MultiMap(RedisCache):
-
     # a --> [b,c] ; no implications
     # all values are sets
 
     def __init__(self, config):
-        if not 'db' in config:
-            config['db'] = 8
+        if not "db" in config:
+            config["db"] = 8
         RedisCache.__init__(self, config)
-        if 'maxItems' in config:
-            self.max_items = config['maxItems']
+        if "maxItems" in config:
+            self.max_items = config["maxItems"]
         else:
-            self.max_items = 0 # meaning infinite
+            self.max_items = 0  # meaning infinite
 
     def get(self, key):
         # values are always sets
@@ -417,17 +430,17 @@ class MultiMap(RedisCache):
         ivalue = self._manage_value_in(value)
         # sadd is set operation. adding x twice is noop
         self.conn.sadd(ikey, ivalue)
-        if self.max_items and l == self.max_items-1:
-            self.conn.sadd(ikey, b'__HIGHWATER__')
+        if self.max_items and l == self.max_items - 1:
+            self.conn.sadd(ikey, b"__HIGHWATER__")
 
     def add(self, key, value):
         return self.set(key, value)
 
     def remove(self, key, value):
         ikey = self._manage_key_in(key)
-        ivalue = self._manage_value_in(value) 
+        ivalue = self._manage_value_in(value)
         # if ikey doesn't exist, returns empty set
-        all_vals = self.conn.smembers(ikey)            
+        all_vals = self.conn.smembers(ikey)
         if ivalue in all_vals:
             self.conn.srem(ikey, ivalue)
 
@@ -437,13 +450,12 @@ class MultiMap(RedisCache):
 
 
 class TransitiveMultiMap(MultiMap):
-
     # a --> [b,c] ; (implies b --> [a] and c --> [a])
     # `map[a] = b` --> add b to the set with key a, and a to set with key b
 
     def __init__(self, config):
-        if not 'db' in config:
-            config['db'] = 5
+        if not "db" in config:
+            config["db"] = 5
         RedisCache.__init__(self, config)
 
     def set(self, key, value):
@@ -455,9 +467,9 @@ class TransitiveMultiMap(MultiMap):
 
     def remove(self, key, value):
         ikey = self._manage_key_in(key)
-        ivalue = self._manage_value_in(value) 
+        ivalue = self._manage_value_in(value)
         # if ikey doesn't exist, returns empty set
-        all_vals = self.conn.smembers(ikey)            
+        all_vals = self.conn.smembers(ikey)
         if not ivalue in all_vals:
             return
         else:
@@ -465,7 +477,7 @@ class TransitiveMultiMap(MultiMap):
             self.conn.srem(ivalue, ikey)
 
     def delete(self, key, typ=""):
-        # Shouldn't be allowed to ensure transitive consistency 
+        # Shouldn't be allowed to ensure transitive consistency
         # Instead rely on redis auto-clean when value is empty
         raise ValueError("You need to .remove(key, value)")
 
@@ -489,10 +501,9 @@ class RedisDictValue(object):
 
 
 class ReferenceMap(NetworkOperationMap):
-
     def __init__(self, config):
-        if not 'db' in config:
-            config['db'] = 3
+        if not "db" in config:
+            config["db"] = 3
         RedisCache.__init__(self, config)
 
     def _export_state(self):
@@ -526,7 +537,7 @@ class ReferenceMap(NetworkOperationMap):
     def _items(self, db_key):
         d = self.conn.hgetall(db_key)
         n = []
-        for (k,v) in d.items():
+        for k, v in d.items():
             n.append((self._manage_key_out(k), self._manage_value_out(v)))
         return n
 
@@ -536,7 +547,7 @@ class ReferenceMap(NetworkOperationMap):
 
     def set(self, key, value):
         # convert from dict or RDV to hset
-        for (k,v) in value.items():
+        for k, v in value.items():
             self._setitem(key, k, v)
 
     # Make an iterator for keys, that match type and/or pattern
@@ -548,7 +559,7 @@ class ReferenceMap(NetworkOperationMap):
             yield RedisDictValue(key, self)
 
     def popitem(self):
-        if len(self) ==  0:
+        if len(self) == 0:
             return None
         rk = self.conn.randomkey()
         try:
@@ -557,11 +568,11 @@ class ReferenceMap(NetworkOperationMap):
         except:
             return None
         n = {}
-        for (k,v) in d.items():
+        for k, v in d.items():
             n[self._manage_key_out(k)] = self._manage_value_out(v)
         return (self._manage_key_out(rk), n)
 
     def update(self, values):
         # Iter through all of the pairs in the dict and set
-        for (k,v) in values.items():
+        for k, v in values.items():
             self.set(k, v)
