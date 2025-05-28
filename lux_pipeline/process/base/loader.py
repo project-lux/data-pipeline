@@ -1,4 +1,3 @@
-
 import io
 import os
 import requests
@@ -48,61 +47,65 @@ datacache exports are "zip.bz2/json"
 
 """
 
+
 class Pointer:
     def __init__(self, parent, info):
         self.parent = parent
         self.info = info
+
 
 class TarPointer(Pointer):
     # parent is a TarFile
     # info is a TarInfo
     def get_name(self):
         return self.info.name
+
     def get_handle(self):
         return self.parent.extractfile(self.info)
+
 
 class ZipPointer(Pointer):
     # parent is ZipFile
     # info is a string
     def get_name(self):
         return self.info
+
     def get_handle(self):
         return self.parent.open(self.info)
 
 
 class Loader(Managable):
-
     def __init__(self, config):
         super().__init__(config)
-        self.name = config['name']
-        self.out_cache = config.get('datacache', {})
-        self.mapper = config.get('mapper', None)
-        self.total = config.get('totalRecords', -1)
+        self.name = config["name"]
+        self.out_cache = config.get("datacache", {})
+        self.mapper = config.get("mapper", None)
+        self.total = config.get("totalRecords", -1)
         self.increment_total = self.total < 0
-        self.dumps_dir = config['all_configs'].dumps_dir
-        if 'dumps_dir' in config:
-            self.dumps_dir = os.path.join(self.dumps_dir, config['dumps_dir'])
+        self.dumps_dir = config["all_configs"].dumps_dir
+        if "dumps_dir" in config:
+            self.dumps_dir = os.path.join(self.dumps_dir, config["dumps_dir"])
         self.seen = 0
         self.my_files = []
         self.temp_file_handles = {}
         self.overwrite = False
 
-        self.fmt_containers = ['dir', 'dirh', 'pair', 'zip', 'tar', 'lines', 'dict', 'array', 'arraylines']
-        self.fmt_formats = ['json', 'raw', 'other']
-        self.fmt_compressions = ['gz', 'bz2']
+        self.fmt_containers = ["dir", "dirh", "pair", "zip", "tar", "lines", "dict", "array", "arraylines"]
+        self.fmt_formats = ["json", "raw", "other"]
+        self.fmt_compressions = ["gz", "bz2"]
         self.step_functions = {
-            'dir': self.iterate_directory,
-            'dirs': self.iterate_directories,
-            'pair': self.iterate_directories,
-            'zip': self.iterate_zip,
-            'tar': self.iterate_tar,
-            'lines': self.iterate_lines,
-            'arraylines': self.iterate_arraylines,
-            'dict': self.iterate_dict,
-            'array': self.iterate_array,
-            'json': self.make_json,
-            'raw': self.make_raw,
-            'other': self.make_other
+            "dir": self.iterate_directory,
+            "dirs": self.iterate_directories,
+            "pair": self.iterate_directories,
+            "zip": self.iterate_zip,
+            "tar": self.iterate_tar,
+            "lines": self.iterate_lines,
+            "arraylines": self.iterate_arraylines,
+            "dict": self.iterate_dict,
+            "array": self.iterate_array,
+            "json": self.make_json,
+            "raw": self.make_raw,
+            "other": self.make_other,
         }
 
     def guess_fmt(self, path):
@@ -113,46 +116,46 @@ class Loader(Managable):
         compression = None
         fmt = None
 
-        if (isdir := os.path.isdir(path)):
+        if isdir := os.path.isdir(path):
             # A directory ... of what?
             # If all we have is a directory, assume everything is consistent
             files = os.listdir(path)
             for f in files:
                 if len(f) == 2 and os.path.isdir(os.path.join(path, f)):
-                    container = 'pair'
+                    container = "pair"
                     break
-                elif '.' in f and os.path.isfile(os.path.join(path, f)):
+                elif "." in f and os.path.isfile(os.path.join(path, f)):
                     # recurse
                     sub = self.guess_fmt(os.path.join(path, f))
                     if sub:
                         # got something, otherwise keep looking
-                        spec = [['dir'], sub]
+                        spec = [["dir"], sub]
                         break
         else:
             # A file ... what sort?
             # Trust extension to start
 
-            if path.endswith('.gz'):
-                compression = 'gz'
+            if path.endswith(".gz"):
+                compression = "gz"
                 path = path[:-3]
-            elif path.endswith('.bz2'):
-                compression = 'bz'
+            elif path.endswith(".bz2"):
+                compression = "bz"
                 path = path[:-4]
 
-            if path.endswith('.zip'):
-                container = 'zip'
-            elif path.endswith('.tar'):
-                container = 'tar'
-            elif path.endswith('.tgz'):
-                compression = 'gz'
-                container = 'tar'
-            elif path.endswith('.json'):
+            if path.endswith(".zip"):
+                container = "zip"
+            elif path.endswith(".tar"):
+                container = "tar"
+            elif path.endswith(".tgz"):
+                compression = "gz"
+                container = "tar"
+            elif path.endswith(".json"):
                 # dunno what this is yet
                 # FIXME: figure out if dict, array, lines, single file?
-                fmt = 'json'
-            elif path.endswith('.jsonl'):
-                container = 'lines'
-                fmt = 'json'
+                fmt = "json"
+            elif path.endswith(".jsonl"):
+                container = "lines"
+                fmt = "json"
 
         if not spec and (container or fmt):
             if container:
@@ -163,13 +166,12 @@ class Loader(Managable):
                 spec.append(compression)
         return [spec]
 
-
     def process_fmt(self, fmt):
         spec = []
-        bits = fmt.split('/')
+        bits = fmt.split("/")
         fmt = bits.pop(-1)
         for b in bits:
-            bb = b.split('.')
+            bb = b.split(".")
             if not bb[0] in self.fmt_containers:
                 raise ValueError(f"Cannot process container type {bb[0]} in {self.name} loader")
             if len(bb) == 2 and bb[1] not in self.fmt_compressions:
@@ -177,7 +179,7 @@ class Loader(Managable):
             if len(bb) > 2:
                 raise ValueError(f"Badly specified container: {bb} in {self.name} loader")
             spec.append(bb)
-        fmts = fmt.split('.')
+        fmts = fmt.split(".")
         if not fmts[0] in self.fmt_formats:
             raise ValueError(f"Cannot process format type {fmts[0]} in {self.name} loader")
         if len(fmts) == 2 and fmts[1] not in self.fmt_compressions:
@@ -186,7 +188,6 @@ class Loader(Managable):
             raise ValueError(f"Badly specified container: {fmts} in {self.name} loader")
         spec.append(fmts)
         return spec
-
 
     def iterate_directory(self, path, comp, remaining):
         # ignore comp
@@ -200,7 +201,8 @@ class Loader(Managable):
 
     def iterate_directories(self, path, comp, remaining):
         # still ignore comp
-        for f in os.listdir(path):
+        files = os.listdir(path)
+        for f in files:
             full = os.path.join(path, f)
             if os.path.isfile(full):
                 if self.increment_total and len(remaining) == 1:
@@ -210,9 +212,9 @@ class Loader(Managable):
                 self.iterate_directories(full, comp, remaining)
 
     def iterate_zip(self, path, comp, remaining):
-        if comp == 'bz2':
+        if comp == "bz2":
             compression = zipfile.ZIP_BZIP2
-        elif comp == 'gz':
+        elif comp == "gz":
             compression = zipfile.ZIP_DEFLATED
         else:
             compression = zipfile.ZIP_STORED
@@ -222,7 +224,7 @@ class Loader(Managable):
             if self.increment_total and len(remaining) == 1:
                 self.update_progress_bar(increment_total=len(names))
             for n in names:
-                if not n.endswith('/'):
+                if not n.endswith("/"):
                     # can't get back to this, so need to yield a file handle like object
                     yield ZipPointer(zh, n)
 
@@ -256,9 +258,9 @@ class Loader(Managable):
             self.manager.log(logging.ERROR, f"[red]Got a dict as path in file_opener for {self.name}: {path}")
             return None
 
-        if comp == 'gz':
+        if comp == "gz":
             return gzip.open(path)
-        elif comp == 'bz2':
+        elif comp == "bz2":
             return bz2.open(path)
         elif not comp:
             try:
@@ -293,7 +295,6 @@ class Loader(Managable):
 
     def iterate_lines(self, path, comp, remaining):
         with self.file_opener(path, comp) as fh:
-
             if self.increment_total:
                 lines = self.count_lines(fh)
                 if lines > 0:
@@ -327,7 +328,6 @@ class Loader(Managable):
     def iterate_arraylines(self, path, comp, remaining):
         # Assumptions:  array of json, where each record is a line
         with self.file_opener(path, comp) as fh:
-
             if self.increment_total:
                 lines = self.count_lines(fh)
                 if lines > 0:
@@ -342,14 +342,14 @@ class Loader(Managable):
                 if type(l) == bytes:
                     l = l.decode("utf-8")
                 l = l.strip()
-                if l[0] in ['[', ',']:
+                if l[0] in ["[", ","]:
                     l = l[1:]
-                elif l[-1] in [']', ',']:
+                elif l[-1] in ["]", ","]:
                     l = l[:-1]
                 l = l.strip()
                 if len(l) < 2:
                     continue
-                elif l[0] != '{' or l[-1] != '}':
+                elif l[0] != "{" or l[-1] != "}":
                     continue
                 yield io.StringIO(l)
 
@@ -359,7 +359,7 @@ class Loader(Managable):
         ident = self.extract_identifier(data)
         if not ident:
             raise ValueError(f"Could not get an identifier in {self.name} while in {parent}")
-        return {'identifier': ident, 'data': data}
+        return {"identifier": ident, "data": data}
 
     def make_json(self, path, comp, parent):
         ident = self.make_identifier(path)
@@ -370,7 +370,7 @@ class Loader(Managable):
             ident = self.extract_identifier(data)
             if not ident:
                 raise ValueError(f"Could not get an identifier in {self.name} while in {parent}/{path}")
-        return {'identifier': ident, 'data': data}
+        return {"identifier": ident, "data": data}
 
     def make_other(self, path, comp, parent):
         ident = self.make_identifier(path)
@@ -378,31 +378,31 @@ class Loader(Managable):
             data = fh.read()
         data = self.post_process_other(data)
         if not type(data) == dict:
-            data = {'data': data}
+            data = {"data": data}
         if not ident:
             ident = self.extract_identifier(data)
             if not ident:
                 raise ValueError(f"Could not get an identifier in {self.name} while in {parent}/{path}")
-        return {'identifier': ident, 'data': data}
+        return {"identifier": ident, "data": data}
 
     def make_identifier(self, value):
         # assume a filepath with the last component as the identifier
         if isinstance(value, Pointer):
             value = value.get_name()
-        elif hasattr(value, 'name'):
+        elif hasattr(value, "name"):
             value = value.name
         elif isinstance(value, bytes):
-            value = value.decode('utf-8')
+            value = value.decode("utf-8")
         try:
-            last = value.split('/')[-1]
-            return last.split('.')[0]
+            last = value.split("/")[-1]
+            return last.split(".")[0]
         except:
             return None
 
     def extract_identifier(self, data):
         # Could be anywhere, but at least check 'id'
-        if type(data) == dict and 'id' in data:
-            return self.make_identifier(data['id'])
+        if type(data) == dict and "id" in data:
+            return self.make_identifier(data["id"])
         return None
 
     def post_process_json(self, data):
@@ -419,7 +419,7 @@ class Loader(Managable):
         return True
 
     def should_store_record(self, data):
-        if not self.overwrite and data['identifier'] in self.out_cache:
+        if not self.overwrite and data["identifier"] in self.out_cache:
             return False
         return True
 
@@ -429,37 +429,36 @@ class Loader(Managable):
         entries = 0
         if self.temp_file_handles:
             fields = self.mapper.extract_index_data(record)
-            for (f, vals) in fields.items():
+            for f, vals in fields.items():
                 if f in self.temp_file_handles:
-                    for (a,b) in vals:
+                    for a, b in vals:
                         valstr = f"{a}\t{b}\n"
                         self.temp_file_handle[f].write(valstr)
                         entries += 1
         return entries
 
     def open_temp_files(self):
-        if 'reconcileDbPath' in self.config:
+        if "reconcileDbPath" in self.config:
             lblfn = os.path.join(self.configs.temp_dir, f"{self.name}_labels_{self.my_slice}.tsv")
-            lbl = open(lblfn, 'w')
-            self.temp_file_handles['label'] = lbl
-        if 'inverseEquivDbPath' in self.config:
+            lbl = open(lblfn, "w")
+            self.temp_file_handles["label"] = lbl
+        if "inverseEquivDbPath" in self.config:
             eqfn = os.path.join(self.configs.temp_dir, f"{self.name}_equivs_{self.my_slice}.tsv")
-            eq = open(eqfn, 'w')
-            self.temp_file_handles['equiv'] = eq
-        if 'hasDifferentFrom' in self.config:
+            eq = open(eqfn, "w")
+            self.temp_file_handles["equiv"] = eq
+        if "hasDifferentFrom" in self.config:
             diffn = os.path.join(self.configs_temp_dir, f"{self.name}_diffs_{self.my_slice}.tsv")
-            diff = open(diffn, 'w')
-            self.temp_file_handles['diff'] = diff
-
+            diff = open(diffn, "w")
+            self.temp_file_handles["diff"] = diff
 
     def close_temp_files(self):
-        for t in ['label', 'equiv', 'diff']:
+        for t in ["label", "equiv", "diff"]:
             if t in self.temp_file_handles and (fh := self.temp_file_handles[t]) and not fh.closed:
                 fh.close()
 
     def store_record(self, record):
-        identifier = record['identifier']
-        data = record['data']
+        identifier = record["identifier"]
+        data = record["data"]
         try:
             self.out_cache[identifier] = data
         except Exception as e:
@@ -499,32 +498,34 @@ class Loader(Managable):
             self.total = -1
 
         files = []
-        if (ifs := self.config.get('input_files', {})):
+        if ifs := self.config.get("input_files", {}):
             if not load_type in ifs:
-                self.manager.log(logging.ERROR, f"No configured file for load type '{load_type}' in source {self.name}")
+                self.manager.log(
+                    logging.ERROR, f"No configured file for load type '{load_type}' in source {self.name}"
+                )
                 return False
             for p in ifs[load_type]:
-                fmt = p.get('type', None)
-                path = p.get('path', None)
-                url = p.get('url', None)
+                fmt = p.get("type", None)
+                path = p.get("path", None)
+                url = p.get("url", None)
                 if url is None and path is None:
                     # WTF?
                     continue
                 elif path is None:
-                    path = url.split('/')[-1]
+                    path = url.split("/")[-1]
                 if fmt:
                     fmtspec = self.process_fmt(fmt)
                 else:
                     # gotta guess
                     fmtspec = self.guess_fmt(path)
 
-                if not '/' in path:
+                if not "/" in path:
                     path = os.path.join(self.dumps_dir, path)
                 files.append({"path": path, "fmt": fmtspec})
 
-        if not files and load_type == "records" and (dfp := self.config.get('dumpFilePath')):
+        if not files and load_type == "records" and (dfp := self.config.get("dumpFilePath")):
             # look in dfp
-            fmt = self.config.get('dumpFileType', None)
+            fmt = self.config.get("dumpFileType", None)
             if fmt:
                 fmtspec = self.process_fmt(fmt)
             else:
@@ -533,7 +534,6 @@ class Loader(Managable):
             files.append({"path": dfp, "fmt": fmtspec})
         self.my_files = files
         self.manager.log(logging.DEBUG, repr(self.my_files))
-
 
     def process(self, disable_ui=False, overwrite=True):
         self.overwrite = overwrite
@@ -554,7 +554,7 @@ class Loader(Managable):
                 self.update_progress_bar()
             self.manager.log(logging.INFO, f"[green]Loading {info['path']} for {self.name} in {self.my_slice}")
             try:
-                self.process_step(info['fmt'], info['path'], None)
+                self.process_step(info["fmt"], info["path"], None)
             except Exception as e:
                 self.manager.log(logging.ERROR, f"[red]Failed to load file:")
                 self.manager.log(logging.ERROR, e)

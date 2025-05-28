@@ -16,6 +16,6 @@ class CommandHandler(CH):
         # The manager needs the type before processing for prepare_single()
         if hasattr(args, "type") and args.type:
             mgr.download_type = args.type
-            if args.type not in ["records", "export"]:
+            if args.type not in ["records", "export", "all"]:
                 logger.warning(f"Unknown download type: {args.type}, continuing anyway...")
         return mgr

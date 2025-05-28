@@ -133,7 +133,7 @@ class BaseDownloader(Managable):
             for data in response.iter_content(chunk_size=1024):
                 size = f.write(data)
                 self.manager.update_progress_bar(advance=size)
-        time.sleep(2)
+        time.sleep(1)
         self.manager.update_progress_bar(completed=total_size)
         self.manager.log(logging.INFO, f"Finished downloading {filename}")
         time.sleep(2)
