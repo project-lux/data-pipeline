@@ -175,7 +175,7 @@ class CommandHandler(BH):
                 print(f"\nShortest path from {from_p} to {to_p}")
                 print(" --> ".join([inv_ident[x] for x in nx.shortest_path(G, idents[from_p], idents[to_p])]))
 
-                plt.figure(figsize=(12, 12))
+                # plt.figure(figsize=(12, 12))
                 uri_colors = {
                     "id.loc.gov": "#7CFC00",
                     "vocab.getty.edu": "#FFA07A",
