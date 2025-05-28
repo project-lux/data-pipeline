@@ -108,7 +108,7 @@ def get_year_from_timespan(event):
         ts = event["timespan"]["begin_of_the_begin"]
         if ts.startswith("-"):
             dt = ts.split("T")[0].split("-")[1]
-            if startswith("0"):
+            if dt.startswith("0"):
                 dt = "-" + dt[1:]
             else:
                 dt = "-" + dt
@@ -405,7 +405,7 @@ def make_datetime(value, precision=""):
                 if dt3.period == "day" and dt3.locale != "en":
                     begin = dt3.date_obj
                     end = begin + timedelta(days=1)
-                elif dt2:
+                elif dt3:
                     logger.debug(f"dateparser found: {dt3} from {value} ?")
                     return None
                 else:

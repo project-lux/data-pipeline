@@ -268,7 +268,7 @@ class ViafMapper(Mapper):
                     elif g == "b":
                         rec.classified_as = vocab.instances["male"]
                     elif not g in ["u", "x"]:
-                        print(f"Unknown gender: {g} in {what}")
+                        print(f"Unknown gender: {g}")
 
                 nat_list = top.xpath("./viaf:nationalityOfEntity/viaf:data/viaf:text/text()", namespaces=nss)
                 for nat in nat_list:

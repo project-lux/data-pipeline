@@ -1,5 +1,6 @@
 from lux_pipeline.process.base.mapper import Mapper
 from cromulent import model, vocab
+from lux_pipeline.process.utils.date_utils import make_datetime
 
 
 class GenericJapanMapper(Mapper):
@@ -204,7 +205,7 @@ class JapanMapper(GenericJapanMapper):
         otherRecs = rec.get("previousName", [])
         for orec in otherRecs:
             uri = orec.get("uri", "")
-            lbl = orec.get("label", preflbl)
+            lbl = orec.get("label", "")
             if uri:
                 # We don't have a property for previous name
                 # Best we can do is an AttributeAssignment
@@ -217,7 +218,7 @@ class JapanMapper(GenericJapanMapper):
         otherRecs = rec.get("laterName", [])
         for orec in otherRecs:
             uri = orec.get("uri", "")
-            lbl = orec.get("label", preflbl)
+            lbl = orec.get("label", "")
             if uri:
                 # We don't have a property for previous name
                 # Best we can do is an AttributeAssignment
@@ -255,14 +256,14 @@ class JapanMapper(GenericJapanMapper):
         otherRecs = rec.get("anotherName", [])
         for orec in otherRecs:
             uri = orec.get("uri", "")
-            lbl = orec.get("label", preflbl)
+            lbl = orec.get("label", "")
             if uri:
                 top.equivalent = topcls(ident=uri, label=lbl)
 
         realName = rec.get("realName", [])
         for rName in realName:
             uri = rName.get("uri", "")
-            lbl = rName.get("label", preflbl)
+            lbl = rName.get("label", "")
             if uri:
                 top.equivalent = topcls(ident=uri, label=lbl)
 
@@ -287,7 +288,7 @@ class JapanShMapper(GenericJapanMapper):
         for eq in equivs:
             uri = eq.get("uri", "")
             if uri:
-                top.equivalent = topcls(ident=uri, label=preflbl)
+                top.equivalent = topcls(ident=uri, label="")
 
         broader = rec.get("broader", [])
         if type(broader) != list:

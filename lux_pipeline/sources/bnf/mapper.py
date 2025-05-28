@@ -325,8 +325,8 @@ class BnfMapper(Mapper):
         return js
 
     def guess_type(self, data):
-        typ = new.get("@type", "")
-        focus = new.get("foaf:focus", {})
+        typ = data.get("@type", "")
+        focus = data.get("foaf:focus", {})
         foc_typ = focus.get("@type", "")
         if typ == "skos:Concept":
             return model.Type

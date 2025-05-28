@@ -3,6 +3,7 @@
 
 from lux_pipeline.process.base.mapper import Mapper
 from cromulent import model, vocab
+from lux_pipeline.process.utils.date_utils import make_datetime
 
 
 class NomismaMapper(Mapper):

@@ -1,5 +1,5 @@
 from lux_pipeline.process.base.mapper import Mapper
-from lux_pipeline.process.utils.date_utils import test_birth_death
+from lux_pipeline.process.utils.date_utils import test_birth_death, make_datetime
 from cromulent import model, vocab
 import logging
 
