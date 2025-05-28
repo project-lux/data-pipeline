@@ -211,6 +211,7 @@ class RayEngine(ProcessingEngine):
         # deal with log_actor here
         self.actor = log_actor
         self.my_slice = i
+        self.batch_logs = []
 
         logger = logging.getLogger("lux_pipeline")
         if logger.handlers:
@@ -227,18 +228,21 @@ class RayEngine(ProcessingEngine):
 
     def maybe_update_log(self, level, message):
         # Use same technique as MP engine to batch logs?
-        # if time.time() > self.last_log_time + 0.5:
-        #    self.last_log_time = time.time()
         if self.actor is not None:
             self.actor.add_to_log.remote(self.my_slice, level, message)
+        return
+        if time.time() > self.last_log_time + 0.5:
+            self.last_log_time = time.time()
+        else:
+            self.batch_logs.append((level, message))
 
     def process(self, layout):
         log_actor = LoggingActor.remote()
+        logger.info(f"Logging Actor: {log_actor}")
         logger.info("Sending tasks")
         futures = [self._distributed.remote(self, i, log_actor) for i in range(self.max_workers)]
         while futures:
             ready_refs, futures = ray.wait(futures, num_returns=1, timeout=0.5)
-            time.sleep(0.5)
             for n in range(self.max_workers):
                 resp = ray.get(log_actor.get_log.remote(n))
                 for lvl, msg in resp:

@@ -1,12 +1,10 @@
 import io
 import os
-import requests
-import shutil
-import time
 import gzip
 import bz2
 import zipfile
 import tarfile
+from lxml import etree
 import ujson as json
 import logging
 from ._managable import Managable
@@ -23,7 +21,7 @@ except:
 
 """
 type is:
-    (container/])*format
+    (container/)*format
 
 Where container is one of:
   dir = directory of files
@@ -34,6 +32,7 @@ Where container is one of:
   dict = json file with a top level dictionary where each value is a member
   array = json file with a top level array where each item is a member
   arraylines = json file, but each record is on a separate line
+  xmls = XML file, but records are children of a root element
 Format is one of:
   json = json, duh
   jsonstr = json but serialized to a string
@@ -90,7 +89,7 @@ class Loader(Managable):
         self.temp_file_handles = {}
         self.overwrite = False
 
-        self.fmt_containers = ["dir", "dirh", "pair", "zip", "tar", "lines", "dict", "array", "arraylines"]
+        self.fmt_containers = ["dir", "dirh", "pair", "zip", "tar", "lines", "dict", "array", "arraylines", "xmls"]
         self.fmt_formats = ["json", "raw", "other"]
         self.fmt_compressions = ["gz", "bz2"]
         self.step_functions = {
@@ -103,6 +102,7 @@ class Loader(Managable):
             "arraylines": self.iterate_arraylines,
             "dict": self.iterate_dict,
             "array": self.iterate_array,
+            "xmls": self.iterate_xmls,
             "json": self.make_json,
             "raw": self.make_raw,
             "other": self.make_other,
@@ -293,6 +293,22 @@ class Loader(Managable):
         else:
             return -1
 
+    def iterate_xmls(self, path, comp, remaining):
+        """Iterate over children of a root node; assume we can read the whole file into memory"""
+
+        with self.file_opener(path, comp) as fh:
+            data = fh.read()
+            # data = data.replace('<?xml version="1.0" encoding="utf-8"?>', "")
+            try:
+                dom = etree.XML(data)
+            except Exception as e:
+                self.manager.log(logging.ERROR, f"Error parsing XML: {e}")
+                return
+            if self.increment_total:
+                self.update_progress_bar(increment_total=len(dom))
+            for kid in dom.iterchildren():
+                yield io.StringIO(etree.tostring(kid).decode("utf-8"))
+
     def iterate_lines(self, path, comp, remaining):
         with self.file_opener(path, comp) as fh:
             if self.increment_total:
@@ -382,8 +398,8 @@ class Loader(Managable):
         if not ident:
             ident = self.extract_identifier(data)
             if not ident:
-                raise ValueError(f"Could not get an identifier in {self.name} while in {parent}/{path}")
-        return {"identifier": ident, "data": data}
+                return None
+        return {"identifier": ident, "data": {"data": data}}
 
     def make_identifier(self, value):
         # assume a filepath with the last component as the identifier
@@ -469,19 +485,23 @@ class Loader(Managable):
 
     def process_step(self, steps, path, parent):
         step = steps[0]
+        if not step:
+            self.manager.log(logging.ERROR, f"No step provided! {steps}")
+            return
         comp = step[1] if len(step) > 1 else None
         handler = self.step_functions[step[0]]
+
         if step[0] in self.fmt_containers:
-            self.manager.log(logging.DEBUG, f"processing path {step[0]}")
+            # self.manager.log(logging.DEBUG, f"processing path {step[0]}")
             for child in handler(path, comp, steps[1:]):
                 self.process_step(steps[1:], child, step)
         elif step[0] in self.fmt_formats:
             # if we don't need to process it, then don't
             self.seen += 1
             if self.should_make_record(path):
-                self.manager.log(logging.DEBUG, f"processing record {step[0]}")
+                # self.manager.log(logging.DEBUG, f"processing record {step[0]}")
                 record = handler(path, comp, parent)
-                if self.should_store_record(record):
+                if record and self.should_store_record(record):
                     okay = self.store_record(record)
                     if okay:
                         self.post_store_record(record)
@@ -491,7 +511,7 @@ class Loader(Managable):
     def prepare(self, mgr, my_slice=0, max_slice=0, load_type="records"):
         super().prepare(mgr, my_slice, max_slice)
 
-        self.manager.log(logging.DEBUG, "Called Prepare")
+        # self.manager.log(logging.DEBUG, "Called Prepare")
 
         if load_type == "export":
             # Unknown calculate from file
@@ -533,7 +553,7 @@ class Loader(Managable):
                 fmtspec = self.guess_fmt(dfp)
             files.append({"path": dfp, "fmt": fmtspec})
         self.my_files = files
-        self.manager.log(logging.DEBUG, repr(self.my_files))
+        # self.manager.log(logging.DEBUG, repr(self.my_files))
 
     def process(self, disable_ui=False, overwrite=True):
         self.overwrite = overwrite
@@ -541,7 +561,7 @@ class Loader(Managable):
         if self.total > 0:
             self.update_progress_bar(total=self.total)
 
-        self.manager.log(logging.DEBUG, "Called Process")
+        # self.manager.log(logging.DEBUG, "Called Process")
 
         if not self.my_files:
             self.manager.log(logging.WARNING, f"Called process, but no files to load")
