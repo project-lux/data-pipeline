@@ -60,12 +60,12 @@
                         <strong>Record:</strong> <a href="{{ record.uri }}" target="_blank">{{ record.uri }}</a>
                         {% if record.names %}
                             <p><strong>Names:</strong> {{ record.names | join(', ') }}</p>
+                        <br>
                         {% endif %}
-                        <p><strong>Add to Same As Sheet?</strong></p>
                         <div class="field">
                             <label class="checkbox">
                                 <input type="checkbox" name="same_as_for_{{ loop.index }}">
-                                Add this record to column A, same as tab
+                                <strong>Add to Same As Sheet?</strong>
                             </label>
                         </div>
                         {% if record.equivalents %}
