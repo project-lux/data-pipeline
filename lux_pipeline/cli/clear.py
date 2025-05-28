@@ -12,7 +12,7 @@ class CommandHandler(BH):
         super().process(args, rest)
         cfgs = self.configs
 
-        if args.map:
+        if hasattr(args, "map") and args.map:
             # Get the map from config
             map = args.map.strip()
             if not map:
@@ -30,7 +30,7 @@ class CommandHandler(BH):
                     print(f"Cleared map '{map}'")
                     return True
 
-        if args.index:
+        if hasattr(args, "index") and args.index:
             # Get the indexes from the source(s) from config
             indexes = []
             if args.index == "all":
