@@ -1,13 +1,10 @@
-
-
-
 class Managable:
     """Base for a class that performs an action that can be managed via a task manager"""
 
     def __init__(self, config):
         self.config = config
-        self.configs = config['all_configs']
-        self.name = config['name']
+        self.configs = config["all_configs"]
+        self.name = config["name"]
         self.max_slice = -1
         self.my_slice = -1
         self.manager = None
@@ -38,7 +35,8 @@ class Managable:
     def close_progress_bar(self):
         # Could set visibility to false or something but better to just leave it
         # alone by default
-        pass
+        ttl = self.total // self.max_slice if self.divide_by_max_slice else self.total
+        self.update_progress_bar(completed=ttl)
 
     def prepare(self, mgr, my_slice=-1, max_slice=-1):
         self.manager = mgr

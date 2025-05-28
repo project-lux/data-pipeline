@@ -238,7 +238,7 @@ class RayEngine(ProcessingEngine):
 
     def process(self, layout):
         log_actor = LoggingActor.remote()
-        logger.info(f"Logging Actor: {log_actor}")
+        # logger.info(f"Logging Actor: {log_actor}")
         logger.info("Sending tasks")
         futures = [self._distributed.remote(self, i, log_actor) for i in range(self.max_workers)]
         while futures:
