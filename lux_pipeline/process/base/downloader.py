@@ -135,5 +135,5 @@ class BaseDownloader(Managable):
                 self.manager.update_progress_bar(advance=size)
         self.manager.update_progress_bar(completed=total_size)
         self.manager.log(logging.INFO, f"Finished downloading {filename}")
-        time.sleep(0.5)
+        time.sleep(1)
         return 1
