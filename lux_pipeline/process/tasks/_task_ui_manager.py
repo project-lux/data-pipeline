@@ -10,6 +10,7 @@ import ray
 logger = logging.getLogger("lux_pipeline")
 import traceback
 
+
 @ray.remote
 class LoggingActor:
     def __init__(self):
@@ -37,11 +38,11 @@ class LoggingActor:
         if not which in self.bars:
             self.bars[which] = {"completed": -1, "total": -1, "description": ""}
         if completed != -1:
-            self.bars[which]['completed'] = completed
+            self.bars[which]["completed"] = completed
         if total != -1:
-            self.bars[which]['total'] = total
+            self.bars[which]["total"] = total
         if description is not None:
-            self.bars[which]['description'] = description
+            self.bars[which]["description"] = description
 
     def get_progress_bar(self, which):
         if which == -1:
@@ -63,7 +64,6 @@ class TaskLogHandler(logging.Handler):
 
 
 class ProcessingEngine:
-
     def __init__(self, manager):
         self.manager = manager
         self.max_workers = manager.max_workers
@@ -106,7 +106,7 @@ class MpEngine(ProcessingEngine):
         self.bar = log_details[0]
         self.messages = log_details[1]
         self.my_slice = i
-        self.temp_bar = {'total': -1, 'completed': -1, 'description': ''}
+        self.temp_bar = {"total": -1, "completed": -1, "description": ""}
         self.temp_log = []
 
         logger = logging.getLogger("lux_pipeline")
@@ -119,17 +119,16 @@ class MpEngine(ProcessingEngine):
     def maybe_update_progress_bar(self, completed, total, description):
         # Shared memory, so no need to batch and send
         if completed > -1:
-            self.temp_bar['completed'] = completed
+            self.temp_bar["completed"] = completed
         if total > -1:
-            self.temp_bar['total'] = total
+            self.temp_bar["total"] = total
         if description:
-            self.temp_bar['description'] = description
+            self.temp_bar["description"] = description
         if time.time() > self.last_bar_time + 0.5:
             self.last_bar_time = time.time()
-            self.bar['completed'] = self.temp_bar['completed']
-            self.bar['total'] = self.temp_bar['total']
-            self.bar['description'] = self.temp_bar['description']
-
+            self.bar["completed"] = self.temp_bar["completed"]
+            self.bar["total"] = self.temp_bar["total"]
+            self.bar["description"] = self.temp_bar["description"]
 
     def maybe_update_log(self, level, message):
         self.temp_log.append((level, message))
@@ -143,20 +142,20 @@ class MpEngine(ProcessingEngine):
         cfgs = self.manager.configs
 
         with multiprocessing.Manager() as mgr:
-            bars = {} # keep track of tasks across Processes
+            bars = {}  # keep track of tasks across Processes
             messages = {}
             for b in range(self.max_workers):
-                bars[b] = mgr.dict({'total': -1, 'completed': -1, 'description': ''})
+                bars[b] = mgr.dict({"total": -1, "completed": -1, "description": ""})
             for b in range(self.max_workers):
                 messages[b] = mgr.list([])
 
-            if hasattr(cfgs, 'log_file'):
-                log_fh = open(cfgs.log_file, 'a')
+            if hasattr(cfgs, "log_file"):
+                log_fh = open(cfgs.log_file, "a")
             else:
                 fn = "lux_log_command.txt"  # FIXME: replace command with CLI command
-                if hasattr(cfgs, 'log_dir'):
+                if hasattr(cfgs, "log_dir"):
                     fn = os.path.join(cfgs.log_dir, fn)
-                log_fh = open(fn, 'a')
+                log_fh = open(fn, "a")
 
             logger.info("Starting...")
             log_fh.write("----- Starting -----\n")
@@ -166,11 +165,11 @@ class MpEngine(ProcessingEngine):
                     futures.append(executor.submit(self._distributed, n, [bars[n], messages[n]]))
                 if not self.manager.disable_ui:
                     while (n_finished := sum([future.done() for future in futures])) < len(futures):
-                        for (k,v) in bars.items():
+                        for k, v in bars.items():
                             if v:
                                 bar = get_bar_from_layout(layout, k)
                                 bar[0].update(bar[1], **v)
-                        for (k,v) in messages.items():
+                        for k, v in messages.items():
                             while v:
                                 lvl, msg = v.pop(0)
                                 logger.log(lvl, msg)
@@ -181,11 +180,11 @@ class MpEngine(ProcessingEngine):
                     future.result()
                 if not self.manager.disable_ui:
                     time.sleep(1)
-                    for (k,v) in bars.items():
+                    for k, v in bars.items():
                         if v:
                             bar = get_bar_from_layout(layout, k)
                             bar[0].update(bar[1], **v)
-                        for (k,v) in messages.items():
+                        for k, v in messages.items():
                             while v:
                                 lvl, msg = v.pop(0)
                                 logger.log(lvl, msg)
@@ -228,13 +227,12 @@ class RayEngine(ProcessingEngine):
 
     def maybe_update_log(self, level, message):
         # Use same technique as MP engine to batch logs?
-        #if time.time() > self.last_log_time + 0.5:
+        # if time.time() > self.last_log_time + 0.5:
         #    self.last_log_time = time.time()
         if self.actor is not None:
             self.actor.add_to_log.remote(self.my_slice, level, message)
 
     def process(self, layout):
-
         log_actor = LoggingActor.remote()
         logger.info("Sending tasks")
         futures = [self._distributed.remote(self, i, log_actor) for i in range(self.max_workers)]
@@ -246,7 +244,7 @@ class RayEngine(ProcessingEngine):
                     # send to log to render
                     logger.log(lvl, msg)
                 resp = ray.get(log_actor.get_progress_bar.remote(n))
-                if resp['completed'] > -1:
+                if resp["completed"] > -1:
                     # process log entry r from process n
                     if layout is not None:
                         bar = get_bar_from_layout(layout, n)
@@ -259,7 +257,7 @@ class RayEngine(ProcessingEngine):
                 if type(res) == int:
                     # process response from task
                     pass
-                logger.log(logging.DEBUG, f"Got {res} from task")
+                # logger.log(logging.DEBUG, f"Got {res} from task")
 
         time.sleep(1)
         for n in range(self.max_workers):
@@ -268,7 +266,7 @@ class RayEngine(ProcessingEngine):
                 # send to log to render
                 logger.log(lvl, msg)
             resp = ray.get(log_actor.get_progress_bar.remote(n))
-            if resp['completed'] > -1:
+            if resp["completed"] > -1:
                 # process log entry r from process n
                 if layout is not None:
                     bar = get_bar_from_layout(layout, n)
@@ -291,7 +289,7 @@ class TaskUiManager:
         self.my_slice = -1
         self.engine = None
 
-        self.bar = {'total': -1, 'completed': -1, 'description': None}
+        self.bar = {"total": -1, "completed": -1, "description": None}
         self.messages = []
         self.actor = None
 
@@ -301,16 +299,15 @@ class TaskUiManager:
 
     def update_progress_bar(self, advance=-1, total=-1, description=None, completed=-1):
         if total > -1:
-            self.bar['total'] = total
+            self.bar["total"] = total
         if completed > -1:
-            self.bar['completed'] = completed
+            self.bar["completed"] = completed
         if description is not None:
-            self.bar['description'] = description
+            self.bar["description"] = description
         if advance > -1:
-            self.bar['completed'] = self.bar['completed'] + advance
+            self.bar["completed"] = self.bar["completed"] + advance
         if self.engine is not None:
-            self.engine.maybe_update_progress_bar(self.bar['completed'], self.bar['total'], self.bar['description'])
-
+            self.engine.maybe_update_progress_bar(self.bar["completed"], self.bar["total"], self.bar["description"])
 
     def log(self, level, message):
         if isinstance(message, Exception):
@@ -320,21 +317,21 @@ class TaskUiManager:
 
     def maybe_add(self, which, cfg):
         # SubClasses should re-define this to actually test
-        self.sources.append((which, cfg['name']))
+        self.sources.append((which, cfg["name"]))
 
     def prepare_single(self, name) -> bool:
         if name in self.configs.internal:
-            self.maybe_add('internal', self.configs.internal[name])
+            self.maybe_add("internal", self.configs.internal[name])
         elif name in self.configs.external:
-            self.maybe_add('external', self.configs.external[name])
+            self.maybe_add("external", self.configs.external[name])
         else:
             raise ValueError(f"Unknown source: {name}")
 
     def prepare_all(self) -> bool:
         for cfg in self.configs.external.values():
-            self.maybe_add('external', cfg)
+            self.maybe_add("external", cfg)
         for cfg in self.configs.internal.values():
-            self.maybe_add('internal', cfg)
+            self.maybe_add("internal", cfg)
 
     def process(self, layout, engine="mp", disable_ui=False, **args) -> bool:
         # local_configs = self.configs
@@ -342,7 +339,7 @@ class TaskUiManager:
         # remote tasks
         self.configs = None
         self.disable_ui = disable_ui
-        for (a,v) in args.items():
+        for a, v in args.items():
             if hasattr(self, a):
                 setattr(self, a, v)
 

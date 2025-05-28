@@ -1,20 +1,24 @@
 import os
+import time
 import requests
 import ujson as json
 from pathlib import Path
 import logging
 from ._managable import Managable
+
 logger = logging.getLogger("lux_pipeline")
+
 
 class BaseDownloader(Managable):
     """
     The purpose of the downloader is to provide urls to the DownloadManager. These will then be downloaded and placed into the required paths.
     """
+
     def __init__(self, config):
         super().__init__(config)
-        self.dumps_dir = config['all_configs'].dumps_dir
-        if 'dumps_dir' in config:
-            self.dumps_dir = os.path.join(self.dumps_dir, config['dumps_dir'])
+        self.dumps_dir = config["all_configs"].dumps_dir
+        if "dumps_dir" in config:
+            self.dumps_dir = os.path.join(self.dumps_dir, config["dumps_dir"])
 
     def fetch_webpage(self, url: str) -> str:
         """Fetch the webpage content from the given URL.
@@ -51,21 +55,21 @@ class BaseDownloader(Managable):
         try:
             page_data = json.loads(response)
             if not page_data:
-                raise ValueError(f"Error: Received empty JSON response from {source_name}")
+                raise ValueError(f"Error: Received empty JSON response from {base_url}")
         except json.JSONDecodeError:
-            raise ValueError(f"Error: Failed to parse JSON response for {source_name}")
+            raise ValueError(f"Error: Failed to parse JSON response for {base_url}")
 
-        if '/' in data_key and not '.' in data_key:
-            data_key = data_key.replace('/', '.')
-        keys = data_key.split('.')
+        if "/" in data_key and not "." in data_key:
+            data_key = data_key.replace("/", ".")
+        keys = data_key.split(".")
         download_url = page_data
 
         try:
             for key in keys:
                 # Check if the key includes an index (e.g., hits[0])
-                if '[' in key and ']' in key:
-                    key_name, index = key.split('[')
-                    index = int(index.rstrip(']'))
+                if "[" in key and "]" in key:
+                    key_name, index = key.split("[")
+                    index = int(index.rstrip("]"))
                     download_url = download_url.get(key_name, [])[index]
                 else:
                     download_url = download_url.get(key, {})
@@ -75,13 +79,13 @@ class BaseDownloader(Managable):
             logger.error(f"Error accessing JSON path '{data_key}': {e}")
             return None
         except Exception as e:
-            raise ValueError(f"Unexpected error fetching {source_name} data: {e}")
+            raise ValueError(f"Unexpected error fetching {base_url} data: {e}")
 
-    def get_value_from_html(self, base_url:str, xpath: str) -> str:
+    def get_value_from_html(self, base_url: str, xpath: str) -> str:
         # FIXME: Implement a basic "splash page" reader from HTML
         pass
 
-    def get_value_from_xml(self, base_url:str, xpath: str) -> str:
+    def get_value_from_xml(self, base_url: str, xpath: str) -> str:
         # FIXME: Implement a basic "splash page" reader from XML
         pass
 
@@ -92,49 +96,44 @@ class BaseDownloader(Managable):
         # {records: [{url, path}, ...], other: [{url, path}, ...], ...}
 
         urls = []
-        if 'dumpFilePath' in self.config and 'remoteDumpFile' in self.config:
-            urls.append({"url": self.config['remoteDumpFile'], 'path': self.config['dumpFilePath']})
+        if "dumpFilePath" in self.config and "remoteDumpFile" in self.config:
+            urls.append({"url": self.config["remoteDumpFile"], "path": self.config["dumpFilePath"]})
 
-        for rt, records in self.config.get('input_files', {}).items():
+        for rt, records in self.config.get("input_files", {}).items():
             if type in ["all", rt]:
                 for record in records:
                     url = record.get("url", None)
                     if not url:
                         raise ValueError(f"URL not found for input file: {record}")
-                    if (p := record.get("path", None)):
-                        if not '/' in p:
+                    if p := record.get("path", None):
+                        if not "/" in p:
                             # just the filename
                             p = os.path.join(self.dumps_dir, p)
                         urls.append({"url": url, "path": p})
                     elif self.dumps_dir:
                         # find the filename and dump it in the path
-                        np = os.path.join(self.dumps_dir, url.rsplit('/', 1)[-1])
+                        np = os.path.join(self.dumps_dir, url.rsplit("/", 1)[-1])
                         urls.append({"url": url, "path": np})
                     else:
                         raise ValueError(f"No download path for input file: {record}")
         return urls
 
-
     def process(self, download, disable_ui=False):
-        url = download['url']
-        path = download['path']
+        url = download["url"]
+        path = download["path"]
 
         response = requests.get(url, stream=True, verify=False)
         response.raise_for_status()
         # Create parent directories if they don't exist
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        total_size = int(response.headers.get('content-length', 0))
+        total_size = int(response.headers.get("content-length", 0))
         filename = os.path.split(path)[-1]
         self.manager.update_progress_bar(total=total_size, description=f"{self.config['name']}/{filename}")
-        with open(path, 'wb') as f:
+        with open(path, "wb") as f:
             for data in response.iter_content(chunk_size=1024):
                 size = f.write(data)
                 self.manager.update_progress_bar(advance=size)
-
-
-
-
-
-
-
-
+        self.manager.update_progress_bar(completed=total_size)
+        self.manager.log(logging.INFO, f"Finished downloading {filename}")
+        time.sleep(0.5)
+        return 1
