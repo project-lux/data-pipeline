@@ -85,10 +85,15 @@ class RorMapper(Mapper):
                     lo.digitally_carried_by = do
                     top.subject_of = lo
 
-        known_typs = {"ISNI": "isni", "Wikidata": "wd"}
+        known_typs = {"wikidata": "http://www.wikidata.org/entity/"}
         if "external_ids" in rec and rec["external_ids"]:
             for ext in rec["external_ids"]:
-                typ = ext["type"]
+                if type(ext) is str:
+                    # {'wikidata': {'all': [...]}}
+                    typ = ext.lower()
+                    ext = rec["external_ids"][typ]
+                else:
+                    typ = ext["type"].lower()
                 if typ in known_typs:
                     for a in ext["all"]:
                         top.equivalent = model.Group(ident=f"{known_typs[typ]}{a}")
