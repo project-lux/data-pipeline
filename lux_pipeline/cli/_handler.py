@@ -1,6 +1,6 @@
-
 from argparse import ArgumentParser
 from ._rich import Live, get_layout
+
 
 class BaseHandler:
     def __init__(self, cfgs):
@@ -15,6 +15,7 @@ class BaseHandler:
             ap = ArgumentParser()
             self.add_args(ap)
             ap.parse_args(rest, namespace=args)
+
 
 class CommandHandler(BaseHandler):
     def __init__(self, cfgs):
@@ -32,16 +33,16 @@ class CommandHandler(BaseHandler):
             args.source = self.default_source
         if args.source == "all":
             sources = [*self.configs.internal.keys(), *self.configs.external.keys()]
-        elif args.source in ['internal', 'external']:
+        elif args.source in ["internal", "external"]:
             sources = list(getattr(self.configs, args.source).keys())
         else:
-            sources = args.source.split(',')
+            sources = args.source.split(",")
 
         manager = self.make_manager(wks, args)
         for s in sources:
             manager.prepare_single(s)
 
-        xargs = {x:getattr(args, y) for x,y in self.extra_args.items()}
+        xargs = {x: getattr(args, y) for x, y in self.extra_args.items()}
 
         # Here we set up the rich UI
         if args.no_ui:
@@ -49,6 +50,6 @@ class CommandHandler(BaseHandler):
             manager.process(layout, engine=args.engine, disable_ui=args.no_ui, **xargs)
         else:
             layout = get_layout(self.configs, wks, args.log)
-            with Live(layout, screen=False, refresh_per_second=4) as live:
+            with Live(layout, screen=False, refresh_per_second=4):
                 # And calling this will manage the multiprocessing
                 manager.process(layout, engine=args.engine, disable_ui=args.no_ui, **xargs)

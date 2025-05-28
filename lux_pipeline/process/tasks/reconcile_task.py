@@ -1,10 +1,9 @@
-import sys
 import logging
 import time
 
 from ._task_ui_manager import TaskUiManager
-from .reconciler import Reconciler
-from .reference_manager import ReferenceManager
+from ..reconciler import Reconciler
+from ..reference_manager import ReferenceManager
 from lux_pipeline.cli.entry import cfgs
 
 logger = logging.getLogger("lux_pipeline")
@@ -108,7 +107,7 @@ class ReconcileManager(TaskUiManager):
             try:
                 (uri, dct) = item
                 distance = dct["dist"]
-            except:
+            except Exception:
                 continue
             if distance > self.configs.max_distance:
                 continue
@@ -119,7 +118,7 @@ class ReconcileManager(TaskUiManager):
                 raise ValueError(f"No qua in referenced {uri} and needed")
             try:
                 (source, recid) = self.configs.split_uri(uri)
-            except:
+            except Exception:
                 continue
             if not source["type"] == "external":
                 raise ValueError(f"Got internal reference! {uri}")

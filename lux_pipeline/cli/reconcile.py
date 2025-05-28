@@ -1,4 +1,4 @@
-from ..process.reconcile_task import ReconcileManager
+from lux_pipeline.process.tasks.reconcile_task import ReconcileManager
 from ._handler import CommandHandler as CH
 
 

@@ -3,29 +3,27 @@ from ._rich import Live, get_layout
 from lux_pipeline.process.reconciler import Reconciler
 import sys
 import networkx as nx
-from netext import ConsoleGraph, EdgeSegmentDrawingMode, EdgeRoutingMode, ArrowTip, Region, AutoZoom
+from netext import ConsoleGraph, EdgeSegmentDrawingMode, EdgeRoutingMode, ArrowTip, AutoZoom
 from netext.layout_engines import ForceDirectedLayout
 
 from rich.color import Color
 from rich.panel import Panel
 from rich.style import Style
-from rich.layout import Layout
-from rich.console import Console
 from rich import print
 
 from ._handler import BaseHandler as BH
 
+
 class CommandHandler(BH):
-
-
     def process(self, args, rest):
         ap = ArgumentParser()
         ap.add_argument("--recid", type=str, help="record id to process")
         ap.parse_args(rest, namespace=args)
+        cfgs = self.configs
 
         # --recid in,out
         try:
-            from_p,to_p = args.recid.split(',')
+            from_p, to_p = args.recid.split(",")
         except:
             print("Usage: lux viz --recid from_id,to_id")
             sys.exit(0)
@@ -69,8 +67,6 @@ class CommandHandler(BH):
             print(f"{from_p} is {yuid} but {to_p} is {yuid2}")
             print("No way to connect these two URIs")
             sys.exit()
-
-
 
         # --- set up environment ---
         reconciler = Reconciler(cfgs, idmap, networkmap)
@@ -143,9 +139,8 @@ class CommandHandler(BH):
                 G.add_edge(kl, vil)
                 edge_labels[(kl, vil)] = vi[1]
 
-
         nx.set_edge_attributes(G, ArrowTip.ARROW, "$end-arrow-tip")
-        #nx.set_edge_attributes(G, ArrowTip.NONE, "$end-arrow-tip-0")
+        # nx.set_edge_attributes(G, ArrowTip.NONE, "$end-arrow-tip-0")
         nx.set_edge_attributes(G, lambda zoom: 0 if zoom < 0.5 else 1, "$lod-map")
         nx.set_edge_attributes(G, Style(color=Color.from_rgb(red=20, green=80, blue=10), bold=True), "$style")
         nx.set_edge_attributes(G, EdgeRoutingMode.STRAIGHT, "$edge-routing-mode")
@@ -157,12 +152,12 @@ class CommandHandler(BH):
         nx.set_node_attributes(G, "box", "$shape")
 
         layout = get_layout(cfgs, 1, args.log)
-        with Live(layout, screen=False, refresh_per_second=4) as live:
+        with Live(layout, screen=False, refresh_per_second=4):
             cg = ConsoleGraph(G, layout_engine=ForceDirectedLayout(), zoom=(AutoZoom.FIT))
             r_panel = Panel(cg)
-            layout['progress'].update(r_panel)
-            #console = Console()
-            #console.print(cg)
+            layout["progress"].update(r_panel)
+            # console = Console()
+            # console.print(cg)
 
             if False:
                 key = []
@@ -179,7 +174,6 @@ class CommandHandler(BH):
                     print(sets)
                 print(f"\nShortest path from {from_p} to {to_p}")
                 print(" --> ".join([inv_ident[x] for x in nx.shortest_path(G, idents[from_p], idents[to_p])]))
-
 
                 plt.figure(figsize=(12, 12))
                 uri_colors = {

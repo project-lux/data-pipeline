@@ -270,7 +270,7 @@ class Config(object):
     def merge_configs(self, base, overlay):
         cfg = base.copy()
         for k, v in overlay.items():
-            if not k in cfg:
+            if k not in cfg:
                 cfg[k] = v
         return cfg
 
@@ -278,11 +278,10 @@ class Config(object):
         return self.instantiate_map(self.idmap_name)["store"]
 
     def cache_globals(self, idmap=None):
-        new = {}
         glbs = self.globals_cfg
         idmap_name = self.idmap_name
         if idmap_name == "":
-            raise ValueError(f"No idmap set in config/base.json via code")
+            raise ValueError("No idmap set in config/base.json via code")
 
         cfg = self.map_stores[idmap_name]
         if "store" in cfg and cfg["store"] is not None:
@@ -314,7 +313,7 @@ class Config(object):
             self.instantiate_ml(k)
 
     def instantiate_ml(self, key):
-        if not key or not key in self.marklogic_stores:
+        if not key or key not in self.marklogic_stores:
             raise ValueError("No such marklogic store config")
         else:
             cfg = self.marklogic_stores[key]
@@ -329,7 +328,7 @@ class Config(object):
         return cfg
 
     def instantiate_map(self, key):
-        if not key or not key in self.map_stores:
+        if not key or key not in self.map_stores:
             raise ValueError(f"Could not find map config: {key}")
         else:
             cfg = self.map_stores[key]
@@ -344,7 +343,7 @@ class Config(object):
         return cfg
 
     def instantiate_config(self, key):
-        if not key or not key in self.subconfig_stores:
+        if not key or key not in self.subconfig_stores:
             raise ValueError(f"Could not find sub configuration: {key}")
         else:
             cfg = self.subconfig_stores[key]
@@ -427,7 +426,7 @@ class Config(object):
                 cfg["downloader"] = dldrcls(cfg)
             else:
                 cfg["downloader"] = None
-        except Exception as e:
+        except Exception:
             logger.critical(f"Failed to build configuration for {cfg['name']}")
             raise
 
@@ -436,9 +435,9 @@ class Config(object):
     def instantiate(self, key, which=None):
         # build the set of components for a configured source
 
-        if which and not which in ["internal", "external", "results"]:
+        if which and which not in ["internal", "external", "results"]:
             raise ValueError(f"Which should be internal or external, got {which}")
-        elif which and not key in getattr(self, which):
+        elif which and key not in getattr(self, which):
             raise ValueError(f"{key} not a valid key in {which}")
         elif which:
             cfg = getattr(self, which)[key]
@@ -483,13 +482,13 @@ class Config(object):
                 for idxname, idxcfg in cfg["indexes"].items():
                     try:
                         idxcls = importObject(idxcfg["indexClass"])
-                    except Exception as e:
+                    except Exception:
                         logger.error(f"Failed to import index class {idxcfg['indexClass']}")
                         idxcfg["index"] = None
                     idxcfg["name"] = idxname
                     try:
                         idxcfg["index"] = idxcls(idxcfg)
-                    except Exception as e:
+                    except Exception:
                         logger.error(f"Failed to build index {idxname}")
                         idxcfg["index"] = None
 

@@ -1,13 +1,12 @@
-
 from ._task_ui_manager import TaskUiManager
 from lux_pipeline.process.base.loader import Loader
 import logging
-import ray
 import time
 
+
 class LoadManager(TaskUiManager):
-    """
-    """
+    """ """
+
     def __init__(self, configs, max_workers: int = 0):
         super().__init__(configs, max_workers)
         self.overwrite = True
@@ -15,8 +14,8 @@ class LoadManager(TaskUiManager):
 
     def _distributed(self, n):
         super()._distributed(n)
-        for (which, src) in self.sources:
-            ldr = getattr(self.configs, which)[src]['loader']
+        for which, src in self.sources:
+            ldr = getattr(self.configs, which)[src]["loader"]
             try:
                 ldr.prepare(self, n, self.max_workers, self.load_type)
                 ldr.process(disable_ui=self.disable_ui, overwrite=self.overwrite)
@@ -29,5 +28,5 @@ class LoadManager(TaskUiManager):
         return 1
 
     def maybe_add(self, which, cfg):
-        if 'loader' in cfg and isinstance(cfg['loader'], Loader):
-            self.sources.append((which, cfg['name']))
+        if "loader" in cfg and isinstance(cfg["loader"], Loader):
+            self.sources.append((which, cfg["name"]))

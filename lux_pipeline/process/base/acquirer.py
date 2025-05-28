@@ -1,5 +1,7 @@
 import logging
+
 logger = logging.getLogger("lux_pipeline")
+
 
 class Acquirer(object):
     def __init__(self, config):
@@ -129,7 +131,7 @@ class Acquirer(object):
                 rec["data"]["type"].remove("Type")  # Prefer Language/Material to Type
                 rec["data"]["type"] = rec["data"]["type"][0]  # and pick the first, right or wrong
             if type(rec["data"]["type"]) == dict:
-                logger.debug(f'{rec["identifier"]} -> {rec["data"]["type"]}')
+                logger.debug(f"{rec['identifier']} -> {rec['data']['type']}")
                 return None
 
             if rec["data"]["type"] in self.configs.ok_record_types:
@@ -150,5 +152,11 @@ class Acquirer(object):
         if reference:
             return rec2
 
-        rec3 = self.do_post_map(rec2, rec2["data"]["type"], store=store)
+        try:
+            rec3 = self.do_post_map(rec2, rec2["data"]["type"], store=store)
+        except Exception as e:
+            print(rec2)
+            logger.warning(f"Failed to post-map record {identifier} for {self.name}: {e}")
+            return None
+
         return rec3
