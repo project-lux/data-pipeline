@@ -238,6 +238,7 @@ class RayEngine(ProcessingEngine):
         futures = [self._distributed.remote(self, i, log_actor) for i in range(self.max_workers)]
         while futures:
             ready_refs, futures = ray.wait(futures, num_returns=1, timeout=0.5)
+            time.sleep(0.5)
             for n in range(self.max_workers):
                 resp = ray.get(log_actor.get_log.remote(n))
                 for lvl, msg in resp:
