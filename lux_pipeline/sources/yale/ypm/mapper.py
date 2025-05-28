@@ -1,5 +1,5 @@
 from lux_pipeline.process.base.mapper import Mapper
-from lux_pipeline.process.utils.mapper_utils import validate_timespans
+from lux_pipeline.process.utils.date_utils import validate_timespans
 
 
 class YpmMapper(Mapper):
@@ -112,7 +112,9 @@ class YpmMapper(Mapper):
                 classes = data["classified_as"]
             else:
                 classes = []
-            classes.append({"id": "http://vocab.getty.edu/aat/300404024", "type": "Type", "_label": "Collection Item"})
+            classes.append(
+                {"id": "http://vocab.getty.edu/aat/300404024", "type": "Type", "_label": "Collection Item"}
+            )
             data["classified_as"] = classes
 
         return rec

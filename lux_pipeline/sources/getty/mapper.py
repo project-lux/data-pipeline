@@ -1,9 +1,11 @@
 from cromulent import model, vocab
 from lux_pipeline.process.base.mapper import Mapper
-from lux_pipeline.process.utils.mapper_utils import make_datetime, test_birth_death
+from lux_pipeline.process.utils.date_utils import test_birth_death
 import datetime
 import logging
+
 logger = logging.getLogger("lux_pipeline")
+
 
 class GettyMapper(Mapper):
     # Core functions
@@ -24,7 +26,7 @@ class GettyMapper(Mapper):
         self.ignore_name_classifications = ["http://vocab.getty.edu/term/type/UsedForTerm"]
 
         self.statements = {}
-        for name, thing in vocab.inst_js.items(): ### FIXME: This is terrible and will break
+        for name, thing in vocab.inst_js.items():  ### FIXME: This is terrible and will break
             if "metatype" in thing and thing["metatype"] == "brief text":
                 self.statements[thing["id"]] = getattr(vocab, name)
 

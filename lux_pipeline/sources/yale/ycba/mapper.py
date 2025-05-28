@@ -1,5 +1,5 @@
 from lux_pipeline.process.base.mapper import Mapper
-from lux_pipeline.process.utils.mapper_utils import validate_timespans
+from lux_pipeline.process.utils.date_utils import validate_timespans
 import ujson as json
 from shapely.geometry import shape
 
@@ -98,8 +98,8 @@ class YcbaMapper(Mapper):
             data["equivalent"] = [uri for uri in data["equivalent"] if "wikidata.org" not in uri.get("id", "")]
             if not data["equivalent"]:
                 del data["equivalent"]
-        
-        if data['type'] == "Period":
+
+        if data["type"] == "Period":
             self.process_period_record(data)
 
         self.fix_links(rec)

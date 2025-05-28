@@ -1,5 +1,4 @@
 from lux_pipeline.process.base.mapper import Mapper
-from lux_pipeline.process.utils.mapper_utils import make_datetime
 from cromulent import model, vocab
 from lxml import etree
 
@@ -91,7 +90,6 @@ class OrcidMapper(Mapper):
             # No year??
             return None
         return dt
-        # return make_datetime(dt)
 
     def transform(self, record, rectype, reference=False):
         # Data in is XML record from the annual dump file
@@ -250,7 +248,8 @@ class OrcidMapper(Mapper):
 
             # Employment: member_of for latest
             for empl in acts.xpath(
-                "./activities:employments/activities:affiliation-group/employment:employment-summary", namespaces=self.nss
+                "./activities:employments/activities:affiliation-group/employment:employment-summary",
+                namespaces=self.nss,
             ):
                 # selm = empl.xpath('./common:start-date', namespaces=self.nss)
                 # eelm = empl.xpath('./common:end-date', namespaces=self.nss)
@@ -266,7 +265,8 @@ class OrcidMapper(Mapper):
 
             # Membership: member_of
             for memb in acts.xpath(
-                "./activities:memberships/activities:affiliation-group/membership:membership-summary", namespaces=self.nss
+                "./activities:memberships/activities:affiliation-group/membership:membership-summary",
+                namespaces=self.nss,
             ):
                 orgName = self.get_text(memb, "./common:organization/common:name")
                 orgId = self.get_text(

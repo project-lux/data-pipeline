@@ -1,8 +1,7 @@
 from lux_pipeline.process.base.mapper import Mapper
-from lux_pipeline.process.utils.mapper_utils import make_datetime, test_birth_death
+from lux_pipeline.process.utils.date_utils import make_datetime, test_birth_death
 from cromulent import model, vocab
 import ujson as json
-import sys
 import re
 import os
 
@@ -56,7 +55,7 @@ class LcMapper(Mapper):
                     "classified_as": [{"id": "http://vocab.getty.edu/aat/300404670"}],
                 }
             ],
-            "source": ""
+            "source": "",
         }
 
         # Map rectype to reconciler and record type
@@ -64,17 +63,17 @@ class LcMapper(Mapper):
             "Place": nafreconciler,
             "Concept": shreconciler,
             "Group": nafreconciler,
-            "Person": nafreconciler, 
+            "Person": nafreconciler,
             "Type": shreconciler,
             "Activity": nafreconciler,
             "Material": shreconciler,
-            "Language": shreconciler
+            "Language": shreconciler,
         }
 
         if rectype in reconcilers:
             reconciler = reconcilers[rectype]
             rec["type"] = rectype
-            if rectype in ["Place","Group","Person","Activity"]:
+            if rectype in ["Place", "Group", "Person", "Activity"]:
                 rec["source"] = "lcnaf"
             else:
                 rec["source"] = "lcsh"
@@ -85,7 +84,6 @@ class LcMapper(Mapper):
             reconrec = None
 
         return reconrec
-
 
     def fix_identifier(self, identifier):
         if identifier == "@@LMI-SPECIAL-TERM@@":
@@ -245,7 +243,6 @@ class LcMapper(Mapper):
         if type(ex) != list:
             ex = [ex]
 
-
         if top.__class__ != model.Group:
             later = new.get("madsrdf:hasLaterEstablishedForm", [])
             if later:
@@ -263,7 +260,7 @@ class LcMapper(Mapper):
                     txt = txt.get("@value") if isinstance(txt, dict) else txt
                     eid = e.get("@id")
 
-                    reid = None 
+                    reid = None
                     if eid and eid.startswith("_:"):
                         if txt:
                             reid = self.build_recs_and_reconcile(txt, type(top).__name__)
@@ -410,7 +407,7 @@ class LcshMapper(LcMapper):
                     blbl = ""
                 # concept broader concept
                 top.broader = topcls(ident=bident, label=blbl)
-        #Eventually add in handling for member_of Group, broader Place, part_of Events
+        # Eventually add in handling for member_of Group, broader Place, part_of Events
 
         js = model.factory.toJSON(top)
         return {"identifier": record["identifier"], "data": js, "source": self.name}
@@ -453,7 +450,6 @@ class LcnafMapper(LcMapper):
             self.parenthetical_places = json.loads(data)
         else:
             self.parenthetical_places = {}
-
 
     def transform(self, record, rectype=None, reference=False):
         try:

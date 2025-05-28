@@ -1,10 +1,8 @@
 from .base import WdConfigManager
 from lux_pipeline.process.base.mapper import Mapper
-from lux_pipeline.process.utils.mapper_utils import make_datetime
+from lux_pipeline.process.utils.date_utils import make_datetime
 from cromulent import model, vocab
 from shapely.geometry import Polygon
-import datetime
-import math
 
 
 class WdMapper(Mapper, WdConfigManager):
@@ -62,7 +60,7 @@ class WdMapper(Mapper, WdConfigManager):
             "Q159": "http://vocab.getty.edu/aat/300111276",
             "Q174193": "http://vocab.getty.edu/aat/300111159",
             "Q668": "http://vocab.getty.edu/aat/300018863",
-        } #covers ~3 mil out of 5.3 total across WD records in use
+        }  # covers ~3 mil out of 5.3 total across WD records in use
 
         #'P830': 'eol',
         #'P6944': 'bionomia',
@@ -150,7 +148,7 @@ class WdMapper(Mapper, WdConfigManager):
             "Q167037": model.Group,
             "Q783794": model.Group,
             "Q163740": model.Group,
-            "Q1530022":model.Group,
+            "Q1530022": model.Group,
             "Q34770": model.Language,
             "Q1288568": model.Language,
             "Q33742": model.Language,
@@ -199,7 +197,7 @@ class WdMapper(Mapper, WdConfigManager):
             "Q901769": model.Activity,
             "Q688909": model.Activity,
             "Q193155": model.Activity,
-            "Q459447": model.Activity
+            "Q459447": model.Activity,
         }
 
         if "P31" in data:
@@ -275,7 +273,7 @@ class WdMapper(Mapper, WdConfigManager):
             "object": model.HumanMadeObject,
             "text": model.LinguisticObject,
             "activity": model.Activity,
-            "period": model.Period
+            "period": model.Period,
         }
 
         hits = {}
@@ -478,7 +476,7 @@ class WdMapper(Mapper, WdConfigManager):
                 ref = self.get_reference(p)
                 if ref and ref.__class__ == model.Activity:
                     top.participated_in = model.Activity(ident=self.expand_uri(p))
-                    
+
         # FIXME: classified_as or professional activity as below
         occupation = data.get("P106", None)
         if occupation:
@@ -626,7 +624,7 @@ class WdMapper(Mapper, WdConfigManager):
 
         nationality = data.get("P27", None)
         if nationality:
-            for n in nationality:            
+            for n in nationality:
                 if n in self.nat_map:
                     top.classified_as = vocab.Nationality(ident=self.nat_map[n])
 
@@ -763,7 +761,6 @@ class WdMapper(Mapper, WdConfigManager):
             ref = self.get_reference(b)
             if ref and ref.__class__ == model.Place:
                 top.part_of = model.Place(ident=self.expand_uri(b))
-            
 
         # Coordinates
         northmost = data.get("P1332", None)
@@ -1116,8 +1113,8 @@ class WdMapper(Mapper, WdConfigManager):
         self.process_imageref(data, top)
         self.process_activity(data, top)
 
-        participant = data.get("P710",[])
-        chairperson = data.get("P488",[])
+        participant = data.get("P710", [])
+        chairperson = data.get("P488", [])
         participants = participant + chairperson
         if participants:
             for p in participants:
@@ -1125,7 +1122,7 @@ class WdMapper(Mapper, WdConfigManager):
                 if pref and pref.__class__ in [model.Group, model.Person]:
                     top.participant = pref
 
-        broader = data.get("P361",[])
+        broader = data.get("P361", [])
         if broader:
             for b in broader:
                 top.part_of = model.Event(ident=self.expand_uri(b))
@@ -1135,17 +1132,16 @@ class WdMapper(Mapper, WdConfigManager):
         self.process_activity(data, top)
         self.process_period_record(data)
 
-        broader = data.get("P361",[])
+        broader = data.get("P361", [])
         if broader:
             for b in broader:
                 top.part_of = model.Period(ident=self.expand_uri(b))
-
 
     def process_activity(self, data, top):
         startTime = data.get("P580")
         endTime = data.get("P582")
         ts = model.TimeSpan()
-        
+
         if startTime:
             startTime, precision = self.clean_date(startTime)
             try:
@@ -1154,7 +1150,7 @@ class WdMapper(Mapper, WdConfigManager):
                 ts.end_of_the_begin = bend
             except TypeError:
                 pass
-        
+
         if endTime:
             endTime, precision = self.clean_date(endTime)
             try:
@@ -1163,14 +1159,14 @@ class WdMapper(Mapper, WdConfigManager):
                 ts.end_of_the_end = eend
             except TypeError:
                 pass
-        
+
         if startTime or endTime:
             top.timespan = ts
 
-        country = data.get("P17",[])
-        location = data.get("P276",[])
-        venue = data.get("P2293",[])
-        
+        country = data.get("P17", [])
+        location = data.get("P276", [])
+        venue = data.get("P2293", [])
+
         places = country + location + venue
         if places:
             for p in places:

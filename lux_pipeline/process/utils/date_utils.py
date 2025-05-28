@@ -4,14 +4,14 @@ from dateutil import parser
 from dateparser.date import DateDataParser
 from edtf import parse_edtf, text_to_edtf, struct_time_to_datetime
 from datetime import datetime, timedelta
-from edtf.parser.parser_classes import (
-    UncertainOrApproximate as UOA,
-    PartialUncertainOrApproximate as PUOA)
+from edtf.parser.parser_classes import UncertainOrApproximate as UOA, PartialUncertainOrApproximate as PUOA
 import numpy as np
 import warnings
+
 warnings.filterwarnings("ignore", category=UserWarning)
 
 import logging
+
 logger = logging.getLogger("lux_pipeline")
 
 # Note -- MaskedPrecision was removed from edtf, so removing as fuzzy parser
@@ -95,7 +95,7 @@ def walk_for_timespan(nodes):
 
 def validate_timespans(rec):
     if not rec["type"] in time_rectype:
-        logger.debug(f"Couldn't find timespan paths for {rec['type']} in mapper_utils")
+        logger.debug(f"Couldn't find timespan paths for {rec['type']} in utils.date_utils")
     else:
         props = time_rectype[rec["type"]]
         for p in props:
@@ -335,7 +335,7 @@ def make_datetime(value, precision=""):
             value = value.replace("u", "X")
             value = value.replace("x", "X")
             value = value.replace("?", "X")
-            value = value.replace('.XX.XX', '-XX-XX')
+            value = value.replace(".XX.XX", "-XX-XX")
             if value.startswith("XX.XX.") or value.startswith("XX-XX-") or value.startswith("XX XX "):
                 value = value[6:]
 

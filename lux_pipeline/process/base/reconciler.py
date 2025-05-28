@@ -1,4 +1,4 @@
-from lux_pipeline.process.utils.mapper_utils import get_year_from_timespan
+from lux_pipeline.process.utils.date_utils import get_year_from_timespan
 from sqlitedict import SqliteDict
 import re
 import logging

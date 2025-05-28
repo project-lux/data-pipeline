@@ -1,6 +1,5 @@
 from lux_pipeline.process.base.mapper import Mapper
-from lux_pipeline.process.utils.mapper_utils import validate_timespans
-from lux_pipeline.process.utils.mapper_utils import make_datetime
+from lux_pipeline.process.utils.date_utils import validate_timespans
 import os
 import ujson as json
 import csv
@@ -323,7 +322,6 @@ class YulMapper(Mapper):
                         "id": "http://vocab.getty.edu/aat/300388277",
                         "type": "Language",
                         "_label": "English",
-
                     }
                     desc = {
                         "type": "LinguisticObject",
@@ -345,12 +343,11 @@ class YulMapper(Mapper):
                     cxns["id"] = "http://vocab.getty.edu/aat/300264388"
 
         # Swap sort title AAT for sort value
-        for ident in data.get("identified_by",[]):
+        for ident in data.get("identified_by", []):
             if "classified_as" in ident:
-                for cxn in ident['classified_as']:
-                    if cxn['id'] == "https://vocab.getty.edu/aat/300451544":
-                        cxn['id'] = "http://vocab.getty.edu/aat/300456575"
-
+                for cxn in ident["classified_as"]:
+                    if cxn["id"] == "https://vocab.getty.edu/aat/300451544":
+                        cxn["id"] = "http://vocab.getty.edu/aat/300456575"
 
         # Add collection item flag
         # FIXME: This doesn't work for archives
@@ -403,14 +400,13 @@ class YulMapper(Mapper):
                         cxnid = c.get("id", "")
                         if cxnid and cxnid.startswith("https://vocab.getty.edu"):
                             c["id"] = cxnid.replace("https://", "http://")
-                            
-        if data['type'] == "Period":
+
+        if data["type"] == "Period":
             self.process_period_record(data)
 
-        if data['type'] == "Set":
-            for c in data.get("classified_as",[]):
+        if data["type"] == "Set":
+            for c in data.get("classified_as", []):
                 if c.get("id") == "http://vocab.getty.edu/aat/300311990":
-                    c['id'] = "http://vocab.getty.edu/aat/300456764"
-
+                    c["id"] = "http://vocab.getty.edu/aat/300456764"
 
         return rec

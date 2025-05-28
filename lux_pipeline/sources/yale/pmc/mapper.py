@@ -1,7 +1,4 @@
 from lux_pipeline.process.base.mapper import Mapper
-from lux_pipeline.process.utils.mapper_utils import validate_timespans
-import ujson as json
-from shapely.geometry import shape
 
 
 class PmcMapper(Mapper):

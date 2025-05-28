@@ -1,6 +1,6 @@
 from lux_pipeline.process.base.mapper import Mapper
 from cromulent import model, vocab
-from lux_pipeline.process.utils.mapper_utils import make_datetime, test_birth_death
+from lux_pipeline.process.utils.date_utils import make_datetime, test_birth_death
 from lxml import etree
 import re
 
@@ -198,7 +198,6 @@ class ViafMapper(Mapper):
             birthdate = [self.to_plain_string(bd) for bd in top.xpath("./viaf:birthDate/text()", namespaces=self.nss)]
             deathdate = [self.to_plain_string(dd) for dd in top.xpath("./viaf:deathDate/text()", namespaces=self.nss)]
             dateType = [self.to_plain_string(dt) for dt in top.xpath("./viaf:dateType/text()", namespaces=self.nss)]
-
 
             if dateType and dateType[0]:
                 # lived, flourished

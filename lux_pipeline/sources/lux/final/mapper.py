@@ -1,10 +1,11 @@
 from lux_pipeline.process.reidentifier import Reidentifier
 from lux_pipeline.process.base.mapper import Mapper
-from lux_pipeline.process.utils.mapper_utils import test_birth_death
+from lux_pipeline.process.utils.date_utils import test_birth_death
 from urllib.parse import quote, urlparse, urlunparse
 import ujson as json
 import os
 import logging
+
 logger = logging.getLogger("lux_pipeline")
 
 
@@ -129,7 +130,7 @@ class Cleaner(Mapper):
             "_label": "Primary Name",
             "equivalent": [
                 {
-                    "id": "http://vocab.getty.edu/aat/300404670", # FIXME: use global
+                    "id": "http://vocab.getty.edu/aat/300404670",  # FIXME: use global
                     "type": "Type",
                     "_label": "Final: Primary Name",
                 }
@@ -141,7 +142,7 @@ class Cleaner(Mapper):
             "_label": "Sort Name",
             "equivalent": [
                 {
-                    "id": "http://vocab.getty.edu/aat/300451544", # FIXME: use global
+                    "id": "http://vocab.getty.edu/aat/300451544",  # FIXME: use global
                     "type": "Type",
                     "_label": "Final: Sort Title",
                 }
@@ -178,9 +179,7 @@ class Cleaner(Mapper):
             for nm in data["identified_by"]:
                 if nm["type"] == "Name":
                     # FIXME: Test for 'language': [{'type': 'Language', '_label': 'und'}]
-                    langs = [
-                        x.get("id", None) for x in nm.get("language", [{"id": None}])
-                    ]
+                    langs = [x.get("id", None) for x in nm.get("language", [{"id": None}])]
                     val = nm.get("content", "")
                     val = val.strip()
                     if not val:
@@ -246,9 +245,7 @@ class Cleaner(Mapper):
                         # FIXME: Any other heuristics here to make a better guess?
                         candidates = []
                         for nm in nms:
-                            cxns = [
-                                x.get("id", None) for x in nm.get("classified_as", [])
-                            ]
+                            cxns = [x.get("id", None) for x in nm.get("classified_as", [])]
                             if not cxns:
                                 candidates.insert(0, nm)
                             else:
@@ -279,9 +276,7 @@ class Cleaner(Mapper):
                         # Everything was bad :(
                         target = nms[0]
                         done = False
-                        cxns = [
-                            x.get("id", None) for x in target.get("classified_as", [])
-                        ]
+                        cxns = [x.get("id", None) for x in target.get("classified_as", [])]
                         for a in [alternateName, alternateTitle, translatedTitle]:
                             if a in cxns:
                                 # Gah. Overwrite. We need a primary name
@@ -377,11 +372,7 @@ class Cleaner(Mapper):
                 if "classified_as" in target:
                     target["classified_as"].append(sortType)
 
-        if (
-            (not "identified_by" in data or not data["identified_by"])
-            and "_label" in data
-            and data["_label"]
-        ):
+        if (not "identified_by" in data or not data["identified_by"]) and "_label" in data and data["_label"]:
             # copy label to name
             data["identified_by"] = [
                 {
@@ -390,20 +381,13 @@ class Cleaner(Mapper):
                     "classified_as": [primaryType],
                 }
             ]
-        elif (
-            not "identified_by" in data
-            and data["type"] == "DigitalObject"
-            and len(data.keys()) == 4
-        ):
+        elif not "identified_by" in data and data["type"] == "DigitalObject" and len(data.keys()) == 4:
             # bad record ... just a pointer to some other URI (id, type, _label, equivalent)
             return None
         elif (
             not "identified_by" in data
             or not data["identified_by"]
-            or (
-                len(data["identified_by"]) == 1
-                and not data["identified_by"][0].get("content", "")
-            )
+            or (len(data["identified_by"]) == 1 and not data["identified_by"][0].get("content", ""))
         ):
             # Uh oh :(
             logger.warning(f"record with no names: {data}")
