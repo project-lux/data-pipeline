@@ -22,7 +22,6 @@ gidfn = os.path.join(cfgs.data_dir, 'google_sheet_id.txt')
 fh = open(gidfn)
 SPREADSHEET_ID = fh.read().strip()
 fh.close()
-RANGE_NAME = 'Different From!A:B'
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
@@ -69,28 +68,39 @@ def index():
 
 @app.route('/add_to_sheet', methods=['POST'])
 def add_to_sheet():
-    record_equivalent_pairs = request.form.getlist('record_equivalent_pairs')  # Get selected pairs
-    
-    # Prepare the data to append
-    values = []
-    for pair in record_equivalent_pairs:
-        record_uri, equivalent_uri = pair.split(",")  # Split the pair into Record and Equivalent
-        values.append([record_uri, equivalent_uri])  # Append as a list of lists
+    record_equivalent_pairs = request.form.getlist('record_equivalent_pairs')
+    record_uris = request.form.getlist('record_uris')
 
-    # Create the request body
-    body = {
-        'values': values
-    }
+    values_same_as = []
+    values_different_from = []
 
-    # Call the Sheets API to append the data
-    result = service.spreadsheets().values().append(
-        spreadsheetId=SPREADSHEET_ID,
-        range=RANGE_NAME,
-        valueInputOption="RAW",
-        body=body
-    ).execute()
+    for idx, record_uri in enumerate(record_uris, start=1):
+        # If this record is marked for the Same As sheet
+        if f"same_as_for_{idx}" in request.form:
+            values_same_as.append([record_uri])
+        else:
+            # Otherwise, collect any selected equivalents for this record
+            for pair in record_equivalent_pairs:
+                rec_uri, equiv_uri = pair.split(",", 1)
+                if rec_uri == record_uri:
+                    values_different_from.append([rec_uri, equiv_uri])
+
+    if values_different_from:
+        service.spreadsheets().values().append(
+            spreadsheetId=SPREADSHEET_ID,
+            range='Different From!A:B',
+            valueInputOption="RAW",
+            body={'values': values_different_from}
+        ).execute()
+
+    if values_same_as:
+        service.spreadsheets().values().append(
+            spreadsheetId=SPREADSHEET_ID,
+            range='Same As!A:A',
+            valueInputOption="RAW",
+            body={'values': values_same_as}
+        ).execute()
 
     return render_template("add_to_sheet.html", success_message="Your records have been successfully added.")
-
 if __name__ == '__main__':
     app.run(host="0.0.0.0", debug=True, port=8080)

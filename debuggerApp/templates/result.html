@@ -61,6 +61,12 @@
                         {% if record.names %}
                             <p><strong>Names:</strong> {{ record.names | join(', ') }}</p>
                         {% endif %}
+                        <div class="field">
+                            <label class="checkbox">
+                                <input type="checkbox" name="same_as_for_{{ loop.index }}">
+                                Add this record to <strong>Same As</strong> sheet (Column A)
+                            </label>
+                        </div>
                         {% if record.equivalents %}
                             <p><strong>Equivalents:</strong></p>
                             <ul class="equivalents-list">
