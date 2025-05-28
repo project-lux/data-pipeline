@@ -57,15 +57,21 @@
             <div id="results">
                 {% for record in result.records %}
                     <div class="record">
-                        <strong>Record:</strong> <a href="{{ record.uri }}" target="_blank">{{ record.uri }}</a>
+                        <strong>Record:</strong>
+                        <a href="{{ record.uri }}" target="_blank">{{ record.uri }}</a>
+
+                        <!-- This hidden field is used in POST data -->
+                        <input type="hidden" name="record_uri_for_same_as" value="{{ record.uri }}">
+
                         {% if record.names %}
-                            <p><strong>Names:</strong> {{ record.names | join(', ') }}</p>
+                        <p><strong>Names:</strong> {{ record.names | join(', ') }}</p>
                         <br>
                         {% endif %}
+
                         <div class="field">
                             <label class="checkbox">
-                                <input type="checkbox" name="same_as">
-                                <strong>Add to Same As Sheet?</strong>
+                            <input type="checkbox" name="add_to_same_as" value="yes">
+                            add this record to same as sheet (column A)
                             </label>
                         </div>
                         {% if record.equivalents %}
