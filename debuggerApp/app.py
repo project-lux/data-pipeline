@@ -69,21 +69,17 @@ def index():
 @app.route('/add_to_sheet', methods=['POST'])
 def add_to_sheet():
     record_equivalent_pairs = request.form.getlist('record_equivalent_pairs')
-    record_uris = request.form.getlist('record_uris')
+    same_as_records = request.form.getlist('same_as')  
 
     values_same_as = []
     values_different_from = []
 
-    for idx, record_uri in enumerate(record_uris, start=1):
-        # If this record is marked for the Same As sheet
-        if f"same_as_for_{idx}" in request.form:
+    for pair in record_equivalent_pairs:
+        record_uri, equivalent_uri = pair.split(",", 1)
+        if record_uri in same_as_records:
             values_same_as.append([record_uri])
         else:
-            # Otherwise, collect any selected equivalents for this record
-            for pair in record_equivalent_pairs:
-                rec_uri, equiv_uri = pair.split(",", 1)
-                if rec_uri == record_uri:
-                    values_different_from.append([rec_uri, equiv_uri])
+            values_different_from.append([record_uri, equivalent_uri])
 
     if values_different_from:
         service.spreadsheets().values().append(
@@ -102,5 +98,6 @@ def add_to_sheet():
         ).execute()
 
     return render_template("add_to_sheet.html", success_message="Your records have been successfully added.")
+
 if __name__ == '__main__':
     app.run(host="0.0.0.0", debug=True, port=8080)
