@@ -68,12 +68,6 @@
                         <br>
                         {% endif %}
 
-                        <div class="field">
-                            <label class="checkbox">
-                            <input type="checkbox" name="add_to_same_as" value="yes">
-                            add this record to same as sheet (column A)
-                            </label>
-                        </div>
                         {% if record.equivalents %}
                             <p><strong>Equivalents:</strong></p>
                             <ul class="equivalents-list">
@@ -93,9 +87,19 @@
                                     </li>
                                 {% endfor %}
                             </ul>
-                        {% else %}
-                            <p class="no-equivalents">Does not have any URI equivalents.</p>
-                        {% endif %}
+                            {% else %}
+                                <p class="no-equivalents">Does not have any URI equivalents.</p>
+
+                                <!-- ✅ Show same-as checkbox only if no equivalents -->
+                                <p><strong>Add to same as?</strong></p>
+                                <div class="field">
+                                    <label class="checkbox">
+                                        <input type="checkbox" name="add_to_same_as" value="yes">
+                                        Yes
+                                    </label>
+                                </div>
+                            {% endif %}
+ 
                     </div>
                 {% endfor %}
             </div>
