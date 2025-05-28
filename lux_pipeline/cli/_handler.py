@@ -38,11 +38,11 @@ class CommandHandler(BaseHandler):
         else:
             sources = args.source.split(",")
 
+        xargs = {x: getattr(args, y) for x, y in self.extra_args.items()}
+
         manager = self.make_manager(wks, args)
         for s in sources:
             manager.prepare_single(s)
-
-        xargs = {x: getattr(args, y) for x, y in self.extra_args.items()}
 
         # Here we set up the rich UI
         if args.no_ui:

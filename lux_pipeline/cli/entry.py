@@ -14,8 +14,8 @@ logger.setLevel(logging.DEBUG)
 
 oh = logging.StreamHandler(stream=sys.stdout)
 # Trap --log here and set it before instantiate_all, which is before the arg parser
-if '--log' in sys.argv:
-    lvl = sys.argv[sys.argv.index('--log')+1]
+if "--log" in sys.argv:
+    lvl = sys.argv[sys.argv.index("--log") + 1]
     lvl = lvl.upper()
     if hasattr(logging, lvl):
         oh.setLevel(getattr(logging, lvl))
@@ -44,21 +44,24 @@ if cfgs is not None:
     except:
         idmap = None
 
+
 def handle_command(cfgs, args, rest):
     print("There isn't an 'entry' command, please see 'lux help' for the list")
     return False
 
-def main():
 
+def main():
     parser = ArgumentParser()
     parser.add_argument("command", type=str, help="Function to execute, see 'lux help' for the list")
     parser.add_argument("--log", type=str, help="Log level to log messages at")
     parser.add_argument("--debug", action="store_true", help="If provided, raise exceptions")
     parser.add_argument("--source", type=str, help="Source(s) to download separated by commas, or 'all'")
-    parser.add_argument("--max_workers", '--max-workers', type=int, default=0, help="Number of processes to use")
-    parser.add_argument("--my_worker", '--my-worker', type=int, default=-1, help="Which process this is (null engine)")
+    parser.add_argument("--max_workers", "--max-workers", type=int, default=0, help="Number of processes to use")
+    parser.add_argument(
+        "--my_worker", "--my-worker", type=int, default=-1, help="Which process this is (null engine)"
+    )
     parser.add_argument("--engine", type=str, help="mp, ray, or null for which task distribution engine to use")
-    parser.add_argument("--no-ui", '--no_ui', action='store_true', help="If set, then disable the user interface")
+    parser.add_argument("--no-ui", "--no_ui", action="store_true", help="If set, then disable the user interface")
     args, rest = parser.parse_known_args()
 
     if args.debug and not args.log:
@@ -71,28 +74,32 @@ def main():
         if not args.max_workers:
             args.max_workers = args.my_worker
         elif args.max_workers <= args.my_worker:
-            print(f"my_worker ({args.my_worker}) must be lower than max_workers ({args.max_workers}) -- my_worker starts at 0")
+            print(
+                f"my_worker ({args.my_worker}) must be lower than max_workers ({args.max_workers}) -- my_worker starts at 0"
+            )
             sys.exit(0)
     elif not args.engine:
         args.engine = "ray"
 
-    if cfgs is None and args.command not in ['initialize', 'testinstall']:
-        print("Please use 'lux initialize <base directory>' first to create your installation or lux testinstall to diagnose issues")
+    if cfgs is None and args.command not in ["initialize", "testinstall"]:
+        print(
+            "Please use 'lux initialize <base directory>' first to create your installation or lux testinstall to diagnose issues"
+        )
         sys.exit(0)
-    elif args.command == 'initialize' and cfgs is not None:
+    elif args.command == "initialize" and cfgs is not None:
         print(f"You have already initialized your LUX pipeline. The configs are at: {basepath}")
         sys.exit(0)
 
     try:
-        mod = importlib.import_module(f'lux_pipeline.cli.{args.command}')
+        mod = importlib.import_module(f"lux_pipeline.cli.{args.command}")
     except Exception as e:
-        if '.' in args.command:
+        if "." in args.command:
             # Try to import an extension command from anywhere
-            if '-' in args.command:
-                args.command = args.command.replace('-', '_')
+            if "-" in args.command:
+                args.command = args.command.replace("-", "_")
             try:
                 mod = importlib.import_module(args.command)
-                if not hasattr(mod, 'CommandHandler'):
+                if not hasattr(mod, "CommandHandler"):
                     print(f"Could not find a command for {args.command}")
                     sys.exit(0)
             except Exception as e:
@@ -108,11 +115,14 @@ def main():
 
     try:
         hdlr = mod.CommandHandler(cfgs)
+        if args.debug:
+            print(f"Calling process on {hdlr} with {args}, {rest}")
         result = hdlr.process(args, rest)
     except Exception as e:
         print(f"Failed to process command: {args}\n{e}")
         if args.debug:
             raise
+
 
 if __name__ == "__main__":
     main()
