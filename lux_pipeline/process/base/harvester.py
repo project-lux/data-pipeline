@@ -75,12 +75,13 @@ class ASHarvester(Managable):
         harvester = self.config["harvester"]
         harvester.fetcher.enabled = True
         storage = self.config["datacache"]
+
         if storage is None:
-            logger.debug(f"No datacache for {config['name']}? Can't harvest")
+            logger.debug(f"No datacache for {self.config['name']}? Can't harvest")
             return
-        fn = os.path.join(self.configs.temp_dir, f"all_{config['name']}_uris.txt")
+        fn = os.path.join(self.configs.temp_dir, f"all_{self.config['name']}_uris.txt")
         if not os.path.exists(fn):
-            logger.debug(f"No uri/change list to harvest for {config['name']}. Run get_record_list()")
+            logger.debug(f"No uri/change list to harvest for {self.config['name']}. Run get_record_list()")
             return
 
         with open(fn, "r") as fh:
@@ -385,6 +386,8 @@ class ASProtocol(HarvestProtocol):
                 uri = uri.replace("http://", "https://")
 
             if not uri.startswith(self.namespace):
+                print(f"{self.namespace} vs {uri}")
+                raise ValueError(f"{self.namespace} vs {uri}")
                 continue
 
             ident = uri.replace(self.namespace, "")
