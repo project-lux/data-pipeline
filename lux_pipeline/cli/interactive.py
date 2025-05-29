@@ -5,6 +5,7 @@ from ._handler import BaseHandler as BH
 
 try:
     import readline
+    import rlcompleter
 except Exception:
     readline = None
 
