@@ -36,7 +36,7 @@ class Managable:
         # Could set visibility to false or something but better to just leave it
         # alone by default
         ttl = self.total // self.max_slice if self.divide_by_max_slice else self.total
-        self.update_progress_bar(completed=ttl)
+        self.manager.update_progress_bar(completed=ttl)
 
     def prepare(self, mgr, my_slice=-1, max_slice=-1):
         self.manager = mgr
