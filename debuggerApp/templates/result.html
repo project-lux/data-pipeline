@@ -60,9 +60,6 @@
                         <strong>Record:</strong>
                         <a href="{{ record.uri }}" target="_blank">{{ record.uri }}</a>
 
-                        <!-- This hidden field is used in POST data -->
-                        <input type="hidden" name="record_uri_for_same_as" value="{{ record.uri }}">
-
                         {% if record.names %}
                         <p><strong>Names:</strong> {{ record.names | join(', ') }}</p>
                         {% endif %}
@@ -86,18 +83,17 @@
                                     </li>
                                 {% endfor %}
                             </ul>
-                            {% else %}
-                                <p class="no-equivalents">Does not have any URI equivalents.</p>
+                        {% else %}
+                            <p class="no-equivalents">Does not have any URI equivalents.</p>
 
-                                <!-- ✅ Show same-as checkbox only if no equivalents -->
-                                <p><strong>Add to same as?</strong></p>
-                                <div class="field">
-                                    <label class="checkbox">
-                                        <input type="checkbox" name="add_to_same_as" value="yes">
-                                        Yes
-                                    </label>
-                                </div>
-                            {% endif %}
+                            <p>Add to same as?</p>
+                            <div class="field">
+                                <label class="checkbox">
+                                    <input type="checkbox" name="same_as_records" value="{{ record.uri }}">
+                                    Add this record to Same As Sheet (Column A)
+                                </label>
+                            </div>
+                        {% endif %}
  
                     </div>
                 {% endfor %}
