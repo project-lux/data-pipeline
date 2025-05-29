@@ -193,7 +193,7 @@ class HarvestProtocol:
 
     def set_page_cache(self):
         if self.page_cache_source and not self.page_cache:
-            self.page_cache = self.config["all_configs"][self.page_cache_source]["datacache"]
+            self.page_cache = self.config["all_configs"].external[self.page_cache_source]["datacache"]
 
     def fetch_json(self, uri, typ):
         # generically useful fallback
