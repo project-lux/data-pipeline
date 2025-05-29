@@ -121,10 +121,6 @@ class ASHarvester(Managable):
         records = {}
         deleted = {}
         for change, ident, record, changeTime in harvester.crawl(refsonly=True):
-            if not ident.startswith(config["namespace"]):
-                # Not something for this source
-                continue
-            ident = ident.replace(config["namespace"], "")
             if ident in deleted:
                 # already seen a delete, ignore
                 pass
@@ -387,6 +383,9 @@ class ASProtocol(HarvestProtocol):
                 uri = uri.replace("https://", "http://")
             elif uri.startswith("http://") and self.namespace.startswith("https://"):
                 uri = uri.replace("http://", "https://")
+
+            if not uri.startswith(self.namespace):
+                continue
 
             ident = uri.replace(self.namespace, "")
             if ident in self.seen:
