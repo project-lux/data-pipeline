@@ -5,7 +5,7 @@ import sys
 from lxml import etree
 import datetime
 from ._managable import Managable
-
+from lux_pipeline.config import importObject
 import logging
 
 logger = logging.getLogger("lux_pipeline")
@@ -150,7 +150,12 @@ class ASHarvester(Managable):
 
     def prepare(self, manager, n, max_workers):
         super().prepare(manager, n, max_workers)
-        self.harvester = ASProtocol(self.config)
+        # import it
+        protocol = importObject(self.config.get("harvestProtocolClass", None))
+        if protocol is None:
+            self.harvester = ASProtocol(self.config)
+        else:
+            self.harvester = protocol(self.config)
         self.harvester.manager = self
         self.divide_by_max_slice = False
 
@@ -384,11 +389,6 @@ class ASProtocol(HarvestProtocol):
                 uri = uri.replace("https://", "http://")
             elif uri.startswith("http://") and self.namespace.startswith("https://"):
                 uri = uri.replace("http://", "https://")
-
-            if not uri.startswith(self.namespace):
-                print(f"{self.namespace} vs {uri}")
-                raise ValueError(f"{self.namespace} vs {uri}")
-                continue
 
             ident = uri.replace(self.namespace, "")
             if ident in self.seen:
