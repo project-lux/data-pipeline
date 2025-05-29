@@ -71,10 +71,10 @@ class ASHarvester(Managable):
                     logger.debug(f"Failed to process {ident}")
                     logger.debug(f"Got: {record['data']}")
 
-    def harvest_from_list(self, config, mySlice=None, maxSlice=None):
-        harvester = config["harvester"]
+    def harvest_from_list(self, mySlice=None, maxSlice=None):
+        harvester = self.config["harvester"]
         harvester.fetcher.enabled = True
-        storage = config["datacache"]
+        storage = self.config["datacache"]
         if storage is None:
             logger.debug(f"No datacache for {config['name']}? Can't harvest")
             return
@@ -108,12 +108,8 @@ class ASHarvester(Managable):
                         logger.debug(f"Got None for {ident}")
                         continue
                 except:
-                    # sys.stdout.write("-")
-                    # sys.stdout.flush()
                     continue
                 storage[ident] = itjs
-                # sys.stdout.write(".")
-                # sys.stdout.flush()
 
     def get_record_list(self, until="0001-01-01T00:00:00"):
         # build the set of records that should be in the cache
@@ -122,24 +118,25 @@ class ASHarvester(Managable):
         harvester = self.harvester
         config = self.config
         harvester.last_harvest = until
-        logger.debug(f"Gathering all from stream until {until}")
         records = {}
         deleted = {}
         for change, ident, record, changeTime in harvester.crawl(refsonly=True):
+            if not ident.startswith(config["namespace"]):
+                # Not something for this source
+                continue
+            ident = ident.replace(config["namespace"], "")
             if ident in deleted:
                 # already seen a delete, ignore
                 pass
             elif ident in records:
                 if change == "delete":
-                    # This is a recreate?
-                    logger.debug(f"Saw record {ident} at {records[ident]} then got delete at {changeTime}")
+                    # It got recreated? Do we need to do anything?
+                    pass
             elif change == "delete":
                 # haven't seen a ref, so most recent is delete
                 deleted[ident] = changeTime
             else:
                 records[ident] = changeTime
-            # sys.stdout.write(".")
-            # sys.stdout.flush()
 
         # Write URIs to all_{name}_uris.txt and deleted_{name}_uris.txt in temp dir
         recs = sorted(list(records.keys()))
