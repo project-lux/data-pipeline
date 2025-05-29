@@ -22,7 +22,7 @@ class LUXREPL(code.InteractiveConsole):
 class CommandHandler(BH):
     def process(self, args, rest):
         # Nicer print and inspect
-        from rich import print, inspect
+        from rich import print, inspect  # noqa F711
 
         pretty.install()
 
@@ -57,3 +57,5 @@ class CommandHandler(BH):
 
         # Launch the console
         LUXREPL(vars).interact(banner="LUX Python Interactive Console")
+        if readline is not None:
+            readline.write_history_file(fn)
