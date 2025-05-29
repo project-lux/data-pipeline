@@ -16,6 +16,7 @@ class LoadManager(TaskUiManager):
         super()._distributed(n)
         for which, src in self.sources:
             ldr = getattr(self.configs, which)[src]["loader"]
+            ldr.local_debug = self.local_debug
             try:
                 ldr.prepare(self, n, self.max_workers, self.load_type)
                 ldr.process(disable_ui=self.disable_ui, overwrite=self.overwrite)
@@ -29,4 +30,5 @@ class LoadManager(TaskUiManager):
 
     def maybe_add(self, which, cfg):
         if "loader" in cfg and isinstance(cfg["loader"], Loader):
-            self.sources.append((which, cfg["name"]))
+            if (which, cfg["name"]) not in self.sources:
+                self.sources.append((which, cfg["name"]))

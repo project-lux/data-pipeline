@@ -2,6 +2,7 @@ import code
 from rich import pretty
 import os
 from ._handler import BaseHandler as BH
+import importlib
 
 try:
     import readline
@@ -29,6 +30,16 @@ class CommandHandler(BH):
         fn = os.path.expanduser("~/.python_history")
         if readline is not None and os.path.exists(fn):
             readline.read_history_file(fn)
+
+        def setup_for(task):
+            # make the manager and the task
+            try:
+                mod = importlib.import_module(f"lux_pipeline.cli.{task}")
+            except Exception:
+                print(f"Failed to import module for task: {task}")
+                return
+            ch = mod.CommandHandler(self.configs)
+            return ch.make_manager(1, None)
 
         # Get idmap into locals
         cfgs = self.configs

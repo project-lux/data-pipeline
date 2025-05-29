@@ -293,6 +293,7 @@ class TaskUiManager:
         self.sources = []
         self.my_slice = -1
         self.engine = None
+        self.local_debug = False
 
         self.bar = {"total": -1, "completed": -1, "description": None}
         self.messages = []
@@ -358,3 +359,7 @@ class TaskUiManager:
             engine = NullEngine(self)
         self.engine = engine
         engine.process(layout)
+
+    def debug_process(self, **args):
+        self.local_debug = True
+        return self.process(None, engine="null", disable_ui=True, **args)

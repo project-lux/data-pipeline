@@ -167,6 +167,8 @@ class Loader(Managable):
         return [spec]
 
     def process_fmt(self, fmt):
+        if self.local_debug:
+            print(f"  process_fmt({fmt})")
         spec = []
         bits = fmt.split("/")
         fmt = bits.pop(-1)
@@ -245,6 +247,8 @@ class Loader(Managable):
                 ti = th.next()
 
     def file_opener(self, path, comp):
+        if self.local_debug:
+            print(f"  file_opener({path}, {comp})")
         if not comp:
             if isinstance(path, io.IOBase):
                 # already a file handle
@@ -378,6 +382,8 @@ class Loader(Managable):
         return {"identifier": ident, "data": data}
 
     def make_json(self, path, comp, parent):
+        if self.local_debug:
+            print(f"  make_json({path}, {comp}, {parent})")
         ident = self.make_identifier(path)
         with self.file_opener(path, comp) as fh:
             data = json.load(fh)
@@ -484,6 +490,8 @@ class Loader(Managable):
         return True
 
     def process_step(self, steps, path, parent):
+        if self.local_debug:
+            print(f"  process_step({steps}, {path}, {parent})")
         step = steps[0]
         if not step:
             self.manager.log(logging.ERROR, f"No step provided! {steps}")
@@ -509,9 +517,10 @@ class Loader(Managable):
             raise ValueError(f"Unknown step type {step} in {self.name}")
 
     def prepare(self, mgr, my_slice=0, max_slice=0, load_type="records"):
-        super().prepare(mgr, my_slice, max_slice)
+        if self.is_prepared:
+            return
 
-        # self.manager.log(logging.DEBUG, "Called Prepare")
+        super().prepare(mgr, my_slice, max_slice)
 
         if load_type == "export":
             # Unknown calculate from file
@@ -553,7 +562,6 @@ class Loader(Managable):
                 fmtspec = self.guess_fmt(dfp)
             files.append({"path": dfp, "fmt": fmtspec})
         self.my_files = files
-        # self.manager.log(logging.DEBUG, repr(self.my_files))
 
     def process(self, disable_ui=False, overwrite=True):
         self.overwrite = overwrite
@@ -561,12 +569,8 @@ class Loader(Managable):
         if self.total > 0:
             self.update_progress_bar(total=self.total)
 
-        # self.manager.log(logging.DEBUG, "Called Process")
-
         if not self.my_files:
             self.manager.log(logging.WARNING, f"Called process, but no files to load")
-        else:
-            print(self.my_files)
 
         self.open_temp_files()
         for info in self.my_files:

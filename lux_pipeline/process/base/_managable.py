@@ -10,11 +10,14 @@ class Managable:
         self.manager = None
         self.total = -1
         self.divide_by_max_slice = True
+        self.is_prepared = False
+        self.local_debug = False
 
-    def prepare(self, manager, my_slice, max_slice):
+    def prepare(self, manager, my_slice=-1, max_slice=-1):
         self.manager = manager
         self.my_slice = my_slice
         self.max_slice = max_slice
+        self.is_prepared = True
 
     def update_progress_bar(self, total=-1, increment_total=-1, desc=None):
         if total > 0:
@@ -37,11 +40,6 @@ class Managable:
         # alone by default
         ttl = self.total // self.max_slice if self.divide_by_max_slice else self.total
         self.manager.update_progress_bar(completed=ttl)
-
-    def prepare(self, mgr, my_slice=-1, max_slice=-1):
-        self.manager = mgr
-        self.my_slice = my_slice
-        self.max_slice = max_slice
 
     def process(self, disable_ui=False, **kw):
         raise NotImplementedError()
