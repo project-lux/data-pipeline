@@ -461,7 +461,7 @@ class ASProtocol(HarvestProtocol):
         while self.collection_index < len(self.collections):
             collection = self.collections[self.collection_index]
             coll = collection.rsplit("/", 1)[-1]
-            self.update_progress_bar(total=0, desc=f"{self.config['name']}/{coll}")
+            self.manager.update_progress_bar(total=0, desc=f"{self.config['name']}/{coll}")
             for rec in self.crawl_single(collection, manager, last_harvest, refsonly):
                 yield rec
             self.collection_index += 1
