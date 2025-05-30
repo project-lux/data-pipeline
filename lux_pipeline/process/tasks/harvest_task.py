@@ -92,9 +92,13 @@ class HarvestManager(TaskUiManager):
 
             # Find the records from the stream
             # Here we're calling once per source
+            mw = self.max_workers
+            self.max_workers = len(self.sources)
+
             logger.info("Entering Phase 1 in master")
             super().process(layout, **args)
             logger.info("Back from phase 1")
+            self.max_workers = mw
 
             # re-show all the bars
             for n in range(len(self.sources), self.max_workers):
