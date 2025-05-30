@@ -46,8 +46,10 @@ class HarvestManager(TaskUiManager):
 
         if self.two_phase:
             if self.phase == 1:
+                self.log(logging.INFO, f"Entering phase 1 in {n}")
                 self._distributed_phase1(n)
             elif self.phase == 2:
+                self.log(logging.INFO, f"Entering phase 2 in {n}")
                 self._distributed_phase2(n)
             else:
                 raise ValueError("Invalid phase")
@@ -72,7 +74,6 @@ class HarvestManager(TaskUiManager):
 
     def process(self, layout, engine="ray", disable_ui=False, **args) -> bool:
         # hide unnecessary bars
-        print(args)
 
         if len(self.sources) < self.max_workers:
             for n in range(len(self.sources), self.max_workers):
@@ -84,13 +85,14 @@ class HarvestManager(TaskUiManager):
         else:
             self.until = "0000"
 
-        if "two_phase" in args:
+        if "two_phase" in args and args["two_phase"]:
             # do two phase harvest of fetch URIs sequentially then records in parallel
             self.two_phase = True
             self.phase = 1
 
             # Find the records from the stream
             # Here we're calling once per source
+            logger.info("Entering Phase 1 in master")
             super().process(layout, **args)
             logger.info("Back from phase 1")
 
