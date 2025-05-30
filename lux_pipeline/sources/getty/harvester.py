@@ -19,6 +19,7 @@ class GettyProtocol(ASProtocol):
                 ident = what.rsplit("/", 1)[-1]
                 item["object"]["id"] = f"{self.namespace}{ident}"
                 filtered_items.append(item)
+        self.manager.increment_progress_bar(len(items) - len(filtered_items))
         if filtered_items:
             for rec in super().process_items(filtered_items, refsonly):
                 yield rec

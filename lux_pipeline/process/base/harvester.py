@@ -206,6 +206,8 @@ class ASHarvester(Managable):
 
 # A usage independent protocol handler
 # c.f. the processing engines in _task_ui_manager
+
+
 class HarvestProtocol:
     def __init__(self, config):
         self.overwrite = config.get("harvest_overwrite", True)
