@@ -72,8 +72,8 @@ class ASHarvester(Managable):
                     logger.debug(f"Got: {record['data']}")
 
     def harvest_from_list(self, mySlice=None, maxSlice=None):
-        harvester = self.config["harvester"]
-        harvester.fetcher.enabled = True
+        fetcher = self.harvester.fetcher
+        fetcher.enabled = True
         storage = self.config["datacache"]
 
         if storage is None:
@@ -104,7 +104,7 @@ class ASHarvester(Managable):
                     # inserted after the change, no need to fetch
                     continue
                 try:
-                    itjs = harvester.fetcher.fetch(ident)
+                    itjs = fetcher.fetch(ident)
                     if itjs is None:
                         logger.debug(f"Got None for {ident}")
                         continue
@@ -112,15 +112,18 @@ class ASHarvester(Managable):
                     continue
                 storage[ident] = itjs
 
-    def get_record_list(self, until="0001-01-01T00:00:00"):
+    def get_record_list(self):
         # build the set of records that should be in the cache
         # from the activity streams
 
         harvester = self.harvester
         config = self.config
-        harvester.last_harvest = until
         records = {}
         deleted = {}
+        self.manager.log(
+            logging.INFO, f"Getting references from {self.config['name']} until {self.harvester.last_harvest}"
+        )
+
         for change, ident, record, changeTime in harvester.crawl(refsonly=True):
             if ident in deleted:
                 # already seen a delete, ignore
@@ -135,6 +138,7 @@ class ASHarvester(Managable):
             else:
                 records[ident] = changeTime
 
+        self.manager.log(logging.INFO, f"Writing temporary record URI files for {self.config['name']}")
         # Write URIs to all_{name}_uris.txt and deleted_{name}_uris.txt in temp dir
         recs = sorted(list(records.keys()))
         with open(os.path.join(self.configs.temp_dir, f"all_{config['name']}_uris.txt"), "w") as fh:
@@ -157,18 +161,19 @@ class ASHarvester(Managable):
         else:
             self.harvester = protocol(self.config)
         self.harvester.manager = self
-        self.divide_by_max_slice = False
 
-    def process(self, collection, disable_ui=False, **kw):
         storage = self.config["datacache"]
         self.internal_nss = [x["namespace"] for x in self.config["all_configs"].internal.values()]
-        if self.harvester.last_harvest[:4] == "0001":
+        if self.manager.until != "0000":
+            self.harvester.last_harvest = self.manager.until
+        if self.harvester.last_harvest[:4] == "0000":
             self.harvester.last_harvest = storage.latest()
-        # logger.debug(f"Harvesting until {self.harvester.last_harvest}")
-        coll = collection.rsplit("/", 1)[-1]
-        self.update_progress_bar(total=0, desc=f"{self.config['name']}/{coll}")
 
-        for change, ident, record, changeTime in self.harvester.crawl_single(collection):
+        self.divide_by_max_slice = False
+
+    def process(self, disable_ui=False, **kw):
+        self.manager.log(logging.INFO, f"Harvesting {self.config['name']} until {self.harvester.last_harvest}")
+        for change, ident, record, changeTime in self.harvester.crawl():
             self.process_change(change, ident, record, changeTime)
 
 
@@ -177,7 +182,7 @@ class ASHarvester(Managable):
 class HarvestProtocol:
     def __init__(self, config):
         self.overwrite = config.get("harvest_overwrite", True)
-        self.last_harvest = config.get("last_harvest", "0001-01-01T00:00:00")
+        self.last_harvest = config.get("last_harvest", "0000-01-01T00:00:00")
         self.harvest_from = config.get("harvest_from", "9999-01-01T00:00:00")
         self.prefix = config["name"]
         self.namespace = config["namespace"]
@@ -289,7 +294,7 @@ class PmhProtocol(HarvestProtocol):
 
 class ASProtocol(HarvestProtocol):
     def __init__(self, config):
-        HarvestProtocol.__init__(self, config)
+        super().__init__(config)
         self.change_types = ["update", "create", "delete", "move", "merge", "split", "refresh"]
         self.collections = config["activitystreams"]
         self.collection_index = 0
@@ -455,6 +460,8 @@ class ASProtocol(HarvestProtocol):
     def crawl(self, manager=None, last_harvest=None, refsonly=False):
         while self.collection_index < len(self.collections):
             collection = self.collections[self.collection_index]
+            coll = collection.rsplit("/", 1)[-1]
+            self.update_progress_bar(total=0, desc=f"{self.config['name']}/{coll}")
             for rec in self.crawl_single(collection, manager, last_harvest, refsonly):
                 yield rec
             self.collection_index += 1

@@ -2,6 +2,8 @@ from lux_pipeline.process.base.harvester import ASProtocol
 
 
 class GettyProtocol(ASProtocol):
+    """Wrap the regular ActivityStreams Protocol to rewrite the URIs"""
+
     def process_items(self, items, refsonly=False):
         # self.namespace = f"http://data.getty.edu/vocab/{self.prefix}/"
         filtered_items = []
