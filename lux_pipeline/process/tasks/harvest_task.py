@@ -72,6 +72,8 @@ class HarvestManager(TaskUiManager):
 
     def process(self, layout, engine="ray", disable_ui=False, **args) -> bool:
         # hide unnecessary bars
+        print(args)
+
         if len(self.sources) < self.max_workers:
             for n in range(len(self.sources), self.max_workers):
                 bar = get_bar_from_layout(layout, n)
