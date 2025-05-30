@@ -159,14 +159,15 @@ class ASHarvester(Managable):
         self.harvester.manager = self
         self.divide_by_max_slice = False
 
-    def process(self, collection, disable_ui=False):
+    def process(self, collection, disable_ui=False, **kw):
         storage = self.config["datacache"]
         self.internal_nss = [x["namespace"] for x in self.config["all_configs"].internal.values()]
         if self.harvester.last_harvest[:4] == "0001":
             self.harvester.last_harvest = storage.latest()
-        logger.debug(f"Harvesting until {self.harvester.last_harvest}")
+        # logger.debug(f"Harvesting until {self.harvester.last_harvest}")
         coll = collection.rsplit("/", 1)[-1]
         self.update_progress_bar(total=0, desc=f"{self.config['name']}/{coll}")
+
         for change, ident, record, changeTime in self.harvester.crawl_single(collection):
             self.process_change(change, ident, record, changeTime)
 

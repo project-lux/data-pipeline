@@ -1,6 +1,4 @@
 from lux_pipeline.process.base.harvester import ASProtocol
-import ujson as json
-import sys
 
 
 class GettyProtocol(ASProtocol):
