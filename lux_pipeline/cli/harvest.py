@@ -7,6 +7,7 @@ class CommandHandler(CH):
         ap.add_argument("--no-overwrite", action="store_false", help="Do not overwrite existing files/records")
         ap.add_argument("--two-phase", action="store_true", help="Process in two phases")
         ap.add_argument("--until", type=str, help="ISO8601 date to harvest backwards to")
+        self.extra_args = {"two_phase": "two_phase", "until": "until"}
 
     def make_manager(self, wks, args):
         return HarvestManager(self.configs, wks)
