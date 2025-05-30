@@ -99,6 +99,7 @@ class HarvestManager(TaskUiManager):
             super().process(layout, **args)
             logger.info("Back from phase 1")
             self.max_workers = mw
+            self.engine.max_workers = mw
 
             # re-show all the bars
             for n in range(len(self.sources), self.max_workers):
