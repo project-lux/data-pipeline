@@ -171,9 +171,12 @@ class MpEngine(ProcessingEngine):
                                 bar[0].update(bar[1], **v)
                         for k, v in messages.items():
                             while v:
-                                lvl, msg = v.pop(0)
-                                logger.log(lvl, msg)
-                                log_fh.write(msg + "\n")
+                                try:
+                                    lvl, msg = v.pop(0)
+                                    logger.log(lvl, msg)
+                                    log_fh.write(msg + "\n")
+                                except Exception:
+                                    break
                             log_fh.flush()
                         time.sleep(0.5)
                 for future in as_completed(futures):
