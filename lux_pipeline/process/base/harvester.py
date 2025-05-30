@@ -71,6 +71,27 @@ class ASHarvester(Managable):
                     logger.debug(f"Failed to process {ident}")
                     logger.debug(f"Got: {record['data']}")
 
+    def count_lines(self, fh):
+        # Simple method of just read in the lines
+        # mmap doesn't work on compressed
+        # And have already opened the file, so no point using binary read
+        # Could read in chunks for some time saving
+
+        try:
+            length = fh.seek(0, os.SEEK_END)
+            fh.seek(0)
+        except:
+            # No seek? :(
+            return -1
+        lines = 0
+        if length < 100000000:
+            for l in fh:
+                lines += 1
+            fh.seek(0)
+            return lines
+        else:
+            return -1
+
     def harvest_from_list(self, mySlice=None, maxSlice=None):
         fetcher = self.harvester.fetcher
         fetcher.enabled = True
@@ -85,8 +106,10 @@ class ASHarvester(Managable):
             return
 
         with open(fn, "r") as fh:
-            x = 0
+            ttl = self.count_lines(fh)
+            self.update_progress_bar(total=ttl)
             l = True
+            x = 0
             while l:
                 l = fh.readline()
                 l = l.strip()
@@ -94,7 +117,11 @@ class ASHarvester(Managable):
                     x += 1
                     continue
                 x += 1
-                (ident, dt) = l.split("\t")
+                self.increment_progress_bar()
+                try:
+                    (ident, dt) = l.split("\t")
+                except ValueError:
+                    continue
                 try:
                     tm = storage.metadata(ident, "insert_time")["insert_time"]
                 except TypeError:

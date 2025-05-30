@@ -32,8 +32,8 @@ class Managable:
             ttl = ttl // self.max_slice
         self.manager.update_progress_bar(total=ttl, description=desc)
 
-    def increment_progress_bar(self, amount):
-        self.manager.update_progress_bar(advance=1)
+    def increment_progress_bar(self, amount=1):
+        self.manager.update_progress_bar(advance=amount)
 
     def close_progress_bar(self):
         # Could set visibility to false or something but better to just leave it
