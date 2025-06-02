@@ -73,7 +73,7 @@ class FastMapper(Mapper):
                         data.setdefault(subfield, []).append(self.to_plain_string(sf.text.rstrip(',')))
         return data
     
-    def dms_to_wkt(dms_string):
+    def dms_to_wkt(self, dms_string):
         def dms_to_dd(degrees, minutes, seconds, direction):
             dd = float(degrees) + float(minutes)/60 + float(seconds)/3600
             return -dd if direction in ['S', 'W'] else dd
@@ -97,40 +97,73 @@ class FastMapper(Mapper):
         for i, name in enumerate(names):
             if not name:
                 continue
+            if not hasattr(rec, "identified_by"):
+                rec.identified_by = []
             if not primary:
-                rec.identified_by = vocab.PrimaryName(content=name)
+                rec.identified_by.append(vocab.PrimaryName(content=name))
                 primary = True
             else:
-                rec.identified_by = vocab.AlternateName(content=name)
-        return primary
+                rec.identified_by.append(vocab.AlternateName(content=name))
 
-    def combine_subfields(*fields):
+
+    def combine_subfields(self, *fields):
         return ", ".join(filter(None, fields))
 
     def process_equivalents(self, rec, uris, cls):
-        """Processes equivalent URIs for a given class."""
+        """Processes equivalent URIs for a given class, avoiding duplicates."""
+        seen = set()
         for uri in uris:
             if not uri:
                 continue
+
             if "wikipedia.org" in uri:
                 wikidata_qid = get_wikidata_qid(uri)
-                if wikidata_qid:
-                    new_uri = self.config['all_configs'].external['wikidata']['namespace'] + wikidata_qid
-                else:
+                if not wikidata_qid:
                     continue
-            if uri.startswith("(DLC)"):
+                uri = self.config['all_configs'].external['wikidata']['namespace'] + wikidata_qid
+
+            elif uri.startswith("(DLC)"):
                 clean_uri = uri.replace("(DLC)", "").replace(" ", "").strip()
-                new_uri = "http://id.loc.gov/authorities/subjects/" + clean_uri
+                uri = "http://id.loc.gov/authorities/subjects/" + clean_uri
+
             elif uri.startswith("(OCoLC)fst"):
-                new_uri = self.fast_id_to_uri(uri)
-            else:
-                new_uri = uri
-            rec.equivalent = cls(ident=new_uri)
+                uri = self.fast_id_to_uri(uri)
+
+            if uri not in seen:
+                seen.add(uri)
+                rec.equivalent = cls(ident=uri)
     
     def process_classifications(self, rec, uris):
         for uri in uris:
             if uri:
                 rec.classified_as = model.Type(ident=uri)
+    
+    def build_timespan(self, start=None, end=None):
+        """Builds a TimeSpan from start and/or end date strings using make_datetime."""
+        ts = model.TimeSpan()
+
+        try:
+            bstart, bend = make_datetime(start) if start else (None, None)
+        except:
+            bstart, bend = None, None
+
+        try:
+            dstart, dend = make_datetime(end) if end else (None, None)
+        except:
+            dstart, dend = None, None
+
+        if not any([bstart, bend, dstart, dend]):
+            return None  # Don't return empty timespans
+
+        if bstart:
+            ts.begin_of_the_begin = bstart
+            ts.end_of_the_begin = bend
+        if dstart:
+            ts.begin_of_the_end = dstart
+            ts.end_of_the_end = dend
+
+        return ts
+
 
     def process_agent(self, root, rec):
         """Processes common fields for People and Groups"""
@@ -214,27 +247,10 @@ class FastMapper(Mapper):
                     activity = vocab.Active()
                     activity.classified_as = [model.Type(ident=fpid, label=field_of_activity)]
 
-                    # If there is a timespan (s or t), attach it
                     if work_start or work_end:
-                        ts = model.TimeSpan()
-                        try:
-                            bstart, bend = make_datetime(work_start)
-                        except:
-                            bstart, bend = None, None
-
-                        try:
-                            dstart, dend = make_datetime(work_end)
-                        except:
-                            dstart, dend = None, None
-
-                        if bstart:
-                            ts.begin_of_the_begin = bstart
-                            ts.end_of_the_begin = bend
-                        if dstart:
-                            ts.begin_of_the_end = dstart
-                            ts.end_of_the_end = dend
-
-                        activity.timespan = ts  # Attach timespan to the specific activity
+                        ts = self.build_timespan(work_start, work_end)
+                        if ts:
+                            activity.timespan = ts
                     carried_out_activities.append(activity)
 
         if carried_out_activities:
@@ -260,70 +276,44 @@ class FastMapper(Mapper):
         elif isinstance(rec, model.Group):
             self.process_equivalents(rec, uris, model.Group)
 
-        # Extract birth/formation and death/dissolution dates (046)
+        # Extract dates (046, 100|d, 400|d)
         df046_data = self.extract_datafields(root, '046', ['f', 'g'])
         df100_data = self.extract_datafields(root, '100', ['d'])
         df400_data = self.extract_datafields(root, '400', ['d'])
-        try:
-            begin_dates = make_datetime(df046_data.get('f', [''])[0])
-        except:
-            begin_dates = None
-        try:
-            end_dates = make_datetime(df046_data.get('g', [''])[0])
-        except: 
-            end_dates = None
 
-        for potential_dates in [df100_data.get('d',[]), df400_data.get('d',[])]:
-                for date in potential_dates:
-                    if date and "-" in date:
-                        try:
-                            b, e = date.split("-")
-                        except: 
-                            b = e = None
-                        try:
-                            begin_tmps = make_datetime(b)
-                        except:
-                            begin_tmps = None
-                        try:
-                            end_tmps = make_datetime(e)
-                        except:
-                            end_tmps = None
+        # Try 046 first
+        begin_ts = self.build_timespan(df046_data.get('f', [''])[0])
+        end_ts = self.build_timespan(df046_data.get('g', [''])[0])
 
-                        if not begin_dates and begin_tmps:
-                            begin_dates = begin_tmps
-                        if not end_dates and end_tmps:
-                            end_dates = end_tmps
-
-                        if begin_dates and end_dates:
+        # Fallback: try parsing textual date ranges in 100|d and 400|d
+        if not begin_ts or not end_ts:
+            for field_data in [df100_data.get('d', []), df400_data.get('d', [])]:
+                for date_str in field_data:
+                    if date_str and "-" in date_str:
+                        start, end = date_str.split("-", 1)
+                        if not begin_ts:
+                            begin_ts = self.build_timespan(start.strip())
+                        if not end_ts:
+                            end_ts = self.build_timespan(end.strip())
+                        if begin_ts and end_ts:
                             break
+                if begin_ts and end_ts:
+                    break
 
-        # Set begin and end timespans
-        if begin_dates:
-            ts = model.TimeSpan()
-            ts.begin_of_the_begin = begin_dates[0]
-            ts.end_of_the_end = begin_dates[1]
-            if rec.__class__ == model.Person:
-                begin = model.Birth()
-                begin.timespan = ts
-                rec.born = begin
-            elif rec.__class__ == model.Group:
-                begin = model.Formation()
-                begin.timespan = ts
-                rec.formed = begin
-        
-        if end_dates:
-            ts = model.TimeSpan()
-            ts.begin_of_the_begin = end_dates[0]
-            ts.end_of_the_end = end_dates[1]
-            if rec.__class__ == model.Person:
-                end = model.Death()
-                end.timespan = ts
-                rec.died = end
-            elif rec.__class__ == model.Group:
-                end = model.Dissolution()
-                end.timespan = ts
-                rec.dissolved = end
+        # Assign TimeSpans
+        if begin_ts:
+            if isinstance(rec, model.Person):
+                rec.born = model.Birth(timespan=begin_ts)
+            elif isinstance(rec, model.Group):
+                rec.formed = model.Formation(timespan=begin_ts)
 
+        if end_ts:
+            if isinstance(rec, model.Person):
+                rec.died = model.Death(timespan=end_ts)
+            elif isinstance(rec, model.Group):
+                rec.dissolved = model.Dissolution(timespan=end_ts)
+
+        # Sanity check
         if not test_birth_death(rec):
             rec.born = None
             rec.died = None
@@ -354,7 +344,7 @@ class FastMapper(Mapper):
             df450_data.get('a', []) +
             df410_data.get('a', [])
         )
-        primary = self.assign_names(rec, names, primary=primary)
+        primary = self.assign_names(rec, names, primary=False)
         if not primary:
             return None
         
@@ -554,27 +544,20 @@ class FastMapper(Mapper):
         if primary == False:
             return None
         
-        # Timespan
+        # Timespans
         df148_data = self.extract_datafields(root, '148', ['a'])
-        if "-" in df148_data.get('a', []):
-            b, e = df148_data.get('a', []).split("-")
-            try:
-                begin_tmps = make_datetime(b)
-            except:
-                begin_tmps = None
-            try:
-                end_tmps = make_datetime(e)
-            except:
-                end_tmps = None
-            if begin_tmps or end_tmps:
-                ts = model.TimeSpan()
-                if begin_tmps:
-                    ts.begin_of_the_begin = begin_tmps[0]
-                    ts.end_of_the_begin = begin_tmps[1]
-                if end_tmps:
-                    ts.begin_of_the_end = end_tmps[0]
-                    ts.end_of_the_end = end_tmps[1]
+
+        for val in df148_data.get('a', []):
+            val = val.strip()
+            if "-" in val:
+                start, end = val.split("-", 1)
+                ts = self.build_timespan(start.strip(), end.strip())
+            else:
+                ts = self.build_timespan(val)
+            if ts:
                 rec.timespan = ts
+                break
+
 
     def process_activity(self, root, rec):
         # Names
@@ -635,58 +618,32 @@ class FastMapper(Mapper):
                 if rpid:
                     rec.took_place_at = model.Place(ident=rpid, label=place)
         
-        #Timespan
+        # Timespan from 046 |s and |t
         df046_data = self.extract_datafields(root, '046', ['s', 't'])
-        timespan = False
+        timespan_set = False
+
         for start, end in zip(df046_data.get('s', []), df046_data.get('t', [])):
-            if start or end:
-                try:
-                    bstart, bend = make_datetime(start)
-                except:
-                    bstart, bend = None, None
-                try:
-                    dstart, dend = make_datetime(end)
-                except:
-                    dstart, dend = None, None
-                if bstart or dstart:
-                    ts = model.TimeSpan()
-                    if bstart:
-                        ts.begin_of_the_begin = bstart
-                        ts.end_of_the_begin = bend
-                    if dstart:
-                        ts.begin_of_the_end = dstart
-                        ts.end_of_the_end = dend
-                    rec.timespan = ts
-                    timespan = True
-        if timespan == False:
+            ts = self.build_timespan(start, end)
+            if ts:
+                rec.timespan = ts
+                timespan_set = True
+                break
+
+        # Fallback: Timespan from 748 |a
+        if not timespan_set:
             df748_data = self.extract_datafields(root, '748', ['a'])
             for date in df748_data.get('a', []):
-                if date and "-" in date:
-                    tempstart, tempend = date.split("-")
-                    try:
-                        bstart, bend = make_datetime(tempstart)
-                    except:
-                        bstart, bend = None, None
-                    try:
-                        dstart, dend = make_datetime(tempend)
-                    except:
-                        dstart, dend = None, None
-                elif date:
-                    try:
-                        bstart, bend = make_datetime(date)
-                    except:
-                        bstart, bend = None, None
-                    dstart, dend = None, None
-                if bstart or dstart:
-                    ts = model.TimeSpan()
-                    if bstart:
-                        ts.begin_of_the_begin = bstart
-                        ts.end_of_the_begin = bend
-                    if dstart:
-                        ts.begin_of_the_end = dstart
-                        ts.end_of_the_end = dend
+                if not date:
+                    continue
+                if "-" in date:
+                    start, end = date.split("-", 1)
+                    ts = self.build_timespan(start.strip(), end.strip())
+                else:
+                    ts = self.build_timespan(date.strip())
+                if ts:
                     rec.timespan = ts
-                    timespan = True
+                    break
+
 
         # Part of
         df547_data = self.extract_datafields(root, '547', ['a','c','d','0'])
