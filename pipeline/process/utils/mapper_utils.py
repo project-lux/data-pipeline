@@ -1,5 +1,6 @@
 import re
 import time
+import requests
 from dateutil import parser
 from dateparser.date import DateDataParser
 from edtf import parse_edtf, text_to_edtf, struct_time_to_datetime
@@ -50,6 +51,39 @@ time_rectype = {
 }
 timestamp_props = ["begin_of_the_begin", "end_of_the_begin", "begin_of_the_end", "end_of_the_end"]
 
+
+def get_wikidata_qid(wikipedia_url):
+    """
+    Given a Wikipedia URL, this function uses Wikidata sitelinks to retrieve the corresponding Wikidata QID.
+    
+    Args:
+        wikipedia_url (str): The full URL of a Wikipedia page (e.g., "http://en.wikipedia.org/wiki/Addison_Mizner")
+    
+    Returns:
+        str or None: The Wikidata QID (e.g., "Q466693") if found, otherwise None.
+    """
+    try:
+        title = wikipedia_url.rstrip("/").split("/")[-1]
+
+        endpoint = "https://www.wikidata.org/w/api.php"
+        params = {
+            "action": "wbgetentities",
+            "sites": "enwiki",
+            "titles": title,
+            "format": "json"
+        }
+
+        response = requests.get(endpoint, params=params)
+        data = response.json()
+
+        entities = data.get("entities",{})
+        for qid, entity in entities.items():
+            if qid != "-1": #if page is not found, the key will be "-1"
+                return qid
+    except Exception as e:
+        print(f"Error getting wikidata ID {e}")
+
+    return None
 
 def walk_for_timespan(nodes):
     if type(nodes) != list:
