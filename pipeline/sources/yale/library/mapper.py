@@ -37,15 +37,15 @@ single_props = [
 class YulMapper(Mapper):
     def __init__(self, config):
         Mapper.__init__(self, config)
-        lccns = {}
         cfgs = config["all_configs"]
+        self.headings_index = cfgs.internal["ils"]["indexLoader"].load_index()
         data_dir = cfgs.data_dir
         fn = os.path.join(data_dir, "stupid_table.json")
         self.object_work_mismatch = {}
         if os.path.exists(fn):
             with open(fn) as fh:
                 self.object_work_mismatch = json.load(fh)
-        # stubid --> [real_id, type]
+        # stupid --> [real_id, type]
 
         ycbaexhs = {}
         ycbaobjs = {}
@@ -119,37 +119,47 @@ class YulMapper(Mapper):
 
     def transform(self, rec, rectype, reference=False):
         data = rec["data"]
+        headings_index = self.headings_index
 
         if data["id"] in self.object_work_mismatch:
             return None
+        elif data["id"] in headings_index:
+            return None
 
-        # add abouts for ycba exhs & objs
+        # replace compound subject headings with their components on LinguisticObjects
         if data["type"] == "LinguisticObject":
-            aboutblock = data.get("about", [])
-            # get yul ID #
-            for ident in data["identified_by"]:
-                if ident["content"].startswith("ils:yul:"):
+            current_about = data.get("about", [])
+            new_about = []
+            for a in current_about:
+                a_id = a.get("id", "")
+                if a_id in headings_index:
+                    csh = {"type": "Type", "created_by": {"type": "Creation", "influenced_by": []}}
+                    for h_json in headings_index[a_id]:
+                        try:
+                            h = json.loads(h_json)
+                            csh["created_by"]["influenced_by"].append(h)
+                        except json.JSONDecodeError:
+                            print(f"Failed to decode JSON for {a_id}")
+                    new_about.append(csh)
+                else:
+                    new_about.append(a)
+
+            # add ycba objects/exhibitions
+            ilsnum = None
+            for ident in data.get("identified_by", []):
+                if ident.get("content", "").startswith("ils:yul:"):
                     ilsnum = ident["content"].split(":")[-1]
                     break
-            try:
-                objslist = self.ycbaobjs[ilsnum]
-                for objs in objslist:
-                    if objs != "":
-                        objsblock = {"id": objs, "type": "HumanMadeObject"}
-                        aboutblock.append(objsblock)
-            except:
-                pass
-            try:
-                exhslist = self.ycbaexhs[ilsnum]
-                for exhs in exhslist:
-                    if exhs != "":
-                        exhsblock = {"id": exhs, "type": "Activity"}
-                        aboutblock.append(exhsblock)
-            except:
-                pass
+            if ilsnum:
+                new_about.extend(
+                    {"id": obj_id, "type": "HumanMadeObject"} for obj_id in self.ycbaobjs.get(ilsnum, []) if obj_id
+                )
+                new_about.extend(
+                    {"id": exh_id, "type": "Activity"} for exh_id in self.ycbaexhs.get(ilsnum, []) if exh_id
+                )
 
-            if aboutblock != []:
-                data["about"] = aboutblock
+            if current_about or new_about:
+                data["about"] = new_about
 
         if data["id"] in self.wiki_recon:
             equivs = data.get("equivalent", [])
@@ -319,7 +329,6 @@ class YulMapper(Mapper):
                         "id": "http://vocab.getty.edu/aat/300388277",
                         "type": "Language",
                         "_label": "English",
-
                     }
                     desc = {
                         "type": "LinguisticObject",
@@ -341,12 +350,11 @@ class YulMapper(Mapper):
                     cxns["id"] = "http://vocab.getty.edu/aat/300264388"
 
         # Swap sort title AAT for sort value
-        for ident in data.get("identified_by",[]):
+        for ident in data.get("identified_by", []):
             if "classified_as" in ident:
-                for cxn in ident['classified_as']:
-                    if cxn['id'] == "https://vocab.getty.edu/aat/300451544":
-                        cxn['id'] = "http://vocab.getty.edu/aat/300456575"
-
+                for cxn in ident["classified_as"]:
+                    if cxn["id"] == "https://vocab.getty.edu/aat/300451544":
+                        cxn["id"] = "http://vocab.getty.edu/aat/300456575"
 
         # Add collection item flag
         # FIXME: This doesn't work for archives
@@ -399,14 +407,13 @@ class YulMapper(Mapper):
                         cxnid = c.get("id", "")
                         if cxnid and cxnid.startswith("https://vocab.getty.edu"):
                             c["id"] = cxnid.replace("https://", "http://")
-                            
-        if data['type'] == "Period":
+
+        if data["type"] == "Period":
             self.process_period_record(data)
 
-        if data['type'] == "Set":
-            for c in data.get("classified_as",[]):
+        if data["type"] == "Set":
+            for c in data.get("classified_as", []):
                 if c.get("id") == "http://vocab.getty.edu/aat/300311990":
-                    c['id'] = "http://vocab.getty.edu/aat/300456764"
-
+                    c["id"] = "http://vocab.getty.edu/aat/300456764"
 
         return rec
