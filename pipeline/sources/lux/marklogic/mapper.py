@@ -153,9 +153,9 @@ class MlMapper(Mapper):
         elif typ in ["HumanMadeObject", "DigitalObject"]:
             # facets["uiType"] = "CollectionItem"
             prefix = "item"
-        elif archive and typ == "Set":
+        elif typ == "Set":
             # facets["uiType"] = "CollectionWork"
-            prefix = "work"
+            prefix = "set"
         elif typ in ["Person", "Group"]:
             # facets["uiType"] = "Agent"
             prefix = "agent"
@@ -167,8 +167,7 @@ class MlMapper(Mapper):
             "Language",
             "Material",
             "Currency",
-            "MeasurementUnit",
-            "Set",
+            "MeasurementUnit"
         ]:
             # Set here is Collection / Holdings. UI decision to put in with concepts
             # facets["uiType"] = "Concept"
@@ -472,25 +471,6 @@ class MlMapper(Mapper):
                 t = {"subject": me, "predicate": f"{luxns}agentGender", "object": f}
                 ml["triples"].append({"triple": t})
 
-            # if "born" in data and "timespan" in data["born"]:
-            #     facets["agentBeginDate"] = data["born"]["timespan"].get("begin_of_the_begin", "")
-            # if "died" in data and "timespan" in data["died"]:
-            #     facets["agentEndDate"] = data["died"]["timespan"].get("end_of_the_end", "")
-
-        # elif data["type"] == "Group":
-        #     facets["groupId"] = data["id"]
-        #     if "formed_by" in data and "timespan" in data["formed_by"]:
-        #         facets["agentBeginDate"] = data["formed_by"]["timespan"].get("begin_of_the_begin", "")
-        #     if "dissolved_by" in data and "timespan" in data["dissolved_by"]:
-        #         facets["agentEndDate"] = data["dissolved_by"]["timespan"].get("end_of_the_end", "")
-
-        # elif data["type"] in ["HumanMadeObject", "DigitalObject", "LinguisticObject"]:
-        #     # Type of work / supertype
-        #     facets["superType"] = [
-        #         x["id"]
-        #         for x in data.get("classified_as", [])
-        #         if self.globals["typeOfWork"] in [y["id"] for y in x.get("classified_as", [])] and "id" in x
-        #     ]
         elif data["type"] == "Set":
             if "used_for" in data:
                 for uf in data["used_for"]:
@@ -770,10 +750,7 @@ class MlMapper(Mapper):
             ml["triples"].append({"triple": t})
             t2 = {"subject": me, "predicate": f"{luxns}any", "object": r}
             ml["triples"].append({"triple": t2})
-            if data["type"] == "Set":
-                t3 = {"subject": me, "predicate": f"{luxns}setAny", "object": r}
-                ml["triples"].append({"triple": t3})
-            elif data["type"] in [
+            if data["type"] in [
                 "Group",
                 "Person",
                 "Place",
