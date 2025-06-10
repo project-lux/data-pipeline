@@ -127,7 +127,7 @@ class YulMapper(Mapper):
             return None
 
         # replace compound subject headings with their components on LinguisticObjects
-        if data["type"] == "LinguisticObject":
+        if data["type"] in ["LinguisticObject","Set"]:
             current_about = data.get("about", [])
             new_about = []
             for a in current_about:
