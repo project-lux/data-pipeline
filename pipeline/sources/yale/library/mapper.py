@@ -126,40 +126,39 @@ class YulMapper(Mapper):
         elif data["id"] in headings_index:
             return None
 
-        # replace compound subject headings with their components on LinguisticObjects
-        if data["type"] in ["LinguisticObject","Set"]:
-            current_about = data.get("about", [])
-            new_about = []
-            for a in current_about:
-                a_id = a.get("id", "")
-                if a_id in headings_index:
-                    csh = {"type": "Type", "created_by": {"type": "Creation", "influenced_by": []}}
-                    for h_json in headings_index[a_id]:
-                        try:
-                            h = json.loads(h_json)
-                            csh["created_by"]["influenced_by"].append(h)
-                        except json.JSONDecodeError:
-                            print(f"Failed to decode JSON for {a_id}")
-                    new_about.append(csh)
-                else:
-                    new_about.append(a)
+        # replace compound subject headings with their components on all Classes
+        current_about = data.get("about", [])
+        new_about = []
+        for a in current_about:
+            a_id = a.get("id", "")
+            if a_id in headings_index:
+                csh = {"type": "Type", "created_by": {"type": "Creation", "influenced_by": []}}
+                for h_json in headings_index[a_id]:
+                    try:
+                        h = json.loads(h_json)
+                        csh["created_by"]["influenced_by"].append(h)
+                    except json.JSONDecodeError:
+                        print(f"Failed to decode JSON for {a_id}")
+                new_about.append(csh)
+            else:
+                new_about.append(a)
 
-            # add ycba objects/exhibitions
-            ilsnum = None
-            for ident in data.get("identified_by", []):
-                if ident.get("content", "").startswith("ils:yul:"):
-                    ilsnum = ident["content"].split(":")[-1]
-                    break
-            if ilsnum:
-                new_about.extend(
-                    {"id": obj_id, "type": "HumanMadeObject"} for obj_id in self.ycbaobjs.get(ilsnum, []) if obj_id
-                )
-                new_about.extend(
-                    {"id": exh_id, "type": "Activity"} for exh_id in self.ycbaexhs.get(ilsnum, []) if exh_id
-                )
+        # add ycba objects/exhibitions
+        ilsnum = None
+        for ident in data.get("identified_by", []):
+            if ident.get("content", "").startswith("ils:yul:"):
+                ilsnum = ident["content"].split(":")[-1]
+                break
+        if ilsnum:
+            new_about.extend(
+                {"id": obj_id, "type": "HumanMadeObject"} for obj_id in self.ycbaobjs.get(ilsnum, []) if obj_id
+            )
+            new_about.extend(
+                {"id": exh_id, "type": "Activity"} for exh_id in self.ycbaexhs.get(ilsnum, []) if exh_id
+            )
 
-            if current_about or new_about:
-                data["about"] = new_about
+        if current_about or new_about:
+            data["about"] = new_about
 
         if data["id"] in self.wiki_recon:
             equivs = data.get("equivalent", [])
