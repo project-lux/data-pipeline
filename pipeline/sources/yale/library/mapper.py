@@ -117,19 +117,11 @@ class YulMapper(Mapper):
             elif type(v) == dict:
                 self.walk_multi(v)
 
-    def transform(self, rec, rectype, reference=False):
-        data = rec["data"]
+    def edit_block(self, block, classification=False):
+        new_block = []
         headings_index = self.headings_index
 
-        if data["id"] in self.object_work_mismatch:
-            return None
-        elif data["id"] in headings_index:
-            return None
-
-        # replace compound subject headings with their components on all Classes
-        current_about = data.get("about", [])
-        new_about = []
-        for a in current_about:
+        for a in block:
             a_id = a.get("id", "")
             if a_id in headings_index:
                 csh = {"type": "Type", "created_by": {"type": "Creation", "influenced_by": []}}
@@ -137,28 +129,67 @@ class YulMapper(Mapper):
                     try:
                         h = json.loads(h_json)
                         csh["created_by"]["influenced_by"].append(h)
+                        if classification:
+                            # only process the first result for classified_as
+                            break
                     except json.JSONDecodeError:
                         print(f"Failed to decode JSON for {a_id}")
-                new_about.append(csh)
+                new_block.append(csh)
             else:
-                new_about.append(a)
+                new_block.append(a)
+        return new_block
 
-        # add ycba objects/exhibitions
-        ilsnum = None
-        for ident in data.get("identified_by", []):
-            if ident.get("content", "").startswith("ils:yul:"):
-                ilsnum = ident["content"].split(":")[-1]
-                break
-        if ilsnum:
-            new_about.extend(
-                {"id": obj_id, "type": "HumanMadeObject"} for obj_id in self.ycbaobjs.get(ilsnum, []) if obj_id
-            )
-            new_about.extend(
-                {"id": exh_id, "type": "Activity"} for exh_id in self.ycbaexhs.get(ilsnum, []) if exh_id
-            )
+    def transform(self, rec, rectype, reference=False):
+        data = rec["data"]
+        headings_index = self.headings_index
+        if data["id"] in self.object_work_mismatch:
+            return None
+        elif data["id"] in headings_index:
+            return None
 
-        if current_about or new_about:
-            data["about"] = new_about
+
+        if data['type'] == "VisualItem":
+            if "classified_as" in data:
+                data['classified_as'] = self.edit_block(data['classified_as'], classification=True)
+
+        # replace compound subject headings with their components in about and represents on Sets and Works
+        if data["type"] in ["LinguisticObject","VisualItem","Set"]:
+            current_about = data.get("about", [])
+            new_about = self.edit_block(current_about)
+
+            represents = data.get("represents", [])
+            remaining_represents = []
+            for r in represents:
+                r_id = r.get("id", "")
+                if r_id in headings_index:
+                    transformed = self.edit_block([r])
+                    new_about.extend(transformed)
+                else:
+                    remaining_represents.append(r)
+
+            if remaining_represents:
+                data["represents"] = remaining_represents
+            else:
+                del data["represents"]
+
+
+            # Add YCBA objects/exhibitions
+            ilsnum = None
+            for ident in data.get("identified_by", []):
+                if ident.get("content", "").startswith("ils:yul:"):
+                    ilsnum = ident["content"].split(":")[-1]
+                    break
+            if ilsnum:
+                new_about.extend(
+                    {"id": obj_id, "type": "HumanMadeObject"} for obj_id in self.ycbaobjs.get(ilsnum, []) if obj_id
+                )
+                new_about.extend(
+                    {"id": exh_id, "type": "Activity"} for exh_id in self.ycbaexhs.get(ilsnum, []) if exh_id
+                )
+
+            if current_about or new_about:
+                data["about"] = new_about
+
 
         if data["id"] in self.wiki_recon:
             equivs = data.get("equivalent", [])
