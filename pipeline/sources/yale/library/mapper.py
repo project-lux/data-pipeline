@@ -374,10 +374,11 @@ class YulMapper(Mapper):
         # Swap MarcGT to AAT equivalents
         if "classified_as" in data:
             for cxns in data["classified_as"]:
-                if cxns["id"] == "http://id.loc.gov/vocabulary/marcgt/rea":
-                    cxns["id"] = "http://vocab.getty.edu/aat/300265419"
-                elif cxns["id"] == "http://id.loc.gov/vocabulary/marcgt/pic":
-                    cxns["id"] = "http://vocab.getty.edu/aat/300264388"
+                if "id" in cxns:
+                    if cxns["id"] == "http://id.loc.gov/vocabulary/marcgt/rea":
+                        cxns["id"] = "http://vocab.getty.edu/aat/300265419"
+                    elif cxns["id"] == "http://id.loc.gov/vocabulary/marcgt/pic":
+                        cxns["id"] = "http://vocab.getty.edu/aat/300264388"
 
         # Swap sort title AAT for sort value
         for ident in data.get("identified_by", []):
