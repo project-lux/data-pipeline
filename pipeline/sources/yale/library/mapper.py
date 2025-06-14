@@ -117,34 +117,63 @@ class YulMapper(Mapper):
             elif type(v) == dict:
                 self.walk_multi(v)
 
+    def edit_block(self, block, classification=False):
+        new_block = []
+        headings_index = self.headings_index
+
+        for a in block:
+            a_id = a.get("id", "")
+            if a_id in headings_index:
+                csh = {"type": "Type", "created_by": {"type": "Creation", "influenced_by": []}}
+                for h_json in headings_index[a_id]:
+                    try:
+                        h = json.loads(h_json)
+                        csh["created_by"]["influenced_by"].append(h)
+                        if classification:
+                            # only process the first result for classified_as
+                            break
+                    except json.JSONDecodeError:
+                        print(f"Failed to decode JSON for {a_id}")
+                new_block.append(csh)
+            else:
+                new_block.append(a)
+        return new_block
+
     def transform(self, rec, rectype, reference=False):
         data = rec["data"]
         headings_index = self.headings_index
-
         if data["id"] in self.object_work_mismatch:
             return None
         elif data["id"] in headings_index:
             return None
 
-        # replace compound subject headings with their components on LinguisticObjects
-        if data["type"] in ["LinguisticObject","Set"]:
-            current_about = data.get("about", [])
-            new_about = []
-            for a in current_about:
-                a_id = a.get("id", "")
-                if a_id in headings_index:
-                    csh = {"type": "Type", "created_by": {"type": "Creation", "influenced_by": []}}
-                    for h_json in headings_index[a_id]:
-                        try:
-                            h = json.loads(h_json)
-                            csh["created_by"]["influenced_by"].append(h)
-                        except json.JSONDecodeError:
-                            print(f"Failed to decode JSON for {a_id}")
-                    new_about.append(csh)
-                else:
-                    new_about.append(a)
 
-            # add ycba objects/exhibitions
+        if data['type'] == "VisualItem":
+            if "classified_as" in data:
+                data['classified_as'] = self.edit_block(data['classified_as'], classification=True)
+
+        # replace compound subject headings with their components in about and represents on Sets and Works
+        if data["type"] in ["LinguisticObject","VisualItem","Set"]:
+            current_about = data.get("about", [])
+            new_about = self.edit_block(current_about)
+
+            represents = data.get("represents", [])
+            remaining_represents = []
+            for r in represents:
+                r_id = r.get("id", "")
+                if r_id in headings_index:
+                    transformed = self.edit_block([r])
+                    new_about.extend(transformed)
+                else:
+                    remaining_represents.append(r)
+
+            if remaining_represents:
+                data["represents"] = remaining_represents
+            else:
+                del data["represents"]
+
+
+            # Add YCBA objects/exhibitions
             ilsnum = None
             for ident in data.get("identified_by", []):
                 if ident.get("content", "").startswith("ils:yul:"):
@@ -160,6 +189,7 @@ class YulMapper(Mapper):
 
             if current_about or new_about:
                 data["about"] = new_about
+
 
         if data["id"] in self.wiki_recon:
             equivs = data.get("equivalent", [])
@@ -344,10 +374,11 @@ class YulMapper(Mapper):
         # Swap MarcGT to AAT equivalents
         if "classified_as" in data:
             for cxns in data["classified_as"]:
-                if cxns["id"] == "http://id.loc.gov/vocabulary/marcgt/rea":
-                    cxns["id"] = "http://vocab.getty.edu/aat/300265419"
-                elif cxns["id"] == "http://id.loc.gov/vocabulary/marcgt/pic":
-                    cxns["id"] = "http://vocab.getty.edu/aat/300264388"
+                if "id" in cxns:
+                    if cxns["id"] == "http://id.loc.gov/vocabulary/marcgt/rea":
+                        cxns["id"] = "http://vocab.getty.edu/aat/300265419"
+                    elif cxns["id"] == "http://id.loc.gov/vocabulary/marcgt/pic":
+                        cxns["id"] = "http://vocab.getty.edu/aat/300264388"
 
         # Swap sort title AAT for sort value
         for ident in data.get("identified_by", []):
