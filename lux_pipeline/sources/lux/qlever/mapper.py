@@ -1,5 +1,3 @@
-import os
-import sys
 from rdflib import URIRef, Literal
 from lux_pipeline.process.base.mapper import Mapper
 from bs4 import BeautifulSoup
@@ -20,7 +18,7 @@ PREFIX la: <https://linked.art/ns/terms/>
 PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 SELECT DISTINCT ?what ?ql_matchingword_t_nann WHERE {
-  ?what a crm:E21_Person ; 
+  ?what a crm:E21_Person ;
       crm:P2_has_type ?type ;
       crm:P98i_was_born ?birth .
   ?birth crm:P4_has_time-span ?ts .
@@ -37,6 +35,15 @@ class QleverMapper(Mapper):
     def __init__(self, config):
         Mapper.__init__(self, config)
         self.configs = config["all_configs"]
+        self.globals = self.configs.globals
+        self.triple_pattern = "<{subject}> <{predicate}> <{object}> ."
+        self.literal_pattern = "<{subject}> <{predicate}> {value}{datatype} ."
+        self.number_type = "^^<http://www.w3.org/2001/XMLSchema#decimal>"
+        self.date_type = "^^<http://www.w3.org/2001/XMLSchema#dateTime>"
+
+        self.nss = self.configs.rdf_namespaces
+        self.nss["data"] = "https://lux.collections.yale.edu/data/"
+
         self.luxns = "https://lux.collections.yale.edu/ns/"
         self.crmns = "http://www.cidoc-crm.org/cidoc-crm/"
         self.lans = "https://linked.art/ns/terms/"
@@ -48,12 +55,6 @@ class QleverMapper(Mapper):
         self.dctns = "http://purl.org/dc/terms/"
         self.datans = "https://lux.collections.yale.edu/data/"
 
-        self.triple_pattern = "<{subject}> <{predicate}> <{object}> ."
-        self.literal_pattern = "<{subject}> <{predicate}> {value}{datatype} ."
-        self.number_type = "^^<http://www.w3.org/2001/XMLSchema#decimal>"
-        self.date_type = "^^<http://www.w3.org/2001/XMLSchema#dateTime>"
-
-        self.globals = self.configs.globals
         self.ignore_props_for_refs = [
             "identified_by",
             "referred_to_by",
@@ -515,7 +516,12 @@ class QleverMapper(Mapper):
         if "identified_by" in data:
             for nm in data["identified_by"]:
                 nmcxns = [y["id"] for y in nm.get("classified_as", []) if "id" in y]
-                if "type" in nm and nm["type"] == "Name" and self.globals["primaryName"] in nmcxns and "content" in nm:
+                if (
+                    "type" in nm
+                    and nm["type"] == "Name"
+                    and self.globals["primaryName"] in nmcxns
+                    and "content" in nm
+                ):
                     t = {"subject": me, "predicate": f"{self.luxns}primaryName", "value": "", "datatype": ""}
                     v = nm["content"]
                     value = v.replace("\t", "\\t")
