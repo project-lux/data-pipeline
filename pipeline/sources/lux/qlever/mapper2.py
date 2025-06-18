@@ -46,7 +46,7 @@ class QleverMapper(Mapper):
         self.weight = self.idmap["http://vocab.getty.edu/aat/300056240##quaType"]
 
         self.triple_pattern = "<{subject}> <{predicate}> <{object}> ."
-        self.literal_pattern = "<{subject}> <{predicate}> {value}{datatype} ."
+        self.literal_pattern = '<{subject}> <{predicate}> "{value}"{datatype} .'
         self.number_type = "^^<http://www.w3.org/2001/XMLSchema#decimal>"
         self.date_type = "^^<http://www.w3.org/2001/XMLSchema#dateTime>"
 
