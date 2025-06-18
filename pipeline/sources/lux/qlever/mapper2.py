@@ -7,27 +7,6 @@ If there isn't a search, then there isn't a triple.
 """
 
 
-def simple_xpath(rec, xpath):
-    props = xpath.split("/")
-    for p in props:
-        n = -1
-        if p.endswith("]"):
-            # Allow [n]
-            sq = p.find("[")
-            if sq > -1:
-                try:
-                    n = int(p[sq + 1 : -1])
-                except ValueError:
-                    n = -1
-                p = p[:sq]
-        rec = rec.get(p, {})
-        if type(rec) is list and n > -1:
-            rec = rec[n]
-        if not rec:
-            return None
-    return rec
-
-
 class QleverMapper(Mapper):
     def __init__(self, config):
         Mapper.__init__(self, config)
@@ -160,12 +139,18 @@ class QleverMapper(Mapper):
 
         # digital image
         # true iff representation/digitally_shown_by/access_point/id
-        rep = simple_xpath(data, "representation[0]/digitally_shown_by[0]/access_point[0]/id")
+        rep = data.get("representation", None)
         if rep:
-            lt["predicate"] = f"{self.luxns}{pfx}HasDigitalImage"
-            lt["value"] = 1
-            lt["datatype"] = self.number_type
-            triples.append(self.literal_pattern.format(**lt))
+            rep = rep[0].get("digitally_shown_by", None)
+            if rep:
+                rep = rep[0].get("access_point", None)
+                if rep:
+                    rep = rep[0].get("id", None)
+                    if rep:
+                        lt["predicate"] = f"{self.luxns}{pfx}HasDigitalImage"
+                        lt["value"] = 1
+                        lt["datatype"] = self.number_type
+                        triples.append(self.literal_pattern.format(**lt))
 
         # all classifications
         # agentClassification, workClassification (etc)
