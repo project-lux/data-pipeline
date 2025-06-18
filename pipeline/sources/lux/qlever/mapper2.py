@@ -115,6 +115,8 @@ class QleverMapper(Mapper):
         # names
         lt["datatype"] = ""
         for idb in data["identified_by"]:
+            if "content" not in idb or not idb["content"]:
+                continue
             recordText.append(idb["content"])
             lt["value"] = idb["content"]
             if idb["type"] == "Name":
@@ -144,7 +146,8 @@ class QleverMapper(Mapper):
             ct = rtb.get("content", "")
             if ct:
                 ct = self.do_bs_html(ct)
-                recordText.append(ct)
+                if ct:
+                    recordText.append(ct)
 
         # equivalents
         t["predicate"] = f"{self.lans}equivalent"
@@ -411,7 +414,7 @@ class QleverMapper(Mapper):
             raise ValueError(f"Unsupported prefix: {pfx}")
 
         # add in recordText
-        rtxt = " ".join(recordText)
+        rtxt = " ".join([x for x in recordText if x])
         lt["predicate"] = f"{self.luxns}recordText"
         lt["value"] = rtxt
         lt["datatype"] = ""
