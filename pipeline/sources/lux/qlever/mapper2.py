@@ -75,10 +75,7 @@ class QleverMapper(Mapper):
         if content.startswith("<"):
             soup = BeautifulSoup(content, features="lxml")
             clncont = soup.get_text()
-            if clncont == "":
-                pass
-            else:
-                part["content"] = clncont
+            return clncont
 
     def get_prefix(self, which):
         if which in ["VisualItem", "LinguisticObject"]:
