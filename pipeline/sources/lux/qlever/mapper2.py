@@ -78,6 +78,8 @@ class QleverMapper(Mapper):
             return clncont
 
     def get_prefix(self, which):
+        if type(which) is dict and "type" in which:
+            which = which["type"]
         if which in ["VisualItem", "LinguisticObject"]:
             pfx = "work"
         elif which in ["HumanMadeObject", "DigitalObject"]:
