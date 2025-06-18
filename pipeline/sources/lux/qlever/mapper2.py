@@ -404,7 +404,7 @@ class QleverMapper(Mapper):
         # add in recordText
         rtxt = " ".join([x for x in recordText if x])
         lt["predicate"] = f"{self.luxns}recordText"
-        lt["value"] = rtxt.replace("\n", "\\n").replace("\r", "")
+        lt["value"] = rtxt.replace("\n", " ").replace("\r", " ").replace('"', "")
         lt["datatype"] = ""
         triples.append(self.literal_pattern.format(**lt))
 
