@@ -357,26 +357,26 @@ class QleverMapper(Mapper):
         elif pfx == "place":
             pass
         elif pfx == "event":
-            whos = bit.get("carried_out_by", [])
+            whos = data.get("carried_out_by", [])
             t["predicate"] = f"{self.luxns}agentOfEvent"
             for who in whos:
                 if "id" in who:
                     t["object"] = who["id"]
                     triples.append(self.triple_pattern.format(**t))
-            wheres = bit.get("took_place_at", [])
+            wheres = data.get("took_place_at", [])
             t["predicate"] = f"{self.luxns}placeOfEvent"
             for where in wheres:
                 if "id" in where:
                     t["object"] = where["id"]
                     triples.append(self.triple_pattern.format(**t))
-            causes = bit.get("caused_by", [])
+            causes = data.get("caused_by", [])
             t["predicate"] = f"{self.luxns}causeOfEvent"
             for cause in causes:
                 if "id" in cause:
                     t["object"] = cause["id"]
                     triples.append(self.triple_pattern.format(**t))
-            infs = bit.get("influenced_by", [])
-            infs.extend(bit.get("used_specific_object", []))
+            infs = data.get("influenced_by", [])
+            infs.extend(data.get("used_specific_object", []))
             for inf in infs:
                 if "type" in inf:
                     infpfx = self.get_prefix(inf["type"])
@@ -387,7 +387,7 @@ class QleverMapper(Mapper):
                     t["object"] = inf["id"]
                     triples.append(self.triple_pattern.format(**t))
             # timespan
-            timespan = bit.get("timespan", {})
+            timespan = data.get("timespan", {})
             if timespan:
                 # start, end dates
                 lt["datatype"] = self.date_type
