@@ -40,6 +40,7 @@ class QleverMapper(Mapper):
         self.gender = self.globals["gender"]
         self.nationality = self.globals["nationality"]
         self.occupation = self.globals["occupation"]
+        self.sortIdentifier = self.idmap["https://vocab.getty.edu/aat/300456575##quaType"]
         self.height = self.idmap["http://vocab.getty.edu/aat/300055644##quaType"]
         self.width = self.idmap["http://vocab.getty.edu/aat/300055647##quaType"]
         self.depth = self.idmap["http://vocab.getty.edu/aat/300072633##quaType"]
