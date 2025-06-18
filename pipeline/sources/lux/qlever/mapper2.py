@@ -108,7 +108,7 @@ class QleverMapper(Mapper):
         pfx = self.get_prefix(rectype)
         triples = []
         recordText = []
-        t = {"subject": me, "predicate": "{self.rdfns}type", "object": f"{self.luxns}{pfx.title()}"}
+        t = {"subject": me, "predicate": f"{self.rdfns}type", "object": f"{self.luxns}{pfx.title()}"}
         lt = {"subject": me, "predicate": "", "value": "", "datatype": ""}
         triples.append(self.triple_pattern.format(**t))
         if pfx not in ["set", "place"]:
