@@ -1,5 +1,3 @@
-import os
-import sys
 from rdflib import URIRef, Literal
 from pipeline.process.base.mapper import Mapper
 from bs4 import BeautifulSoup
@@ -20,7 +18,7 @@ PREFIX la: <https://linked.art/ns/terms/>
 PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 SELECT DISTINCT ?what ?ql_matchingword_t_nann WHERE {
-  ?what a crm:E21_Person ; 
+  ?what a crm:E21_Person ;
       crm:P2_has_type ?type ;
       crm:P98i_was_born ?birth .
   ?birth crm:P4_has_time-span ?ts .
@@ -368,14 +366,14 @@ class QleverMapper(Mapper):
             pfx = "agent"
         elif which == "Place":
             pfx = "place"
-        elif which in ["Type", "Language", "Material", "Currency", "MeasurementUnit", "Set"]:
+        elif which in ["Type", "Language", "Material", "Currency", "MeasurementUnit"]:
             # Set here is Collection / Holdings. UI decision to put in with concepts
             pfx = "concept"
         elif which in ["Activity", "Event", "Period"]:
             pfx = "event"
+        elif which == "Set":
+            pfx = "set"
         else:
-            # Things that don't fall into the above categories
-            # Probably due to bugs
             print(f"Failed to find a prefix for {which}")
             pfx = "other"
         return pfx
@@ -515,7 +513,12 @@ class QleverMapper(Mapper):
         if "identified_by" in data:
             for nm in data["identified_by"]:
                 nmcxns = [y["id"] for y in nm.get("classified_as", []) if "id" in y]
-                if "type" in nm and nm["type"] == "Name" and self.globals["primaryName"] in nmcxns and "content" in nm:
+                if (
+                    "type" in nm
+                    and nm["type"] == "Name"
+                    and self.globals["primaryName"] in nmcxns
+                    and "content" in nm
+                ):
                     t = {"subject": me, "predicate": f"{self.luxns}primaryName", "value": "", "datatype": ""}
                     v = nm["content"]
                     value = v.replace("\t", "\\t")
