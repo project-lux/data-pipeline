@@ -156,8 +156,9 @@ class QleverMapper(Mapper):
         # agentClassification, workClassification (etc)
         t["predicate"] = f"{self.luxns}{pfx}Classification"
         for cls in data.get("classified_as", []):
-            t["object"] = cls["id"]
-            triples.append(self.triple_pattern.format(**t))
+            if "id" in cls:
+                t["object"] = cls["id"]
+                triples.append(self.triple_pattern.format(**t))
 
         # beginning/ending
         drels = {}
