@@ -196,6 +196,8 @@ class QleverMapper(Mapper):
         # Process embedded activities down to single artificial relationships
         for dprop, dtyp in drels.items():
             vals = data.get(dprop, None)
+            if not vals:
+                continue
             if type(vals) is not list:
                 vals = [vals]
             for val in vals:
