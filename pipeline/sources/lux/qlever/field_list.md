@@ -85,13 +85,11 @@
 - [X] createdBy = agentOfWorkBeginning
 - [X] creationCausedBy = causeOfWorkBeginning
 - [X] creationInfluencedBy = agentInfluenceOfWorkBeginning
-- [ ] curatedBy
 - [X] publishedAt = placeOfWorkPublication
 - [X] publishedBy = agentOfWorkPublication
 - [X] publishedDate = startOfWorkPublication / endOfWorkPublication
 - [ ] isOnline
 - [ ] isPublicDomain
-
 - [X] partOfWork
 - [X] language = workLanguage
 
