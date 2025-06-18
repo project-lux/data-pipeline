@@ -318,16 +318,16 @@ class QleverMapper(Mapper):
                     lt["value"] = d["value"]
                     cxns = [x["id"] for x in d.get("classified_as", []) if "id" in x]
                     if self.height in cxns:
-                        t["predicate"] = f"{self.luxns}height"
+                        lt["predicate"] = f"{self.luxns}height"
                     elif self.width in cxns:
-                        t["predicate"] = f"{self.luxns}width"
+                        lt["predicate"] = f"{self.luxns}width"
                     elif self.depth in cxns:
-                        t["predicate"] = f"{self.luxns}depth"
+                        lt["predicate"] = f"{self.luxns}depth"
                     elif self.weight in cxns:
-                        t["predicate"] = f"{self.luxns}weight"
-                    triples.append(self.literal_pattern.format(**t))
-                    t["predicate"] = f"{self.luxns}dimension"
-                    triples.append(self.literal_pattern.format(**t))
+                        lt["predicate"] = f"{self.luxns}weight"
+                    triples.append(self.literal_pattern.format(**lt))
+                    lt["predicate"] = f"{self.luxns}dimension"
+                    triples.append(self.literal_pattern.format(**lt))
 
         elif pfx == "agent":
             # nationality, occupation, gender
