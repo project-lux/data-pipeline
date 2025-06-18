@@ -70,8 +70,7 @@ class QleverMapper(Mapper):
             uri = uri.replace("}", "%7D")
         return uri
 
-    def do_bs_html(self, part):
-        content = part.get("content", "")
+    def do_bs_html(self, content):
         content = content.strip()
         if content.startswith("<"):
             soup = BeautifulSoup(content, features="lxml")
