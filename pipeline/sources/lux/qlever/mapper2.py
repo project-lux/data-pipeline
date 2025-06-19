@@ -263,7 +263,7 @@ class QleverMapper(Mapper):
                             triples.append(self.literal_pattern.format(**lt))
 
         # memberOf
-        for member in data.get("memberOf", []):
+        for member in data.get("member_of", []):
             if "id" in member:
                 t["object"] = member["id"]
                 t["predicate"] = f"{self.luxns}{pfx}MemberOf{member['type']}"
@@ -339,12 +339,12 @@ class QleverMapper(Mapper):
             cxns = data.get("classified_as", [])
             for cxn in cxns:
                 if "id" in cxn:
-                    metas = cxn.get("classified_as", [])
+                    metas = [x["id"] for x in cxn.get("classified_as", []) if "id" in x]
                     if self.nationality in metas:
                         t["predicate"] = f"{self.luxns}nationality"
                     elif self.occupation in metas:
                         t["predicate"] = f"{self.luxns}occupation"
-                    elif cxn["id"] == self.gender:
+                    elif self.gender in metas:
                         t["predicate"] = f"{self.luxns}gender"
                     else:
                         continue
