@@ -97,6 +97,7 @@ class QleverMapper(Mapper):
         pfx = self.get_prefix(rectype)
         triples = []
         recordText = []
+        anyt = {"subject": me, "predicate": f"{self.luxns}{pfx}Any", "object": ""}
         t = {"subject": me, "predicate": f"{self.rdfns}type", "object": f"{self.luxns}{pfx.title()}"}
         lt = {"subject": me, "predicate": "", "value": "", "datatype": ""}
         triples.append(self.triple_pattern.format(**t))
@@ -176,6 +177,8 @@ class QleverMapper(Mapper):
             if "id" in cls:
                 t["object"] = cls["id"]
                 triples.append(self.triple_pattern.format(**t))
+                anyt["object"] = cls["id"]
+                triples.append(self.triple_pattern.format(**anyt))
 
         # beginning/ending
         drels = {}
@@ -216,12 +219,18 @@ class QleverMapper(Mapper):
                         if "id" in who:
                             t["object"] = who["id"]
                             triples.append(self.triple_pattern.format(**t))
+                            anyt["object"] = who["id"]
+                            triples.append(self.triple_pattern.format(**anyt))
+
                     wheres = bit.get("took_place_at", [])
                     t["predicate"] = f"{self.luxns}placeOf{pcls}"
                     for where in wheres:
                         if "id" in where:
                             t["object"] = where["id"]
                             triples.append(self.triple_pattern.format(**t))
+                            anyt["object"] = where["id"]
+                            triples.append(self.triple_pattern.format(**anyt))
+
                     types = bit.get("classified_as", [])
                     types.extend(bit.get("technique", []))
                     t["predicate"] = f"{self.luxns}typeOf{pcls}"
@@ -229,12 +238,16 @@ class QleverMapper(Mapper):
                         if "id" in typ:
                             t["object"] = typ["id"]
                             triples.append(self.triple_pattern.format(**t))
+                            anyt["object"] = typ["id"]
+                            triples.append(self.triple_pattern.format(**anyt))
                     causes = bit.get("caused_by", [])
                     t["predicate"] = f"{self.luxns}causeOf{pcls}"
                     for cause in causes:
                         if "id" in cause:
                             t["object"] = cause["id"]
                             triples.append(self.triple_pattern.format(**t))
+                            anyt["object"] = cause["id"]
+                            triples.append(self.triple_pattern.format(**anyt))
                     infs = bit.get("influenced_by", [])
                     infs.extend(bit.get("used_specific_object", []))
                     for inf in infs:
@@ -246,6 +259,8 @@ class QleverMapper(Mapper):
                         if "id" in inf:
                             t["object"] = inf["id"]
                             triples.append(self.triple_pattern.format(**t))
+                            anyt["object"] = inf["id"]
+                            triples.append(self.triple_pattern.format(**anyt))
                     # timespan
                     timespan = bit.get("timespan", {})
                     if timespan:
@@ -268,6 +283,8 @@ class QleverMapper(Mapper):
                 t["object"] = member["id"]
                 t["predicate"] = f"{self.luxns}{pfx}MemberOf{member['type']}"
                 triples.append(self.triple_pattern.format(**t))
+                anyt["object"] = member["id"]
+                triples.append(self.triple_pattern.format(**anyt))
 
         # partOf
         parents = data.get("part_of", [])
@@ -275,7 +292,9 @@ class QleverMapper(Mapper):
             if "id" in parent:
                 t["predicate"] = f"{self.luxns}{pfx}PartOf"
                 t["object"] = parent["id"]
-                triples.append(self.triple_pattern.format(**t))  #
+                triples.append(self.triple_pattern.format(**t))
+                anyt["object"] = parent["id"]
+                triples.append(self.triple_pattern.format(**anyt))
 
         # Class Specific relationships
         if pfx in ["work", "set"]:
@@ -286,6 +305,8 @@ class QleverMapper(Mapper):
                 if "id" in lang:
                     t["object"] = lang["id"]
                     triples.append(self.triple_pattern.format(**t))
+                    anyt["object"] = lang["id"]
+                    triples.append(self.triple_pattern.format(**anyt))
 
             # Subjects
             abouts = data.get("about", [])
@@ -296,6 +317,8 @@ class QleverMapper(Mapper):
                     abpfx = self.get_prefix(about)
                     t["predicate"] = f"{self.luxns}{pfx}About{abpfx.title()}"
                     triples.append(self.triple_pattern.format(**t))
+                    anyt["object"] = about["id"]
+                    triples.append(self.triple_pattern.format(**anyt))
 
         elif pfx == "item":
             # carries/shows
@@ -306,6 +329,8 @@ class QleverMapper(Mapper):
                     t["object"] = c["id"]
                     t["predicate"] = f"{self.luxns}carries"
                     triples.append(self.triple_pattern.format(**t))
+                    anyt["object"] = c["id"]
+                    triples.append(self.triple_pattern.format(**anyt))
 
             # materials
             mats = data.get("made_of", [])
@@ -314,6 +339,8 @@ class QleverMapper(Mapper):
                 if "id" in mat:
                     t["object"] = mat["id"]
                     triples.append(self.triple_pattern.format(**t))
+                    anyt["object"] = mat["id"]
+                    triples.append(self.triple_pattern.format(**anyt))
 
             # dimensions
             dims = data.get("dimension", [])
@@ -358,6 +385,8 @@ class QleverMapper(Mapper):
                     t["predicate"] = f"{self.luxns}broader"
                     t["object"] = b["id"]
                     triples.append(self.triple_pattern.format(**t))
+                    anyt["object"] = b["id"]
+                    triples.append(self.triple_pattern.format(**anyt))
 
         elif pfx == "place":
             pass
@@ -368,18 +397,24 @@ class QleverMapper(Mapper):
                 if "id" in who:
                     t["object"] = who["id"]
                     triples.append(self.triple_pattern.format(**t))
+                    anyt["object"] = who["id"]
+                    triples.append(self.triple_pattern.format(**anyt))
             wheres = data.get("took_place_at", [])
             t["predicate"] = f"{self.luxns}placeOfEvent"
             for where in wheres:
                 if "id" in where:
                     t["object"] = where["id"]
                     triples.append(self.triple_pattern.format(**t))
+                    anyt["object"] = where["id"]
+                    triples.append(self.triple_pattern.format(**anyt))
             causes = data.get("caused_by", [])
             t["predicate"] = f"{self.luxns}causeOfEvent"
             for cause in causes:
                 if "id" in cause:
                     t["object"] = cause["id"]
                     triples.append(self.triple_pattern.format(**t))
+                    anyt["object"] = cause["id"]
+                    triples.append(self.triple_pattern.format(**anyt))
             infs = data.get("influenced_by", [])
             infs.extend(data.get("used_specific_object", []))
             for inf in infs:
@@ -391,6 +426,8 @@ class QleverMapper(Mapper):
                 if "id" in inf:
                     t["object"] = inf["id"]
                     triples.append(self.triple_pattern.format(**t))
+                    anyt["object"] = inf["id"]
+                    triples.append(self.triple_pattern.format(**anyt))
             # timespan
             timespan = data.get("timespan", {})
             if timespan:
@@ -414,6 +451,8 @@ class QleverMapper(Mapper):
                 if "carried_out_by" in c and "id" in c["carried_out_by"]:
                     t["object"] = c["carried_out_by"]["id"]
                     triples.append(self.triple_pattern.format(**t))
+                    anyt["object"] = c["carried_out_by"]["id"]
+                    triples.append(self.triple_pattern.format(**anyt))
 
         else:
             raise ValueError(f"Unsupported prefix: {pfx}")
