@@ -28,6 +28,37 @@ SELECT DISTINCT ?what ?ql_matchingword_t_nann WHERE {
   ?name crm:P190_has_symbolic_content ?txt .
   ?t ql:contains-word "Nann*" ; ql:contains-entity ?txt .
   } LIMIT 1000
+
+PREFIX lux: <https://lux.collections.yale.edu/ns/>
+SELECT DISTINCT ?what ?score WHERE {
+	?what a lux:Item ; lux:recordText ?ft ; lux:itemPrimaryName ?name .
+    ?t ql:contains-word "dort" ; ql:contains-entity ?ft .
+	OPTIONAL { ?t2 ql:contains-word "dort" ; ql:contains-entity ?name . }
+	BIND(?ql_score_word_t_dort + (?ql_score_word_t2_dort*4) AS ?score)
+} ORDER BY DESC(?score) LIMIT 25
+
+PREFIX textSearch: <https://qlever.cs.uni-freiburg.de/textSearch/>
+PREFIX lux: <https://lux.collections.yale.edu/ns/>
+SELECT DISTINCT ?what ?score WHERE {
+	?what a lux:Work ; lux:recordText ?ft ; lux:workPrimaryName ?name ; ?foo ?who .
+	?who lux:agentName ?name2 .
+
+    ?t ql:contains-word "froissart" ; ql:contains-entity ?ft .
+	?t2 ql:contains-word "froissart" ; ql:contains-entity ?name .
+	?t3 ql:contains-word "robinson" ; ql:contains-entity ?name2 .
+
+	BIND(?ql_score_word_t_froissart + (?ql_score_word_t2_froissart*4) + (?ql_score_word_t3_robinson*2) AS ?score)
+} ORDER BY DESC(?score)
+
+
+
+
+
+SELECT ?p (COUNT(?p) AS ?ct) WHERE {
+?s ?p ?o .
+} GROUP BY (?p) ORDER BY DESC (?ct)
+
+
 """
 
 

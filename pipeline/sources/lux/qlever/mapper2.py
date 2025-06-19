@@ -50,10 +50,11 @@ class QleverMapper(Mapper):
         return uri
 
     def sanitize_string(self, string):
-        string = string.replace("\n", "")
-        string = string.replace("\t", "")
-        string = string.replace("\r", "")
+        string = string.replace("\r", " ")
+        string = string.replace("\n", " ")
+        string = string.replace("\t", " ")
         string = string.replace('"', "")
+        string = string.replace("\\", "")
         return string
 
     def do_bs_html(self, content):
@@ -114,11 +115,15 @@ class QleverMapper(Mapper):
                 if self.primaryName in cxns:
                     lt["predicate"] = f"{self.luxns}{pfx}PrimaryName"
                     triples.append(self.literal_pattern.format(**lt))
+                    lt["predicate"] = f"{self.luxns}primaryName"
+                    triples.append(self.literal_pattern.format(**lt))
                 elif self.sortName in cxns:
                     lt["predicate"] = f"{self.luxns}{pfx}SortName"
                     triples.append(self.literal_pattern.format(**lt))
                     continue
                 lt["predicate"] = f"{self.luxns}{pfx}Name"
+                triples.append(self.literal_pattern.format(**lt))
+                lt["predicate"] = f"{self.luxns}name"
                 triples.append(self.literal_pattern.format(**lt))
             else:
                 cxns = [x.get("id", None) for x in idb.get("classified_as", [])]
@@ -286,7 +291,7 @@ class QleverMapper(Mapper):
                 if "id" in about:
                     t["object"] = about["id"]
                     abpfx = self.get_prefix(about)
-                    t["predicate"] = f"{self.luxns}{pfx}About{abpfx}"
+                    t["predicate"] = f"{self.luxns}{pfx}About{abpfx.title()}"
                     triples.append(self.triple_pattern.format(**t))
 
         elif pfx == "item":
