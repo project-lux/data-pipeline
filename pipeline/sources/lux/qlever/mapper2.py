@@ -65,6 +65,7 @@ class QleverMapper(Mapper):
             soup = BeautifulSoup(content, features="lxml")
             clncont = soup.get_text()
             return clncont
+        return content
 
     def get_prefix(self, which):
         if type(which) is dict and "type" in which:
