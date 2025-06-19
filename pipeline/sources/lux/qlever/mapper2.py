@@ -50,6 +50,8 @@ class QleverMapper(Mapper):
         return uri
 
     def sanitize_string(self, string):
+        if not string:
+            return ""
         string = string.replace("\r", " ")
         string = string.replace("\n", " ")
         string = string.replace("\t", " ")
