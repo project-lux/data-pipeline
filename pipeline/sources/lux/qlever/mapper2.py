@@ -49,6 +49,13 @@ class QleverMapper(Mapper):
             uri = uri.replace("}", "%7D")
         return uri
 
+    def sanitize_string(self, string):
+        string = string.replace("\n", "")
+        string = string.replace("\t", "")
+        string = string.replace("\r", "")
+        string = string.replace('"', "")
+        return string
+
     def do_bs_html(self, content):
         content = content.strip()
         if content.startswith("<"):
@@ -98,8 +105,9 @@ class QleverMapper(Mapper):
         for idb in data["identified_by"]:
             if "content" not in idb or not idb["content"]:
                 continue
-            recordText.append(idb["content"])
-            lt["value"] = idb["content"]
+            val = self.sanitize_string(idb["content"])
+            recordText.append(val)
+            lt["value"] = val
             if idb["type"] == "Name":
                 # primaryName
                 cxns = [x.get("id", None) for x in idb.get("classified_as", [])]
@@ -127,6 +135,7 @@ class QleverMapper(Mapper):
             ct = rtb.get("content", "")
             if ct:
                 ct = self.do_bs_html(ct)
+                ct = self.sanitize_string(ct)
                 if ct:
                     recordText.append(ct)
 
