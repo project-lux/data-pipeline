@@ -7,6 +7,92 @@ If there isn't a search, then there isn't a triple.
 """
 
 
+examples = """
+PREFIX lux: <https://lux.collections.yale.edu/ns/>
+SELECT DISTINCT ?what WHERE {
+   ?what lux:recordText ?ftxt .
+   ?t ql:contains-word "guide* routing" .
+   ?t ql:contains-entity ?ftxt .
+   FILTER (contains(?ftxt, "guidebook routing")) # as a phrase
+  } LIMIT 100
+
+
+PREFIX crm: <http://www.cidoc-crm.org/cidoc-crm/>
+PREFIX lux: <https://lux.collections.yale.edu/ns/>
+PREFIX la: <https://linked.art/ns/terms/>
+PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT DISTINCT ?what ?ql_matchingword_t_nann WHERE {
+  ?what a crm:E21_Person ;
+      crm:P2_has_type ?type ;
+      crm:P98i_was_born ?birth .
+  ?birth crm:P4_has_time-span ?ts .
+  ?ts crm:P82a_begin_of_the_begin ?tsb .
+  FILTER (?tsb < "1900-01-01T00:00:00Z"^^xsd:dateTime)
+  ?type crm:P1_is_identified_by ?name .
+  ?name crm:P190_has_symbolic_content ?txt .
+  ?t ql:contains-word "Nann*" ; ql:contains-entity ?txt .
+  } LIMIT 1000
+
+PREFIX lux: <https://lux.collections.yale.edu/ns/>
+SELECT DISTINCT ?what ?score WHERE {
+	?what a lux:Item ; lux:recordText ?ft ; lux:itemPrimaryName ?name .
+    ?t ql:contains-word "dort" ; ql:contains-entity ?ft .
+	OPTIONAL { ?t2 ql:contains-word "dort" ; ql:contains-entity ?name . }
+	BIND(?ql_score_word_t_dort + (?ql_score_word_t2_dort*4) AS ?score)
+} ORDER BY DESC(?score) LIMIT 25
+
+PREFIX textSearch: <https://qlever.cs.uni-freiburg.de/textSearch/>
+PREFIX lux: <https://lux.collections.yale.edu/ns/>
+SELECT DISTINCT ?what ?score WHERE {
+	?what a lux:Work ; lux:recordText ?ft ; lux:workPrimaryName ?name ; ?foo ?who .
+	?who lux:agentName ?name2 .
+
+    ?t ql:contains-word "froissart" ; ql:contains-entity ?ft .
+	?t2 ql:contains-word "froissart" ; ql:contains-entity ?name .
+	?t3 ql:contains-word "robinson" ; ql:contains-entity ?name2 .
+
+	BIND(?ql_score_word_t_froissart + (?ql_score_word_t2_froissart*4) + (?ql_score_word_t3_robinson*2) AS ?score)
+} ORDER BY DESC(?score)
+
+
+### This should work replacing aoWB with agentAny
+PREFIX lux: <https://lux.collections.yale.edu/ns/>
+SELECT ?work ?score  WHERE {
+{
+  {
+    ?work a lux:Work ; lux:agentOfWorkBeginning/lux:agentPrimaryName ?nm .
+    ?t ql:contains-word "robinson" ; ql:contains-entity ?nm .
+    BIND (?ql_score_word_t_robinson*2 as ?score1)
+  } OPTIONAL {
+    ?work a lux:Work ; lux:recordText ?ft .
+    ?t2 ql:contains-word "robinson" ; ql:contains-entity ?ft .
+    BIND (?ql_score_word_t2_robinson as ?score2)
+  }
+  BIND (?score1 + ?score2 as ?score)
+} UNION {
+  {
+    ?work a lux:Work ; lux:recordText ?ft .
+    ?t2 ql:contains-word "robinson" ; ql:contains-entity ?ft .
+    BIND (?ql_score_word_t2_robinson as ?score2)
+  } OPTIONAL {
+    ?work a lux:Work ; lux:agentOfWorkBeginning/lux:agentPrimaryName ?nm .
+    ?t ql:contains-word "robinson" ; ql:contains-entity ?nm .
+    BIND (?ql_score_word_t_robinson*2 as ?score1)
+  }
+  BIND (?score1 + ?score2 as ?score)
+}
+} ORDER BY DESC(?score)
+
+
+
+SELECT ?p (COUNT(?p) AS ?ct) WHERE {
+?s ?p ?o .
+} GROUP BY (?p) ORDER BY DESC (?ct)
+
+"""
+
+
 class QleverMapper(Mapper):
     def __init__(self, config):
         Mapper.__init__(self, config)
