@@ -34,55 +34,74 @@ SELECT DISTINCT ?what ?ql_matchingword_t_nann WHERE {
   ?t ql:contains-word "Nann*" ; ql:contains-entity ?txt .
   } LIMIT 1000
 
+
+
+# Single keyword search with relevance ranking and referencing records names
+#
 PREFIX lux: <https://lux.collections.yale.edu/ns/>
-SELECT DISTINCT ?what ?score WHERE {
-	?what a lux:Item ; lux:recordText ?ft ; lux:itemPrimaryName ?name .
-    ?t ql:contains-word "dort" ; ql:contains-entity ?ft .
-	OPTIONAL { ?t2 ql:contains-word "dort" ; ql:contains-entity ?name . }
-	BIND(?ql_score_word_t_dort + (?ql_score_word_t2_dort*4) AS ?score)
-} ORDER BY DESC(?score) LIMIT 25
-
-PREFIX textSearch: <https://qlever.cs.uni-freiburg.de/textSearch/>
-PREFIX lux: <https://lux.collections.yale.edu/ns/>
-SELECT DISTINCT ?what ?score WHERE {
-	?what a lux:Work ; lux:recordText ?ft ; lux:workPrimaryName ?name ; ?foo ?who .
-	?who lux:agentName ?name2 .
-
-    ?t ql:contains-word "froissart" ; ql:contains-entity ?ft .
-	?t2 ql:contains-word "froissart" ; ql:contains-entity ?name .
-	?t3 ql:contains-word "robinson" ; ql:contains-entity ?name2 .
-
-	BIND(?ql_score_word_t_froissart + (?ql_score_word_t2_froissart*4) + (?ql_score_word_t3_robinson*2) AS ?score)
-} ORDER BY DESC(?score)
-
-
-### This should work replacing aoWB with agentAny
-PREFIX lux: <https://lux.collections.yale.edu/ns/>
-SELECT ?work ?score  WHERE {
+SELECT DISTINCT ?work ?score  WHERE {
 {
   {
-    ?work a lux:Work ; lux:agentOfWorkBeginning/lux:agentPrimaryName ?nm .
+    ?work a lux:Work ; lux:workAny/lux:primaryName ?nm .
     ?t ql:contains-word "robinson" ; ql:contains-entity ?nm .
-    BIND (?ql_score_word_t_robinson*2 as ?score1)
+    BIND (?ql_score_word_t_robinson*8 as ?score1)
   } OPTIONAL {
-    ?work a lux:Work ; lux:recordText ?ft .
+    ?work a lux:Work ; lux:recordText ?ft ; lux:workPrimaryName ?nmw .
     ?t2 ql:contains-word "robinson" ; ql:contains-entity ?ft .
-    BIND (?ql_score_word_t2_robinson as ?score2)
+    OPTIONAL {?t3 ql:contains-word "robinson" ; ql:contains-entity ?nmw}
+    BIND (?ql_score_word_t2_robinson + (?ql_score_word_t3_robinson * 4) as ?score2)
   }
   BIND (?score1 + ?score2 as ?score)
 } UNION {
   {
-    ?work a lux:Work ; lux:recordText ?ft .
+    ?work a lux:Work ; lux:recordText ?ft ; lux:workPrimaryName ?nmw2 .
     ?t2 ql:contains-word "robinson" ; ql:contains-entity ?ft .
-    BIND (?ql_score_word_t2_robinson as ?score2)
+    OPTIONAL {?t3 ql:contains-word "robinson" ; ql:contains-entity ?nmw2}
+    BIND (?ql_score_word_t2_robinson + (?ql_score_word_t3_robinson * 4) as ?score2)
   } OPTIONAL {
-    ?work a lux:Work ; lux:agentOfWorkBeginning/lux:agentPrimaryName ?nm .
+    ?work a lux:Work ; lux:workAny/lux:primaryName ?nm .
     ?t ql:contains-word "robinson" ; ql:contains-entity ?nm .
-    BIND (?ql_score_word_t_robinson*2 as ?score1)
+    BIND (?ql_score_word_t_robinson*8 as ?score1)
   }
   BIND (?score1 + ?score2 as ?score)
 }
 } ORDER BY DESC(?score)
+
+
+### Facets
+#
+PREFIX lux: <https://lux.collections.yale.edu/ns/>
+SELECT ?facet (COUNT(?facet) AS ?facetCount) WHERE {
+
+  {SELECT DISTINCT ?work WHERE {{
+    {
+      ?work a lux:Work ; lux:workAny/lux:primaryName ?nm .
+      ?t ql:contains-word "robinson" ; ql:contains-entity ?nm .
+      BIND (?ql_score_word_t_robinson*8 as ?score1)
+    } OPTIONAL {
+      ?work a lux:Work ; lux:recordText ?ft ; lux:workPrimaryName ?nmw .
+      ?t2 ql:contains-word "robinson" ; ql:contains-entity ?ft .
+      OPTIONAL {?t3 ql:contains-word "robinson" ; ql:contains-entity ?nmw}
+      BIND (?ql_score_word_t2_robinson + (?ql_score_word_t3_robinson * 4) as ?score2)
+    }
+    BIND (?score1 + ?score2 as ?score)
+  } UNION {
+    {
+      ?work a lux:Work ; lux:recordText ?ft ; lux:workPrimaryName ?nmw2 .
+      ?t2 ql:contains-word "robinson" ; ql:contains-entity ?ft .
+      OPTIONAL {?t3 ql:contains-word "robinson" ; ql:contains-entity ?nmw2}
+      BIND (?ql_score_word_t2_robinson + (?ql_score_word_t3_robinson * 4) as ?score2)
+    } OPTIONAL {
+      ?work a lux:Work ; lux:workAny/lux:primaryName ?nm .
+      ?t ql:contains-word "robinson" ; ql:contains-entity ?nm .
+      BIND (?ql_score_word_t_robinson*8 as ?score1)
+    }
+    BIND (?score1 + ?score2 as ?score)
+  }}}
+
+?work lux:workLanguage ?facet .
+
+} GROUP BY (?facet) ORDER BY DESC (?facetCount) LIMIT 50
 
 
 
