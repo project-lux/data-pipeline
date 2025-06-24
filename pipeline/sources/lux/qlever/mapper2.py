@@ -8,6 +8,9 @@ If there isn't a search, then there isn't a triple.
 
 
 examples = """
+
+#### Phrase:
+
 PREFIX lux: <https://lux.collections.yale.edu/ns/>
 SELECT DISTINCT ?what WHERE {
    ?what lux:recordText ?ftxt .
@@ -16,6 +19,8 @@ SELECT DISTINCT ?what WHERE {
    FILTER (contains(?ftxt, "guidebook routing")) # as a phrase
   } LIMIT 100
 
+
+#### Comparisons:
 
 PREFIX crm: <http://www.cidoc-crm.org/cidoc-crm/>
 PREFIX lux: <https://lux.collections.yale.edu/ns/>
@@ -34,80 +39,6 @@ SELECT DISTINCT ?what ?ql_matchingword_t_nann WHERE {
   ?t ql:contains-word "Nann*" ; ql:contains-entity ?txt .
   } LIMIT 1000
 
-
-
-# Single keyword search with relevance ranking and referencing records names
-#
-PREFIX lux: <https://lux.collections.yale.edu/ns/>
-SELECT DISTINCT ?work ?score  WHERE {
-{
-  {
-    ?work a lux:Work ; lux:workAny/lux:primaryName ?nm .
-    ?t ql:contains-word "robinson" ; ql:contains-entity ?nm .
-    BIND (?ql_score_word_t_robinson*8 as ?score1)
-  } OPTIONAL {
-    ?work a lux:Work ; lux:recordText ?ft ; lux:workPrimaryName ?nmw .
-    ?t2 ql:contains-word "robinson" ; ql:contains-entity ?ft .
-    OPTIONAL {?t3 ql:contains-word "robinson" ; ql:contains-entity ?nmw}
-    BIND (?ql_score_word_t2_robinson + (?ql_score_word_t3_robinson * 4) as ?score2)
-  }
-  BIND (?score1 + ?score2 as ?score)
-} UNION {
-  {
-    ?work a lux:Work ; lux:recordText ?ft ; lux:workPrimaryName ?nmw2 .
-    ?t2 ql:contains-word "robinson" ; ql:contains-entity ?ft .
-    OPTIONAL {?t3 ql:contains-word "robinson" ; ql:contains-entity ?nmw2}
-    BIND (?ql_score_word_t2_robinson + (?ql_score_word_t3_robinson * 4) as ?score2)
-  } OPTIONAL {
-    ?work a lux:Work ; lux:workAny/lux:primaryName ?nm .
-    ?t ql:contains-word "robinson" ; ql:contains-entity ?nm .
-    BIND (?ql_score_word_t_robinson*8 as ?score1)
-  }
-  BIND (?score1 + ?score2 as ?score)
-}
-} ORDER BY DESC(?score)
-
-
-### Facets
-#
-PREFIX lux: <https://lux.collections.yale.edu/ns/>
-SELECT ?facet (COUNT(?facet) AS ?facetCount) WHERE {
-
-  {SELECT DISTINCT ?work WHERE {{
-    {
-      ?work a lux:Work ; lux:workAny/lux:primaryName ?nm .
-      ?t ql:contains-word "robinson" ; ql:contains-entity ?nm .
-      BIND (?ql_score_word_t_robinson*8 as ?score1)
-    } OPTIONAL {
-      ?work a lux:Work ; lux:recordText ?ft ; lux:workPrimaryName ?nmw .
-      ?t2 ql:contains-word "robinson" ; ql:contains-entity ?ft .
-      OPTIONAL {?t3 ql:contains-word "robinson" ; ql:contains-entity ?nmw}
-      BIND (?ql_score_word_t2_robinson + (?ql_score_word_t3_robinson * 4) as ?score2)
-    }
-    BIND (?score1 + ?score2 as ?score)
-  } UNION {
-    {
-      ?work a lux:Work ; lux:recordText ?ft ; lux:workPrimaryName ?nmw2 .
-      ?t2 ql:contains-word "robinson" ; ql:contains-entity ?ft .
-      OPTIONAL {?t3 ql:contains-word "robinson" ; ql:contains-entity ?nmw2}
-      BIND (?ql_score_word_t2_robinson + (?ql_score_word_t3_robinson * 4) as ?score2)
-    } OPTIONAL {
-      ?work a lux:Work ; lux:workAny/lux:primaryName ?nm .
-      ?t ql:contains-word "robinson" ; ql:contains-entity ?nm .
-      BIND (?ql_score_word_t_robinson*8 as ?score1)
-    }
-    BIND (?score1 + ?score2 as ?score)
-  }}}
-
-?work lux:workLanguage ?facet .
-
-} GROUP BY (?facet) ORDER BY DESC (?facetCount) LIMIT 50
-
-
-
-SELECT ?p (COUNT(?p) AS ?ct) WHERE {
-?s ?p ?o .
-} GROUP BY (?p) ORDER BY DESC (?ct)
 
 """
 
@@ -202,13 +133,15 @@ class QleverMapper(Mapper):
         pfx = self.get_prefix(rectype)
         triples = []
         recordText = []
+
         anyt = {"subject": me, "predicate": f"{self.luxns}{pfx}Any", "object": ""}
-        t = {"subject": me, "predicate": f"{self.rdfns}type", "object": f"{self.luxns}{pfx.title()}"}
         lt = {"subject": me, "predicate": "", "value": "", "datatype": ""}
+
+        # Otherwise can't distinguish between event category and event vs period vs activity
+        t = {"subject": me, "predicate": f"{self.rdfns}type", "object": f"{self.luxns}{pfx.title()}"}
         triples.append(self.triple_pattern.format(**t))
-        if pfx not in ["set", "place"]:
-            t["object"] = f"{self.luxns}{rectype}"
-            triples.append(self.triple_pattern.format(**t))
+        t["object"] = f"{self.lans}{rectype}"
+        triples.append(self.triple_pattern.format(**t))
 
         # names
         lt["datatype"] = ""
@@ -415,7 +348,7 @@ class QleverMapper(Mapper):
 
             # Subjects
             abouts = data.get("about", [])
-            abouts.extend(data.get("depicts", []))
+            abouts.extend(data.get("represents", []))
             for about in abouts:
                 if "id" in about:
                     t["object"] = about["id"]
@@ -424,6 +357,17 @@ class QleverMapper(Mapper):
                     triples.append(self.triple_pattern.format(**t))
                     anyt["object"] = about["id"]
                     triples.append(self.triple_pattern.format(**anyt))
+
+            # Set specific predicates
+            if pfx == "set":
+                curates = data.get("used_for", [])
+                t["predicate"] = f"{self.luxns}setCuratedBy"
+                for c in curates:
+                    if "carried_out_by" in c and "id" in c["carried_out_by"]:
+                        t["object"] = c["carried_out_by"]["id"]
+                        triples.append(self.triple_pattern.format(**t))
+                        anyt["object"] = c["carried_out_by"]["id"]
+                        triples.append(self.triple_pattern.format(**anyt))
 
         elif pfx == "item":
             # carries/shows
@@ -548,17 +492,6 @@ class QleverMapper(Mapper):
                     lt["predicate"] = f"{self.luxns}endOfEvent"
                     lt["value"] = endval
                     triples.append(self.literal_pattern.format(**lt))
-
-        elif pfx == "set":
-            curates = data.get("used_for", [])
-            t["predicate"] = f"{self.luxns}setCuratedBy"
-            for c in curates:
-                if "carried_out_by" in c and "id" in c["carried_out_by"]:
-                    t["object"] = c["carried_out_by"]["id"]
-                    triples.append(self.triple_pattern.format(**t))
-                    anyt["object"] = c["carried_out_by"]["id"]
-                    triples.append(self.triple_pattern.format(**anyt))
-
         else:
             raise ValueError(f"Unsupported prefix: {pfx}")
 

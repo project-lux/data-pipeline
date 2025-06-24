@@ -13,7 +13,7 @@
 - [X] text
 
 ## Agent
-- [X] startAt = placeOfAgentBeginning
+- [X] startAt = fou
 - [X] startDate = startOfAgentBeginning / endOfAgentBeginning
 - [X] endAt = placeOfAgentEnding
 - [X] endDate = startOfAgentEnding / endOfAgentEnding
@@ -26,23 +26,25 @@
 - [X] activeDate = startofAgentActivity / endOfAgentActivity
 
 ## Concept
-- [X] broader =
+- [X] broader = broader
 
 ## Event
-- [X] carriedOutBy
+- [X] carriedOutBy = agentOfEvent
+- [X] tookPlaceAt = placeOfEvent
+- [X] used = eventUsedSet 
+- [ ] ?? = causeOfEvent
 - [X] endDate
 - [X] startDate
-- [X] tookPlaceAt
-- [X] used
+
 
 
 ## Item
 - [ ] isOnline
 - [X] producedAt = placeOfItemBeginning
 - [X] producedBy = agentOfItemBeginning
-- [X] producedDate = startOfItemBeginning / endOfItemBeginning
 - [X] producedUsing = typeOfItemBeginning
 - [X] productionInfluencedBy = agentInfluenceOfItemBeginning
+- [X] producedDate = startOfItemBeginning / endOfItemBeginning
 - [X] dimension
 - [X] depth
 - [X] height
@@ -53,9 +55,9 @@
 - [X] carries = carries
 - [X] material = material
 + weight
-
+I
 ## Place
-- [X] partOf
+- [X] partOf = placePartOf
 
 ## Set
 - [X] aboutConcept = setAboutConcept
@@ -65,10 +67,10 @@
 - [X] aboutPlace = setAboutPlace
 - [X] aboutWork = setAboutWork
 - [X] createdAt = placeOfSetBeginning
-- [X] createdDate = startOfSetBeginning / endOfSetBeginning
 - [X] createdBy = agentOfSetBeginning
 - [X] creationCausedBy = causeOfSetBeginning
-- [X] curatedBy
+- [X] createdDate = startOfSetBeginning / endOfSetBeginning
+- [X] curatedBy = setCuratedBy
 - [X] publishedAt = placeOfSetPublication
 - [X] publishedBy = agentOfSetPublication
 - [X] publishedDate = startOfSetPublication / endOfSetPublication
@@ -81,17 +83,19 @@
 - [X] aboutPlace = workAboutPlace
 - [X] aboutWork = workAboutWork
 - [X] createdAt = placeOfWorkBeginning
-- [X] createdDate = startOfWorkBeginning / endOfWorkBeginning
 - [X] createdBy = agentOfWorkBeginning
 - [X] creationCausedBy = causeOfWorkBeginning
 - [X] creationInfluencedBy = agentInfluenceOfWorkBeginning
 - [X] publishedAt = placeOfWorkPublication
 - [X] publishedBy = agentOfWorkPublication
+- [X] language = workLanguage
+- [X] partOfWork = workPartOf
+- [X] createdDate = startOfWorkBeginning / endOfWorkBeginning
 - [X] publishedDate = startOfWorkPublication / endOfWorkPublication
 - [ ] isOnline
 - [ ] isPublicDomain
-- [X] partOfWork
-- [X] language = workLanguage
+
+
 
 
 # Inverses
@@ -105,7 +109,6 @@
 - [X] encountered = ^agentOfItemEncounter
 - [X] founded = ^agentOfAgentBeginning
 - [X] memberOfInverse = ^agentMemberOfGroup
-- [ ] influenced = X (no PCSH)
 - [X] influencedProduction = ^agentInfluenceOfItemBeginning
 - [X] influencedCreation = ^agentInfluenceOfWorkBeginning
 - [X] publishedSet = ^agentOfSetPublication
@@ -122,7 +125,6 @@
 - [X] classificationOfPlace = ^placeClassification
 - [X] classificationOfWork = ^workClassification
 - [X] genderOf = ^gender
-- [ ] influenced X
 - [X] languageOf = ^workLanguage
 - [X] --- = ^setLanguage
 - [X] materialOfItem = ^material
