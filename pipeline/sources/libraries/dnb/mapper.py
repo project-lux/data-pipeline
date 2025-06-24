@@ -58,6 +58,7 @@ class DnbMapper(Mapper):
                 ts = model.TimeSpan()
                 ts.begin_of_the_begin = b
                 ts.end_of_the_end = e
+                ts.identified_by = vocab.DisplayName(content=dob)
                 birth.timespan = ts
                 top.born = birth
 
@@ -91,8 +92,10 @@ class DnbMapper(Mapper):
                 ts = model.TimeSpan()
                 ts.begin_of_the_begin = b
                 ts.end_of_the_end = e
+                ts.identified_by = vocab.DisplayName(content=dod)
                 death.timespan = ts
                 top.died = death
+
 
         if 'placeOfDeath' in rec:
             pod = rec['placeOfDeath']
