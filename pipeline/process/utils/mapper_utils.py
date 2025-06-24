@@ -27,6 +27,7 @@ dp_parser = DateDataParser(settings=dp_settings)
 bcdate_re = re.compile("(.+) ([bceBCE.]+)")
 np_precisions = ["", "Y", "M", "D", "h", "m", "s"]  # number of -s in the string
 max_life_delta = np.datetime64("2122-01-01") - np.datetime64("2000-01-01")
+max_year_delta = np.datetime64("2001-01-01") - np.datetime64("2000-01-01")
 non_four_year_date = re.compile("(-?)([0-9]{2,3})(-[0-9][0-9]-[0-9][0-9]([^0-9].*|$))")
 de_bc_abbr = re.compile("(([0-9][0-9]).([0-9][0-9]).)?v([0-9]{2,3})$")
 valid_date_re = re.compile(r"([0-2][0-9]{3})(-[0-1][0-9]-[0-3][0-9]([ T][0-2][0-9]:[0-5][0-9]:[0-5][0-9]Z?$|$))")
@@ -152,18 +153,19 @@ def test_birth_death(person):
     if type(person) == dict:
         # JSON serialization
         if "born" in person and "timespan" in person["born"]:
-            bts = person["born"]["timespan"]
-            if "begin_of_the_begin" in bts:
-                b = bts["begin_of_the_begin"]
-            else:
+            bts = person["born"]["timespan"]   
+            botb = bts.get("begin_of_the_begin")
+            bote = bts.get("end_of_the_end")
+            if not botb or not bote:
                 return True
         else:
             return True
+
         if "died" in person and "timespan" in person["died"]:
             dts = person["died"]["timespan"]
-            if "end_of_the_end" in dts:
-                d = dts["end_of_the_end"]
-            else:
+            dote = dts.get("end_of_the_end")
+            dotb = dts.get("begin_of_the_begin")
+            if not dote or not dotb:
                 return True
         else:
             return True
@@ -175,22 +177,28 @@ def test_birth_death(person):
             hasattr(person, "born")
             and hasattr(person.born, "timespan")
             and hasattr(person.born.timespan, "begin_of_the_begin")
+            and hasattr(person.born.timespan, "end_of_the_end")
         ):
-            b = person.born.timespan.begin_of_the_begin
+            botb = person.born.timespan.begin_of_the_begin
+            bote = person.born.timespan.end_of_the_end
         else:
             return True
         if (
             hasattr(person, "died")
             and hasattr(person.died, "timespan")
+            and hasattr(person.died.timespan, "begin_of_the_begin")
             and hasattr(person.died.timespan, "end_of_the_end")
         ):
-            d = person.died.timespan.end_of_the_end
+            dotb = person.died.timespan.begin_of_the_begin
+            dote = person.died.timespan.end_of_the_end
         else:
             return True
 
     try:
-        start = np.datetime64(b)
-        end = np.datetime64(d)
+        start = np.datetime64(botb)
+        start_end = np.datetime64(bote)
+        end = np.datetime64(dote)
+        end_start = np.datetime64(dotb)
     except:
         return True
     if end - start > max_life_delta:
@@ -199,9 +207,14 @@ def test_birth_death(person):
     elif end < start:
         # Can't die before being born
         return False
+    elif bote - botb > max_year_delta:
+        #birth range too large
+        return False 
+    elif dote - dotb > max_year_delta:
+        #death range too large
+        return False
     else:
         return True
-
 
 def convert_hebrew_date(dt):
     if HebrewDate is not None and int(dt[:4]) > 4500:
@@ -248,6 +261,26 @@ def make_datetime(value, precision=""):
     # given a date / datetime string
     # and maybe a precision from wikidata
     # return (begin, end) range
+
+    # Remove parenthetical prefixes like (naf), (iso8601)
+    value = re.sub(r"^\([^)]*\)\s*", "", value)
+
+    # Fix special characters and artifacts
+    value = value.replace("edtf", "")
+    value = value.replace("?", "~").replace("=", "-")
+    value = value.replace("u", "X").replace("x", "X")
+
+    # Handle date ranges, take first date
+    value = re.split(r"[,/]| or ", value)[0].strip()
+
+    # Add hyphens to 8- or 6-digit date strings
+    if re.fullmatch(r"\d{8}", value):
+        value = f"{value[:4]}-{value[4:6]}-{value[6:]}"
+    elif re.fullmatch(r"\d{6}", value):
+        value = f"{value[:4]}-{value[4:]}"
+
+    # Replace 00 with XX (EDTF pattern)
+    value = value.replace("-00", "-XX")
 
     initialValue = value
     # allow 0000-01-01
@@ -423,6 +456,8 @@ def make_datetime(value, precision=""):
                 # might be hebrew
                 start = convert_hebrew_date(start)
                 end = convert_hebrew_date(end)
+            if start > end:
+                start, end = end, start
             return (start, end)
         else:
             # No to EDTF, last resort try DateDataParser
@@ -483,3 +518,4 @@ def make_datetime(value, precision=""):
             dtstr = begin.isoformat()[:l]
         dt = np.datetime64(dtstr)
         return process_np_datetime(dt, prec)
+
