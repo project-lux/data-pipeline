@@ -254,14 +254,9 @@ def make_datetime(value, precision=""):
     value = value.replace("edtf", "")
     value = value.replace("=", "-")
 
-    # Handle date ranges, take first date
-    value = re.split(r"[,/]| or ", value)[0].strip()
-
     # Add hyphens to 8- or 6-digit date strings
     if re.fullmatch(r"\d{8}", value):
         value = f"{value[:4]}-{value[4:6]}-{value[6:]}"
-    elif re.fullmatch(r"\d{6}", value):
-        value = f"{value[:4]}-{value[4:]}"
 
     initialValue = value
     # allow 0000-01-01
@@ -378,8 +373,11 @@ def make_datetime(value, precision=""):
             value = value.replace("x", "X")
             value = value.replace("?", "X")
             value = value.replace('.XX.XX', '-XX-XX')
+            # Handle date ranges, take first date
+            value = re.split(r"[,/]| or ", value)[0].strip()
             if value.startswith("XX.XX.") or value.startswith("XX-XX-") or value.startswith("XX XX "):
                 value = value[6:]
+
 
         value = value.replace("-00", "-XX")
         ed_value = "-" + value if is_bce_date else value
