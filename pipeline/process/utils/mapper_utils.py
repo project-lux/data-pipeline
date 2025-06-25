@@ -267,8 +267,8 @@ def make_datetime(value, precision=""):
 
     # Fix special characters and artifacts
     value = value.replace("edtf", "")
-    value = value.replace("?", "~").replace("=", "-")
-    value = value.replace("u", "X").replace("x", "X")
+    value = value.replace("=", "-")
+    value = value.replace("x", "X")
 
     # Handle date ranges, take first date
     value = re.split(r"[,/]| or ", value)[0].strip()
@@ -456,8 +456,6 @@ def make_datetime(value, precision=""):
                 # might be hebrew
                 start = convert_hebrew_date(start)
                 end = convert_hebrew_date(end)
-            if start > end:
-                start, end = end, start
             return (start, end)
         else:
             # No to EDTF, last resort try DateDataParser
