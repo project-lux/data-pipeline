@@ -27,7 +27,6 @@ dp_parser = DateDataParser(settings=dp_settings)
 bcdate_re = re.compile("(.+) ([bceBCE.]+)")
 np_precisions = ["", "Y", "M", "D", "h", "m", "s"]  # number of -s in the string
 max_life_delta = np.datetime64("2122-01-01") - np.datetime64("2000-01-01")
-max_year_delta = np.datetime64("2001-01-01") - np.datetime64("2000-01-01")
 non_four_year_date = re.compile("(-?)([0-9]{2,3})(-[0-9][0-9]-[0-9][0-9]([^0-9].*|$))")
 de_bc_abbr = re.compile("(([0-9][0-9]).([0-9][0-9]).)?v([0-9]{2,3})$")
 valid_date_re = re.compile(r"([0-2][0-9]{3})(-[0-1][0-9]-[0-3][0-9]([ T][0-2][0-9]:[0-5][0-9]:[0-5][0-9]Z?$|$))")
@@ -155,8 +154,7 @@ def test_birth_death(person):
         if "born" in person and "timespan" in person["born"]:
             bts = person["born"]["timespan"]   
             botb = bts.get("begin_of_the_begin")
-            bote = bts.get("end_of_the_end")
-            if not botb or not bote:
+            if not botb:
                 return True
         else:
             return True
@@ -164,8 +162,7 @@ def test_birth_death(person):
         if "died" in person and "timespan" in person["died"]:
             dts = person["died"]["timespan"]
             dote = dts.get("end_of_the_end")
-            dotb = dts.get("begin_of_the_begin")
-            if not dote or not dotb:
+            if not dote:
                 return True
         else:
             return True
@@ -177,28 +174,22 @@ def test_birth_death(person):
             hasattr(person, "born")
             and hasattr(person.born, "timespan")
             and hasattr(person.born.timespan, "begin_of_the_begin")
-            and hasattr(person.born.timespan, "end_of_the_end")
         ):
             botb = person.born.timespan.begin_of_the_begin
-            bote = person.born.timespan.end_of_the_end
         else:
             return True
         if (
             hasattr(person, "died")
             and hasattr(person.died, "timespan")
-            and hasattr(person.died.timespan, "begin_of_the_begin")
             and hasattr(person.died.timespan, "end_of_the_end")
         ):
-            dotb = person.died.timespan.begin_of_the_begin
             dote = person.died.timespan.end_of_the_end
         else:
             return True
 
     try:
         start = np.datetime64(botb)
-        start_end = np.datetime64(bote)
         end = np.datetime64(dote)
-        end_start = np.datetime64(dotb)
     except:
         return True
     if end - start > max_life_delta:
@@ -206,12 +197,6 @@ def test_birth_death(person):
         return False
     elif end < start:
         # Can't die before being born
-        return False
-    elif bote - botb > max_year_delta:
-        #birth range too large
-        return False 
-    elif dote - dotb > max_year_delta:
-        #death range too large
         return False
     else:
         return True
@@ -268,7 +253,6 @@ def make_datetime(value, precision=""):
     # Fix special characters and artifacts
     value = value.replace("edtf", "")
     value = value.replace("=", "-")
-    value = value.replace("x", "X")
 
     # Handle date ranges, take first date
     value = re.split(r"[,/]| or ", value)[0].strip()
@@ -278,9 +262,6 @@ def make_datetime(value, precision=""):
         value = f"{value[:4]}-{value[4:6]}-{value[6:]}"
     elif re.fullmatch(r"\d{6}", value):
         value = f"{value[:4]}-{value[4:]}"
-
-    # Replace 00 with XX (EDTF pattern)
-    value = value.replace("-00", "-XX")
 
     initialValue = value
     # allow 0000-01-01
@@ -390,7 +371,7 @@ def make_datetime(value, precision=""):
         if len(value) == 5 and value[4] == "?":
             value = value[:4] + "~"
         # Fix: 19XX or 17??
-        if "?" in value or "X" in value or "x" in value:
+        if "?" in value or "u" in value or "x" in value:
             # value = x_re.sub('\g<1>u', value)
             # value = x_re.sub('\g<1>u', value)
             value = value.replace("u", "X")
