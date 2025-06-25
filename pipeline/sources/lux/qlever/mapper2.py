@@ -20,24 +20,27 @@ SELECT DISTINCT ?what WHERE {
   } LIMIT 100
 
 
-#### Comparisons:
+### Related Lists v1
 
-PREFIX crm: <http://www.cidoc-crm.org/cidoc-crm/>
 PREFIX lux: <https://lux.collections.yale.edu/ns/>
-PREFIX la: <https://linked.art/ns/terms/>
-PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
-PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-SELECT DISTINCT ?what ?ql_matchingword_t_nann WHERE {
-  ?what a crm:E21_Person ;
-      crm:P2_has_type ?type ;
-      crm:P98i_was_born ?birth .
-  ?birth crm:P4_has_time-span ?ts .
-  ?ts crm:P82a_begin_of_the_begin ?tsb .
-  FILTER (?tsb < "1900-01-01T00:00:00Z"^^xsd:dateTime)
-  ?type crm:P1_is_identified_by ?name .
-  ?name crm:P190_has_symbolic_content ?txt .
-  ?t ql:contains-word "Nann*" ; ql:contains-entity ?txt .
-  } LIMIT 1000
+SELECT DISTINCT ?place ?prep ?prep2 (COUNT(?work) AS ?ct) WHERE {
+  ?place a lux:Place .
+ {
+  ?work a lux:Item ;
+        ?prep ?place ;
+        ?prep2 <https://lux.collections.yale.edu/data/person/2107305b-7a4c-4af8-9d02-7a75bb1b2a4e> .
+  FILTER (?prep2 != lux:itemAny)
+  FILTER (?prep != lux:itemAny)
+ }
+UNION {
+  ?work a lux:Work ;
+    ?prep ?place ;
+	?prep2 <https://lux.collections.yale.edu/data/person/2107305b-7a4c-4af8-9d02-7a75bb1b2a4e> .
+	FILTER (?prep != lux:workAny)
+	FILTER (?prep2 != lux:workAny)
+}
+
+} GROUP BY ?place ?prep ?prep2 ORDER BY ?place
 
 
 """
