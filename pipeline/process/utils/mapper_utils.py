@@ -5,16 +5,14 @@ from dateutil import parser
 from dateparser.date import DateDataParser
 from edtf import parse_edtf, text_to_edtf, struct_time_to_datetime
 from datetime import datetime, timedelta
-from edtf.parser.parser_classes import (
-    UncertainOrApproximate as UOA,
-    PartialUncertainOrApproximate as PUOA)
+from edtf.parser.parser_classes import UncertainOrApproximate as UOA, PartialUncertainOrApproximate as PUOA
 import numpy as np
 
 # Note -- MaskedPrecision was removed from edtf, so removing as fuzzy parser
 
 try:
     from pyluach.dates import HebrewDate
-except:
+except Exception:
     HebrewDate = None
 
 # ABANDON ALL HOPE, YE WHO ENTER HERE
@@ -23,8 +21,7 @@ except:
 default_dt = datetime.strptime("0001-01-01T00:00:00", "%Y-%m-%dT%H:%M:%S")
 dp_settings = {"PREFER_DAY_OF_MONTH": "first", "PREFER_DATES_FROM": "past"}
 dp_parser = DateDataParser(settings=dp_settings)
-# x_re = re.compile('([?xXu0-9-])([?X])')
-bcdate_re = re.compile("(.+) ([bceBCE.]+)")
+bcdate_re = re.compile(r"(.+?)\s+(B\.?C\.?(?:E\.?)?|BCE)", re.IGNORECASE)
 np_precisions = ["", "Y", "M", "D", "h", "m", "s"]  # number of -s in the string
 max_life_delta = np.datetime64("2122-01-01") - np.datetime64("2000-01-01")
 non_four_year_date = re.compile("(-?)([0-9]{2,3})(-[0-9][0-9]-[0-9][0-9]([^0-9].*|$))")
@@ -55,10 +52,10 @@ timestamp_props = ["begin_of_the_begin", "end_of_the_begin", "begin_of_the_end",
 def get_wikidata_qid(wikipedia_url):
     """
     Given a Wikipedia URL, this function uses Wikidata sitelinks to retrieve the corresponding Wikidata QID.
-    
+
     Args:
         wikipedia_url (str): The full URL of a Wikipedia page (e.g., "http://en.wikipedia.org/wiki/Addison_Mizner")
-    
+
     Returns:
         str or None: The Wikidata QID (e.g., "Q466693") if found, otherwise None.
     """
@@ -66,24 +63,20 @@ def get_wikidata_qid(wikipedia_url):
         title = wikipedia_url.rstrip("/").split("/")[-1]
 
         endpoint = "https://www.wikidata.org/w/api.php"
-        params = {
-            "action": "wbgetentities",
-            "sites": "enwiki",
-            "titles": title,
-            "format": "json"
-        }
+        params = {"action": "wbgetentities", "sites": "enwiki", "titles": title, "format": "json"}
 
         response = requests.get(endpoint, params=params)
         data = response.json()
 
-        entities = data.get("entities",{})
+        entities = data.get("entities", {})
         for qid, entity in entities.items():
-            if qid != "-1": #if page is not found, the key will be "-1"
+            if qid != "-1":  # if page is not found, the key will be "-1"
                 return qid
     except Exception as e:
         print(f"Error getting wikidata ID {e}")
 
     return None
+
 
 def walk_for_timespan(nodes):
     if type(nodes) != list:
@@ -137,7 +130,7 @@ def get_year_from_timespan(event):
         ts = event["timespan"]["begin_of_the_begin"]
         if ts.startswith("-"):
             dt = ts.split("T")[0].split("-")[1]
-            if startswith("0"):
+            if dt.startswith("0"):
                 dt = "-" + dt[1:]
             else:
                 dt = "-" + dt
@@ -363,7 +356,7 @@ def make_datetime(value, precision=""):
             value = value.replace("u", "X")
             value = value.replace("x", "X")
             value = value.replace("?", "X")
-            value = value.replace('.XX.XX', '-XX-XX')
+            value = value.replace(".XX.XX", "-XX-XX")
             if value.startswith("XX.XX.") or value.startswith("XX-XX-") or value.startswith("XX XX "):
                 value = value[6:]
 
@@ -431,7 +424,7 @@ def make_datetime(value, precision=""):
                 if dt3.period == "day" and dt3.locale != "en":
                     begin = dt3.date_obj
                     end = begin + timedelta(days=1)
-                elif dt2:
+                elif dt:
                     print(f"dateparser found: {dt3} from {value} ?")
                     return None
                 else:
