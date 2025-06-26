@@ -107,26 +107,39 @@ class PleiadesMapper(Mapper):
 
         # Handle places
         top = model.Place(ident=rec["uri"])
-        # Add primary name from title or names
+        # Collect all available names
+        all_names = []
         title = rec.get("title")
-        primary_name = None
         if title:
-            primary_name = vocab.PrimaryName(content=title)
+            all_names.append({"content": title, "language": "en", "source": "title"})
+        
+        # Add names from the names array
+        names = rec.get("names", [])
+        for n in names:
+            if "attested" in n and n["attested"]:
+                lang = n.get("language", "en")
+                all_names.append({"content": n["attested"], "language": lang, "source": "names"})
+        
+        if not all_names:
+            return None
+        
+        # Assign first name as primary
+        primary_name_data = all_names[0]
+        primary_name = vocab.PrimaryName(content=primary_name_data["content"])
+        if primary_name_data["language"] == "en":
             primary_name.language = model.Language(ident="http://vocab.getty.edu/aat/300388277")  # English
         else:
-            # Try to find a name in names
-            names = rec.get("names", [])
-            for n in names:
-                if "attested" in n and n["attested"]:
-                    primary_name = vocab.PrimaryName(content=n["attested"])
-                    if "language" in n:
-                        primary_name.language = model.Language(label=n["language"])
-                    else:
-                        primary_name.language = model.Language(ident="http://vocab.getty.edu/aat/300388277")
-                    break
-        if not primary_name:
-            return None
+            primary_name.language = model.Language(label=primary_name_data["language"])
         top.identified_by = primary_name
+        
+        # Add remaining names as alternate names
+        for name_data in all_names[1:]:
+            alt_name = vocab.AlternateName(content=name_data["content"])
+            if name_data["language"] == "en":
+                alt_name.language = model.Language(ident="http://vocab.getty.edu/aat/300388277")  # English
+            else:
+                alt_name.language = model.Language(label=name_data["language"])
+            top.identified_by = alt_name
 
         # Add description
         if "description" in rec:
@@ -158,7 +171,8 @@ class PleiadesMapper(Mapper):
         # Add part_of relationships
         if "connections" in rec and rec["connections"]:
             for conn in rec["connections"]:
-                if conn.get("connectionType") == "succeeds":
+                #https://pleiades.stoa.org/vocabularies/relationship-types
+                if conn.get("connectionType") in ["part_of_physical", "part_of_admin", "part_of_regional", "located_in", "in_territory_of"]:
                     related = model.Place(ident=conn["connectsTo"])
                     if "title" in conn:
                         related._label = conn["title"]
