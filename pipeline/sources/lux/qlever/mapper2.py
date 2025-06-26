@@ -370,7 +370,7 @@ class QleverMapper(Mapper):
                         if "id" in cby:
                             t["object"] = cby["id"]
                             triples.append(self.triple_pattern.format(**t))
-                            anyt["object"] = c["carried_out_by"]["id"]
+                            anyt["object"] = cby["id"]
                             triples.append(self.triple_pattern.format(**anyt))
 
         elif pfx == "item":
