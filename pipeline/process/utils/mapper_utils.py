@@ -145,18 +145,17 @@ def test_birth_death(person):
     if type(person) == dict:
         # JSON serialization
         if "born" in person and "timespan" in person["born"]:
-            bts = person["born"]["timespan"]
-            if "begin_of_the_begin" in bts:
-                b = bts["begin_of_the_begin"]
-            else:
+            bts = person["born"]["timespan"]   
+            botb = bts.get("begin_of_the_begin")
+            if not botb:
                 return True
         else:
             return True
+
         if "died" in person and "timespan" in person["died"]:
             dts = person["died"]["timespan"]
-            if "end_of_the_end" in dts:
-                d = dts["end_of_the_end"]
-            else:
+            dote = dts.get("end_of_the_end")
+            if not dote:
                 return True
         else:
             return True
@@ -169,7 +168,7 @@ def test_birth_death(person):
             and hasattr(person.born, "timespan")
             and hasattr(person.born.timespan, "begin_of_the_begin")
         ):
-            b = person.born.timespan.begin_of_the_begin
+            botb = person.born.timespan.begin_of_the_begin
         else:
             return True
         if (
@@ -177,13 +176,13 @@ def test_birth_death(person):
             and hasattr(person.died, "timespan")
             and hasattr(person.died.timespan, "end_of_the_end")
         ):
-            d = person.died.timespan.end_of_the_end
+            dote = person.died.timespan.end_of_the_end
         else:
             return True
 
     try:
-        start = np.datetime64(b)
-        end = np.datetime64(d)
+        start = np.datetime64(botb)
+        end = np.datetime64(dote)
     except:
         return True
     if end - start > max_life_delta:
@@ -194,7 +193,6 @@ def test_birth_death(person):
         return False
     else:
         return True
-
 
 def convert_hebrew_date(dt):
     if HebrewDate is not None and int(dt[:4]) > 4500:
@@ -241,6 +239,17 @@ def make_datetime(value, precision=""):
     # given a date / datetime string
     # and maybe a precision from wikidata
     # return (begin, end) range
+
+    # Remove parenthetical prefixes like (naf), (iso8601)
+    value = re.sub(r"^\([^)]*\)\s*", "", value)
+
+    # Fix special characters and artifacts
+    value = value.replace("edtf", "")
+    value = value.replace("=", "-")
+
+    # Add hyphens to 8- or 6-digit date strings
+    if re.fullmatch(r"\d{8}", value):
+        value = f"{value[:4]}-{value[4:6]}-{value[6:]}"
 
     initialValue = value
     # allow 0000-01-01
@@ -350,15 +359,18 @@ def make_datetime(value, precision=""):
         if len(value) == 5 and value[4] == "?":
             value = value[:4] + "~"
         # Fix: 19XX or 17??
-        if "?" in value or "X" in value or "x" in value:
+        if "?" in value or "u" in value or "x" in value:
             # value = x_re.sub('\g<1>u', value)
             # value = x_re.sub('\g<1>u', value)
             value = value.replace("u", "X")
             value = value.replace("x", "X")
             value = value.replace("?", "X")
-            value = value.replace(".XX.XX", "-XX-XX")
+            value = value.replace('.XX.XX', '-XX-XX')
+            # Handle date ranges, take first date
+            value = re.split(r"[,/]| or ", value)[0].strip()
             if value.startswith("XX.XX.") or value.startswith("XX-XX-") or value.startswith("XX XX "):
                 value = value[6:]
+
 
         value = value.replace("-00", "-XX")
         ed_value = "-" + value if is_bce_date else value
@@ -476,3 +488,4 @@ def make_datetime(value, precision=""):
             dtstr = begin.isoformat()[:l]
         dt = np.datetime64(dtstr)
         return process_np_datetime(dt, prec)
+
