@@ -12,7 +12,7 @@ import numpy as np
 
 try:
     from pyluach.dates import HebrewDate
-except:
+except Exception:
     HebrewDate = None
 
 # ABANDON ALL HOPE, YE WHO ENTER HERE
@@ -21,8 +21,7 @@ except:
 default_dt = datetime.strptime("0001-01-01T00:00:00", "%Y-%m-%dT%H:%M:%S")
 dp_settings = {"PREFER_DAY_OF_MONTH": "first", "PREFER_DATES_FROM": "past"}
 dp_parser = DateDataParser(settings=dp_settings)
-# x_re = re.compile('([?xXu0-9-])([?X])')
-bcdate_re = re.compile("(.+) ([bceBCE.]+)")
+bcdate_re = re.compile(r"(.+?)\s+(B\.?C\.?(?:E\.?)?|BCE)", re.IGNORECASE)
 np_precisions = ["", "Y", "M", "D", "h", "m", "s"]  # number of -s in the string
 max_life_delta = np.datetime64("2122-01-01") - np.datetime64("2000-01-01")
 non_four_year_date = re.compile("(-?)([0-9]{2,3})(-[0-9][0-9]-[0-9][0-9]([^0-9].*|$))")
@@ -80,7 +79,7 @@ def get_wikidata_qid(wikipedia_url):
 
 
 def walk_for_timespan(nodes):
-    if type(nodes) != list:
+    if type(nodes) is not list:
         nodes = [nodes]
     for node in nodes:
         if "timespan" in node:
@@ -131,7 +130,7 @@ def get_year_from_timespan(event):
         ts = event["timespan"]["begin_of_the_begin"]
         if ts.startswith("-"):
             dt = ts.split("T")[0].split("-")[1]
-            if startswith("0"):
+            if dt.startswith("0"):
                 dt = "-" + dt[1:]
             else:
                 dt = "-" + dt
@@ -430,7 +429,7 @@ def make_datetime(value, precision=""):
                 if dt3.period == "day" and dt3.locale != "en":
                     begin = dt3.date_obj
                     end = begin + timedelta(days=1)
-                elif dt2:
+                elif dt:
                     print(f"dateparser found: {dt3} from {value} ?")
                     return None
                 else:
