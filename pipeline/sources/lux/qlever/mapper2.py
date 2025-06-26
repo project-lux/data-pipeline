@@ -366,11 +366,12 @@ class QleverMapper(Mapper):
                 curates = data.get("used_for", [])
                 t["predicate"] = f"{self.luxns}setCuratedBy"
                 for c in curates:
-                    if "carried_out_by" in c and "id" in c["carried_out_by"]:
-                        t["object"] = c["carried_out_by"]["id"]
-                        triples.append(self.triple_pattern.format(**t))
-                        anyt["object"] = c["carried_out_by"]["id"]
-                        triples.append(self.triple_pattern.format(**anyt))
+                    for cby in c.get("carried_out_by", []):
+                        if "id" in cby:
+                            t["object"] = cby["id"]
+                            triples.append(self.triple_pattern.format(**t))
+                            anyt["object"] = c["carried_out_by"]["id"]
+                            triples.append(self.triple_pattern.format(**anyt))
 
         elif pfx == "item":
             # carries/shows
