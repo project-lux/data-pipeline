@@ -5,9 +5,9 @@ import re
 
 class PleiadesMapper(Mapper):
     def __init__(self, config):
-        # Mapper.__init__(self, config)
-        # self.factory.auto_assign_id = False
-        pass
+        Mapper.__init__(self, config)
+        self.factory.auto_assign_id = False
+        # pass
     
     def guess_type(self, data):
         # Check the @type field first
