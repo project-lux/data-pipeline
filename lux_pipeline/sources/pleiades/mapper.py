@@ -5,8 +5,9 @@ import re
 
 class PleiadesMapper(Mapper):
     def __init__(self, config):
-        Mapper.__init__(self, config)
-        self.factory.auto_assign_id = False
+        # Mapper.__init__(self, config)
+        # self.factory.auto_assign_id = False
+        pass
     
     def guess_type(self, data):
         # Check the @type field first
@@ -67,9 +68,14 @@ class PleiadesMapper(Mapper):
         scope_match = re.search(r'skos:scopeNote "([^"]+)"@en', ttl_section)
         description = scope_match.group(1) if scope_match else None
         
-        # Extract AAT URI if present
-        aat_match = re.search(r'<http://vocab\.getty\.edu/aat/([^>]+)>', ttl_section)
-        aat_uri = f"http://vocab.getty.edu/aat/{aat_match.group(1)}" if aat_match else None
+        # Extract all owl:sameAs URIs (handling multiline format)
+        # First find the owl:sameAs section
+        same_as_match = re.search(r'owl:sameAs\s+(.+?);', ttl_section, re.DOTALL)
+        same_as_matches = []
+        if same_as_match:
+            same_as_section = same_as_match.group(1)
+            # Extract all URIs from this section
+            same_as_matches = re.findall(r'<([^>]+)>', same_as_section)
         
         # Create the Type record
         top = model.Type(ident=uri)
@@ -85,9 +91,12 @@ class PleiadesMapper(Mapper):
             desc.language = model.Language(ident="http://vocab.getty.edu/aat/300388277")  # English
             top.referred_to_by = desc
         
-        # Add AAT equivalent if present
-        if aat_uri:
-            top.equivalent = model.Type(ident=aat_uri)
+        # Add equivalents from owl:sameAs statements
+        for same_as_uri in same_as_matches:
+            # Skip self-references
+            if same_as_uri != uri:
+                top.equivalent = model.Type(ident=same_as_uri)
+            
         
         data = model.factory.toJSON(top)
         return {"identifier": concept_id, "data": data, "source": "pleiades"}
