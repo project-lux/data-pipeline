@@ -7,43 +7,9 @@ If there isn't a search, then there isn't a triple.
 """
 
 
-examples = """
-
-#### Phrase:
-
-PREFIX lux: <https://lux.collections.yale.edu/ns/>
-SELECT DISTINCT ?what WHERE {
-   ?what lux:recordText ?ftxt .
-   ?t ql:contains-word "guide* routing" .
-   ?t ql:contains-entity ?ftxt .
-   FILTER (contains(?ftxt, "guidebook routing")) # as a phrase
-  } LIMIT 100
-
-
-### Related Lists v1
-
-PREFIX lux: <https://lux.collections.yale.edu/ns/>
-SELECT DISTINCT ?place ?prep ?prep2 (COUNT(?work) AS ?ct) WHERE {
-  ?place a lux:Place .
- {
-  ?work a lux:Item ;
-        ?prep ?place ;
-        ?prep2 <https://lux.collections.yale.edu/data/person/2107305b-7a4c-4af8-9d02-7a75bb1b2a4e> .
-  FILTER (?prep2 != lux:itemAny)
-  FILTER (?prep != lux:itemAny)
- }
-UNION {
-  ?work a lux:Work ;
-    ?prep ?place ;
-	?prep2 <https://lux.collections.yale.edu/data/person/2107305b-7a4c-4af8-9d02-7a75bb1b2a4e> .
-	FILTER (?prep != lux:workAny)
-	FILTER (?prep2 != lux:workAny)
-}
-
-} GROUP BY ?place ?prep ?prep2 ORDER BY ?place
-
-
-"""
+### TO DO
+# consider:  make a {pfx}AllNames field with all concatenated names
+# then use it to count word occurences for reranking
 
 
 class QleverMapper(Mapper):
