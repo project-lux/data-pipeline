@@ -376,6 +376,8 @@ class QleverMapper(Mapper):
                         lt["predicate"] = f"{self.luxns}depth"
                     elif self.weight in cxns:
                         lt["predicate"] = f"{self.luxns}weight"
+                    else:
+                        continue
                     triples.append(self.literal_pattern.format(**lt))
                     lt["predicate"] = f"{self.luxns}dimension"
                     triples.append(self.literal_pattern.format(**lt))
