@@ -128,10 +128,9 @@ class QleverMapper(Mapper):
                     triples.append(self.literal_pattern.format(**lt))
                     lt["predicate"] = f"{self.luxns}primaryName"
                     triples.append(self.literal_pattern.format(**lt))
-                elif self.sortName in cxns:
+                if self.sortName in cxns:
                     lt["predicate"] = f"{self.luxns}{pfx}SortName"
                     triples.append(self.literal_pattern.format(**lt))
-                    continue
                 lt["predicate"] = f"{self.luxns}{pfx}Name"
                 triples.append(self.literal_pattern.format(**lt))
                 lt["predicate"] = f"{self.luxns}name"
