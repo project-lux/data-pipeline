@@ -1,5 +1,5 @@
 # from lux_pipeline.process.base.mapper import Mapper
-from lux_pipeline.process.base.mapper import Mapper
+from pipeline.process.base.mapper import Mapper
 from cromulent import model, vocab
 import re
 
@@ -172,7 +172,18 @@ class PleiadesMapper(Mapper):
         if "connections" in rec and rec["connections"]:
             for conn in rec["connections"]:
                 #https://pleiades.stoa.org/vocabularies/relationship-types
-                if conn.get("connectionType") in ["part_of_physical", "part_of_admin", "part_of_regional", "located_in", "in_territory_of"]:
+                if conn.get("connectionType") in [
+                                                  "part_of_physical", 
+                                                  "part_of_admin",
+                                                  "part_of_regional",
+                                                  "located_in",
+                                                  "in_territory_of",
+                                                  "located_at",
+                                                  "port_of",
+                                                  "member_of",
+                                                  "part_of_analytical",
+                                                  "capital_of"
+                                                  ]:
                     related = model.Place(ident=conn["connectsTo"])
                     if "title" in conn:
                         related._label = conn["title"]
