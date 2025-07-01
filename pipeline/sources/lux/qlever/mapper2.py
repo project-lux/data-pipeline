@@ -1,5 +1,6 @@
 from pipeline.process.base.mapper import Mapper
 from bs4 import BeautifulSoup
+import unicodedata
 
 """
 Create a mapper that produces completely artificial triples.
@@ -18,6 +19,9 @@ class QleverMapper(Mapper):
         self.configs = config["all_configs"]
         self.idmap = self.configs.get_idmap()
         self.globals = self.configs.globals
+
+        self.remove_diacritics = False
+        self.min_word_chars = 4
 
         self.primaryName = self.globals["primaryName"]
         self.sortName = self.globals["sortName"]
@@ -62,6 +66,15 @@ class QleverMapper(Mapper):
         string = string.replace("\t", " ")
         string = string.replace('"', "")
         string = string.replace("\\", "")
+        # remove diacritics
+        if self.remove_diacritics:
+            nfkd_form = unicodedata.normalize("NFD", string)
+            string = "".join([c for c in nfkd_form if not unicodedata.category(c) == "Mn"])
+
+        if self.min_word_chars > 1:
+            words = string.split()
+            padded = [word.ljust(self.min_word_chars, "_") for word in words]
+            string = " ".join(padded)
         return string
 
     def do_bs_html(self, content):
@@ -468,8 +481,9 @@ class QleverMapper(Mapper):
 
         # add in recordText
         rtxt = " ".join([x for x in recordText if x])
+        rtxt = self.sanitize_string(rtxt)
         lt["predicate"] = f"{self.luxns}recordText"
-        lt["value"] = rtxt.replace("\n", " ").replace("\r", " ").replace('"', "")
+        lt["value"] = rtxt
         lt["datatype"] = ""
         triples.append(self.literal_pattern.format(**lt))
 
