@@ -131,6 +131,17 @@ class QleverMapper(Mapper):
         t["object"] = f"{self.lans}{rectype}"
         triples.append(self.triple_pattern.format(**t))
 
+        # meta-metadata -- sources for the record
+        if "change" in record and record["change"]:
+            sources = record["change"].split("|")
+            okay = ["ipch", "pmc", "ils", "yuag", "ycba", "ypm"]
+            t["predicate"] = f"{self.luxns}source"
+            for s in sources[:]:
+                if s in okay:
+                    # add triple
+                    t["object"] = f"{self.luxns}{s.upper()}"
+                    triples.append(self.triple_pattern.format(**t))
+
         # names
         lt["datatype"] = ""
         for idb in data["identified_by"]:
