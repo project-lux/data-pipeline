@@ -8,10 +8,9 @@ Create a mapper that produces completely artificial triples.
 If there isn't a search, then there isn't a triple.
 """
 
-
 ### TO DO
-# consider:  make a {pfx}AllNames field with all concatenated names
-# then use it to count word occurences for reranking
+# Consider: make different text fields for case sensitive/insensitive, diacritics/not diacritics
+#   and padded / not padded
 
 
 class QleverMapper(Mapper):
