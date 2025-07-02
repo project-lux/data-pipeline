@@ -1,6 +1,7 @@
 from pipeline.process.base.mapper import Mapper
 from bs4 import BeautifulSoup
 import unicodedata
+from string import whitespace, punctuation
 
 """
 Create a mapper that produces completely artificial triples.
@@ -22,6 +23,7 @@ class QleverMapper(Mapper):
 
         self.remove_diacritics = False
         self.min_word_chars = 4
+        self.padding_char = "Þ"
 
         self.primaryName = self.globals["primaryName"]
         self.sortName = self.globals["sortName"]
@@ -61,6 +63,7 @@ class QleverMapper(Mapper):
     def sanitize_string(self, string):
         if not string:
             return ""
+        string = string.lower()
         string = string.replace("\r", " ")
         string = string.replace("\n", " ")
         string = string.replace("\t", " ")
@@ -72,9 +75,12 @@ class QleverMapper(Mapper):
             string = "".join([c for c in nfkd_form if not unicodedata.category(c) == "Mn"])
 
         if self.min_word_chars > 1:
-            words = string.split()
-            padded = [word.ljust(self.min_word_chars, "_") for word in words]
-            string = " ".join(padded)
+            string = " ".join(
+                [
+                    word.strip(whitespace + punctuation).ljust(self.min_word_chars, self.padding_char)
+                    for word in string.split()
+                ]
+            )
         return string
 
     def do_bs_html(self, content):
