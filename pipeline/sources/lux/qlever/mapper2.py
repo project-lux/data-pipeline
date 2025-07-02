@@ -39,6 +39,7 @@ class QleverMapper(Mapper):
         self.literal_pattern = '<{subject}> <{predicate}> "{value}"{datatype} .'
         self.number_type = "^^<http://www.w3.org/2001/XMLSchema#decimal>"
         self.date_type = "^^<http://www.w3.org/2001/XMLSchema#dateTime>"
+        self.wkt_type = "^^<http://www.opengis.net/ont/geosparql#wktLiteral>"
 
         self.datans = "https://lux.collections.yale.edu/data/"
         self.luxns = "https://lux.collections.yale.edu/ns/"
@@ -427,7 +428,13 @@ class QleverMapper(Mapper):
                     triples.append(self.triple_pattern.format(**anyt))
 
         elif pfx == "place":
-            pass
+            wkt = data.get("defined_by", "")
+            if wkt:
+                lt["predicate"] = f"{self.luxns}placeWKT"
+                lt["value"] = wkt
+                lt["datatype"] = self.wkt_type
+                triples.append(self.literal_pattern.format(**lt))
+
         elif pfx == "event":
             whos = data.get("carried_out_by", [])
             t["predicate"] = f"{self.luxns}agentOfEvent"
