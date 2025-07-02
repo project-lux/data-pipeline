@@ -5,14 +5,7 @@
 ![architecture diagram](docs/architecture2.png)
 
 
-## Pipeline Components
-
-### Future ITS Owned Components:
-* Harvester: ActivityStreams based record harvester that stores to a Cache.
-* Cache:  Record cache for storing local copies of JSON data. Currently postgres or filesystem.
-* IdMap: Identifier Map that mints, manages and retrieves external/internal identifier sets. Currently redis or in-memory.
-
-### Pipeline Components:
+## Pipeline Components:
 
 * config: Configuration of the pipeline, as JSON records in a cache.
 * process/Collector: Recursively collects identifiers for a given record.
@@ -37,17 +30,17 @@
 
 | Source          | Fetch | Map | Name Reconcile | Load | IdxLoad |
 | --------------- | ----- | --- | -------------- | ---- | ------- |
-| AAT             |   ✅  |  ✅ |    ✅         | N/A | -       | 
-| DNB             |   ✅  |  ✅ |     -         |  ✅ | -       | 
-| FAST            |   ✅  |  -  |     -          |  -   | -      | 
-| Geonames        |   ✅  |  ✅ |     -          | ✅  | -      | 
-| LCNAF           |   ✅  |  ✅ |     ✅        |  ✅ | -       | 
-| LCSH            |   ✅  |  ✅ |     ✅        |  ✅ | ✅      | 
-| TGN             |   ✅  |  ✅ |     -         | N/A  | -       | 
-| ULAN            |   ✅  |  ✅ |     ✅        | N/A  | -       | 
-| VIAF            |   ✅  |  ✅ |     -         |  ✅  | -       | 
-| Who's on First  |   ✅  |  ✅ |     -         | N/A  | -       | 
-| Wikidata        |   ✅  |  ✅ |     -         |  ✅  | ✅     | 
+| AAT             |   ✅  |  ✅ |    ✅         | N/A | -       |
+| DNB             |   ✅  |  ✅ |     -         |  ✅ | -       |
+| FAST            |   ✅  |  -  |     -          |  -   | -      |
+| Geonames        |   ✅  |  ✅ |     -          | ✅  | -      |
+| LCNAF           |   ✅  |  ✅ |     ✅        |  ✅ | -       |
+| LCSH            |   ✅  |  ✅ |     ✅        |  ✅ | ✅      |
+| TGN             |   ✅  |  ✅ |     -         | N/A  | -       |
+| ULAN            |   ✅  |  ✅ |     ✅        | N/A  | -       |
+| VIAF            |   ✅  |  ✅ |     -         |  ✅  | -       |
+| Who's on First  |   ✅  |  ✅ |     -         | N/A  | -       |
+| Wikidata        |   ✅  |  ✅ |     -         |  ✅  | ✅     |
 | Japan NL        |   ✅  |  ✅ |     -         | N/A  | -       |
 | BNF             |   ✅  |  ✅ |     -         | N/A  | -       |
 | GBIF            |   ✅  |  ✅ |     -         | N/A  | -       |
@@ -76,5 +69,4 @@ Process:
 2. Go to the directory where `dumpFilePath` exists and rename it with a date (e.g. latest-2022-07)
 3. execute `wget <url>` where `<url>` is the URL from `remoteDumpFile` (and probably validate it by hand online)
 4. For wikidata, as it's SO HUGE, instead do:  `nohup wget --quiet <url> &` to fetch it in the background so we can get on with our lives in the mean time.
-5. Done :) 
-
+5. Done :)
