@@ -438,8 +438,12 @@ class Cleaner(Mapper):
         replacement = []
         for c in data.get(prop, []):
             c_id = c.get("id", "")
-            if c_id and c_id not in counter:
-                counter[c_id] = 1
+            if c_id:
+                if c_id not in counter:
+                    counter[c_id] = 1
+                    replacement.append(c)
+            else:
+                # allow for empty ids for PCSH (etc)
                 replacement.append(c)
         if replacement:
             data[prop] = replacement

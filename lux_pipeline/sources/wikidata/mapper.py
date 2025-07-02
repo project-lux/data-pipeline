@@ -303,6 +303,8 @@ class WdMapper(Mapper, WdConfigManager):
             if lang in self.process_langs:
                 top._label = val
                 return
+        if "mul" in data["prefLabel"]:
+            top._label = data["prefLabel"]["mul"]
 
     def process_labels(self, data, top):
         # Top 25 (or so) languages spoken:
@@ -331,10 +333,17 @@ class WdMapper(Mapper, WdConfigManager):
         # Might need to process everything to get any labels
         if self.process_all_langs or not hasattr(top, "identified_by"):
             for lang, val in data["prefLabel"].items():
-                if lang in self.process_langs and not val in vals:
+                if lang in self.process_langs and val not in vals:
                     lbl = vocab.PrimaryName(content=val)
                     vals[val] = lbl
                     lbl.language = self.process_langs[lang]
+                    top.identified_by = lbl
+                    if not hasattr(top, "_label"):
+                        top._label = val
+                elif lang == "mul":
+                    # mul is "default for multiple languages"
+                    lbl = vocab.PrimaryName(content=val)
+                    vals[val] = lbl
                     top.identified_by = lbl
                     if not hasattr(top, "_label"):
                         top._label = val

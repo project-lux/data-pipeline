@@ -45,24 +45,24 @@ class MlMapper(Mapper):
 
         self.ref_ctr_excludes = set([x[-36:] for x in list(self.configs.globals.values()) if x])
         non_global_externals = [
-            'http://vocab.getty.edu/aat/300264578##quaType',
-            'http://vocab.getty.edu/aat/300435704##quaType',
-            'http://id.loc.gov/authorities/names/n80008747##quaGroup',
-            'http://vocab.getty.edu/aat/300133046##quaType',
-            'http://vocab.getty.edu/aat/300025883##quaType',
-            'http://vocab.getty.edu/aat/300435452##quaType',
-            'http://vocab.getty.edu/aat/300435430##quaType',
-            'http://vocab.getty.edu/aat/300202362##quaType',
-            'http://vocab.getty.edu/aat/300311706##quaType',
-            'http://vocab.getty.edu/aat/300404621##quaType',
-            'http://vocab.getty.edu/aat/300055665##quaType',
-            'http://vocab.getty.edu/aat/300027200##quaType',
-            'http://vocab.getty.edu/aat/300404333##quaType',
-            'http://id.loc.gov/authorities/names/n78015294##quaGroup',
-            'http://vocab.getty.edu/aat/300404264##quaType',
-            'http://vocab.getty.edu/aat/300417443##quaType',
-            'http://vocab.getty.edu/aat/300026497##quaType',
-            'http://vocab.getty.edu/aat/300215302##quaType'
+            "http://vocab.getty.edu/aat/300264578##quaType",
+            "http://vocab.getty.edu/aat/300435704##quaType",
+            "http://id.loc.gov/authorities/names/n80008747##quaGroup",
+            "http://vocab.getty.edu/aat/300133046##quaType",
+            "http://vocab.getty.edu/aat/300025883##quaType",
+            "http://vocab.getty.edu/aat/300435452##quaType",
+            "http://vocab.getty.edu/aat/300435430##quaType",
+            "http://vocab.getty.edu/aat/300202362##quaType",
+            "http://vocab.getty.edu/aat/300311706##quaType",
+            "http://vocab.getty.edu/aat/300404621##quaType",
+            "http://vocab.getty.edu/aat/300055665##quaType",
+            "http://vocab.getty.edu/aat/300027200##quaType",
+            "http://vocab.getty.edu/aat/300404333##quaType",
+            "http://id.loc.gov/authorities/names/n78015294##quaGroup",
+            "http://vocab.getty.edu/aat/300404264##quaType",
+            "http://vocab.getty.edu/aat/300417443##quaType",
+            "http://vocab.getty.edu/aat/300026497##quaType",
+            "http://vocab.getty.edu/aat/300215302##quaType",
         ]
         idmap = self.configs.get_idmap()
         # They might not exist yet if idmap is empty
@@ -70,12 +70,7 @@ class MlMapper(Mapper):
         self.ref_ctr_excludes.update(set(non_global_excludes))
 
     def _walk_node_ref(self, node, refs, all_refs, top=False, ignore=False):
-        if (
-            not top
-            and "id" in node
-            and node["id"] is not None
-            and node["id"].startswith(self.configs.internal_uri)
-        ):
+        if not top and "id" in node and node["id"] is not None and node["id"].startswith(self.configs.internal_uri):
             # record node['id']
             if not node["id"] in all_refs:
                 all_refs.append(node["id"])
@@ -158,23 +153,16 @@ class MlMapper(Mapper):
         elif typ in ["HumanMadeObject", "DigitalObject"]:
             # facets["uiType"] = "CollectionItem"
             prefix = "item"
-        elif archive and typ == "Set":
+        elif typ == "Set":
             # facets["uiType"] = "CollectionWork"
-            prefix = "work"
+            prefix = "set"
         elif typ in ["Person", "Group"]:
             # facets["uiType"] = "Agent"
             prefix = "agent"
         elif typ == "Place":
             # facets["uiType"] = "Place"
             prefix = "place"
-        elif typ in [
-            "Type",
-            "Language",
-            "Material",
-            "Currency",
-            "MeasurementUnit",
-            "Set",
-        ]:
+        elif typ in ["Type", "Language", "Material", "Currency", "MeasurementUnit"]:
             # Set here is Collection / Holdings. UI decision to put in with concepts
             # facets["uiType"] = "Concept"
             prefix = "concept"
@@ -269,11 +257,7 @@ class MlMapper(Mapper):
         isMFHD = False
         if "identified_by" in data:
             for i in data["identified_by"]:
-                if (
-                    i["type"] == "Identifier"
-                    and "content" in i
-                    and i["content"].startswith("ils:yul:mfhd:")
-                ):
+                if i["type"] == "Identifier" and "content" in i and i["content"].startswith("ils:yul:mfhd:"):
                     isMFHD = True
                     break
 
@@ -309,13 +293,9 @@ class MlMapper(Mapper):
                     node = [node]
                 for n in node:
                     if "carried_out_by" in n:
-                        agents.extend(
-                            [x["id"] for x in n["carried_out_by"] if "id" in x]
-                        )
+                        agents.extend([x["id"] for x in n["carried_out_by"] if "id" in x])
                     if "took_place_at" in n:
-                        places.extend(
-                            [x["id"] for x in n["took_place_at"] if "id" in x]
-                        )
+                        places.extend([x["id"] for x in n["took_place_at"] if "id" in x])
                     if "technique" in n:
                         techs.extend([x["id"] for x in n["technique"] if "id" in x])
                     if "caused_by" in n:
@@ -336,21 +316,13 @@ class MlMapper(Mapper):
                     if "part" in n:
                         for p in n["part"]:
                             if "carried_out_by" in p:
-                                agents.extend(
-                                    [x["id"] for x in p["carried_out_by"] if "id" in x]
-                                )
+                                agents.extend([x["id"] for x in p["carried_out_by"] if "id" in x])
                             if "took_place_at" in p:
-                                places.extend(
-                                    [x["id"] for x in p["took_place_at"] if "id" in x]
-                                )
+                                places.extend([x["id"] for x in p["took_place_at"] if "id" in x])
                             if "technique" in p:
-                                techs.extend(
-                                    [x["id"] for x in p["technique"] if "id" in x]
-                                )
+                                techs.extend([x["id"] for x in p["technique"] if "id" in x])
                             if "caused_by" in p:
-                                causes.extend(
-                                    [x["id"] for x in p["caused_by"] if "id" in x]
-                                )
+                                causes.extend([x["id"] for x in p["caused_by"] if "id" in x])
                             if "influenced_by" in p:
                                 for inf in p["influenced_by"]:
                                     if "id" in inf:
@@ -369,58 +341,22 @@ class MlMapper(Mapper):
                                     if "assigned" in aa:
                                         for p2 in aa["assigned"]:
                                             if "carried_out_by" in p2:
-                                                agents.extend(
-                                                    [
-                                                        x["id"]
-                                                        for x in p2["carried_out_by"]
-                                                        if "id" in x
-                                                    ]
-                                                )
+                                                agents.extend([x["id"] for x in p2["carried_out_by"] if "id" in x])
                                             if "took_place_at" in p2:
-                                                places.extend(
-                                                    [
-                                                        x["id"]
-                                                        for x in p2["took_place_at"]
-                                                        if "id" in x
-                                                    ]
-                                                )
+                                                places.extend([x["id"] for x in p2["took_place_at"] if "id" in x])
                                             if "technique" in p2:
-                                                techs.extend(
-                                                    [
-                                                        x["id"]
-                                                        for x in p2["technique"]
-                                                        if "id" in x
-                                                    ]
-                                                )
+                                                techs.extend([x["id"] for x in p2["technique"] if "id" in x])
 
                     if "attributed_by" in n:
                         for p in n["attributed_by"]:
                             if "assigned" in p:
                                 for p2 in p["assigned"]:
                                     if "carried_out_by" in p2:
-                                        agents.extend(
-                                            [
-                                                x["id"]
-                                                for x in p2["carried_out_by"]
-                                                if "id" in x
-                                            ]
-                                        )
+                                        agents.extend([x["id"] for x in p2["carried_out_by"] if "id" in x])
                                     if "took_place_at" in p2:
-                                        places.extend(
-                                            [
-                                                x["id"]
-                                                for x in p2["took_place_at"]
-                                                if "id" in x
-                                            ]
-                                        )
+                                        places.extend([x["id"] for x in p2["took_place_at"] if "id" in x])
                                     if "technique" in p2:
-                                        techs.extend(
-                                            [
-                                                x["id"]
-                                                for x in p2["technique"]
-                                                if "id" in x
-                                            ]
-                                        )
+                                        techs.extend([x["id"] for x in p2["technique"] if "id" in x])
 
                 for a in agents:
                     t = {"subject": me, "predicate": f"{luxns}{apred}", "object": a}
@@ -484,9 +420,7 @@ class MlMapper(Mapper):
             facets["nationalityId"] = [
                 x["id"]
                 for x in data.get("classified_as", [])
-                if self.globals["nationality"]
-                in [y["id"] for y in x.get("classified_as", [])]
-                and "id" in x
+                if self.globals["nationality"] in [y["id"] for y in x.get("classified_as", [])] and "id" in x
             ]
             for f in facets["nationalityId"]:
                 t = {
@@ -499,9 +433,7 @@ class MlMapper(Mapper):
             facets["occupationId"] = [
                 x["id"]
                 for x in data.get("classified_as", [])
-                if self.globals["occupation"]
-                in [y["id"] for y in x.get("classified_as", [])]
-                and "id" in x
+                if self.globals["occupation"] in [y["id"] for y in x.get("classified_as", [])] and "id" in x
             ]
             for f in facets["occupationId"]:
                 t = {"subject": me, "predicate": f"{luxns}agentOccupation", "object": f}
@@ -527,33 +459,12 @@ class MlMapper(Mapper):
             facets["genderId"] = [
                 x["id"]
                 for x in data.get("classified_as", [])
-                if self.globals["gender"]
-                in [y["id"] for y in x.get("classified_as", [])]
-                and "id" in x
+                if self.globals["gender"] in [y["id"] for y in x.get("classified_as", [])] and "id" in x
             ]
             for f in facets["genderId"]:
                 t = {"subject": me, "predicate": f"{luxns}agentGender", "object": f}
                 ml["triples"].append({"triple": t})
 
-            # if "born" in data and "timespan" in data["born"]:
-            #     facets["agentBeginDate"] = data["born"]["timespan"].get("begin_of_the_begin", "")
-            # if "died" in data and "timespan" in data["died"]:
-            #     facets["agentEndDate"] = data["died"]["timespan"].get("end_of_the_end", "")
-
-        # elif data["type"] == "Group":
-        #     facets["groupId"] = data["id"]
-        #     if "formed_by" in data and "timespan" in data["formed_by"]:
-        #         facets["agentBeginDate"] = data["formed_by"]["timespan"].get("begin_of_the_begin", "")
-        #     if "dissolved_by" in data and "timespan" in data["dissolved_by"]:
-        #         facets["agentEndDate"] = data["dissolved_by"]["timespan"].get("end_of_the_end", "")
-
-        # elif data["type"] in ["HumanMadeObject", "DigitalObject", "LinguisticObject"]:
-        #     # Type of work / supertype
-        #     facets["superType"] = [
-        #         x["id"]
-        #         for x in data.get("classified_as", [])
-        #         if self.globals["typeOfWork"] in [y["id"] for y in x.get("classified_as", [])] and "id" in x
-        #     ]
         elif data["type"] == "Set":
             if "used_for" in data:
                 for uf in data["used_for"]:
@@ -653,7 +564,14 @@ class MlMapper(Mapper):
 
         elif data["type"] in ["LinguisticObject", "Set"]:
             if "about" in data:
-                for a in data["about"]:
+                subs = []
+                for s in data["about"]:
+                    if "id" in s:
+                        subs.append(s)
+                    elif "created_by" in s and "influenced_by" in s["created_by"]:
+                        subs.extend(s["created_by"]["influenced_by"])
+
+                for a in subs:
                     if "id" in a:
                         t = {
                             "subject": me,
@@ -826,10 +744,7 @@ class MlMapper(Mapper):
             ml["triples"].append({"triple": t})
             t2 = {"subject": me, "predicate": f"{luxns}any", "object": r}
             ml["triples"].append({"triple": t2})
-            if data["type"] == "Set":
-                t3 = {"subject": me, "predicate": f"{luxns}setAny", "object": r}
-                ml["triples"].append({"triple": t3})
-            elif data["type"] in [
+            if data["type"] in [
                 "Group",
                 "Person",
                 "Place",
@@ -851,7 +766,7 @@ class MlMapper(Mapper):
                 continue
             else:
                 t = {"subject": me, "predicate": f"{luxns}refCtr", "object": r}
-                ml['triples'].append({'triple': t})
+                ml["triples"].append({"triple": t})
 
         # Add boolean flags for hasImage and isOnline
 
@@ -881,21 +796,11 @@ class MlMapper(Mapper):
                                         ap = apo.get("id", "")
                                         if (
                                             ap
-                                            and not ap.startswith(
-                                                "https://search.library.yale.edu/"
-                                            )
-                                            and not ap.startswith(
-                                                "https://collections.britishart.yale.edu/"
-                                            )
-                                            and not ap.startswith(
-                                                "https://artgallery.yale.edu/"
-                                            )
-                                            and not ap.startswith(
-                                                "https://collections.peabody.yale.edu/"
-                                            )
-                                            and not ap.startswith(
-                                                "https://archives.yale.edu/"
-                                            )
+                                            and not ap.startswith("https://search.library.yale.edu/")
+                                            and not ap.startswith("https://collections.britishart.yale.edu/")
+                                            and not ap.startswith("https://artgallery.yale.edu/")
+                                            and not ap.startswith("https://collections.peabody.yale.edu/")
+                                            and not ap.startswith("https://archives.yale.edu/")
                                         ):
                                             facets["isOnline"] = 1
 
@@ -906,10 +811,7 @@ class MlMapper(Mapper):
                 for r in data["subject_to"]:
                     if "classified_as" in r:
                         for c in r["classified_as"]:
-                            if (
-                                "id" in c
-                                and "creativecommons.org/publicdomain" in c["id"]
-                            ):
+                            if "id" in c and "creativecommons.org/publicdomain" in c["id"]:
                                 facets["isPublicDomain"] = 1
 
         ml["indexedProperties"] = facets
