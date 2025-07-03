@@ -137,7 +137,7 @@ if "--validate" in sys.argv:
         my_slice = max_slice = -1
 
     v = cfgs.validator
-    for (src, cfg) in to_do:
+    for src, cfg in to_do:
         rc = cfg["recordcache"]
         for rec in rc.iter_records_slice(my_slice, max_slice):
             sys.stdout.write(".")
@@ -190,11 +190,11 @@ if "--write-refs" in sys.argv:
 
 ### Quick places export
 if "--places" in sys.argv:
-    rc = cfgs.results['merged']['recordcache']
+    rc = cfgs.results["merged"]["recordcache"]
     print("Starting")
-    with open('places.jsonl', 'w') as fh:
-        for rec in rc.iter_records_type('Place'):
-            fh.write(json.dumps(rec['data'], separators=(",", ":")))
+    with open("places.jsonl", "w") as fh:
+        for rec in rc.iter_records_type("Place"):
+            fh.write(json.dumps(rec["data"], separators=(",", ":")))
             fh.write("\n")
     print("Done")
 
@@ -228,7 +228,7 @@ if "--nt" in sys.argv:
                 fh.write(f"{r}\n")
             x += 1
             if not x % 100000:
-                print(f"{x} {time.time()-start}")
+                print(f"{x} {time.time() - start}")
                 sys.stdout.flush()
 
 
@@ -247,7 +247,7 @@ if "--clean-idmap" in sys.argv:
         kill = False
         for v in val:
             if v.startswith("__"):
-                if v.startswith("__2023"):
+                if v.startswith("__2024"):
                     kill = True
                 done = True
                 break
@@ -269,7 +269,7 @@ if "--clean-idmap" in sys.argv:
                 killed[v] = 1
         if not x % 100000:
             durn = int(time.time() - start)
-            print(f"{x} in {durn} = {x/durn}/sec = {total/(x/durn)} total")
+            print(f"{x} in {durn} = {x / durn}/sec = {total / (x / durn)} total")
             print(killed)
 
     print("Cleaned idmap")
@@ -290,8 +290,8 @@ if "--test-ils-idmap" in sys.argv:
         x += 1
         if not x % 50000:
             durn = int(time.time() - start)
-            print(f"{x}/{ttl} = {x/durn}/sec = {ttl/(x/durn)}")
-            print(f"    Found old: {len(old)} = {int(len(old)/x*100)}% = {int(len(old)/x*ttl)} to go")
+            print(f"{x}/{ttl} = {x / durn}/sec = {ttl / (x / durn)}")
+            print(f"    Found old: {len(old)} = {int(len(old) / x * 100)}% = {int(len(old) / x * ttl)} to go")
     with open("old_ils_idmap.txt", "w") as fh:
         for o in old:
             fh.write(f"{o}\n")
