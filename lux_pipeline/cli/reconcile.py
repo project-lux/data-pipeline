@@ -10,4 +10,4 @@ class CommandHandler(CH):
         self.extra_args = {"no_refs": "no_refs", "my_slice": "my_worker", "new_token": "new_token"}
 
     def make_manager(self, wks, args):
-        return ReconcileManager(self.configs, wks)
+        return ReconcileManager(self.configs, wks, args)

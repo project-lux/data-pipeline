@@ -7,8 +7,8 @@ import time
 class LoadManager(TaskUiManager):
     """ """
 
-    def __init__(self, configs, max_workers: int = 0):
-        super().__init__(configs, max_workers)
+    def __init__(self, configs, max_workers: int = 0, args=None):
+        super().__init__(configs, max_workers, args)
         self.overwrite = True
         self.load_type = "records"
 

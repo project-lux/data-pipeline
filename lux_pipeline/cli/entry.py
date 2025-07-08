@@ -6,7 +6,7 @@ import importlib
 from ..config import Config
 import multiprocessing
 import logging
-import ray
+
 
 logger = logging.getLogger("lux_pipeline")
 # Send /everything/ to the logger
@@ -33,7 +33,7 @@ basepath = os.getenv("LUX_BASEPATH", "")
 if basepath:
     try:
         cfgs = Config(basepath=basepath)
-    except:
+    except Exception:
         cfgs = None
 
 if cfgs is not None:
@@ -41,7 +41,7 @@ if cfgs is not None:
         idmap = cfgs.get_idmap()
         cfgs.cache_globals()
         cfgs.instantiate_all()
-    except:
+    except Exception:
         idmap = None
 
 
@@ -61,7 +61,9 @@ def main():
         "--my_worker", "--my-worker", type=int, default=-1, help="Which process this is (null engine)"
     )
     parser.add_argument("--engine", type=str, help="mp, ray, or null for which task distribution engine to use")
-    parser.add_argument("--no-ui", "--no_ui", action="store_true", help="If set, then disable the user interface")
+    parser.add_argument(
+        "--no-ui", "--no_ui", "--disable-ui", action="store_true", help="If set, then disable the user interface"
+    )
     args, rest = parser.parse_known_args()
 
     if args.debug and not args.log:
@@ -117,7 +119,7 @@ def main():
         hdlr = mod.CommandHandler(cfgs)
         if args.debug:
             print(f"Calling process on {hdlr} with {args}, {rest}")
-        result = hdlr.process(args, rest)
+        hdlr.process(args, rest)
     except Exception as e:
         print(f"Failed to process command: {args}\n{e}")
         if args.debug:

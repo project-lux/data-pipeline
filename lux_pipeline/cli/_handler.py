@@ -47,6 +47,7 @@ class CommandHandler(BaseHandler):
         # Here we set up the rich UI
         if args.no_ui:
             layout = None
+            print(xargs)
             manager.process(layout, engine=args.engine, disable_ui=args.no_ui, **xargs)
         else:
             layout = get_layout(self.configs, wks, args.log)

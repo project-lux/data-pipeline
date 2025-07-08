@@ -14,8 +14,8 @@ class ReconcileManager(TaskUiManager):
     manages reconcilation phase
     """
 
-    def __init__(self, configs, max_workers: int = 0):
-        super().__init__(configs, max_workers)
+    def __init__(self, configs, max_workers: int = 0, args=None):
+        super().__init__(configs, max_workers, args)
         self.no_refs = False
         self.ref_mgr = None
         self.reconciler = None

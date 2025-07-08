@@ -1,26 +1,32 @@
-
 from ._task_ui_manager import TaskUiManager
 from lux_pipeline.sources.lux.qlever.mapper import QleverMapper
 from config import importObject
 import logging
+import os
+
 
 class ExportManager(TaskUiManager):
-    """
-    """
-    def __init__(self, configs, max_workers: int = 0):
-        super().__init__(configs, max_workers)
+    """ """
+
+    def __init__(self, configs, max_workers: int = 0, args=None):
+        super().__init__(configs, max_workers, args)
         self.export_type = "marklogic"
         self.cache = "recordcache"
         self.total = -1
         self.out_config = ""
 
-    def prepare_single(self, name, export_type="marklogic", cache="recordcache", ):
+    def prepare_single(
+        self,
+        name,
+        export_type="marklogic",
+        cache="recordcache",
+    ):
         if name in self.configs.internal:
-            self.maybe_add('internal', self.configs.internal[name])
+            self.maybe_add("internal", self.configs.internal[name])
         elif name in self.configs.external:
-            self.maybe_add('external', self.configs.external[name])
+            self.maybe_add("external", self.configs.external[name])
         elif name in self.configs.results:
-            self.maybe_add('results', self.configs.external[name])
+            self.maybe_add("results", self.configs.external[name])
         else:
             raise ValueError(f"Unknown source: {name}")
 
@@ -38,7 +44,7 @@ class ExportManager(TaskUiManager):
             # Create a compressed zip file with one record per 'file'
             # This will be loaded with load --type export
             return None
-        elif '.' in self.export_type:
+        elif "." in self.export_type:
             # try to import a mapper
             try:
                 clss = importObject(self.export_type)
@@ -66,22 +72,24 @@ class ExportManager(TaskUiManager):
         if self.out_config:
             # "marklogic"
             try:
-                export_cache = self.results[self.out_config]['recordcache']
-            except:
-                logging.log(logging.ERROR, f"Could not get a recordcache from {self.out_config}; cannot cache results")
+                export_cache = self.results[self.out_config]["recordcache"]
+            except Exception:
+                logging.log(
+                    logging.ERROR, f"Could not get a recordcache from {self.out_config}; cannot cache results"
+                )
                 export_cache = None
         else:
             export_cache = None
 
-        for (which, src) in self.sources:
+        for which, src in self.sources:
             if mapper is not None:
-                fn = mapper.make_export_filename(src['name'], n)
+                fn = mapper.make_export_filename(src["name"], n)
             else:
                 fn = "lux_{src['name']}_{n}.json"
             self.log(logging.INFO, f"Exporting {fn}")
             cache = src[self.cache]
             ttl = cache.len_estimate()
-            if l < 1000000:
+            if ttl < 1000000:
                 ttl = len(cache)
             if self.max_slice > 1:
                 ttl = ttl // self.max_slice
@@ -90,7 +98,7 @@ class ExportManager(TaskUiManager):
                 self.update_progress_bar(total=ttl, description=fn)
 
             outfn = os.path.join(self.configs.exports_dir, fn)
-            with open(outfn, 'w') as outh:
+            with open(outfn, "w") as outh:
                 for rec in cache.iter_records_slice(n, self.max_slice):
                     yuid = rec["yuid"]
                     if mapper is not None:
@@ -117,7 +125,7 @@ class ExportManager(TaskUiManager):
                         jstr = rec2
                     elif type(rec2) == list:
                         if type(rec2[0]) == str:
-                            jstr = '\n'.join(rec2)
+                            jstr = "\n".join(rec2)
                         elif type(rec2[0]) == dict:
                             js = []
                             for r in rec2:
@@ -125,7 +133,10 @@ class ExportManager(TaskUiManager):
                                 js.append(jr)
                             jstr = "\n".join(js)
                         else:
-                            self.log(logging.CRITICAL, f"Expected dict,str, or list of dict/str, but got list of {type(rec2[0])}")
+                            self.log(
+                                logging.CRITICAL,
+                                f"Expected dict,str, or list of dict/str, but got list of {type(rec2[0])}",
+                            )
                             continue
                     else:
                         self.log(logging.CRITICAL, f"Expected dict,str, or list of dict/str, but got {type(rec2[0])}")
@@ -133,12 +144,11 @@ class ExportManager(TaskUiManager):
                     outh.write(jstr)
                     outh.write("\n")
 
-
     def export_external_used(self, n):
         if len(self.sources) <= n:
             return
         which, src = self.sources[n]
-        cache = src['recordcache']
+        cache = src["recordcache"]
         total = len(cache)
         self.total = total
         fn = f"{src['name']}.zip"
@@ -146,20 +156,20 @@ class ExportManager(TaskUiManager):
         if not self.disable_ui:
             self.update_progress_bar(total=ttl, description=fn)
 
-        datacache = src['datacache']
+        datacache = src["datacache"]
         outfn = os.path.join(self.configs.exports_dir, fn)
         done = {}
-        with zipfile.ZipFile(outfn, 'w', compression=zipfile.ZIP_BZIP2) as fh:
+        with zipfile.ZipFile(outfn, "w", compression=zipfile.ZIP_BZIP2) as fh:
             for ident in cache.iter_keys():
                 ident = self.configs.split_qua(ident)[0]
                 if ident in done:
                     continue
                 done[ident] = 1
                 rec = datacache[ident]
-                outjs = {'data': rec['data']}
+                outjs = {"data": rec["data"]}
                 if not self.disable_ui:
                     self.update_progress_bar(advance=1)
-                with fh.open(ident, 'w') as ffh:
+                with fh.open(ident, "w") as ffh:
                     outs = json.dumps(outjs, separators=(",", ":"))
-                    outb = outs.encode('utf-8')
+                    outb = outs.encode("utf-8")
                     ffh.write(outb)

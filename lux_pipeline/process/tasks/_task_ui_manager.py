@@ -6,9 +6,9 @@ from lux_pipeline.cli.entry import cfgs
 from lux_pipeline.cli._rich import get_bar_from_layout
 import logging
 import ray
+import traceback
 
 logger = logging.getLogger("lux_pipeline")
-import traceback
 
 
 @ray.remote
@@ -20,22 +20,22 @@ class LoggingActor:
     def add_to_log(self, which, level, txt):
         try:
             self.logs[which].append((level, txt))
-        except:
+        except Exception:
             self.logs[which] = [(level, txt)]
 
     def get_log(self, which):
         if which == -1:
             return self.logs
         try:
-            l = self.logs[which]
+            entry = self.logs[which]
             self.logs[which] = []
-            return l
-        except:
+            return entry
+        except Exception:
             self.logs[which] = []
             return []
 
     def update_progress_bar(self, which, completed=-1, total=-1, description=None):
-        if not which in self.bars:
+        if which not in self.bars:
             self.bars[which] = {"completed": -1, "total": -1, "description": ""}
         if completed != -1:
             self.bars[which]["completed"] = completed
@@ -49,7 +49,7 @@ class LoggingActor:
             return self.bars
         try:
             return self.bars[which]
-        except:
+        except Exception:
             self.bars[which] = {"completed": -1, "total": -1, "description": ""}
             return self.bars[which]
 
@@ -134,8 +134,8 @@ class MpEngine(ProcessingEngine):
         self.temp_log.append((level, message))
         if time.time() > self.last_log_time + 0.5:
             self.messages[:] = []
-            for l in self.temp_log:
-                self.messages.append(l)
+            for entry in self.temp_log:
+                self.messages.append(entry)
             self.temp_log = []
 
     def process(self, layout):
@@ -164,7 +164,7 @@ class MpEngine(ProcessingEngine):
                 for n in range(self.max_workers):
                     futures.append(executor.submit(self._distributed, n, [bars[n], messages[n]]))
                 if not self.manager.disable_ui:
-                    while (n_finished := sum([future.done() for future in futures])) < len(futures):
+                    while (sum([future.done() for future in futures])) < len(futures):
                         for k, v in bars.items():
                             if v:
                                 bar = get_bar_from_layout(layout, k)
@@ -262,7 +262,7 @@ class RayEngine(ProcessingEngine):
             if ready_refs:
                 # Completed tasks
                 res = ray.get(ready_refs[0])
-                if type(res) == int:
+                if type(res) is int:
                     # process response from task
                     pass
                 # logger.log(logging.DEBUG, f"Got {res} from task")
@@ -286,7 +286,7 @@ class RayEngine(ProcessingEngine):
 
 
 class TaskUiManager:
-    def __init__(self, configs, max_workers: int = 0):
+    def __init__(self, configs, max_workers: int = 0, args=None):
         self.configs = configs
         self.disable_ui = False
         if max_workers > 0:
@@ -295,8 +295,13 @@ class TaskUiManager:
             self.max_workers = configs.max_workers
         self.sources = []
         self.my_slice = -1
+        if args is not None:
+            if hasattr(args, "my_worker") and args.my_worker > -1:
+                self.my_slice = args.my_worker
+
         self.engine = None
         self.local_debug = False
+        self.command_line_args = args
 
         self.bar = {"total": -1, "completed": -1, "description": None}
         self.messages = []

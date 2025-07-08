@@ -11,9 +11,9 @@ class DownloadManager(TaskUiManager):
     Each source configuration file contains a Downloader class. The Downloader class is responsible for preparing a list of urls that need to be downloaded. To see an example, see the BaseDownloader class.
     """
 
-    def __init__(self, configs, max_workers: int = 0):
+    def __init__(self, configs, max_workers: int = 0, args=None):
         self.download_type = "all"
-        super().__init__(configs, max_workers)
+        super().__init__(configs, max_workers, args)
 
     def _distributed(self, n):
         super()._distributed(n)
