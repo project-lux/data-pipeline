@@ -208,7 +208,7 @@ if "--nt" in sys.argv:
     else:
         my_slice = max_slice = -1
 
-    from pipeline.sources.lux.qlever.mapper import QleverMapper
+    from pipeline.sources.lux.qlever.mapper2 import QleverMapper
 
     mpr = QleverMapper(cfgs.results["marklogic"])
     rc = cfgs.results["merged"]["recordcache"]
