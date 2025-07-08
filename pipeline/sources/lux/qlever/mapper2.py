@@ -22,7 +22,8 @@ class QleverMapper(Mapper):
 
         self.remove_diacritics = False
         self.min_word_chars = 4
-        self.padding_char = "Þ"
+        # self.padding_char = "Þ"
+        self.padding_char = b"\xc3\xbe".decode("utf-8")
 
         self.primaryName = self.globals["primaryName"]
         self.sortName = self.globals["sortName"]
@@ -69,6 +70,7 @@ class QleverMapper(Mapper):
         string = string.replace("\t", " ")
         string = string.replace('"', "")
         string = string.replace("\\", "")
+        string = string.replace("-", " ")
         # remove diacritics
         if self.remove_diacritics:
             nfkd_form = unicodedata.normalize("NFD", string)
@@ -355,6 +357,22 @@ class QleverMapper(Mapper):
                     triples.append(self.triple_pattern.format(**t))
                     anyt["object"] = about["id"]
                     triples.append(self.triple_pattern.format(**anyt))
+
+            # Public Domain
+            #
+            isPublicDomain = 0
+            if "subject_to" in data:
+                for r in data["subject_to"]:
+                    if "classified_as" in r:
+                        for c in r["classified_as"]:
+                            if "id" in c and "creativecommons.org/publicdomain" in c["id"]:
+                                isPublicDomain = 1
+                                break
+
+            lt["datatype"] = self.number_type
+            lt["value"] = isPublicDomain
+            lt["predicate"] = f"{self.luxns}{pfx}IsPublicDomain"
+            triples.append(self.literal_pattern.format(**lt))
 
             # Set specific predicates
             if pfx == "set":
