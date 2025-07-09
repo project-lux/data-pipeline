@@ -10,7 +10,6 @@ If there isn't a search, then there isn't a triple.
 
 ### TO DO
 # Consider: make different text fields for case sensitive/insensitive, diacritics/not diacritics
-#   and padded / not padded
 
 
 class QleverMapper(Mapper):
@@ -21,7 +20,7 @@ class QleverMapper(Mapper):
         self.globals = self.configs.globals
 
         self.remove_diacritics = False
-        self.min_word_chars = 4
+        self.min_word_chars = 0
         # self.padding_char = "Þ"
         self.padding_char = b"\xc3\xbe".decode("utf-8")
 
@@ -196,6 +195,7 @@ class QleverMapper(Mapper):
         # digital image
         # true iff representation/digitally_shown_by/access_point/id
         rep = data.get("representation", None)
+        hasDigitalImage = 0
         if rep:
             rep = rep[0].get("digitally_shown_by", None)
             if rep:
@@ -205,6 +205,7 @@ class QleverMapper(Mapper):
                     if rep:
                         lt["predicate"] = f"{self.luxns}{pfx}HasDigitalImage"
                         lt["value"] = 1
+                        hasDigitalImage = 1
                         lt["datatype"] = self.number_type
                         triples.append(self.literal_pattern.format(**lt))
 
@@ -333,6 +334,34 @@ class QleverMapper(Mapper):
                 triples.append(self.triple_pattern.format(**t))
                 anyt["object"] = parent["id"]
                 triples.append(self.triple_pattern.format(**anyt))
+
+        # isOnline for items, works, sets
+        if pfx in ["item", "work", "set"]:
+            isOnline = hasDigitalImage
+            if not isOnline:
+                if data["type"] == "DigitalObject" and "access_point" in data:
+                    isOnline = 1
+                elif "subject_of" in data:
+                    for so in data["subject_of"]:
+                        if "digitally_carried_by" in so:
+                            for dcb in so["digitally_carried_by"]:
+                                if "access_point" in dcb:
+                                    for apo in dcb["access_point"]:
+                                        if "id" in apo:
+                                            ap = apo.get("id", "")
+                                            if (
+                                                ap
+                                                and not ap.startswith("https://search.library.yale.edu/")
+                                                and not ap.startswith("https://collections.britishart.yale.edu/")
+                                                and not ap.startswith("https://artgallery.yale.edu/")
+                                                and not ap.startswith("https://collections.peabody.yale.edu/")
+                                                and not ap.startswith("https://archives.yale.edu/")
+                                            ):
+                                                isOnline = 1
+            lt["predicate"] = f"{self.luxns}{pfx}IsOnline"
+            lt["value"] = isOnline
+            lt["datatype"] = self.number_type
+            triples.append(self.literal_pattern.format(**lt))
 
         # Class Specific relationships
         if pfx in ["work", "set"]:
