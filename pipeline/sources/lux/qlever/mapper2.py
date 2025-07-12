@@ -2,6 +2,7 @@ from pipeline.process.base.mapper import Mapper
 from bs4 import BeautifulSoup
 import unicodedata
 from string import whitespace, punctuation
+from shapely.wkt import loads
 
 """
 Create a mapper that produces completely artificial triples.
@@ -169,7 +170,7 @@ class QleverMapper(Mapper):
             else:
                 cxns = [x.get("id", None) for x in idb.get("classified_as", [])]
                 if self.sortIdentifier in cxns:
-                    lt["predicate"] = f"{self.luxns}{pfx}SortIdentifier"
+                    lt["predicate"] = f"{self.luxns}sortIdentifier"
                     triples.append(self.literal_pattern.format(**lt))
                 else:
                     lt["predicate"] = f"{self.luxns}{pfx}Identifier"
@@ -488,10 +489,27 @@ class QleverMapper(Mapper):
         elif pfx == "place":
             wkt = data.get("defined_by", "")
             if wkt:
-                lt["predicate"] = f"{self.luxns}placeWKT"
-                lt["value"] = wkt
-                lt["datatype"] = self.wkt_type
-                triples.append(self.literal_pattern.format(**lt))
+                # Clean the WKT string of points that can't exist
+                # parse the string using shapely
+                okay = True
+                try:
+                    geom = loads(wkt)
+                    if geom.is_empty:
+                        okay = False
+                except Exception as e:
+                    okay = False
+                if okay:
+                    # step through each point in the geometry
+                    # and test if within the bounds of lat/long
+                    for point in geom.exterior.coords:
+                        if not (-90 <= point[1] <= 90 and -180 <= point[0] <= 180):
+                            okay = False
+                            break
+                    if okay:
+                        lt["predicate"] = f"{self.luxns}placeWKT"
+                        lt["value"] = wkt
+                        lt["datatype"] = self.wkt_type
+                        triples.append(self.literal_pattern.format(**lt))
 
         elif pfx == "event":
             whos = data.get("carried_out_by", [])
