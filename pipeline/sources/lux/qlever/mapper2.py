@@ -501,10 +501,14 @@ class QleverMapper(Mapper):
                 if okay:
                     # step through each point in the geometry
                     # and test if within the bounds of lat/long
-                    for point in geom.exterior.coords:
-                        if not (-90 <= point[1] <= 90 and -180 <= point[0] <= 180):
+                    if geom.geom_type == "Point":
+                        if not (-90 <= geom.y <= 90 and -180 <= geom.x <= 180):
                             okay = False
-                            break
+                    else:
+                        for point in geom.exterior.coords:
+                            if not (-90 <= point[1] <= 90 and -180 <= point[0] <= 180):
+                                okay = False
+                                break
                     if okay:
                         lt["predicate"] = f"{self.luxns}placeWKT"
                         lt["value"] = wkt
