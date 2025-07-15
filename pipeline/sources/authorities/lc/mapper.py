@@ -352,7 +352,7 @@ class LcMapper(Mapper):
 
 class LcshMapper(LcMapper):
     def __init__(self, config):
-        Mapper.__init__(self, config)
+        LcMapper.__init__(self, config)
         fn = os.path.join(config["all_configs"].data_dir, "periods_by_name.json")
         if os.path.exists(fn):
             with open(fn) as fh:
