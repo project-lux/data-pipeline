@@ -127,19 +127,21 @@ class PleiadesMapper(Mapper):
         # Assign first name as primary
         primary_name_data = all_names[0]
         primary_name = vocab.PrimaryName(content=primary_name_data["content"])
-        if primary_name_data["language"] == "en":
-            primary_name.language = model.Language(ident="http://vocab.getty.edu/aat/300388277")  # English
-        else:
-            primary_name.language = model.Language(label=primary_name_data["language"])
+        lang_code = primary_name_data["language"]
+        if len(lang_code) == 3:
+            lang_code = self.lang_three_to_two.get(lang_code, lang_code)
+        if lang_code in self.process_langs:
+            primary_name.language = self.process_langs[lang_code]
         top.identified_by = primary_name
         
         # Add remaining names as alternate names
         for name_data in all_names[1:]:
             alt_name = vocab.AlternateName(content=name_data["content"])
-            if name_data["language"] == "en":
-                alt_name.language = model.Language(ident="http://vocab.getty.edu/aat/300388277")  # English
-            else:
-                alt_name.language = model.Language(label=name_data["language"])
+            lang_code = name_data["language"]
+            if len(lang_code) == 3:
+                lang_code = self.lang_three_to_two.get(lang_code, lang_code)
+            if lang_code in self.process_langs:
+                alt_name.language = self.process_langs[lang_code]
             top.identified_by = alt_name
 
         # Add description
