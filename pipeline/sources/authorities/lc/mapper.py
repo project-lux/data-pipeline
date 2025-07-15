@@ -436,6 +436,9 @@ class LcshMapper(LcMapper):
                                     # first check Periods in the mapper
                                     uri = self.period_names.get(lbl.lower(), "")
                                     if uri:
+                                        uri = uri.replace(
+                                            "yul:", "https://linkedhttps://linked-art.library.yale.edu/node/"
+                                        )
                                         ref = model.Period(uri, label=lbl)
                                     else:
                                         # Now do reconciliation
