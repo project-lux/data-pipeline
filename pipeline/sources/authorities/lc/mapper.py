@@ -56,7 +56,7 @@ class LcMapper(Mapper):
                     "classified_as": [{"id": "http://vocab.getty.edu/aat/300404670"}],
                 }
             ],
-            "source": ""
+            "source": "",
         }
 
         # Map rectype to reconciler and record type
@@ -64,17 +64,17 @@ class LcMapper(Mapper):
             "Place": nafreconciler,
             "Concept": shreconciler,
             "Group": nafreconciler,
-            "Person": nafreconciler, 
+            "Person": nafreconciler,
             "Type": shreconciler,
             "Activity": nafreconciler,
             "Material": shreconciler,
-            "Language": shreconciler
+            "Language": shreconciler,
         }
 
         if rectype in reconcilers:
             reconciler = reconcilers[rectype]
             rec["type"] = rectype
-            if rectype in ["Place","Group","Person","Activity"]:
+            if rectype in ["Place", "Group", "Person", "Activity"]:
                 rec["source"] = "lcnaf"
             else:
                 rec["source"] = "lcsh"
@@ -85,7 +85,6 @@ class LcMapper(Mapper):
             reconrec = None
 
         return reconrec
-
 
     def fix_identifier(self, identifier):
         if identifier == "@@LMI-SPECIAL-TERM@@":
@@ -245,7 +244,6 @@ class LcMapper(Mapper):
         if type(ex) != list:
             ex = [ex]
 
-
         if top.__class__ != model.Group:
             later = new.get("madsrdf:hasLaterEstablishedForm", [])
             if later:
@@ -263,7 +261,7 @@ class LcMapper(Mapper):
                     txt = txt.get("@value") if isinstance(txt, dict) else txt
                     eid = e.get("@id")
 
-                    reid = None 
+                    reid = None
                     if eid and eid.startswith("_:"):
                         if txt:
                             reid = self.build_recs_and_reconcile(txt, type(top).__name__)
@@ -331,16 +329,6 @@ class LcMapper(Mapper):
                 continue
             doneids.append(eid)
             equiv = topcls(ident=eid)
-            # if 'madsrdf:authoritativeLabel' in e:
-            #    xl = e['madsrdf:authoritativeLabel']
-            #    if type(xl) == list:
-            #        xl = xl[0]
-            #    if type(xl) == dict:
-            #        xl = xl['@value']
-            #    if type(xl) == str:
-            #        equiv._label = xl
-            #    else:
-            #        print(f"found weird equiv label: {xl}")
             top.equivalent = equiv
 
     def reconstitute(self, js, nodes):
@@ -363,6 +351,15 @@ class LcMapper(Mapper):
 
 
 class LcshMapper(LcMapper):
+    def __init__(self, config):
+        Mapper.__init__(self, config)
+        fn = os.path.join(config["all_configs"].data_dir, "periods_by_name.json")
+        if os.path.exists(fn):
+            with open(fn) as fh:
+                self.period_names = json.load(fh)
+        else:
+            self.period_names = {}
+
     def transform(self, record, rectype=None, reference=False):
         rec = record["data"]
         if not rec["@graph"] or rec["@graph"] == {}:
@@ -409,7 +406,15 @@ class LcshMapper(LcMapper):
                         blbl = ""
                     # concept broader concept
                     top.broader = topcls(ident=bident, label=blbl)
-            #Eventually add in handling for member_of Group, broader Place, part_of Events
+                # Eventually add in handling for member_of Group, broader Place, part_of Events
+
+                comps = new.get("madsrdf:componentList", [])
+                if comps:
+                    cre = model.Creation()
+                    for c in comps:
+                        # add c to influenced_by in the Creation after mapping it to the right class
+                        print(c)
+                        cre.influenced_by = c
 
         js = model.factory.toJSON(top)
         return {"identifier": record["identifier"], "data": js, "source": self.name}
@@ -452,7 +457,6 @@ class LcnafMapper(LcMapper):
             self.parenthetical_places = json.loads(data)
         else:
             self.parenthetical_places = {}
-
 
     def transform(self, record, rectype=None, reference=False):
         try:
