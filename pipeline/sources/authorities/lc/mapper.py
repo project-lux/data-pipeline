@@ -420,7 +420,7 @@ class LcshMapper(LcMapper):
                     cre = model.Creation()
                     if type(comps) is dict and "@list" in comps:
                         comps = comps["@list"]
-                    if type(comp) is not list:
+                    if type(comps) is list:
                         for c in comps:
                             # add c to influenced_by in the Creation after mapping it to the right class
                             if type(c) is dict and "@id" in c:
