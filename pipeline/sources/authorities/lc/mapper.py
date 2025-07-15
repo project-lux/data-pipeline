@@ -418,6 +418,7 @@ class LcshMapper(LcMapper):
                 if comps:
                     print(comps)
                     cre = model.Creation()
+                    top.created_by = cre
                     if type(comps) is dict and "@list" in comps:
                         comps = comps["@list"]
                     if type(comps) is list:
@@ -427,19 +428,32 @@ class LcshMapper(LcMapper):
                                 uri = c["@id"]
                                 if uri[0] == "_":
                                     # blank node, try to reconcile based on name
-
+                                    lbl = c.get("madsrdf:authoritativeLabel", {"@value": ""})
+                                    if type(lbl) is list:
+                                        lbl = lbl[0]
+                                    if type(lbl) is dict:
+                                        lbl = lbl["@value"]
                                     # first check Periods in the mapper
-
-                                    # Now do reconciliation
-                                    #
-                                    cre.influenced_by = c
+                                    uri = self.periods_by_name.get(lbl.lower(), "")
+                                    if uri:
+                                        ref = model.Period(uri, label=lbl)
+                                    else:
+                                        # Now do reconciliation
+                                        print(c)
+                                        ref = {"_label": lbl}
+                                    cre.influenced_by = ref
                                 else:
                                     # Need to know what class this is
-                                    ident = uri.rsplit("/", 1)[-1]
-                                    if "subjects" in uri:
-                                        ref = self.get_reference(ident)
+                                    if "@type" in c and c["@type"] in self.type_map:
+                                        clsnm = self.type_map[c["@type"]]
+                                        cls = getattr(model, clsnm)
+                                        ref = cls(ident=uri)
                                     else:
-                                        ref = self.lcnaf_mapper.get_reference(ident)
+                                        ident = uri.rsplit("/", 1)[-1]
+                                        if "subjects" in uri:
+                                            ref = self.get_reference(ident)
+                                        else:
+                                            ref = self.lcnaf_mapper.get_reference(ident)
                                     cre.influenced_by = ref
                             else:
                                 print(f"Unknown form of component: {c}")
