@@ -450,6 +450,8 @@ class LcshMapper(LcMapper):
                                                 pass
                                             typ = typ[0]
                                         lbl = c.get("madsrdf:authoritativeLabel", {"@value": ""})
+                                        if type(lbl) is dict:
+                                            lbl = lbl.get("@value", "")
                                         print(f"{record['identifier']} -- {typ} -- {lbl}")
                                         # print(c)
                                         ref = {"_label": lbl}
