@@ -83,13 +83,15 @@ class PleiadesMapper(Mapper):
         
         # Add primary name
         primary_name = vocab.PrimaryName(content=label)
-        primary_name.language = model.Language(ident="http://vocab.getty.edu/aat/300388277")  # English
+        if 'en' in self.process_langs:
+            primary_name.language = self.process_langs['en']
         top.identified_by = primary_name
         
         # Add description if present
         if description:
             desc = vocab.Description(content=description)
-            desc.language = model.Language(ident="http://vocab.getty.edu/aat/300388277")  # English
+            if 'en' in self.process_langs:
+                desc.language = self.process_langs['en']
             top.referred_to_by = desc
         
         # Add equivalents from owl:sameAs statements
@@ -148,7 +150,8 @@ class PleiadesMapper(Mapper):
         if "description" in rec:
             desc = vocab.Description(content=rec["description"])
             # Add English language
-            desc.language = model.Language(ident="http://vocab.getty.edu/aat/300388277")  # English
+            if 'en' in self.process_langs:
+                desc.language = self.process_langs['en']
             top.referred_to_by = desc
 
         # Add place types using placeTypeURIs directly
