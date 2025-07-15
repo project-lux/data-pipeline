@@ -339,8 +339,10 @@ class LcMapper(Mapper):
         for k, v in js.items():
             if type(v) == dict and "@id" in v and v["@id"] in nodes:
                 js[k] = self.reconstitute(nodes[v["@id"]], nodes)
-            elif type(v) == list:
+            elif type(v) == list or (type(v) is dict and "@list" in v):
                 new = []
+                if type(v) is dict:
+                    v = v["@list"]
                 for vi in v:
                     if type(vi) == dict and "@id" in vi and vi["@id"] in nodes:
                         new.append(self.reconstitute(nodes[vi["@id"]], nodes))
@@ -359,11 +361,15 @@ class LcshMapper(LcMapper):
                 self.period_names = json.load(fh)
         else:
             self.period_names = {}
+        self.lcnaf_mapper = None
 
     def transform(self, record, rectype=None, reference=False):
         rec = record["data"]
         if not rec["@graph"] or rec["@graph"] == {}:
             return None
+
+        if self.lcnaf_mapper is None:
+            self.lcnaf_mapper = self.configs.external["lcnaf"]["mapper"]
 
         new = LcMapper.transform(self, record, rectype)
         if not new:
@@ -408,13 +414,35 @@ class LcshMapper(LcMapper):
                     top.broader = topcls(ident=bident, label=blbl)
                 # Eventually add in handling for member_of Group, broader Place, part_of Events
 
-                comps = new.get("madsrdf:componentList", [])
+                comps = new.get("madsrdf:componentList", {})
                 if comps:
                     print(comps)
                     cre = model.Creation()
-                    for c in comps:
-                        # add c to influenced_by in the Creation after mapping it to the right class
-                        cre.influenced_by = c
+                    if type(comps) is dict and "@list" in comps:
+                        comps = comps["@list"]
+                    if type(comp) is not list:
+                        for c in comps:
+                            # add c to influenced_by in the Creation after mapping it to the right class
+                            if type(c) is dict and "@id" in c:
+                                uri = c["@id"]
+                                if uri[0] == "_":
+                                    # blank node, try to reconcile based on name
+
+                                    # first check Periods in the mapper
+
+                                    # Now do reconciliation
+                                    #
+                                    cre.influenced_by = c
+                                else:
+                                    # Need to know what class this is
+                                    ident = uri.rsplit("/", 1)[-1]
+                                    if "subjects" in uri:
+                                        ref = self.get_reference(ident)
+                                    else:
+                                        ref = self.lcnaf_mapper.get_reference(ident)
+                                    cre.influenced_by = ref
+                            else:
+                                print(f"Unknown form of component: {c}")
 
         js = model.factory.toJSON(top)
         return {"identifier": record["identifier"], "data": js, "source": self.name}
