@@ -441,8 +441,17 @@ class LcshMapper(LcMapper):
                                         ref = model.Period(uri, label=lbl)
                                     else:
                                         # Now do reconciliation
-                                        print(record["identifier"])
-                                        print(c)
+                                        #
+                                        typ = c["@type"]
+                                        if type(typ) is list:
+                                            try:
+                                                typ.remove("madsrdf:Authority")
+                                            except:
+                                                pass
+                                            typ = typ[0]
+                                        lbl = c.get("madsrdf:authoritativeLabel", {"@value": ""})
+                                        print(f"{record['identifier']} -- {typ} -- {lbl}")
+                                        # print(c)
                                         ref = {"_label": lbl}
                                     cre.influenced_by = ref
                                 else:
