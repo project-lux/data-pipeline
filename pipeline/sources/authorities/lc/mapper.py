@@ -434,7 +434,7 @@ class LcshMapper(LcMapper):
                                     if type(lbl) is dict:
                                         lbl = lbl["@value"]
                                     # first check Periods in the mapper
-                                    uri = self.periods_by_name.get(lbl.lower(), "")
+                                    uri = self.period_names.get(lbl.lower(), "")
                                     if uri:
                                         ref = model.Period(uri, label=lbl)
                                     else:
