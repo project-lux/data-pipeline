@@ -21,6 +21,7 @@ class PleiadesMapper(Mapper):
         t = geom.get("type")
         coords = geom.get("coordinates")
         if t == "Point":
+            #  Geometry and coordinates (long, lat order): { "type": "Point", "coordinates": [ 31.18, 36.935499999999998 ] }
             return f"POINT ({coords[0]} {coords[1]})"
         elif t == "Polygon":
             # Polygon: list of linear rings (first is exterior)
@@ -196,7 +197,8 @@ class PleiadesMapper(Mapper):
         return {"identifier": recid, "data": data, "source": "pleiades"}
 
     def transform(self, record, rectype, reference=False):
-
+        if not rectype:
+            rectype = self.guess_type(record)
         if rectype == "Place":
             return self.parse_place(record)
         elif rectype == "Type":
