@@ -426,6 +426,7 @@ class LcshMapper(LcMapper):
                             # add c to influenced_by in the Creation after mapping it to the right class
                             if type(c) is dict and "@id" in c:
                                 uri = c["@id"]
+
                                 if uri[0] == "_":
                                     # blank node, try to reconcile based on name
                                     lbl = c.get("madsrdf:authoritativeLabel", {"@value": ""})
@@ -446,6 +447,7 @@ class LcshMapper(LcMapper):
                                         ref = {"_label": lbl}
                                     cre.influenced_by = ref
                                 else:
+                                    uri = uri.replace("rwo/agents", "authorities/names")
                                     # Need to know what class this is
                                     if "@type" in c and c["@type"] in self.type_map:
                                         clsnm = self.type_map[c["@type"]]
