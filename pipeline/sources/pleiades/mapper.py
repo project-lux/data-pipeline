@@ -58,16 +58,18 @@ class PleiadesMapper(Mapper):
         concept_id = uri_match.group(1)
         uri = f"https://pleiades.stoa.org/vocabularies/{concept_id}"
         
-        # Extract prefLabel
-        label_match = re.search(r'skos:prefLabel "([^"]+)"@en', ttl_section)
+        # Extract prefLabel with optional language tag
+        label_match = re.search(r'skos:prefLabel "([^"]+)"(?:@([a-z]{2}))?', ttl_section)
         if not label_match:
             return None
         
         label = label_match.group(1)
+        label_lang = label_match.group(2) if label_match.group(2) else 'en'  # default to English if no language tag
         
-        # Extract scopeNote (description)
-        scope_match = re.search(r'skos:scopeNote "([^"]+)"@en', ttl_section)
+        # Extract scopeNote (description) with optional language tag  
+        scope_match = re.search(r'skos:scopeNote "([^"]+)"(?:@([a-z]{2}))?', ttl_section)
         description = scope_match.group(1) if scope_match else None
+        description_lang = scope_match.group(2) if scope_match and scope_match.group(2) else 'en'  # default to English if no language tag
         
         # Extract all owl:sameAs URIs (handling multiline format)
         # First find the owl:sameAs section
@@ -83,15 +85,15 @@ class PleiadesMapper(Mapper):
         
         # Add primary name
         primary_name = vocab.PrimaryName(content=label)
-        if 'en' in self.process_langs:
-            primary_name.language = self.process_langs['en']
+        if label_lang in self.process_langs:
+            primary_name.language = self.process_langs[label_lang]
         top.identified_by = primary_name
         
         # Add description if present
         if description:
             desc = vocab.Description(content=description)
-            if 'en' in self.process_langs:
-                desc.language = self.process_langs['en']
+            if description_lang and description_lang in self.process_langs:
+                desc.language = self.process_langs[description_lang]
             top.referred_to_by = desc
         
         # Add equivalents from owl:sameAs statements
