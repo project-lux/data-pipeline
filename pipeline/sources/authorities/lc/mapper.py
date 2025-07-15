@@ -410,10 +410,10 @@ class LcshMapper(LcMapper):
 
                 comps = new.get("madsrdf:componentList", [])
                 if comps:
+                    print(comps)
                     cre = model.Creation()
                     for c in comps:
                         # add c to influenced_by in the Creation after mapping it to the right class
-                        print(c)
                         cre.influenced_by = c
 
         js = model.factory.toJSON(top)
