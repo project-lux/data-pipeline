@@ -441,6 +441,7 @@ class LcshMapper(LcMapper):
                                         ref = model.Period(uri, label=lbl)
                                     else:
                                         # Now do reconciliation
+                                        print(rec["identifier"])
                                         print(c)
                                         ref = {"_label": lbl}
                                     cre.influenced_by = ref
