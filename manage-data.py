@@ -201,7 +201,7 @@ if "--places" in sys.argv:
 if "--concepts" in sys.argv:
     rc = cfgs.results["merged"]["recordcache"]
     print("Starting")
-    with open("places.jsonl", "w") as fh:
+    with open("concepts.jsonl", "w") as fh:
         for rec in rc.iter_records_type("Concept"):
             fh.write(json.dumps(rec["data"], separators=(",", ":")))
             fh.write("\n")
