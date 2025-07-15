@@ -416,7 +416,6 @@ class LcshMapper(LcMapper):
 
                 comps = new.get("madsrdf:componentList", {})
                 if comps:
-                    print(comps)
                     cre = model.Creation()
                     top.created_by = cre
                     if type(comps) is dict and "@list" in comps:
@@ -426,7 +425,6 @@ class LcshMapper(LcMapper):
                             # add c to influenced_by in the Creation after mapping it to the right class
                             if type(c) is dict and "@id" in c:
                                 uri = c["@id"]
-
                                 if uri[0] == "_":
                                     # blank node, try to reconcile based on name
                                     lbl = c.get("madsrdf:authoritativeLabel", {"@value": ""})
