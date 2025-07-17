@@ -452,10 +452,15 @@ class LcshMapper(LcMapper):
                                         lbl = c.get("madsrdf:authoritativeLabel", {"@value": ""})
                                         if type(lbl) is dict:
                                             lbl = lbl.get("@value", "")
-                                        print(f"{record['identifier']} -- {typ} -- {lbl}")
-                                        # print(c)
-                                        ref = {"_label": lbl}
-                                    cre.influenced_by = ref
+                                        clsnm = type_map.get(typ, "")
+                                        if not clsnm:
+                                            # Now what? Just strip it?
+                                            ref = None
+                                        else:
+                                            ref = self.build_recs_and_reconcile(lbl, clsnm)
+                                            print(f"{typ} -- {lbl}: {ref}")
+                                    if ref:
+                                        cre.influenced_by = ref
                                 else:
                                     uri = uri.replace("rwo/agents", "authorities/names")
                                     # Need to know what class this is
