@@ -420,6 +420,8 @@ class QleverMapper(Mapper):
             # carries/shows
             carries = data.get("carries", [])
             carries.extend(data.get("shows", []))
+            carries.extend(data.get("digitally_carries", []))
+            carries.extend(data.get("digitally_shows", []))
             for c in carries:
                 if "id" in c:
                     t["object"] = c["id"]
