@@ -452,7 +452,7 @@ class LcshMapper(LcMapper):
                                         lbl = c.get("madsrdf:authoritativeLabel", {"@value": ""})
                                         if type(lbl) is dict:
                                             lbl = lbl.get("@value", "")
-                                        clsnm = type_map.get(typ, "")
+                                        clsnm = self.type_map.get(typ, "")
                                         if not clsnm:
                                             # Now what? Just strip it?
                                             ref = None
