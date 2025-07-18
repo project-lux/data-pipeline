@@ -69,6 +69,7 @@ class LcMapper(Mapper):
             "Activity": nafreconciler,
             "Material": shreconciler,
             "Language": shreconciler,
+            "Period": shreconciler,
         }
 
         if rectype in reconcilers:
@@ -417,10 +418,10 @@ class LcshMapper(LcMapper):
                 comps = new.get("madsrdf:componentList", {})
                 if comps:
                     cre = model.Creation()
-                    top.created_by = cre
                     if type(comps) is dict and "@list" in comps:
                         comps = comps["@list"]
                     if type(comps) is list:
+                        add_comps = True
                         for c in comps:
                             # add c to influenced_by in the Creation after mapping it to the right class
                             if type(c) is dict and "@id" in c:
@@ -441,24 +442,33 @@ class LcshMapper(LcMapper):
                                         ref = model.Period(uri, label=lbl)
                                     else:
                                         # Now do reconciliation
-                                        #
-                                        typ = c["@type"]
-                                        if type(typ) is list:
-                                            try:
-                                                typ.remove("madsrdf:Authority")
-                                            except:
-                                                pass
-                                            typ = typ[0]
-                                        lbl = c.get("madsrdf:authoritativeLabel", {"@value": ""})
-                                        if type(lbl) is dict:
-                                            lbl = lbl.get("@value", "")
-                                        clsnm = self.type_map.get(typ, "")
-                                        if not clsnm:
-                                            # Now what? Just strip it?
-                                            ref = None
-                                        else:
-                                            ref = self.build_recs_and_reconcile(lbl, clsnm)
-                                            print(f"{typ} -- {lbl}: {ref}")
+                                        # ... in practice, this never matches
+                                        ref = None
+                                        add_comps = False
+                                        break
+
+                                        # typ = c["@type"]
+                                        # if type(typ) is list:
+                                        #     try:
+                                        #         typ.remove("madsrdf:Authority")
+                                        #     except:
+                                        #         pass
+                                        #     typ = typ[0]
+                                        # lbl = c.get("madsrdf:authoritativeLabel", {"@value": ""})
+                                        # if type(lbl) is dict:
+                                        #     lbl = lbl.get("@value", "")
+                                        # clsnm = self.type_map.get(typ, "")
+                                        # if not clsnm:
+                                        #     # Now what? Just strip it?
+                                        #     ref = None
+                                        # else:
+                                        #     refid = self.build_recs_and_reconcile(lbl, clsnm)
+                                        #     if refid is not None:
+                                        #         cls = getattr(model, clsnm)
+                                        #         ...
+                                        #     else:
+                                        #         ref = None
+                                        #     print(f"{typ} -- {lbl}: {ref}")
                                     if ref:
                                         cre.influenced_by = ref
                                 else:
@@ -477,6 +487,8 @@ class LcshMapper(LcMapper):
                                     cre.influenced_by = ref
                             else:
                                 print(f"Unknown form of component: {c}")
+                        if add_comps:
+                            top.created_by = cre
 
         js = model.factory.toJSON(top)
         return {"identifier": record["identifier"], "data": js, "source": self.name}
