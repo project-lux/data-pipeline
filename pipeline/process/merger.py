@@ -107,7 +107,10 @@ class RecordMerger(object):
         if "created_by" in merge and not "created_by" in skip:
             if "influenced_by" in merge["created_by"]:
                 mc = merge["created_by"]["influenced_by"]
-                rc = rec["created_by"]["influenced_by"]
+                try:
+                    rc = rec["created_by"]["influenced_by"]
+                except KeyError:
+                    rc = mc  # avoid triggering next line
                 if len(mc) != len(rc):
                     print(f"In {rec['id']} - Strange creation influences - different counts!")
                     print(f"    {mc}\n    {rc}")
