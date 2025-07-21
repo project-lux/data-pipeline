@@ -1,20 +1,17 @@
-
 import os
-import requests
-import shutil
 import time
 import gzip
 import zipfile
 import ujson as json
 
-class Loader(object):
 
+class Loader(object):
     def __init__(self, config):
         self.config = config
-        self.in_url = config.get('remoteDumpFile', '')
-        self.in_path = config.get('dumpFilePath', '')
-        self.out_cache = config['datacache']
-        self.total = config.get('totalRecords', -1)
+        self.in_url = config.get("remoteDumpFile", "")
+        self.in_path = config.get("dumpFilePath", "")
+        self.out_cache = config["datacache"]
+        self.total = config.get("totalRecords", -1)
 
     def get_identifier_raw(self, line):
         # Find identifier from raw line
@@ -34,9 +31,9 @@ class Loader(object):
         # without headers/footers or other wrapping
         # Dump in raw without parsing
 
-        if self.in_path.endswith('.gz'):
+        if self.in_path.endswith(".gz"):
             fh = gzip.open(self.in_path)
-        elif self.in_path.endswith('.zip'):
+        elif self.in_path.endswith(".zip"):
             zh = zipfile.ZipFile(self.in_path)
             # Assume a single zipped file
             names = zh.namelist()
@@ -46,7 +43,7 @@ class Loader(object):
                 fh = zh.open(names[0])
 
         start = time.time()
-        x = 0 
+        x = 0
         done_x = 0
         l = 1
         while l:
@@ -64,7 +61,7 @@ class Loader(object):
             try:
                 js = json.loads(l)
             except:
-                raise    
+                raise
             x += 1
             try:
                 new = self.post_process_json(js)
@@ -76,25 +73,25 @@ class Loader(object):
                     what = self.get_identifier_json(new)
                     if not what:
                         print(l)
-                        raise NotImplementedError(f"is get_identifier_raw or _json implemented for {self.__class__.__name__}?")
+                        raise NotImplementedError(
+                            f"is get_identifier_raw or _json implemented for {self.__class__.__name__}?"
+                        )
                 self.out_cache[what] = new
             if not x % 10000:
                 t = time.time() - start
-                xps = x/t
+                xps = x / t
                 ttls = self.total / xps
-                print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
+                print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls / 3600} hrs)")
         fh.close()
         self.out_cache.commit()
 
-
-
     def load_export(self):
-        where = self.config['all_configs'].dumps_dir
-        zipfn = os.path.join(where, f'export_{self.config["name"]}.zip')
+        where = self.config["all_configs"].dumps_dir
+        zipfn = os.path.join(where, f"export_{self.config['name']}.zip")
         if not os.path.exists(zipfn):
-            zipfn = os.path.join(where, f'{self.config["name"]}.zip')
+            zipfn = os.path.join(where, f"{self.config['name']}.zip")
         if os.path.exists(zipfn):
-            zh = zipfile.ZipFile(zipfn, 'r', compression=zipfile.ZIP_BZIP2)
+            zh = zipfile.ZipFile(zipfn, "r", compression=zipfile.ZIP_BZIP2)
         else:
             print("Could not find export zip")
             return None
@@ -108,16 +105,16 @@ class Loader(object):
             data = fh.read()
             fh.close()
             try:
-                data = data.decode('utf-8')
+                data = data.decode("utf-8")
                 js = json.loads(data)
             except Exception as e:
                 print(e)
                 continue
             x += 1
-            self.out_cache[ident] = js['data']
+            self.out_cache[ident] = js["data"]
             if not x % 10000:
                 t = time.time() - start
-                xps = x/t
+                xps = x / t
                 ttls = total / xps
-                print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
+                print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls / 3600} hrs)")
         zh.close()
