@@ -29,6 +29,9 @@ for rec in wd.iter_records():
         outh.write(json.dumps(data))
         outh.write("\n")
         index[wp] = data["id"]
+        if not x % 100000:
+            print(f"extracted {x}")
+
 outh.close()
 
 idx = open("wd_wp.json", "w")
