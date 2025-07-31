@@ -22,9 +22,11 @@ wd = cfgs.external["wikidata"]["datacache"]
 outh = open("wikidata_wikipedia_en.jsonl", "w")
 index = {}
 
+x = 0
 for rec in wd.iter_records():
     data = rec["data"]
     if "sitelinks" in data and "enwiki" in data["sitelinks"]:
+        x += 1
         wp = data["sitelinks"]["enwiki"]["title"]
         outh.write(json.dumps(data))
         outh.write("\n")
