@@ -1,14 +1,9 @@
-import os
-import sys
-import uuid
-import copy
 import datetime
 from ctypes import c_int32
 from pipeline.process.base.mapper import Mapper
 import ujson as json
 import numpy as np
 from bs4 import BeautifulSoup
-import re
 
 
 class MlMapper(Mapper):
@@ -162,13 +157,7 @@ class MlMapper(Mapper):
         elif typ == "Place":
             # facets["uiType"] = "Place"
             prefix = "place"
-        elif typ in [
-            "Type",
-            "Language",
-            "Material",
-            "Currency",
-            "MeasurementUnit"
-        ]:
+        elif typ in ["Type", "Language", "Material", "Currency", "MeasurementUnit"]:
             # Set here is Collection / Holdings. UI decision to put in with concepts
             # facets["uiType"] = "Concept"
             prefix = "concept"
