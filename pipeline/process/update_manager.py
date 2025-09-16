@@ -179,3 +179,8 @@ class UpdateManager(object):
                 fh.write(f"{r}\t{deleted[r]}\n")
 
         return records, deleted
+
+    def harvest_pages(self, config, my_slice, max_slice):
+        harvester = config["harvester"]
+        harvester.page_cache = config["harvester"].page_cache
+        harvester.harvest_pages(my_slice, max_slice)

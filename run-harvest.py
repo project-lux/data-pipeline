@@ -7,7 +7,7 @@ from pipeline.config import Config
 from pipeline.process.update_manager import UpdateManager
 
 load_dotenv()
-basepath = os.getenv('LUX_BASEPATH', "")
+basepath = os.getenv("LUX_BASEPATH", "")
 cfgs = Config(basepath=basepath)
 idmap = cfgs.get_idmap()
 cfgs.cache_globals()
@@ -15,15 +15,20 @@ cfgs.instantiate_all()
 
 to_do = []
 
-if '--all' in sys.argv:
-    to_do = list(cfgs.internal.items()) 
+if "--all" in sys.argv:
+    to_do = list(cfgs.internal.items())
 else:
     for src, cfg in cfgs.internal.items():
         if f"--{src}" in sys.argv:
             to_do.append((src, cfg))
     for src, cfg in cfgs.external.items():
         if f"--{src}" in sys.argv:
-            to_do.append((src, cfg))        
+            to_do.append((src, cfg))
+
+if "--pages" in sys.argv:
+    ONLY_PAGES = True
+else:
+    ONLY_PAGES = False
 
 if len(sys.argv) > 2 and sys.argv[1].isnumeric() and sys.argv[2].isnumeric():
     my_slice = int(sys.argv[1])
@@ -42,17 +47,22 @@ harvest_from = None
 # last_update = "2020-01-01T00:00:00"
 # harvest_from = "2024-01-01T00:00:00"
 
-for src, cfg in to_do:
+if ONLY_PAGES:
+    for src, cfg in to_do:
+        cfg["harvester"].page_cache = cfgs.external["activitystreams"]["datacache"]
+        mgr.harvest_pages(cfg, my_slice, max_slice)
+    sys.exit()
 
+for src, cfg in to_do:
     if max_slice > -1:
         # call harvest_from_list
         mgr.harvest_from_list(cfg, my_slice, max_slice)
     else:
         if last_update:
-            cfg['harvester'].last_harvest = last_update
+            cfg["harvester"].last_harvest = last_update
         if harvest_from:
-            cfg['harvester'].harvest_from = harvest_from
+            cfg["harvester"].harvest_from = harvest_from
 
-        cfg['harvester'].page_cache = cfgs.external['activitystreams']['datacache']
+        cfg["harvester"].page_cache = cfgs.external["activitystreams"]["datacache"]
         print(f"Harvesting {src} records")
         mgr.harvest_single(src)
