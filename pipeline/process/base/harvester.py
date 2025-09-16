@@ -292,6 +292,6 @@ class ASHarvester(Harvester):
         # assume that pages are integers between first and last
         ns, first = coll["first"]["id"].rsplit("/", 1)
         last = coll["last"]["id"].rsplit("/", 1)[-1]
-        for pg in range(int(first + my_slice), int(last) + 1, max_slice):
+        for pg in range(int(first) + my_slice, int(last) + 1, max_slice):
             self.page = ns + "/" + str(pg)
             self.fetch_page()
