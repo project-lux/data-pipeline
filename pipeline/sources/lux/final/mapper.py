@@ -227,21 +227,25 @@ class Cleaner(Mapper):
                 # test birth and death as well
                 first = pname["first_name"]
                 last = pname["last_name"]
-                middle = " ".join(pname["middle_names"]) + " "
+                middle = " ".join(pname["middle_names"]) if pname["middle_names"] else ""
+                if not middle:
+                    middle = " ".join(pname["middle_initials"]) if pname["middle_initials"] else ""
+                if middle:
+                    middle += " "
                 birth = str(pname["birth_year"]) if pname["birth_year"] else ""
                 death = str(pname["death_year"]) if pname["death_year"] else ""
                 if birth and death:
-                    birthdeath = f" ({birth}-{death})"
+                    birthdeath = f"({birth}-{death})"
                 elif birth:
-                    birthdeath = f" ({birth}-)"
+                    birthdeath = f"({birth}-)"
                 elif death:
-                    birthdeath = f" (-{death})"
+                    birthdeath = f"(-{death})"
                 else:
                     birthdeath = ""
-                llm_sortname_val = f"{last}, {first} {middle}{birthdeath}"
-                llm_primaryname_val = f"{first} {middle} {last}"
+                llm_sortname_val = f"{last}, {first} {middle}{birthdeath}".strip()
+                llm_primaryname_val = f"{first} {middle}{last}".strip()
 
-                print(f"\n{llm_primaryname_val}  / {llm_sortname_val}")
+                print(f"\n'{llm_primaryname_val}' / '{llm_sortname_val}'")
                 llm_primaryname = {
                     "type": "Name",
                     "content": llm_primaryname_val,
