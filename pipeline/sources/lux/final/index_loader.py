@@ -8,10 +8,13 @@ from pipeline.storage.idmap.lmdb import JsonLmdb
 class LlmNameIndexLoader(LmdbIndexLoader):
     def get_storage(self):
         mapExp = self.config.get("mapSizeExponent", 30)
-        path = self.config.get("llmNameDbPath", os.path.join(self.config.get("indexes_dir"), "llmPersonNames.lmdb"))
+        path = self.config.get(
+            "llmNameDbPath", os.path.join(self.config["all_configs"].indexes_dir, "llmPersonNames.lmdb")
+        )
         return JsonLmdb.open(path, "c", map_size=2**mapExp, readahead=False, writemap=True)
 
     def load(self, filename):
+        db = self.get_storage()
         huge_dict = {}
         x = 0
         with open(filename, "r") as fh:
@@ -24,7 +27,7 @@ class LlmNameIndexLoader(LmdbIndexLoader):
                 if not x % 100000:
                     print(f"Processed {x} parsed_names")
         huge_dict = dict(sorted(huge_dict.items()))
-        db = self.get_storage()
+
         db.update(huge_dict)
 
 
