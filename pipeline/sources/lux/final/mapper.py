@@ -127,7 +127,7 @@ class Cleaner(Mapper):
             "_label": "Primary Name",
             "equivalent": [
                 {
-                    "id": "http://vocab.getty.edu/aat/300404670", # FIXME: use global
+                    "id": "http://vocab.getty.edu/aat/300404670",  # FIXME: use global
                     "type": "Type",
                     "_label": "Final: Primary Name",
                 }
@@ -139,7 +139,7 @@ class Cleaner(Mapper):
             "_label": "Sort Name",
             "equivalent": [
                 {
-                    "id": "http://vocab.getty.edu/aat/300451544", # FIXME: use global
+                    "id": "http://vocab.getty.edu/aat/300451544",  # FIXME: use global
                     "type": "Type",
                     "_label": "Final: Sort Title",
                 }
@@ -169,6 +169,40 @@ class Cleaner(Mapper):
         #     then primary name with no language, otherwise first primary name, whatever that is
         # ensure no primary+alternate name
 
+        # If the record is a Person, then check the LLM parsed name LMDB
+        # Structure from the LLM:
+        # {
+        #  "first_name": "Roger",
+        #  "last_name": "King",
+        #  "middle_names": ["A."],
+        #  "middle_initials": [],
+        #  "birth_year": 1945,
+        #  "death_year": null,
+        #  "titles": [],
+        #  "extra_info": []
+        # }
+
+        if data["type"] == "Person":
+            my_uuid = data["id"].rsplit("/", 1)[-1]
+            pname = self.parsed_person_names[my_uuid]
+            # test birth and death as well
+            first = pname["first_name"]
+            last = pname["last_name"]
+            middle = " ".join(pname["middle_names"])
+            birth = str(pname["birth_year"]) if pname["birth_year"] else ""
+            death = str(pname["death_year"]) if pname["death_year"] else ""
+            if birth and death:
+                birthdeath = f" ({birth}-{death})"
+            elif birth:
+                birthdeath = f" ({birth}-)"
+            elif death:
+                birthdeath = f" (-{death})"
+            else:
+                birthdeath = ""
+            sortname = f"{last}, {first} {middle}{birthdeath}"
+            
+            
+
         if "identified_by" in data:
             lang_names = {}
             remove = []
@@ -176,9 +210,7 @@ class Cleaner(Mapper):
             for nm in data["identified_by"]:
                 if nm["type"] == "Name":
                     # FIXME: Test for 'language': [{'type': 'Language', '_label': 'und'}]
-                    langs = [
-                        x.get("id", None) for x in nm.get("language", [{"id": None}])
-                    ]
+                    langs = [x.get("id", None) for x in nm.get("language", [{"id": None}])]
                     val = nm.get("content", "")
                     val = val.strip()
                     if not val:
@@ -244,9 +276,7 @@ class Cleaner(Mapper):
                         # FIXME: Any other heuristics here to make a better guess?
                         candidates = []
                         for nm in nms:
-                            cxns = [
-                                x.get("id", None) for x in nm.get("classified_as", [])
-                            ]
+                            cxns = [x.get("id", None) for x in nm.get("classified_as", [])]
                             if not cxns:
                                 candidates.insert(0, nm)
                             else:
@@ -277,9 +307,7 @@ class Cleaner(Mapper):
                         # Everything was bad :(
                         target = nms[0]
                         done = False
-                        cxns = [
-                            x.get("id", None) for x in target.get("classified_as", [])
-                        ]
+                        cxns = [x.get("id", None) for x in target.get("classified_as", [])]
                         for a in [alternateName, alternateTitle, translatedTitle]:
                             if a in cxns:
                                 # Gah. Overwrite. We need a primary name
@@ -375,11 +403,7 @@ class Cleaner(Mapper):
                 if "classified_as" in target:
                     target["classified_as"].append(sortType)
 
-        if (
-            (not "identified_by" in data or not data["identified_by"])
-            and "_label" in data
-            and data["_label"]
-        ):
+        if (not "identified_by" in data or not data["identified_by"]) and "_label" in data and data["_label"]:
             # copy label to name
             data["identified_by"] = [
                 {
@@ -388,20 +412,13 @@ class Cleaner(Mapper):
                     "classified_as": [primaryType],
                 }
             ]
-        elif (
-            not "identified_by" in data
-            and data["type"] == "DigitalObject"
-            and len(data.keys()) == 4
-        ):
+        elif not "identified_by" in data and data["type"] == "DigitalObject" and len(data.keys()) == 4:
             # bad record ... just a pointer to some other URI (id, type, _label, equivalent)
             return None
         elif (
             not "identified_by" in data
             or not data["identified_by"]
-            or (
-                len(data["identified_by"]) == 1
-                and not data["identified_by"][0].get("content", "")
-            )
+            or (len(data["identified_by"]) == 1 and not data["identified_by"][0].get("content", ""))
         ):
             # Uh oh :(
             print(f"record with no names: {data}")
@@ -457,7 +474,7 @@ class Cleaner(Mapper):
                     counter[c_id] = 1
                     replacement.append(c)
             else:
-                #allow for empty ids
+                # allow for empty ids
                 replacement.append(c)
 
         if replacement:

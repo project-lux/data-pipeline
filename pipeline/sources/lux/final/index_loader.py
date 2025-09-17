@@ -1,7 +1,26 @@
 import os
-import sys
 import csv
-from pipeline.process.base.index_loader import LmdbIndexLoader, TabLmdb
+import ujson as json
+from pipeline.process.base.index_loader import LmdbIndexLoader, TabLmdb, JsonLmdb
+
+
+class LlmNameIndexLoader(LmdbIndexLoader):
+    def get_storage(self):
+        mapExp = self.config.get("mapSizeExponent", 30)
+        path = self.config.get("llmNameDbPath", os.path.join(self.config.get("indexes_dir"), "llmPersonNames.lmdb"))
+        return JsonLmdb.open(path, "c", map_size=2**mapExp, readahead=False, writemap=True)
+
+    def load(self, filename):
+        huge_dict = {}
+        with open(filename, "r") as fh:
+            for line in fh:
+                js = json.loads(line)
+                key = js["id"].rsplit("/", 1)[-1]
+                val = js["parsed_name"]
+                huge_dict[key] = val
+        huge_dict = dict(sorted(huge_dict.items()))
+        db = self.get_storage()
+        db.update(huge_dict)
 
 
 class GlobalIndexLoader(LmdbIndexLoader):
@@ -71,13 +90,13 @@ class GlobalIndexLoader(LmdbIndexLoader):
 
                 if a.startswith("https://lux.collections.yale.edu/data/"):
                     # Don't do this!
-                    raise ValueError(f"File {csvfn} has LUX URI: {a}")
+                    raise ValueError(f"File {filename} has LUX URI: {a}")
                 else:
                     a2 = self.configs.canonicalize(a)
 
                 if b.startswith("https://lux.collections.yale.edu/data/"):
                     # Don't do this!
-                    raise ValueError(f"File {csvfn} has LUX URI: {b}")
+                    raise ValueError(f"File {filename} has LUX URI: {b}")
                 else:
                     b2 = self.configs.canonicalize(b)
 

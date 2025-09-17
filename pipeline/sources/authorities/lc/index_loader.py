@@ -14,7 +14,7 @@ class LCIndexLoader(LmdbIndexLoader):
             ident = topid.rsplit("/", 1)[-1]
         else:
             ident = rec["identifier"]
-            topid = f"{self.namespace}{identifier}"
+            topid = f"{self.namespace}{ident}"
         if len(rec.keys()) == 1 and "value" in rec:
             rec["@graph"] = rec["value"]
             del rec["value"]
