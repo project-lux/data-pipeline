@@ -13,12 +13,16 @@ class LlmNameIndexLoader(LmdbIndexLoader):
 
     def load(self, filename):
         huge_dict = {}
+        x = 0
         with open(filename, "r") as fh:
             for line in fh:
                 js = json.loads(line)
                 key = js["id"].rsplit("/", 1)[-1]
-                val = js["parsed_name"]
+                val = js["parsed_names"]
                 huge_dict[key] = val
+                x += 1
+                if not x % 100000:
+                    print(f"Processed {x} parsed_names")
         huge_dict = dict(sorted(huge_dict.items()))
         db = self.get_storage()
         db.update(huge_dict)
