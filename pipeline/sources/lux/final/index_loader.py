@@ -1,7 +1,8 @@
 import os
 import csv
 import ujson as json
-from pipeline.process.base.index_loader import LmdbIndexLoader, TabLmdb, JsonLmdb
+from pipeline.process.base.index_loader import LmdbIndexLoader, TabLmdb
+from pipeline.storage.idmap.lmdb import JsonLmdb
 
 
 class LlmNameIndexLoader(LmdbIndexLoader):

@@ -77,9 +77,7 @@ class IndexLoader(object):
                             if len(nm) < 500:
                                 all_names[nm.lower()] = [recid, typ]
                             else:
-                                print(
-                                    f"Dropping name as too long ({len(nm)}>500):\n\t{nm}"
-                                )
+                                print(f"Dropping name as too long ({len(nm)}>500):\n\t{nm}")
                 if eqindex is not None:
                     eqs = self.extract_uris(res["data"])
                     for eq in eqs:
@@ -89,21 +87,19 @@ class IndexLoader(object):
             n += 1
             if not n % 100000:
                 durn = time.time() - start
-                print(
-                    f"{n} of {ttl} in {int(durn)} = {n/durn}/sec -> {ttl/(n/durn)} secs"
-                )
+                print(f"{n} of {ttl} in {int(durn)} = {n / durn}/sec -> {ttl / (n / durn)} secs")
                 sys.stdout.flush()
 
         if index is not None and all_names:
             start = time.time()
             index.update(all_names)
             durn = time.time() - start
-            print(f"names insert time: {int(durn)} = {len(all_names)/durn}/sec")
+            print(f"names insert time: {int(durn)} = {len(all_names) / durn}/sec")
         if eqindex is not None and all_uris:
             start = time.time()
             eqindex.update(all_uris)
             durn = time.time() - start
-            print(f"uris insert time: {int(durn)} = {len(all_names)/durn}/sec")
+            print(f"uris insert time: {int(durn)} = {len(all_names) / durn}/sec")
 
 
 class LmdbIndexLoader(IndexLoader):
@@ -111,9 +107,7 @@ class LmdbIndexLoader(IndexLoader):
         mapExp = self.config.get("mapSizeExponent", 30)
         # n = remove and recreate
         if self.out_path:
-            index = TabLmdb.open(
-                self.out_path, "c", map_size=2**mapExp, readahead=False, writemap=True
-            )
+            index = TabLmdb.open(self.out_path, "c", map_size=2**mapExp, readahead=False, writemap=True)
         else:
             index = None
         if self.inverse_path:
@@ -132,20 +126,20 @@ class LmdbIndexLoader(IndexLoader):
         # Once loaded, this will export from the LMDB to a CSV for sharing
 
         if self.out_path is not None:
-            idx = TabLmdb.open(self.out_path, 'r', readahead=False, writemap=True)
-            csvfn = self.out_path.rsplit('/')[-1].replace('lmdb', 'csv')
+            idx = TabLmdb.open(self.out_path, "r", readahead=False, writemap=True)
+            csvfn = self.out_path.rsplit("/")[-1].replace("lmdb", "csv")
             outfn = os.path.join(self.configs.data_dir, csvfn)
             self.write_csv(idx, outfn)
         if self.inverse_path is not None:
-            idx = TabLmdb.open(self.inverse_path, 'r', readahead=False, writemap=True)
-            csvfn = self.inverse_path.rsplit('/')[-1].replace('lmdb', 'csv')
+            idx = TabLmdb.open(self.inverse_path, "r", readahead=False, writemap=True)
+            csvfn = self.inverse_path.rsplit("/")[-1].replace("lmdb", "csv")
             outfn = os.path.join(self.configs.data_dir, csvfn)
             self.write_csv(idx, outfn)
 
     def write_csv(self, idx, outfn):
-        with open(outfn, 'w') as csvh:
-            writer = csv.writer(csvh, delimiter=',')
-            for (k,v) in idx.items():
+        with open(outfn, "w") as csvh:
+            writer = csv.writer(csvh, delimiter=",")
+            for k, v in idx.items():
                 if type(v) == list:
                     writer.writerow([k, "\t".join(v)])
                 else:
@@ -154,12 +148,12 @@ class LmdbIndexLoader(IndexLoader):
 
 class SqliteIndexLoader(IndexLoader):
     def get_storage(self):
-        if out_path:
-            index = SqliteDict(out_path, autocommit=False)
+        if self.out_path is not None:
+            index = SqliteDict(self.out_path, autocommit=False)
         else:
             index = None
-        if inverse_path:
-            eqindex = SqliteDict(inverse_path, autocommit=False)
+        if self.inverse_path is not None:
+            eqindex = SqliteDict(self.inverse_path, autocommit=False)
         else:
             eqindex = None
         return (index, eqindex)
