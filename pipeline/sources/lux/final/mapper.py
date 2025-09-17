@@ -265,7 +265,7 @@ class Cleaner(Mapper):
                         "begin_of_the_begin": f"{birth}-01-01T00:00:00",
                         "end_of_the_end": f"{birth}-12-31T23:59:59",
                     }
-                    ts.identified_by = [dn]
+                    ts["identified_by"] = [dn]
                     b = {"type": "Birth", "timespan": ts}
                     data["born"] = b
 
@@ -280,7 +280,7 @@ class Cleaner(Mapper):
                         "begin_of_the_begin": f"{death}-01-01T00:00:00",
                         "end_of_the_end": f"{death}-12-31T23:59:59",
                     }
-                    ts.identified_by = [dn]
+                    ts["identified_by"] = [dn]
                     d = {"type": "Death", "timespan": ts}
                     data["died"] = d
 
