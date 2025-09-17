@@ -1,22 +1,26 @@
-import lmdb
 from lmdbm import Lmdb
 import ujson as json
 
 ### Storage Layer
 
+
 class StringLmdb(Lmdb):
     # key is string, value is string
     def _pre_key(self, value):
-        val = value.encode('utf-8')
+        val = value.encode("utf-8")
         if len(val) > 500:
             raise ValueError("LMDB cannot have keys longer than 500 characters")
         return val
+
     def _post_key(self, value):
-        return value.decode('utf-8')
+        return value.decode("utf-8")
+
     def _pre_value(self, value):
-        return value.encode('utf-8')
+        return value.encode("utf-8")
+
     def _post_value(self, value):
-        return value.decode('utf-8')
+        return value.decode("utf-8")
+
     def commit(self):
         pass
 
@@ -27,16 +31,17 @@ class StringLmdb(Lmdb):
             print(f"\n*** __contains__ got {e} for {key} ***")
             return False
 
+
 class TabLmdb(StringLmdb):
     # key is string, value is tab separated __strings__
     # eg URI\tURI\tURI or URI\tType
 
     def _pre_value(self, value):
         if type(value) == str:
-            return value.encode('utf-8')
+            return value.encode("utf-8")
         elif type(value) in [list, set]:
             try:
-                return '\t'.join(value).encode('utf-8')
+                return "\t".join(value).encode("utf-8")
             except:
                 raise ValueError(f"TabLmdb cannot accept {value}")
         elif type(value) == bytes:
@@ -46,17 +51,18 @@ class TabLmdb(StringLmdb):
             raise ValueError(f"TabLmdb cannot accept {type(value)}: {value}")
 
     def _post_value(self, value):
-        value = value.decode('utf-8')
-        if '\t' in value:
-            value = value.split('\t')
+        value = value.decode("utf-8")
+        if "\t" in value:
+            value = value.split("\t")
         return value
+
 
 class JsonLmdb(StringLmdb):
     # key is string, value is arbitrary JSON
     # but adds the cost of dumps/loads if really just strings
 
     def _pre_value(self, value):
-        return json.dumps(value).encode('utf-8')
-    def _post_value(self, value):
-        return json.loads(value.decode('utf-8'))
+        return json.dumps(value).encode("utf-8")
 
+    def _post_value(self, value):
+        return json.loads(value.decode("utf-8"))

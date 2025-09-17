@@ -2,6 +2,8 @@ from pipeline.process.reidentifier import Reidentifier
 from pipeline.process.base.mapper import Mapper
 from pipeline.process.utils.mapper_utils import test_birth_death
 from urllib.parse import quote, urlparse, urlunparse
+from pipeline.storage.idmap.lmdb import JsonLmdb
+
 import ujson as json
 import os
 
@@ -26,6 +28,11 @@ class Cleaner(Mapper):
             with open(fn) as fh:
                 data = fh.read()
             self.metatypes = json.loads(data)
+
+        # Look for LLM Parsed Person names
+        fn = os.path.join(self.configs.indexes_dir, "llmPersonNames.lmdb")
+        if os.path.exists(fn):
+            self.llm_person_names = JsonLmdb.open(fn, "r", readahead=False, writemap=True)
 
     def get_commons_license(self, img):
         # Can't store reidentified version as it would need a YUID
@@ -121,6 +128,7 @@ class Cleaner(Mapper):
     def process_names(self, data):
         primary = self.globals["primaryName"]  # 300404670
         sortName = self.globals["sortName"]  # 300451544
+        displayName = self.globals["displayName"]  # 300404669
         primaryType = {
             "id": primary,
             "type": "Type",
@@ -146,6 +154,19 @@ class Cleaner(Mapper):
             ],
         }
 
+        displayType = {
+            "id": displayName,
+            "type": "Type",
+            "_label": "Display Name",
+            "equivalent": [
+                {
+                    "id": "http://vocab.getty.edu/aat/300404669",  # FIXME: use global
+                    "type": "Type",
+                    "_label": "Final: Display Name",
+                }
+            ],
+        }
+
         alternateName = self.globals["alternateName"]  # 300264273
         alternateTitle = self.globals["alternateTitle"]  # 300417227
         translatedTitle = self.globals["translatedTitle"]  # 300417194
@@ -157,6 +178,13 @@ class Cleaner(Mapper):
         german = self.globals["lang_de"]
         dutch = self.globals["lang_nl"]
         chinese = self.globals["lang_zh"]
+
+        lang_en_js = {
+            "id": english,
+            "type": "Language",
+            "_label": "English",
+            "equivalent": [{"id": "http://vocab.getty.edu/aat/300388277", "type": "Language", "_label": "English"}],
+        }
 
         # displayName = self.globals['displayName'] # 300404669
         # original title # 300417204
@@ -182,29 +210,82 @@ class Cleaner(Mapper):
         #  "extra_info": []
         # }
 
+        llm_sortname = None
+        llm_primaryname = None
         if data["type"] == "Person":
             my_uuid = data["id"].rsplit("/", 1)[-1]
-            pname = self.parsed_person_names[my_uuid]
-            # test birth and death as well
-            first = pname["first_name"]
-            last = pname["last_name"]
-            middle = " ".join(pname["middle_names"])
-            birth = str(pname["birth_year"]) if pname["birth_year"] else ""
-            death = str(pname["death_year"]) if pname["death_year"] else ""
-            if birth and death:
-                birthdeath = f" ({birth}-{death})"
-            elif birth:
-                birthdeath = f" ({birth}-)"
-            elif death:
-                birthdeath = f" (-{death})"
-            else:
-                birthdeath = ""
-            sortname = f"{last}, {first} {middle}{birthdeath}"
-            
-            
+            try:
+                pname = self.parsed_person_names[my_uuid]
+            except:
+                # Log missing person
+                print(f"Missing person in LLM Names: {my_uuid}")
+                pname = {}
+
+            if pname:
+                # test birth and death as well
+                first = pname["first_name"]
+                last = pname["last_name"]
+                middle = " ".join(pname["middle_names"]) + " "
+                birth = str(pname["birth_year"]) if pname["birth_year"] else ""
+                death = str(pname["death_year"]) if pname["death_year"] else ""
+                if birth and death:
+                    birthdeath = f" ({birth}-{death})"
+                elif birth:
+                    birthdeath = f" ({birth}-)"
+                elif death:
+                    birthdeath = f" (-{death})"
+                else:
+                    birthdeath = ""
+                llm_sortname_val = f"{last}, {first} {middle}{birthdeath}"
+                llm_primaryname_val = f"{first} {middle} {last}"
+
+                llm_primaryname = {
+                    "type": "Name",
+                    "content": llm_primaryname_val,
+                    "classified_as": [primaryType],
+                    "language": [lang_en_js],
+                }
+                llm_sortname = {
+                    "type": "Name",
+                    "content": llm_sortname_val,
+                    "classified_as": [sortType],
+                    "language": [lang_en_js],
+                }
+
+                if birth and "born" not in data:
+                    # add birth year
+                    dn = {"type": "Name", "content": birth, "classified_as": [displayType]}
+                    if len(birth) != 4:
+                        # 0 pad it
+                        birth = birth.zfill(4)
+                    ts = {
+                        "type": "TimeSpan",
+                        "begin_of_the_begin": f"{birth}-01-01T00:00:00",
+                        "end_of_the_end": f"{birth}-12-31T23:59:59",
+                    }
+                    ts.identified_by = [dn]
+                    b = {"type": "Birth", "timespan": ts}
+                    data["born"] = b
+
+                if death and "died" not in data:
+                    # add death year
+                    dn = {"type": "Name", "content": death, "classified_as": [displayType]}
+                    if len(death) != 4:
+                        # 0 pad it
+                        death = death.zfill(4)
+                    ts = {
+                        "type": "TimeSpan",
+                        "begin_of_the_begin": f"{death}-01-01T00:00:00",
+                        "end_of_the_end": f"{death}-12-31T23:59:59",
+                    }
+                    ts.identified_by = [dn]
+                    d = {"type": "Death", "timespan": ts}
+                    data["died"] = d
 
         if "identified_by" in data:
             lang_names = {}
+            if llm_primaryname:
+                lang_names[english] = [llm_primaryname, llm_sortname]
             remove = []
             # invert the names into languages then primary / not primary
             for nm in data["identified_by"]:
@@ -338,23 +419,25 @@ class Cleaner(Mapper):
                     primary_name_langs[lang] = target
                 elif len(primaryNameVals) > 1:
                     # pick shortest, and de-primary the others
-                    primaryNameVals.sort(key=lambda x: len(x["content"]))
-                    if len(primaryNameVals) > 1 and data["type"] == "Place":
-                        if len(primaryNameVals[0]["content"]) < 3:
-                            primaryNameVals = primaryNameVals[1:] + [primaryNameVals[0]]
+                    # if llm, then just pick it by leaving it first
+                    if not llm_primaryname:
+                        primaryNameVals.sort(key=lambda x: len(x["content"]))
+                        if len(primaryNameVals) > 1 and data["type"] == "Place":
+                            if len(primaryNameVals[0]["content"]) < 3:
+                                primaryNameVals = primaryNameVals[1:] + [primaryNameVals[0]]
 
-                    # test for acronyms... prefer Great Britain to GB,
-                    #   International Businesss Machines to IBM
-                    if primaryNameVals[0]["content"].isupper():
-                        acrs = []
-                        other = []
-                        for p in primaryNameVals:
-                            if p["content"].isupper():
-                                acrs.append(p)
-                            else:
-                                other.append(p)
-                        primaryNameVals = other
-                        primaryNameVals.extend(acrs)
+                        # test for acronyms... prefer Great Britain to GB,
+                        #   International Businesss Machines to IBM
+                        if primaryNameVals[0]["content"].isupper():
+                            acrs = []
+                            other = []
+                            for p in primaryNameVals:
+                                if p["content"].isupper():
+                                    acrs.append(p)
+                                else:
+                                    other.append(p)
+                            primaryNameVals = other
+                            primaryNameVals.extend(acrs)
 
                     for nm in primaryNameVals[1:]:
                         if len(nm["classified_as"]) == 1:
@@ -370,6 +453,7 @@ class Cleaner(Mapper):
                 else:
                     primary_name_langs[lang] = primaryNameVals[0]
 
+            # This will pick LLM sort by default as it's first in the list
             if sort_name_langs:
                 if len(sort_name_langs) == 1:
                     sort_name = list(sort_name_langs.values())[0][0]
