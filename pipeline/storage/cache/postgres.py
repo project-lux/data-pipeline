@@ -380,6 +380,20 @@ class PooledCache(object):
             for res in cursor:
                 yield res
 
+    def iter_keys_type(self, t):
+        # allow query for records by top level type value
+        # CREATE INDEX merged_type_idx ON merged_merged_record_cache USING BTREE ((data->'type'));
+        # is important!
+
+        if t == "Concept":
+            qry = f"SELECT {self.key} FROM {self.name} WHERE data->>'type' IN ('Type', 'Currency', 'Language', 'Material', 'MeasurementUnit')"
+        else:
+            qry = f"SELECT {self.key} FROM {self.name} WHERE data->'type' = '\"{t}\"'"
+        with self._cursor(iter=True) as cursor:
+            cursor.execute(qry)
+            for res in cursor:
+                yield res[self.key]
+
     def set(
         self,
         data,
