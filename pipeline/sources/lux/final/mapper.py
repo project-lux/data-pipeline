@@ -225,39 +225,44 @@ class Cleaner(Mapper):
 
             if pname:
                 # test birth and death as well
-                first = pname["first_name"]
-                last = pname["last_name"]
-                middle = " ".join(pname["middle_names"]) if pname["middle_names"] else ""
-                if not middle:
-                    middle = " ".join(pname["middle_initials"]) if pname["middle_initials"] else ""
-                if middle:
-                    middle += " "
+                first = pname["first_name"] if pname["first_name"] else ""
+                last = pname["last_name"] if pname["last_name"] else ""
                 birth = str(pname["birth_year"]) if pname["birth_year"] else ""
                 death = str(pname["death_year"]) if pname["death_year"] else ""
-                if birth and death:
-                    birthdeath = f"({birth}-{death})"
-                elif birth:
-                    birthdeath = f"({birth}-)"
-                elif death:
-                    birthdeath = f"(-{death})"
-                else:
-                    birthdeath = ""
-                llm_sortname_val = f"{last}, {first} {middle}{birthdeath}".strip()
-                llm_primaryname_val = f"{first} {middle}{last}".strip()
 
-                print(f"\n'{llm_primaryname_val}' / '{llm_sortname_val}'")
-                llm_primaryname = {
-                    "type": "Name",
-                    "content": llm_primaryname_val,
-                    "classified_as": [primaryType],
-                    "language": [lang_en_js],
-                }
-                llm_sortname = {
-                    "type": "Name",
-                    "content": llm_sortname_val,
-                    "classified_as": [sortType],
-                    "language": [lang_en_js],
-                }
+                if not last or not first:
+                    print(f"Missing either last or first name for {my_uuid}")
+                else:
+                    middle = " ".join(pname["middle_names"]) if pname["middle_names"] else ""
+                    if not middle:
+                        middle = " ".join(pname["middle_initials"]) if pname["middle_initials"] else ""
+                    if middle:
+                        middle += " "
+
+                    if birth and death:
+                        birthdeath = f"({birth}-{death})"
+                    elif birth:
+                        birthdeath = f"({birth}-)"
+                    elif death:
+                        birthdeath = f"(-{death})"
+                    else:
+                        birthdeath = ""
+                    llm_sortname_val = f"{last}, {first} {middle}{birthdeath}".strip()
+                    llm_primaryname_val = f"{first} {middle}{last}".strip()
+
+                    print(f"\n'{llm_primaryname_val}' / '{llm_sortname_val}'")
+                    llm_primaryname = {
+                        "type": "Name",
+                        "content": llm_primaryname_val,
+                        "classified_as": [primaryType],
+                        "language": [lang_en_js],
+                    }
+                    llm_sortname = {
+                        "type": "Name",
+                        "content": llm_sortname_val,
+                        "classified_as": [sortType],
+                        "language": [lang_en_js],
+                    }
 
                 if birth and "born" not in data:
                     # add birth year
