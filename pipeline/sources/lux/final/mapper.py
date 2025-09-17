@@ -33,6 +33,8 @@ class Cleaner(Mapper):
         fn = os.path.join(self.configs.indexes_dir, "llmPersonNames.lmdb")
         if os.path.exists(fn):
             self.llm_person_names = JsonLmdb.open(fn, "r", readahead=False, writemap=True)
+        else:
+            print("Couldn't find LLM Person Names lmdb")
 
     def get_commons_license(self, img):
         # Can't store reidentified version as it would need a YUID
@@ -215,7 +217,7 @@ class Cleaner(Mapper):
         if data["type"] == "Person":
             my_uuid = data["id"].rsplit("/", 1)[-1]
             try:
-                pname = self.parsed_person_names[my_uuid]
+                pname = self.llm_person_names[my_uuid]
             except:
                 # Log missing person
                 print(f"Missing person in LLM Names: {my_uuid}")
