@@ -52,7 +52,7 @@ for src, cfg in to_do:
     start = time.time()
     x = 0
     with zipfile.ZipFile(outfn, "w", compression=zipfile.ZIP_BZIP2) as fh:
-        for ident in store.iter_keys():
+        for ident in store.iter_keys_slice(my_slice, max_slice):
             ident = cfgs.split_qua(ident)[0]
             if ident in done:
                 continue
