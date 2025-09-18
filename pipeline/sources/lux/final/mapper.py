@@ -321,6 +321,9 @@ class Cleaner(Mapper):
             # Now set a primary name for each language (including no language)
             # Ensure no alternate and primary
 
+            if llm_primaryname:
+                print(lang_names)
+                break
             sort_name_langs = {}
             primary_name_langs = {}
 
