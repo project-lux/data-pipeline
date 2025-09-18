@@ -323,7 +323,7 @@ class Cleaner(Mapper):
 
             if llm_primaryname:
                 print(lang_names)
-                break
+                raise ValueError(lang_names)
             sort_name_langs = {}
             primary_name_langs = {}
 
