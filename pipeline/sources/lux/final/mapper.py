@@ -264,6 +264,8 @@ class Cleaner(Mapper):
                         "language": [lang_en_js],
                     }
 
+                    data["identified_by"] = [llm_primaryname, llm_sortname, *data.get("identified_by", [])]
+
                 if birth and "born" not in data:
                     # add birth year
                     dn = {"type": "Name", "content": birth, "classified_as": [displayType]}
@@ -296,8 +298,6 @@ class Cleaner(Mapper):
 
         if "identified_by" in data:
             lang_names = {}
-            if llm_primaryname:
-                lang_names[english] = [llm_primaryname, llm_sortname]
             remove = []
             # invert the names into languages then primary / not primary
             for nm in data["identified_by"]:
@@ -321,9 +321,6 @@ class Cleaner(Mapper):
             # Now set a primary name for each language (including no language)
             # Ensure no alternate and primary
 
-            if llm_primaryname:
-                print(lang_names)
-                raise ValueError(lang_names)
             sort_name_langs = {}
             primary_name_langs = {}
 
