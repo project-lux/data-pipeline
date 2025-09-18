@@ -46,7 +46,7 @@ for src, cfg in to_do:
 
     print(f"Exporting {ttl} records from {src}")
 
-    outfn = f"/data-export/output/external/export_{src}.zip"
+    outfn = f"/data-export/output/external/export_{src}_{my_slice}.zip"
     done = {}
 
     start = time.time()
