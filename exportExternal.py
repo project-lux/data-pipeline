@@ -66,6 +66,7 @@ for src, cfg in to_do:
                 ffh.write(outb)
             if not x % 25000:
                 print(f"  {x} in {time.time() - start}")
+                sys.stdout.flush()
 
     fh.close()
     end = time.time()
