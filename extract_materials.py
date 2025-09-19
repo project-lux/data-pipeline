@@ -22,7 +22,7 @@ DESCRIPTION = "http://vocab.getty.edu/aat/300435416"
 records = []
 x = 0
 for src in srcs:
-    print(f"Processing {src.name}...")
+    print(f"Processing {src['name']}...")
     dc = src["datacache"]
     for rec in dc.iter_records_type("HumanMadeObject"):
         data = rec["data"]
