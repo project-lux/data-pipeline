@@ -27,9 +27,9 @@ for src in srcs:
     for rec in dc.iter_records_type("HumanMadeObject"):
         data = rec["data"]
         id = data["id"]
-        classified_as = data["classified_as"]
-        made_of = data["made_of"]
-        for desc in data["referred_to_by"]:
+        classified_as = data.get("classified_as", [])
+        made_of = data.get("made_of", [])
+        for desc in data.get("referred_to_by", []):
             cxns = [x.get("id", None) for x in desc.get("classified_as", [])]
             if MATERIAL in cxns:
                 material_desc = desc.get("content", "")
