@@ -29,21 +29,24 @@ for src in srcs:
         id = data["id"]
         classified_as = data.get("classified_as", [])
         made_of = data.get("made_of", [])
+        description = ""
+        material_desc = ""
         for desc in data.get("referred_to_by", []):
             cxns = [x.get("id", None) for x in desc.get("classified_as", [])]
             if MATERIAL in cxns:
                 material_desc = desc.get("content", "")
             elif DESCRIPTION in cxns:
                 description = desc.get("content", "")
-        records.append(
-            {
-                "id": id,
-                "classifications": classified_as,
-                "materials": made_of,
-                "description": description,
-                "material_description": material_desc,
-            }
-        )
+        if materials and (material_desc or description):
+            records.append(
+                {
+                    "id": id,
+                    "classifications": classified_as,
+                    "materials": made_of,
+                    "description": description,
+                    "material_description": material_desc,
+                }
+            )
         x += 1
         if not x % 25000:
             print(f"Processed {x} records")
