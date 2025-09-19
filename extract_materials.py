@@ -47,3 +47,5 @@ for src in srcs:
         x += 1
         if not x % 25000:
             print(f"Processed {x} records")
+
+json.dump(records, open("materials.json", "w"), indent=2)
