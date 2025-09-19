@@ -37,7 +37,7 @@ for src in srcs:
                 material_desc = desc.get("content", "")
             elif DESCRIPTION in cxns:
                 description = desc.get("content", "")
-        if materials and (material_desc or description):
+        if made_of and (material_desc or description):
             records.append(
                 {
                     "id": id,
