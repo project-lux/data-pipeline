@@ -1,11 +1,12 @@
-from pipeline.process.reidentifier import Reidentifier
-from pipeline.process.base.mapper import Mapper
-from pipeline.process.utils.mapper_utils import test_birth_death
+import os
 from urllib.parse import quote, urlparse, urlunparse
-from pipeline.storage.idmap.lmdb import JsonLmdb
 
 import ujson as json
-import os
+
+from pipeline.process.base.mapper import Mapper
+from pipeline.process.reidentifier import Reidentifier
+from pipeline.process.utils.mapper_utils import test_birth_death
+from pipeline.storage.idmap.lmdb import JsonLmdb
 
 
 class Cleaner(Mapper):
@@ -220,7 +221,7 @@ class Cleaner(Mapper):
                 pname = self.llm_person_names[my_uuid]
             except:
                 # Log missing person
-                print(f"Missing person in LLM Names: {my_uuid}")
+                # print(f"Missing person in LLM Names: {my_uuid}")
                 pname = {}
 
             if pname:
