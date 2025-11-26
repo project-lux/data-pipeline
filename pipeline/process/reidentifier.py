@@ -1,5 +1,6 @@
-import ujson as json
 import os
+
+import ujson as json
 
 
 class Reidentifier(object):
@@ -174,7 +175,7 @@ class Reidentifier(object):
                     result[k] = []
                 for i in v:
                     if type(i) == dict:
-                        nres = self._reidentify(i)
+                        nres = self._reidentify(i, i.get("type", None))
                         if nres:
                             if orig == dict:
                                 result[k] = nres
