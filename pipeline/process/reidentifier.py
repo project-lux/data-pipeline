@@ -72,6 +72,11 @@ class Reidentifier(object):
                 # strip explicit bnode identifiers (_:)
                 if not recid.startswith("_:"):
                     result["id"] = recid
+        elif equivs:
+            # not recid, but yes equivalents
+            # So a bnode for us, but one with external URIs.
+            # just preserve the equivalents and move on
+            return {"equivalent": equivs}
 
         if recid or equivs:
             # get equivalents and uri first for this
@@ -96,12 +101,6 @@ class Reidentifier(object):
                     uu = self.idmap[qrecid]
                     equiv_map[recid] = uu
 
-            print(record)
-            print(recid)
-            print(equiv_map)
-            print(uu)
-            print(qrecid)
-
             if not equiv_map:
                 # Don't know anything at all, ask for a new yuid??
                 # This shouldn't happen if previous phases have worked
@@ -122,7 +121,7 @@ class Reidentifier(object):
                         print(f"Found YUID only via equivs, not recid {recid} / {equivs}")
                     self.idmap[qrecid] = uu
 
-            # And set on way out
+            # And set up the URI on the way out
             result["id"] = uu
 
             if top:
