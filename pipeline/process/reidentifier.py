@@ -1,8 +1,3 @@
-import os
-
-import ujson as json
-
-
 class Reidentifier(object):
     def __init__(self, configs, idmap):
         self.configs = configs
@@ -49,6 +44,8 @@ class Reidentifier(object):
         result = {}
         recid = record.get("id", "")
         equivs = record.get("equivalent", [])
+        uu = None
+        qrecid = None
 
         if recid:
             # Don't rewrite some URIs like creativecommons
@@ -98,6 +95,12 @@ class Reidentifier(object):
                     # We know about this entity/record already
                     uu = self.idmap[qrecid]
                     equiv_map[recid] = uu
+
+            print(record)
+            print(recid)
+            print(equiv_map)
+            print(uu)
+            print(qrecid)
 
             if not equiv_map:
                 # Don't know anything at all, ask for a new yuid??
