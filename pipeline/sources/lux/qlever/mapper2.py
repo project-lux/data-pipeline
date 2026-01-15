@@ -1,8 +1,10 @@
-from pipeline.process.base.mapper import Mapper
-from bs4 import BeautifulSoup
 import unicodedata
-from string import whitespace, punctuation
+from string import punctuation, whitespace
+
+from bs4 import BeautifulSoup
 from shapely.wkt import loads
+
+from pipeline.process.base.mapper import Mapper
 
 """
 Create a mapper that produces completely artificial triples.
@@ -573,12 +575,15 @@ class QleverMapper(Mapper):
         else:
             raise ValueError(f"Unsupported prefix: {pfx}")
 
-        # add in recordText
+        # add in recordText, with prefix
+
         rtxt = " ".join([x for x in recordText if x])
         rtxt = self.sanitize_string(rtxt)
-        lt["predicate"] = f"{self.luxns}recordText"
+        lt["predicate"] = f"{self.luxns}{pfx}RecordText"
         lt["value"] = rtxt
         lt["datatype"] = ""
         triples.append(self.literal_pattern.format(**lt))
+
+        # Experiment: Try keeping recordTexts in separate triples
 
         return triples
