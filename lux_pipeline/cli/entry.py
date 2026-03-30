@@ -1,12 +1,13 @@
+import importlib
+import logging
+import multiprocessing
 import os
 import sys
 from argparse import ArgumentParser
-from dotenv import load_dotenv, find_dotenv
-import importlib
-from ..config import Config
-import multiprocessing
-import logging
 
+from dotenv import find_dotenv, load_dotenv
+
+from ..config import Config
 
 logger = logging.getLogger("lux_pipeline")
 # Send /everything/ to the logger

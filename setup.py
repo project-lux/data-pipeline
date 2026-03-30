@@ -1,9 +1,9 @@
-from setuptools import setup, find_packages
+from setuptools import find_namespace_packages, setup
 
 setup(
     name="lux-pipeline",
-    version="0.0.3",
-    packages=find_packages(),
+    version="0.0.4",
+    packages=find_namespace_packages(include=["lux_pipeline"]),
     install_requires=[
         "requests",
         "redis",
@@ -25,11 +25,11 @@ setup(
         "python-dotenv",
         "pyluach",
         "PyGithub",
-        "rich"
+        "rich",
     ],
     entry_points={
-        'console_scripts': [
-            'lux = lux_pipeline.cli.entry:main',
+        "console_scripts": [
+            "lux = lux_pipeline.cli.entry:main",
         ]
-    }
+    },
 )
