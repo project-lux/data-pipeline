@@ -1,10 +1,11 @@
-import psycopg2
-from psycopg2.extras import RealDictCursor, Json
-from psycopg2.pool import SimpleConnectionPool
-import time
 import datetime
 import sys
 import threading
+import time
+
+import psycopg2
+from psycopg2.extras import Json, RealDictCursor
+from psycopg2.pool import SimpleConnectionPool
 
 #
 # How to index into JSONB arrays:
@@ -379,6 +380,23 @@ class PooledCache(object):
             cursor.execute(qry)
             for res in cursor:
                 yield res
+
+    def iter_keys_type_slice(self, t, mySlice=0, maxSlice=10):
+        # DON'T use row_number() as it's freaking slow
+        if mySlice >= maxSlice:
+            raise ValueError(f"{mySlice} cannot be > {maxSlice}")
+
+        if t == "Concept":
+            qry = f"SELECT * FROM {self.name} WHERE data->>'type' IN ('Type', 'Currency', 'Language', 'Material', 'MeasurementUnit')"
+        else:
+            qry = f"SELECT * FROM {self.name} WHERE data->'type' = '\"{t}\"'"
+        ct = 0
+        with self._cursor(iter=True, size=50000) as cursor:
+            cursor.execute(qry)
+            for res in cursor:
+                if (ct % maxSlice) - mySlice == 0:
+                    yield res[self.key]
+                ct += 1
 
     def iter_keys_type(self, t):
         # allow query for records by top level type value
