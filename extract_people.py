@@ -24,8 +24,13 @@ merged_cache = cfgs.results["merged"]["recordcache"]
 
 outh = open(f"dump_person_{my_slice}.jsonl", "w")
 
+total = 5275500 / max_slice
+x = 0
 for recid in merged_cache.iter_keys_type_slice("Person", my_slice, max_slice):
     rec = merged_cache[recid]
     outh.write(json.dumps(rec["data"]) + "\n")
+    x += 1
+    if not x % 50000:
+        print(f"{x}/{total}")
 
 outh.close()
