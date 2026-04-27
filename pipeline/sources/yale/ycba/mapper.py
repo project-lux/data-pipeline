@@ -1,7 +1,8 @@
-from pipeline.process.base.mapper import Mapper
-from pipeline.process.utils.mapper_utils import validate_timespans
 import ujson as json
 from shapely.geometry import shape
+
+from pipeline.process.base.mapper import Mapper
+from pipeline.process.utils.mapper_utils import validate_timespans
 
 
 class YcbaMapper(Mapper):
@@ -27,6 +28,18 @@ class YcbaMapper(Mapper):
 
     def transform(self, rec, rectype, reference=False):
         data = rec["data"]
+
+        # 2026-04-27
+        # Remove [] from content in statements
+
+        if "referred_to_by" in data:
+            for rtb in data["referred_to_by"]:
+                if "content" in rtb:
+                    if type(rtb["content"]) is list and rtb["content"]:
+                        rtb["content"] = rtb["content"][0]
+                else:
+                    # uhoh
+                    print(f"Statement in YCBA {data['id']} is missing content")
 
         # 2022-08-19
         # straight up delete all ycba_term entries before they make a mess
@@ -98,8 +111,8 @@ class YcbaMapper(Mapper):
             data["equivalent"] = [uri for uri in data["equivalent"] if "wikidata.org" not in uri.get("id", "")]
             if not data["equivalent"]:
                 del data["equivalent"]
-        
-        if data['type'] == "Period":
+
+        if data["type"] == "Period":
             self.process_period_record(data)
 
         self.fix_links(rec)

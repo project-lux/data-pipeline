@@ -1,9 +1,11 @@
 import datetime
 from ctypes import c_int32
-from pipeline.process.base.mapper import Mapper
-import ujson as json
+
 import numpy as np
+import ujson as json
 from bs4 import BeautifulSoup
+
+from pipeline.process.base.mapper import Mapper
 
 
 class MlMapper(Mapper):
@@ -207,7 +209,10 @@ class MlMapper(Mapper):
 
         # strip html from content, move to _content_html
         for part in data.get("referred_to_by", []):
-            self.do_bs_html(part)
+            try:
+                self.do_bs_html(part)
+            except:
+                pass
         for rep in data.get("representation", []):
             for dsb in rep.get("digitally_shown_by", []):
                 for ref in dsb.get("referred_to_by", []):
