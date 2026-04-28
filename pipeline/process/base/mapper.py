@@ -220,7 +220,7 @@ class Mapper(object):
                         match = self.single_century_regex.match(content)
                         if match:
                             try:
-                                century = int(match.group(1))
+                                century = int(match.group(2))
                             except:
                                 print(f"content: {content}")
                                 print(match.groups())
@@ -232,7 +232,7 @@ class Mapper(object):
                         match = self.range_centuries_regex.match(content)
                         if match:
                             try:
-                                start_century, end_century = map(int, match.groups())
+                                start_century, end_century = int(match.group(2)), int(match.group(4))
                             except:
                                 print(f"content for range: {content}")
                                 print(match.groups())
