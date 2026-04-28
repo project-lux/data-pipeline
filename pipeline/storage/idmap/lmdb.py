@@ -1,5 +1,5 @@
-from lmdbm import Lmdb
 import ujson as json
+from lmdbm import Lmdb
 
 ### Storage Layer
 
@@ -25,10 +25,12 @@ class StringLmdb(Lmdb):
         pass
 
     def __contains__(self, key):
+        if not str(key).strip():
+            return False
         try:
             return Lmdb.__contains__(self, key)
         except Exception as e:
-            print(f"\n*** __contains__ got {e} for {key} ***")
+            print(f"\n*** __contains__ got {e} for '{key}' ***")
             return False
 
 

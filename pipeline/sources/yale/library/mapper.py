@@ -1,10 +1,11 @@
-from pipeline.process.base.mapper import Mapper
-from pipeline.process.utils.mapper_utils import validate_timespans
-from pipeline.process.utils.mapper_utils import make_datetime
-import os
-import ujson as json
 import csv
+import os
 import re
+
+import ujson as json
+
+from pipeline.process.base.mapper import Mapper
+from pipeline.process.utils.mapper_utils import make_datetime, validate_timespans
 
 multi_props = [
     "part_of",
@@ -117,27 +118,29 @@ class YulMapper(Mapper):
             elif type(v) == dict:
                 self.walk_multi(v)
 
-    def edit_block(self, block, classification=False):
-        new_block = []
-        headings_index = self.headings_index
+    # def old_edit_block(self, block, classification=False):
+    #     new_block = []
+    #     headings_index = self.headings_index
 
-        for a in block:
-            a_id = a.get("id", "")
-            if a_id in headings_index:
-                csh = {"type": "Type", "created_by": {"type": "Creation", "influenced_by": []}}
-                for h_json in headings_index[a_id]:
-                    try:
-                        h = json.loads(h_json)
-                        csh["created_by"]["influenced_by"].append(h)
-                        if classification:
-                            # only process the first result for classified_as
-                            break
-                    except json.JSONDecodeError:
-                        print(f"Failed to decode JSON for {a_id}")
-                new_block.append(csh)
-            else:
-                new_block.append(a)
-        return new_block
+    #     for a in block:
+    #         a_id = a.get("id", "")
+    #         if not a_id:
+    #             continue
+    #         if a_id in headings_index:
+    #             csh = {"type": "Type", "created_by": {"type": "Creation", "influenced_by": []}}
+    #             for h_json in headings_index[a_id]:
+    #                 try:
+    #                     h = json.loads(h_json)
+    #                     csh["created_by"]["influenced_by"].append(h)
+    #                     if classification:
+    #                         # only process the first result for classified_as
+    #                         break
+    #                 except json.JSONDecodeError:
+    #                     print(f"Failed to decode JSON for {a_id}")
+    #             new_block.append(csh)
+    #         else:
+    #             new_block.append(a)
+    #     return new_block
 
     def transform(self, rec, rectype, reference=False):
         data = rec["data"]
@@ -153,23 +156,23 @@ class YulMapper(Mapper):
 
         # replace compound subject headings with their components in about and represents on Sets and Works
         if data["type"] in ["LinguisticObject", "VisualItem", "Set"]:
-            current_about = data.get("about", [])
-            new_about = self.edit_block(current_about)
+            new_about = data.get("about", [])
+            # new_about = self.edit_block(current_about)
 
-            represents = data.get("represents", [])
-            remaining_represents = []
-            for r in represents:
-                r_id = r.get("id", "")
-                if r_id in headings_index:
-                    transformed = self.edit_block([r])
-                    new_about.extend(transformed)
-                else:
-                    remaining_represents.append(r)
+            # represents = data.get("represents", [])
+            # remaining_represents = []
+            # for r in represents:
+            #     r_id = r.get("id", "")
+            #     if r_id in headings_index:
+            #         transformed = self.edit_block([r])
+            #         new_about.extend(transformed)
+            #     else:
+            #         remaining_represents.append(r)
 
-            if remaining_represents:
-                data["represents"] = remaining_represents
-            elif represents:
-                del data["represents"]
+            # if remaining_represents:
+            #     data["represents"] = remaining_represents
+            # elif represents:
+            #     del data["represents"]
 
             # Add YCBA objects/exhibitions
             ilsnum = None
@@ -185,7 +188,7 @@ class YulMapper(Mapper):
                     {"id": exh_id, "type": "Activity"} for exh_id in self.ycbaexhs.get(ilsnum, []) if exh_id
                 )
 
-            if current_about or new_about:
+            if new_about:
                 data["about"] = new_about
 
         if data["id"] in self.wiki_recon:

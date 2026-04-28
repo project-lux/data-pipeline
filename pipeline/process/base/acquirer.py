@@ -1,4 +1,3 @@
-
 class Acquirer(object):
     def __init__(self, config):
         self.config = config
@@ -137,6 +136,7 @@ class Acquirer(object):
         try:
             rec2 = self.mapper.transform(rec, rectype, reference=reference)
         except Exception as e:
+            raise
             print(f"Failed to map record {identifier} for {self.name}: {e}")
             return None
 
