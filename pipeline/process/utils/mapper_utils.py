@@ -1,12 +1,14 @@
 import re
 import time
-import requests
-from dateutil import parser
-from dateparser.date import DateDataParser
-from edtf import parse_edtf, text_to_edtf, struct_time_to_datetime
 from datetime import datetime, timedelta
-from edtf.parser.parser_classes import UncertainOrApproximate as UOA, PartialUncertainOrApproximate as PUOA
+
 import numpy as np
+import requests
+from dateparser.date import DateDataParser
+from dateutil import parser
+from edtf import parse_edtf, struct_time_to_datetime, text_to_edtf
+from edtf.parser.parser_classes import PartialUncertainOrApproximate as PUOA
+from edtf.parser.parser_classes import UncertainOrApproximate as UOA
 
 # Note -- MaskedPrecision was removed from edtf, so removing as fuzzy parser
 
@@ -145,7 +147,7 @@ def test_birth_death(person):
     if type(person) == dict:
         # JSON serialization
         if "born" in person and "timespan" in person["born"]:
-            bts = person["born"]["timespan"]   
+            bts = person["born"]["timespan"]
             botb = bts.get("begin_of_the_begin")
             if not botb:
                 return True
@@ -193,6 +195,7 @@ def test_birth_death(person):
         return False
     else:
         return True
+
 
 def convert_hebrew_date(dt):
     if HebrewDate is not None and int(dt[:4]) > 4500:
@@ -365,12 +368,11 @@ def make_datetime(value, precision=""):
             value = value.replace("u", "X")
             value = value.replace("x", "X")
             value = value.replace("?", "X")
-            value = value.replace('.XX.XX', '-XX-XX')
+            value = value.replace(".XX.XX", "-XX-XX")
             # Handle date ranges, take first date
             value = re.split(r"[,/]| or ", value)[0].strip()
             if value.startswith("XX.XX.") or value.startswith("XX-XX-") or value.startswith("XX XX "):
                 value = value[6:]
-
 
         value = value.replace("-00", "-XX")
         ed_value = "-" + value if is_bce_date else value
@@ -433,10 +435,12 @@ def make_datetime(value, precision=""):
             # No to EDTF, last resort try DateDataParser
             try:
                 dt3 = dp_parser.get_date_data(value)
+                if not dt3:
+                    dt3 = dp_parser.get_date_data(initialValue)
                 if dt3.period == "day" and dt3.locale != "en":
                     begin = dt3.date_obj
                     end = begin + timedelta(days=1)
-                elif dt:
+                elif dt3:
                     print(f"dateparser found: {dt3} from {value} ?")
                     return None
                 else:
@@ -488,4 +492,3 @@ def make_datetime(value, precision=""):
             dtstr = begin.isoformat()[:l]
         dt = np.datetime64(dtstr)
         return process_np_datetime(dt, prec)
-
