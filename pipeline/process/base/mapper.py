@@ -1,6 +1,7 @@
 import os
-import ujson as json
 import re
+
+import ujson as json
 from cromulent import model, vocab
 from lxml import etree
 
@@ -27,7 +28,6 @@ class Mapper(object):
         self.factory.order_json = False
         self.factory.cache_hierarchy()
 
-
         ### FIXME: How much of this is actually needed for *all* mappers?
         ### shouldn't they be instantiated on some constants instance
         ### and then referenced?
@@ -37,7 +37,7 @@ class Mapper(object):
         self.aat_unit_ids = []
         for i in vocab.instances.values():
             if isinstance(i, model.Language):
-                if hasattr(i, 'notation'):
+                if hasattr(i, "notation"):
                     self.process_langs[i.notation] = i
             elif isinstance(i, model.Material):
                 self.aat_material_ids.append(i.id)
@@ -186,18 +186,22 @@ class Mapper(object):
                         self.xpath_fixes[ident] = [f]
 
         self.single_century_regex = re.compile(
-            r"(early|mid|late)?\s*(\d{1,2})(?:st|nd|rd|th) century$", re.IGNORECASE)
+            r"(early|mid|late)?\s*(\d{1,2})(?:st|nd|rd|th) century$", re.IGNORECASE
+        )
         self.range_centuries_regex = re.compile(
             r"(early|mid|late)?\s*(\d{1,2})(?:st|nd|rd|th) century\s*-\s*(early|mid|late)?\s*(\d{1,2})(?:st|nd|rd|th) century",
-            re.IGNORECASE)
+            re.IGNORECASE,
+        )
 
     def process_period_record(self, record):
         # Add AAT classification
-        record.setdefault("classified_as", []).append({
-            "id": "http://vocab.getty.edu/aat/300081446",
-            "type": "Type",
-            "_label": "Period",
-        })
+        record.setdefault("classified_as", []).append(
+            {
+                "id": "http://vocab.getty.edu/aat/300081446",
+                "type": "Type",
+                "_label": "Period",
+            }
+        )
 
         if "timespan" not in record:
             identified_by = record.get("identified_by", [])
@@ -207,19 +211,24 @@ class Mapper(object):
                     if cxn.get("id") == "http://vocab.getty.edu/aat/300404670":
                         content = identifier.get("content", "").strip()
 
-                        #Dates are at end of string separated by a comma e.g. 
+                        # Dates are at end of string separated by a comma e.g.
                         # "Five Hu and the Sixteen kingdoms, 304-439"
                         if "," in content:
                             dates = content.rsplit(",", 1)[-1].strip()
 
-                        #String is a single century e.g. "19th century"
+                            # String is a single century e.g. "19th century"
                         match = self.single_century_regex.match(content)
                         if match:
-                            century = int(match.group(1))
+                            try:
+                                century = int(match.group(1))
+                            except:
+                                print(f"content: {content}")
+                                print(match.groups())
+                                raise
                             start_year, end_year = (century - 1) * 100, (century - 1) * 100 + 99
                             dates = f"{start_year} - {end_year}"
 
-                        #String is century range e.g. "12th century - 15th century"
+                        # String is century range e.g. "12th century - 15th century"
                         match = self.range_centuries_regex.match(content)
                         if match:
                             start_century, end_century = map(int, match.groups())
@@ -227,7 +236,7 @@ class Mapper(object):
                             dates = f"{start_year} - {end_year}"
 
                         else:
-                            #just try the string itself
+                            # just try the string itself
                             dates = content
 
                         try:
@@ -239,15 +248,19 @@ class Mapper(object):
                                 "type": "TimeSpan",
                                 "begin_of_the_begin": begin if begin else "",
                                 "end_of_the_end": end if end else "",
-                                "identified_by": [{
-                                    "type": "Name",
-                                    "classified_as": [{
-                                        "id": "http://vocab.getty.edu/aat/300404669",
-                                        "type": "Type",
-                                        "_label": "Display Title",
-                                    }],
-                                    "content": content,
-                                }]
+                                "identified_by": [
+                                    {
+                                        "type": "Name",
+                                        "classified_as": [
+                                            {
+                                                "id": "http://vocab.getty.edu/aat/300404669",
+                                                "type": "Type",
+                                                "_label": "Display Title",
+                                            }
+                                        ],
+                                        "content": content,
+                                    }
+                                ],
                             }
                         break
         return record
@@ -266,7 +279,7 @@ class Mapper(object):
 
     def expand_uri(self, identifier):
         return self.namespace + identifier
-    
+
     def to_plain_string(self, value):
         return str(value) if isinstance(value, etree._ElementUnicodeResult) else value
 
