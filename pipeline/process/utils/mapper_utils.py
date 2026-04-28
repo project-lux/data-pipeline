@@ -359,23 +359,22 @@ def make_datetime(value, precision=""):
     except:
         # Nope, try the edtf parser
         # Fix: 2020?
-        if len(value) == 5 and value[4] == "?":
-            value = value[:4] + "~"
+        ed_value = value
+        if len(ed_value) == 5 and ed_value[4] == "?":
+            ed_value = ed_value[:4] + "~"
         # Fix: 19XX or 17??
-        if "?" in value or "u" in value or "x" in value:
-            # value = x_re.sub('\g<1>u', value)
-            # value = x_re.sub('\g<1>u', value)
-            value = value.replace("u", "X")
-            value = value.replace("x", "X")
-            value = value.replace("?", "X")
-            value = value.replace(".XX.XX", "-XX-XX")
+        if "?" in ed_value or "u" in ed_value or "x" in ed_value:
+            ed_value = ed_value.replace("u", "X")
+            ed_value = ed_value.replace("x", "X")
+            ed_value = ed_value.replace("?", "X")
+            ed_value = ed_value.replace(".XX.XX", "-XX-XX")
             # Handle date ranges, take first date
-            value = re.split(r"[,/]| or ", value)[0].strip()
-            if value.startswith("XX.XX.") or value.startswith("XX-XX-") or value.startswith("XX XX "):
-                value = value[6:]
+            ed_value = re.split(r"[,/]| or ", ed_value)[0].strip()
+            if ed_value.startswith("XX.XX.") or ed_value.startswith("XX-XX-") or ed_value.startswith("XX XX "):
+                ed_value = ed_value[6:]
 
-        value = value.replace("-00", "-XX")
-        ed_value = "-" + value if is_bce_date else value
+        ed_value = ed_value.replace("-00", "-XX")
+        ed_value = "-" + ed_value if is_bce_date else ed_value
 
         try:
             # Could be actual EDTF but not parsable by dateutils
@@ -435,7 +434,7 @@ def make_datetime(value, precision=""):
             # No to EDTF, last resort try DateDataParser
             try:
                 dt3 = dp_parser.get_date_data(value)
-                if not dt3:
+                if not dt3 or not dt3.date_obj:
                     dt3 = dp_parser.get_date_data(initialValue)
                 if dt3.period == "day" and dt3.locale != "en":
                     begin = dt3.date_obj
@@ -446,8 +445,9 @@ def make_datetime(value, precision=""):
                 else:
                     print(f"Failed to parse date: {initialValue} --> {value}")
                     return None
-            except:
-                print(f"Failed to parse date: {initialValue} --> {value}")
+            except Exception as e:
+                print(f"Failed to parse date with dateparser: {initialValue} --> {value}")
+                print(e)
                 return None
 
     if not precision:
