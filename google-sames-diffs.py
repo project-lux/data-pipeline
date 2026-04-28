@@ -1,16 +1,16 @@
-import os
-import sys
 import csv
 import json
+import os
+import sys
 import time
 
+from dotenv import load_dotenv
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from dotenv import load_dotenv
 from pipeline.config import Config
 
 load_dotenv()
@@ -59,7 +59,7 @@ try:
 
     for sn, my_map in SHEET_NAMES:
         page = RANGE_START
-        rng = f"A{page}:B{page+500}"
+        rng = f"A{page}:B{page + 500}"
         RANGE = f"{sn}!{rng}"
         cont = True
         while cont:
@@ -81,23 +81,26 @@ try:
                     else:
                         my_map.append([uriaf, uribf])
                 page += 500
-                rng = f"A{page}:B{page+500}"
+                rng = f"A{page}:B{page + 500}"
                 RANGE = f"{sn}!{rng}"
 
 except HttpError as err:
     print(f"Trapped error: {err}")
 
-# Now write the dicts to CSVs
-dfn = os.path.join(cfgs.data_dir, "differentFrom/google.csv")
-with open(dfn, "w") as fh:
-    writer = csv.writer(fh)
-    for r in diffs:
-        writer.writerow(r)
-sfn = os.path.join(cfgs.data_dir, "sameAs/google.csv")
-with open(sfn, "w") as fh:
-    writer = csv.writer(fh)
-    for r in sames:
-        writer.writerow(r)
+if diffs:
+    # Now write the dicts to CSVs
+    dfn = os.path.join(cfgs.data_dir, "differentFrom/google.csv")
+    with open(dfn, "w") as fh:
+        writer = csv.writer(fh)
+        for r in diffs:
+            writer.writerow(r)
+
+if sames:
+    sfn = os.path.join(cfgs.data_dir, "sameAs/google.csv")
+    with open(sfn, "w") as fh:
+        writer = csv.writer(fh)
+        for r in sames:
+            writer.writerow(r)
 
 # Later we'll call load-csv-map2.py on them
 
@@ -106,7 +109,7 @@ with open(sfn, "w") as fh:
 fixes = []
 
 page = RANGE_START
-rng = f"A{page}:G{page+500}"
+rng = f"A{page}:G{page + 500}"
 RANGE = f"Fixes!{rng}"
 cont = True
 while cont:
@@ -138,7 +141,7 @@ while cont:
                 }
             )
         page += 500
-        rng = f"A{page}:G{page+500}"
+        rng = f"A{page}:G{page + 500}"
         RANGE = f"Fixes!{rng}"
 
 dfn = os.path.join(cfgs.data_dir, "xpath_fixes.json")
