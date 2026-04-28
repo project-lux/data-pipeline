@@ -1,7 +1,9 @@
+from datetime import datetime, timedelta
+
 import ujson as json
 from shapely import wkt
 from shapely.geometry import shape
-from datetime import datetime, timedelta
+
 from pipeline.process.reidentifier import Reidentifier
 
 
@@ -290,6 +292,8 @@ class RecordMerger(object):
     def merge_person(self, rec, merge, msource, skip):
         # born, died, carried_out, contact_point, residence
         if "born" in merge and not "born" in skip:
+            if type(rec["born"]) is not dict or type(merge["born"]) is not dict:
+                print(f"Can't merge born on {rec['id']} / {merge['id']}; not dicts")
             self.merge_common(rec["born"], merge["born"], msource)
 
         if "died" in merge and not "died" in skip:
@@ -662,6 +666,15 @@ class RecordMerger(object):
     def merge_common(self, rec, merge, msource="", myskip=None):
         if "id" in merge:
             del merge["id"]
+
+        if type(rec) is not dict or type(merge) is not dict:
+            print(f"FAILED to merge {rec} and {merge}, not actual records")
+            if type(rec) is dict:
+                return rec
+            elif type(merge) is dict:
+                return merge
+            else:
+                return []
 
         # Check if type is the same, if not, log an issue
         if rec["type"] != merge["type"]:
