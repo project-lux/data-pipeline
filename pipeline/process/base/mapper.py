@@ -231,7 +231,12 @@ class Mapper(object):
                         # String is century range e.g. "12th century - 15th century"
                         match = self.range_centuries_regex.match(content)
                         if match:
-                            start_century, end_century = map(int, match.groups())
+                            try:
+                                start_century, end_century = map(int, match.groups())
+                            except:
+                                print(f"content for range: {content}")
+                                print(match.groups())
+                                raise
                             start_year, end_year = (start_century - 1) * 100, (end_century - 1) * 100 + 99
                             dates = f"{start_year} - {end_year}"
 
