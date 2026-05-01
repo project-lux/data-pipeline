@@ -1,7 +1,9 @@
 import csv
 import os
+import unicodedata
 
 import ujson as json
+import yaml
 
 from pipeline.process.base.index_loader import LmdbIndexLoader, TabLmdb
 from pipeline.storage.idmap.lmdb import JsonLmdb
@@ -32,6 +34,15 @@ class LlmNameIndexLoader(LmdbIndexLoader):
                 key = js["lux_id"]
                 name = js["primary_name"]
                 val = js["parsed_output"]
+                if not val:
+                    raw = js["raw_output"]
+                    try:
+                        decoded = raw.encode("utf-8").decode("unicode_escape")
+                        fixed = decoded.encode("latin-1").decode("utf-8")
+                        clean = unicodedata.normalize("NFC", fixed)
+                        val = yaml.safe_load(clean)
+                    except:
+                        pass
 
                 if key and val:
                     huge_dict[key] = val
