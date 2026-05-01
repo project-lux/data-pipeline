@@ -27,7 +27,7 @@ class LlmNameIndexLoader(LmdbIndexLoader):
         huge_dict = {}
         name_dict = {}
         x = 0
-        dead = 0
+        bad = []
         with open(filename, "r") as fh:
             for line in fh:
                 js = json.loads(line)
@@ -35,33 +35,28 @@ class LlmNameIndexLoader(LmdbIndexLoader):
                 name = js["primary_name"]
                 val = js["parsed_output"]
                 if not val:
-                    raw = js["raw_output"]
-                    try:
-                        decoded = raw.encode("utf-8").decode("unicode_escape")
-                        fixed = decoded.encode("latin-1").decode("utf-8")
-                        clean = unicodedata.normalize("NFC", fixed)
-                        val = yaml.safe_load(clean)
-                    except Exception as e:
-                        print(raw)
-                        print(e)
+                    bad.append(line)
+                    continue
 
-                if key and val:
+                if key:
                     huge_dict[key] = val
-                if name and val:
+                if name:
                     if len(name) > 498:
                         print(f"Name too long: {name}")
                     else:
                         name_dict[name] = val
-                if not key or not name or not val:
-                    dead += 1
                 x += 1
                 if not x % 100000:
-                    print(f"Processed {x} parsed_names, {dead} skipped due to nulls")
+                    print(f"Processed {x} parsed_names, {len(bad)} skipped due to nulls")
         huge_dict = dict(sorted(huge_dict.items()))
         name_dict = dict(sorted(name_dict.items()))
 
         db.update(huge_dict)
         db2.update(name_dict)
+        fh = open("bad-js-lines.jsonl", "w")
+        for l in bad:
+            fh.write(l + "\n")
+        fh.close()
 
 
 class GlobalIndexLoader(LmdbIndexLoader):
