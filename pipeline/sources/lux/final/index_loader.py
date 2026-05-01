@@ -25,6 +25,7 @@ class LlmNameIndexLoader(LmdbIndexLoader):
         huge_dict = {}
         name_dict = {}
         x = 0
+        dead = 0
         with open(filename, "r") as fh:
             for line in fh:
                 js = json.loads(line)
@@ -37,10 +38,10 @@ class LlmNameIndexLoader(LmdbIndexLoader):
                 if name and val:
                     name_dict[name] = val
                 if not key or not name or not val:
-                    print(json.dumps(js, indent=2))
+                    dead += 1
                 x += 1
                 if not x % 100000:
-                    print(f"Processed {x} parsed_names")
+                    print(f"Processed {x} parsed_names, {dead} skipped due to nulls")
         huge_dict = dict(sorted(huge_dict.items()))
         name_dict = dict(sorted(name_dict.items()))
 
