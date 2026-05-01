@@ -31,11 +31,16 @@ class Cleaner(Mapper):
             self.metatypes = json.loads(data)
 
         # Look for LLM Parsed Person names
-        fn = os.path.join(self.configs.indexes_dir, "llmPersonNames.lmdb")
+        fn = os.path.join(self.configs.indexes_dir, "yuid_personname.lmdb")
         if os.path.exists(fn):
             self.llm_person_names = JsonLmdb.open(fn, "r", readahead=False, writemap=True)
         else:
-            print("Couldn't find LLM Person Names lmdb")
+            print("Couldn't find LLM yuid->name lmdb")
+        fn2 = os.path.join(self.configs.indexes_dir, "yuid_personname.lmdb")
+        if os.path.exists(fn2):
+            self.llm_label_person_names = JsonLmdb.open(fn2, "r", readahead=False, writemap=True)
+        else:
+            print("Couldn't find LLM label->name lmdb")
 
     def get_commons_license(self, img):
         # Can't store reidentified version as it would need a YUID
@@ -216,13 +221,25 @@ class Cleaner(Mapper):
         llm_sortname = None
         llm_primaryname = None
         if data["type"] == "Person":
+            pname = {}
             my_uuid = data["id"].rsplit("/", 1)[-1]
             try:
                 pname = self.llm_person_names[my_uuid]
             except:
-                # Log missing person
-                # print(f"Missing person in LLM Names: {my_uuid}")
-                pname = {}
+                # check primary name value
+                for n in data["identified_by"]:
+                    if (
+                        n["type"] == "Name"
+                        and "classified_as" in n
+                        and "content" in n
+                        and primary in [x.get("id", "") for x in n["classified_as"]]
+                    ):
+                        nm = n["content"].strip()
+                        try:
+                            pname = self.llm_label_person_names[nm]
+                        except:
+                            pname = {}
+                        break
 
             if pname:
                 # test birth and death as well

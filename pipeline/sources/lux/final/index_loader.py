@@ -1,34 +1,46 @@
-import os
 import csv
+import os
+
 import ujson as json
+
 from pipeline.process.base.index_loader import LmdbIndexLoader, TabLmdb
 from pipeline.storage.idmap.lmdb import JsonLmdb
 
 
 class LlmNameIndexLoader(LmdbIndexLoader):
     def get_storage(self):
-        mapExp = self.config.get("mapSizeExponent", 30)
+        mapExp = self.config.get("mapSizeExponent", 31)
         path = self.config.get(
-            "llmNameDbPath", os.path.join(self.config["all_configs"].indexes_dir, "llmPersonNames.lmdb")
+            "llmNameDbPath", os.path.join(self.config["all_configs"].indexes_dir, "yuid_personname.lmdb")
         )
-        return JsonLmdb.open(path, "c", map_size=2**mapExp, readahead=False, writemap=True)
+        db1 = JsonLmdb.open(path, "c", map_size=2**mapExp, readahead=False, writemap=True)
+        path2 = self.config.get(
+            "llmNameLabelDbPath", os.path.join(self.config["all_configs"].indexes_dir, "label_personname.lmdb")
+        )
+        db2 = JsonLmdb.open(path2, "c", map_size=2**mapExp, readahead=False, writemap=True)
+        return (db1, db2)
 
     def load(self, filename):
         db = self.get_storage()
         huge_dict = {}
+        name_dict = {}
         x = 0
         with open(filename, "r") as fh:
             for line in fh:
                 js = json.loads(line)
-                key = js["id"].rsplit("/", 1)[-1]
-                val = js["parsed_names"]
+                key = js["lux_id"]
+                name = js["primary_name"]
+                val = js["parsed_output"]
                 huge_dict[key] = val
+                name_dict[name] = val
                 x += 1
                 if not x % 100000:
                     print(f"Processed {x} parsed_names")
         huge_dict = dict(sorted(huge_dict.items()))
+        name_dict = dict(sorted(name_dict.items()))
 
         db.update(huge_dict)
+        db2.update(name_dict)
 
 
 class GlobalIndexLoader(LmdbIndexLoader):

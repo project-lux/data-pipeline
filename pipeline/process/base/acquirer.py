@@ -136,7 +136,7 @@ class Acquirer(object):
         try:
             rec2 = self.mapper.transform(rec, rectype, reference=reference)
         except Exception as e:
-            raise
+            # raise
             print(f"Failed to map record {identifier} for {self.name}: {e}")
             return None
 

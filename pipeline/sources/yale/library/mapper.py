@@ -150,9 +150,9 @@ class YulMapper(Mapper):
         elif data["id"] in headings_index:
             return None
 
-        if data["type"] == "VisualItem":
-            if "classified_as" in data:
-                data["classified_as"] = self.edit_block(data["classified_as"], classification=True)
+        # if data["type"] == "VisualItem":
+        #    if "classified_as" in data:
+        #        data["classified_as"] = self.edit_block(data["classified_as"], classification=True)
 
         # replace compound subject headings with their components in about and represents on Sets and Works
         if data["type"] in ["LinguisticObject", "VisualItem", "Set"]:
