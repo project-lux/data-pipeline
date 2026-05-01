@@ -36,7 +36,10 @@ class LlmNameIndexLoader(LmdbIndexLoader):
                 if key and val:
                     huge_dict[key] = val
                 if name and val:
-                    name_dict[name] = val
+                    if len(name) > 498:
+                        print(f"Name too long: {name}")
+                    else:
+                        name_dict[name] = val
                 if not key or not name or not val:
                     dead += 1
                 x += 1
