@@ -41,8 +41,9 @@ class LlmNameIndexLoader(LmdbIndexLoader):
                         fixed = decoded.encode("latin-1").decode("utf-8")
                         clean = unicodedata.normalize("NFC", fixed)
                         val = yaml.safe_load(clean)
-                    except:
-                        pass
+                    except Exception as e:
+                        print(raw)
+                        print(e)
 
                 if key and val:
                     huge_dict[key] = val
