@@ -31,8 +31,13 @@ class LlmNameIndexLoader(LmdbIndexLoader):
                 key = js["lux_id"]
                 name = js["primary_name"]
                 val = js["parsed_output"]
-                huge_dict[key] = val
-                name_dict[name] = val
+
+                if key and val:
+                    huge_dict[key] = val
+                if name and val:
+                    name_dict[name] = val
+                if not key or not name or not val:
+                    print(json.dumps(js, indent=2))
                 x += 1
                 if not x % 100000:
                     print(f"Processed {x} parsed_names")
