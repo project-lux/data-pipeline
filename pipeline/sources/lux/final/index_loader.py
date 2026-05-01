@@ -21,7 +21,7 @@ class LlmNameIndexLoader(LmdbIndexLoader):
         return (db1, db2)
 
     def load(self, filename):
-        db = self.get_storage()
+        db, db2 = self.get_storage()
         huge_dict = {}
         name_dict = {}
         x = 0
