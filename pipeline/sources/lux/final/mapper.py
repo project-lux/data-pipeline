@@ -268,7 +268,7 @@ class Cleaner(Mapper):
                     llm_sortname_val = f"{last}, {first} {middle}{birthdeath}".strip()
                     llm_primaryname_val = f"{first} {middle}{last}".strip()
 
-                    print(f"\n'{llm_primaryname_val}' / '{llm_sortname_val}'")
+                    # print(f"\n'{llm_primaryname_val}' / '{llm_sortname_val}'")
                     llm_primaryname = {
                         "type": "Name",
                         "content": llm_primaryname_val,
