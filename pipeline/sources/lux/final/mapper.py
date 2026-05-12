@@ -243,17 +243,17 @@ class Cleaner(Mapper):
 
             if pname:
                 # test birth and death as well
-                first = pname["first_name"] if pname["first_name"] else ""
-                last = pname["last_name"] if pname["last_name"] else ""
-                birth = str(pname["birth_year"]) if pname["birth_year"] else ""
-                death = str(pname["death_year"]) if pname["death_year"] else ""
+                first = pname.get("first_name", "")
+                last = pname.get("last_name", "")
+                birth = str(pname.get("birth_year", ""))
+                death = str(pname.get("death_year", ""))
 
                 if not last or not first:
                     print(f"Missing either last or first name for {my_uuid}")
                 else:
-                    middle = " ".join(pname["middle_names"]) if pname["middle_names"] else ""
+                    middle = " ".join(pname.get("middle_names", [])).strip()
                     if not middle:
-                        middle = " ".join(pname["middle_initials"]) if pname["middle_initials"] else ""
+                        middle = " ".join(pname.get("middle_initials", [])).strip()
                     if middle:
                         middle += " "
 
