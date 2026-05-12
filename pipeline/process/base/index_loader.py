@@ -1,8 +1,10 @@
-import os
 import csv
+import os
 import sys
 import time
+
 from sqlitedict import SqliteDict
+
 from pipeline.storage.idmap.lmdb import TabLmdb
 
 
@@ -74,7 +76,7 @@ class IndexLoader(object):
                     for nm in names.keys():
                         # sys.stdout.write('n');sys.stdout.flush()
                         if nm:
-                            if len(nm) < 500:
+                            if len(nm.encode("utf-8")) < 499:
                                 all_names[nm.lower()] = [recid, typ]
                             else:
                                 print(f"Dropping name as too long ({len(nm)}>500):\n\t{nm}")
