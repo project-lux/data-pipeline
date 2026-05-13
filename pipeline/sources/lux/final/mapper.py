@@ -251,9 +251,15 @@ class Cleaner(Mapper):
                 if not last or not first:
                     print(f"Missing either last or first name for {my_uuid}")
                 else:
-                    middle = " ".join(pname.get("middle_names", [])).strip()
+                    try:
+                        middle = " ".join(pname.get("middle_names", [])).strip()
+                    except:
+                        middle = ""
                     if not middle:
-                        middle = " ".join(pname.get("middle_initials", [])).strip()
+                        try:
+                            middle = " ".join(pname.get("middle_initials", [])).strip()
+                        except:
+                            middle = ""
                     if middle:
                         middle += " "
 
