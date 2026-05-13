@@ -195,7 +195,11 @@ class RecordMerger(object):
                                 ftr = ftrs[0]
                             shapes.append(shape(ftr["geometry"]))
                     elif x.startswith("POINT") or x.startswith("POLYGON"):
-                        shapes.append(wkt.loads(x))
+                        try:
+                            shapes.append(wkt.loads(x))
+                        except:
+                            print(f"Invalid WKT in {rec['id']}: {x}")
+                            shapes.append(None)
                     else:
                         print(f"Unknown place.defined_by value: {x}")
                         shapes.append(None)
