@@ -1,10 +1,12 @@
+import multiprocessing
 import os
 import sys
-from dotenv import load_dotenv
-from pipeline.config import Config
-import multiprocessing
 from concurrent.futures import ProcessPoolExecutor, as_completed
+
+from dotenv import load_dotenv
 from tqdm import tqdm
+
+from pipeline.config import Config
 from pipeline.storage.cache.postgres import PoolManager
 
 load_dotenv()
@@ -20,9 +22,10 @@ cfgs.instantiate_all()
 
 TQDM_DISABLE = "--no-tqdm" in sys.argv
 
+
 def walk_for_refs(node, distance, distances, added, top=False):
-    if not top and "id" in node and not node["id"].startswith("_"):
-        yuid = node['id'].rsplit('/', 1)[-1]
+    if not top and "id" in node and node["id"] and not node["id"].startswith("_"):
+        yuid = node["id"].rsplit("/", 1)[-1]
         dist = distances.get(yuid, 100)
         if distance < dist:
             distances[yuid] = distance
@@ -39,13 +42,16 @@ def walk_for_refs(node, distance, distances, added, top=False):
         elif type(v) == dict:
             walk_for_refs(v, distance, distances, added)
 
+
 def process_recids(recids, thr):
-    pbar = tqdm(total=len(recids),
-                desc=f'Process {thr}',
-                position=thr,  # Position the progress bar based on process number
-                leave=True,
-                disable=TQDM_DISABLE)
-    merged = cfgs.results['merged']['recordcache']
+    pbar = tqdm(
+        total=len(recids),
+        desc=f"Process {thr}",
+        position=thr,  # Position the progress bar based on process number
+        leave=True,
+        disable=TQDM_DISABLE,
+    )
+    merged = cfgs.results["merged"]["recordcache"]
     local_dists = {}
     local_added = {}
     for recid in recids:
@@ -53,7 +59,7 @@ def process_recids(recids, thr):
             rec = merged[recid]
             if not rec:
                 continue
-            walk_for_refs(rec['data'], 1, local_dists, local_added, top=True)
+            walk_for_refs(rec["data"], 1, local_dists, local_added, top=True)
         except KeyError:
             missing[k] = 1
             print(f"missing: {recid}")
@@ -61,17 +67,20 @@ def process_recids(recids, thr):
     pbar.close()
     return [local_dists, local_added]
 
+
 def set_portal(portal_ids, portal, thr):
-    pbar = tqdm(total=len(portal_ids),
-                desc=f'Process {thr}',
-                position=thr,  # Position the progress bar based on process number
-                leave=True,
-                disable=TQDM_DISABLE)
-    merged = cfgs.results['merged']['recordcache']
+    pbar = tqdm(
+        total=len(portal_ids),
+        desc=f"Process {thr}",
+        position=thr,  # Position the progress bar based on process number
+        leave=True,
+        disable=TQDM_DISABLE,
+    )
+    merged = cfgs.results["merged"]["recordcache"]
     done = 0
     for recid in portal_ids:
         try:
-            merged.set_metadata(recid, 'change', portal)
+            merged.set_metadata(recid, "change", portal)
             pbar.update(1)
             done += 1
         except:
@@ -79,13 +88,13 @@ def set_portal(portal_ids, portal, thr):
     pbar.close()
     return done
 
+
 if __name__ == "__main__":
     multiprocessing.set_start_method("spawn")
     procs = multiprocessing.cpu_count() * 2 // 3
 
-
-    src = cfgs.internal['ypm']
-    rc = src['recordcache2']
+    src = cfgs.internal["ypm"]
+    rc = src["recordcache2"]
 
     all_distances = {}
     print("Keys...")
@@ -115,17 +124,17 @@ if __name__ == "__main__":
 
     print(f"Added refs: {len(added_refs)} base")
     pbar = tqdm(total=len(added_refs), desc="Referenced", disable=TQDM_DISABLE)
-    merged = cfgs.results['merged']['recordcache']
+    merged = cfgs.results["merged"]["recordcache"]
     done = 0
     while added_refs:
-        (k,d) = added_refs.popitem()
+        (k, d) = added_refs.popitem()
         done += 1
         if d > 4:
             continue
         rec = merged[k]
         if not rec:
             continue
-        walk_for_refs(rec['data'], d+1, all_distances, added_refs, top=True)
+        walk_for_refs(rec["data"], d + 1, all_distances, added_refs, top=True)
         pbar.update(1)
         pbar.total = done + len(added_refs)
 
@@ -138,8 +147,7 @@ if __name__ == "__main__":
         for x in range(procs):
             start_idx = x * chunk_size
             end_idx = start_idx + chunk_size if x < procs - 1 else len(portal_ids)
-            future = executor.submit(set_portal, portal_ids[start_idx:end_idx], 'ypm', x)
+            future = executor.submit(set_portal, portal_ids[start_idx:end_idx], "ypm", x)
             future_sets[future] = x
         for future in as_completed(future_sets):
             done = future.result()
-
