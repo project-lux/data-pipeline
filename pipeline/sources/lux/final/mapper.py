@@ -227,7 +227,7 @@ class Cleaner(Mapper):
                 pname = self.llm_person_names[my_uuid]
             except:
                 # check primary name value
-                for n in data["identified_by"]:
+                for n in data.get("identified_by", []):
                     if (
                         n["type"] == "Name"
                         and "classified_as" in n
