@@ -1,4 +1,5 @@
 import datetime
+import re
 from ctypes import c_int32
 
 import numpy as np
@@ -14,6 +15,9 @@ class MlMapper(Mapper):
         self.start_str = datetime.datetime.now().isoformat()
         self.configs = config["all_configs"]
         self.globals = self.configs.globals
+        self.dot_re = re.compile(".[0-9]{4,10}([^0-9]|$)")
+        self.coord_180 = re.compile("180[.0]*")
+        self.coord_90 = re.compile("90[.0]*")
         self.ignore_props = [
             "identified_by",
             "referred_to_by",
@@ -174,6 +178,19 @@ class MlMapper(Mapper):
             # facets["uiType"] = "Other"
 
         return prefix
+
+    def fix_polygon_coords(self, coords):
+        # From string, test if we need to fix
+        #
+        if "180" in coords or "90" in coords:
+            # replace 180 with 179.75 and 90 with 89.75
+            # FIXME: yes this will break things on the 90 longitude
+            coords = self.coord_180.sub("179.75", coords)
+            coords = self.coord_90.sub("89.75", coords)
+
+        coords = self.dot_re.sub(lambda x: f"{x.group(1)[:4]}{x.group(2)}", coords)
+
+        return coords
 
     def transform(self, record, rectype=None, reference=False):
         ## XXX FIXME to config
@@ -822,6 +839,7 @@ class MlMapper(Mapper):
             if coords.lower().startswith("point"):
                 ml["indexedProperties"]["defined_by_point"] = coords
             elif coords.lower().startswith("polygon"):
+                coords = self.fix_polygon_coords(coords)
                 ml["indexedProperties"]["defined_by_polygon"] = coords
             else:
                 print(f"Unknown place coordinate value: {coords}")
