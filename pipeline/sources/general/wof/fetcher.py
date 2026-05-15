@@ -1,18 +1,21 @@
-from pipeline.process.base.fetcher import Fetcher
-import os, sys
+import os
 import sqlite3
+import sys
+
 import ujson as json
 
-class WofFetcher(Fetcher):
-    
+from pipeline.process.base.fetcher import Fetcher
 
+
+class WofFetcher(Fetcher):
     def __init__(self, config):
         Fetcher.__init__(self, config)
-        self.dumpdb = config['dumpFilePath']
+        self.dumpdb = config["dumpFilePath"]
+        self.enabled = True
 
     def make_fetch_uri(self, identifier):
-        identifier = identifier.replace('.geojson', '')
-        if '/' in identifier:
+        identifier = identifier.replace(".geojson", "")
+        if "/" in identifier:
             return f"https://data.whosonfirst.org/{identifier}.geojson"
         else:
             # base /chunks-of-up-to-3/ pid.geojson
@@ -24,7 +27,7 @@ class WofFetcher(Fetcher):
                     npid = npid[3:]
                 else:
                     chunks.append(npid)
-                    npid = ''
+                    npid = ""
             return f"https://data.whosonfirst.org/{'/'.join(chunks)}/{identifier}.geojson"
 
     def fetch(self, identifier):
@@ -33,10 +36,10 @@ class WofFetcher(Fetcher):
         if os.path.exists(fn):
             conn = sqlite3.connect(f"file:{fn}?mode=ro", uri=True)
             cursor = conn.cursor()
-            if '/' in identifier:
-                identifier = identifier.rsplit('/', 1)[1]
-            ident = identifier.replace('.geojson', '')
-            cursor.execute("SELECT body FROM geojson WHERE id=?", (ident, ))
+            if "/" in identifier:
+                identifier = identifier.rsplit("/", 1)[1]
+            ident = identifier.replace(".geojson", "")
+            cursor.execute("SELECT body FROM geojson WHERE id=?", (ident,))
             res = cursor.fetchall()
             try:
                 jstr = res[0][0]
@@ -48,7 +51,7 @@ class WofFetcher(Fetcher):
                 js = json.loads(jstr)
             else:
                 js = jstr
-            return {'data': js, 'source': self.name, 'identifier': identifier}
+            return {"data": js, "source": self.name, "identifier": identifier}
 
         else:
             return Fetcher.fetch(self, identifier)
