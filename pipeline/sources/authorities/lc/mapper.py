@@ -189,12 +189,12 @@ class LcMapper(Mapper):
         prefs = new.get("madsrdf:authoritativeLabel", [])
         # And /this/ is why no-rules JSON-LD compaction is terrible
         if type(prefs) is list and prefs:
-           nprefs = []
-           for n in prefs:
-               if type(n) is str:
-                   nprefs.append({"@value": n})
-               else:
-                   nprefs.append(n)
+            nprefs = []
+            for n in prefs:
+                if type(n) is str:
+                    nprefs.append({"@value": n})
+                else:
+                    nprefs.append(n)
             prefs = nprefs
         if type(prefs) == str:
             prefs = {"@value": prefs}
