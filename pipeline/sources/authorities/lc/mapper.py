@@ -798,6 +798,7 @@ class LcnafMapper(LcMapper):
                         top.died = death
                     death.took_place_at = where
 
+        act = None
         if "madsrdf:fieldOfActivity" in rwo:
             # fieldOfActivity --> professional activity
             # activityStartDate
@@ -827,10 +828,36 @@ class LcnafMapper(LcMapper):
                     act = vocab.Active()
                     act.classified_as = model.Type(ident=fid, label=al)
                     top.carried_out = act
+
+        ts = None
         if "madsrdf:activityStartDate" in rwo:
-            print(f"LCNAF start activity: {rwo['madsrdf:activityStartDate']}")
+            asd = rwo["madsrdf:activityStartDate"]
+            if type(asd) is dict and "@value" in dict:
+                asdd = make_datetime(asd["@value"])
+            elif type(asd) is str:
+                asdd = make_datetime(asd)
+            elif type(asd) is int:
+                asdd = make_datetime(str(asd))
+            ts = model.TimeSpan()
+            ts.begin_of_the_begin = asdd[0]
+
         if "madsrdf:activityEndDate" in rwo:
-            print(f"LCNAF end activity: {rwo['madsrdf:activityEndDate']}")
+            asd = rwo["madsrdf:activityEndDate"]
+            if type(asd) is dict and "@value" in dict:
+                asdd = make_datetime(asd["@value"])
+            elif type(asd) is str:
+                asdd = make_datetime(asd)
+            elif type(asd) is int:
+                asdd = make_datetime(str(asd))
+            if ts is None:
+                ts = model.TimeSpan()
+            ts.end_of_the_end = asdd[1]
+
+        if ts is not None:
+            if act is None:
+                act = vocab.Active()
+                top.carried_out = act
+            act.timespan = ts
 
         if "madsrdf:occupation" in rwo:
             # occupation --> classified_as
