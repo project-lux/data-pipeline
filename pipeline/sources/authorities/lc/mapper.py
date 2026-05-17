@@ -1,10 +1,12 @@
+import os
+import re
+import sys
+
+import ujson as json
+from cromulent import model, vocab
+
 from pipeline.process.base.mapper import Mapper
 from pipeline.process.utils.mapper_utils import make_datetime, test_birth_death
-from cromulent import model, vocab
-import ujson as json
-import sys
-import re
-import os
 
 
 class LcMapper(Mapper):
@@ -185,6 +187,15 @@ class LcMapper(Mapper):
     def map_label(self, new, top):
         ### Names of the Entity
         prefs = new.get("madsrdf:authoritativeLabel", [])
+        # And /this/ is why no-rules JSON-LD compaction is terrible
+        if type(prefs) is list and prefs:
+           nprefs = []
+           for n in prefs:
+               if type(n) is str:
+                   nprefs.append({"@value": n})
+               else:
+                   nprefs.append(n)
+            prefs = nprefs
         if type(prefs) == str:
             prefs = {"@value": prefs}
         if type(prefs) == dict:
