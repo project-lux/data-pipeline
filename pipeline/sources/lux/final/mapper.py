@@ -49,7 +49,7 @@ class Cleaner(Mapper):
         if not img in self.wikimedia["recordcache"]:
             if not img in self.wikimedia["datacache"]:
                 data = self.wikimedia["fetcher"].fetch(img)
-                if data:
+                if data and type(data) is dict:
                     self.wikimedia["datacache"][img] = data
                 else:
                     return None
