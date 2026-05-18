@@ -46,6 +46,7 @@ class Cleaner(Mapper):
         # Can't store reidentified version as it would need a YUID
         # And YUIDs must be UUIDs - no way to look up fn->yuid
         # without stuffing them in the idmap, and that would be a waste
+        print(f"\nWMFETCH: {img}\n")
         if not img in self.wikimedia["recordcache"]:
             if not img in self.wikimedia["datacache"]:
                 data = self.wikimedia["fetcher"].fetch(img)
