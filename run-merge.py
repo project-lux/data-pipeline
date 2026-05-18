@@ -1,18 +1,19 @@
-import os
-import sys
-import json
-from dotenv import load_dotenv
-from pipeline.config import Config
-from pipeline.process.reidentifier import Reidentifier
-from pipeline.process.merger import MergeHandler
-from pipeline.process.reference_manager import ReferenceManager
-from pipeline.storage.cache.postgres import PoolManager
-
+import cProfile
 import datetime
 import io
-import cProfile
+import json
+import os
 import pstats
+import sys
 from pstats import SortKey
+
+from dotenv import load_dotenv
+
+from pipeline.config import Config
+from pipeline.process.merger import MergeHandler
+from pipeline.process.reference_manager import ReferenceManager
+from pipeline.process.reidentifier import Reidentifier
+from pipeline.storage.cache.postgres import PoolManager
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")
@@ -41,6 +42,11 @@ if "--norefs" in sys.argv:
     DO_REFERENCES = False
 else:
     DO_REFERENCES = True
+
+if "--resume" in sys.argv:
+    RESUME = True
+else:
+    RESUME = False
 
 max_slice = -1
 my_slice = -1
@@ -121,7 +127,7 @@ for src_name, src in to_do:
             continue
         yuid = yuid.rsplit("/", 1)[1]
         ins_time = merged_cache.metadata(yuid, "insert_time")
-        if ins_time is not None and ins_time["insert_time"] > start_time:
+        if ins_time is not None and (RESUME or ins_time["insert_time"] > start_time):
             # Already processed this record this build
             continue
         else:
