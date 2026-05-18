@@ -103,7 +103,10 @@ class Cleaner(Mapper):
 
                     if fn:
                         # Now look up license etc
-                        do = self.get_commons_license(fn)
+                        try:
+                            do = self.get_commons_license(fn)
+                        except:
+                            print(f"Failed to get WM license for {data.get('id', '????')}")
                         del rep["digitally_shown_by"]
                         if do:
                             rep["digitally_shown_by"] = [do["data"]]
