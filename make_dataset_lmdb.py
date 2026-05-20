@@ -47,7 +47,7 @@ def rebuild_database():
     if "--gz" in sys.argv:
         INPUT_FILES = [f"{IN_PATH}{g}.jsonl.gz" for g in range(slices)]
     else:
-        INPUT_FILES = [f"{IN_PATH}{g}.jsonl.gz" for g in range(slices)]
+        INPUT_FILES = [f"{IN_PATH}{g}.jsonl" for g in range(slices)]
 
     generators = [record_generator(f) for f in INPUT_FILES]
     # heapq.merge yields the smallest (uid, cls, line) across all generators
