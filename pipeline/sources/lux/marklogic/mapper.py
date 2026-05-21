@@ -15,7 +15,7 @@ class MlMapper(Mapper):
         self.start_str = datetime.datetime.now().isoformat()
         self.configs = config["all_configs"]
         self.globals = self.configs.globals
-        self.dot_re = re.compile(".[0-9]{4,10}([^0-9]|$)")
+        self.dot_re = re.compile("(.[0-9]{4,10})([^0-9]|$)")
         self.coord_180 = re.compile("180[.0]*")
         self.coord_90 = re.compile("90[.0]*")
         self.ignore_props = [
