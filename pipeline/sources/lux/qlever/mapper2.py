@@ -251,6 +251,9 @@ class QleverMapper(Mapper):
             if type(vals) is not list:
                 vals = [vals]
             for val in vals:
+                if type(val) is not dict:
+                    print(f"*** string not dict: {dprop} in {me} ***")
+                    continue
                 pcls = f"{pfx.title()}{dtyp}"
                 check = [val]
                 check.extend(val.get("part", []))
