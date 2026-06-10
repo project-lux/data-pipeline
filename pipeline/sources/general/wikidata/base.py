@@ -43,7 +43,6 @@ class WdConfigManager(object):
             "P227": "gnd",
             "P213": "isni",
             "P11858": "nsf",
-            "P3500": "ringgold",
             "P6782": "ror",  # https://ror.org/00qb4ds53
             "P3430": "snac",  # https://snaccooperative.org/ark:/99166/{ident}
             "P496": "orcid",  # https://orcid.org/<ident>
@@ -53,6 +52,7 @@ class WdConfigManager(object):
             "P349": "ndl",  # Japan
             "P5587": "snl",  # Sweden
             "P8714": "gadm",
+            "P6108": "iiif",
         }
         self.different_prop = "P1889"
         self.instance_of_prop = "P31"
