@@ -1,9 +1,8 @@
-import os
 import multiprocessing
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from lux_pipeline.cli.entry import cfgs
-from lux_pipeline.cli._rich import get_bar_from_layout
+from lux_pipeline.cli._rich import get_bar_from_layout, add_worker_log_line
 import logging
 import ray
 import traceback
@@ -12,27 +11,13 @@ logger = logging.getLogger("lux_pipeline")
 
 
 @ray.remote
-class LoggingActor:
+class ProgressActor:
+    """Holds per-worker progress bar state for the driver to poll. Log messages
+    do not pass through here -- workers write them to their own files and the
+    driver tails those."""
+
     def __init__(self):
-        self.logs = {}
         self.bars = {}
-
-    def add_to_log(self, which, level, txt):
-        try:
-            self.logs[which].append((level, txt))
-        except Exception:
-            self.logs[which] = [(level, txt)]
-
-    def get_log(self, which):
-        if which == -1:
-            return self.logs
-        try:
-            entry = self.logs[which]
-            self.logs[which] = []
-            return entry
-        except Exception:
-            self.logs[which] = []
-            return []
 
     def update_progress_bar(self, which, completed=-1, total=-1, description=None):
         if which not in self.bars:
@@ -44,7 +29,7 @@ class LoggingActor:
         if description is not None:
             self.bars[which]["description"] = description
 
-    def get_progress_bar(self, which):
+    def get_progress_bar(self, which=-1):
         if which == -1:
             return self.bars
         try:
@@ -54,13 +39,60 @@ class LoggingActor:
             return self.bars[which]
 
 
-class TaskLogHandler(logging.Handler):
-    def __init__(self, manager):
-        super().__init__()
-        self.manager = manager
+def make_file_handler(manager, my_slice):
+    # Filter at the user's --log level here in the worker: the lux_pipeline
+    # logger itself is set to DEBUG, and the hot paths log per-record DEBUG
+    # messages that would otherwise be written only to be discarded
+    lvl = (manager.log_level or "INFO").upper()
+    if not hasattr(logging, lvl):
+        lvl = "INFO"
+    handler = logging.FileHandler(f"{manager.log_file_prefix}-w{my_slice}.log", delay=True)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(message)s", datefmt="%H:%M:%S"))
+    handler.setLevel(getattr(logging, lvl))
+    return handler
 
-    def emit(self, record):
-        self.manager.log(record.levelno, record.getMessage())
+
+def attach_worker_log_handler(manager, my_slice):
+    # The worker's file is the log of record; log messages never cross the
+    # process boundary. The parent tails the files for the live display, so a
+    # slow or stalled UI cannot block the workers.
+    logger = logging.getLogger("lux_pipeline")
+    while logger.handlers:
+        logger.removeHandler(logger.handlers[0])
+    if manager.log_file_prefix:
+        logger.addHandler(make_file_handler(manager, my_slice))
+    else:
+        logger.addHandler(logging.NullHandler())
+
+
+class LogTailer:
+    """Incrementally reads complete new lines from each worker's log file,
+    to feed the live display."""
+
+    def __init__(self, prefix, max_workers):
+        self.prefix = prefix
+        self.max_workers = max_workers
+        self.offsets = {}
+
+    def read_new_lines(self):
+        if not self.prefix:
+            return []
+        lines = []
+        for n in range(self.max_workers):
+            try:
+                with open(f"{self.prefix}-w{n}.log", "rb") as fh:
+                    fh.seek(self.offsets.get(n, 0))
+                    data = fh.read()
+            except OSError:
+                continue
+            # only consume up to the last newline; the worker may be mid-write
+            nl = data.rfind(b"\n")
+            if nl == -1:
+                continue
+            self.offsets[n] = self.offsets.get(n, 0) + nl + 1
+            for line in data[:nl].split(b"\n"):
+                lines.append((n, line.decode("utf-8", errors="replace")))
+        return lines
 
 
 class ProcessingEngine:
@@ -68,7 +100,15 @@ class ProcessingEngine:
         self.manager = manager
         self.max_workers = manager.max_workers
         self.last_bar_time = 0
-        self.last_log_time = 0
+        self.temp_bar = {"total": -1, "completed": -1, "description": ""}
+        self.tailer = LogTailer(manager.log_file_prefix, self.max_workers)
+
+    def refresh_logs(self, layout):
+        if layout is None:
+            return
+        self.tailer.max_workers = self.max_workers
+        for n, line in self.tailer.read_new_lines():
+            add_worker_log_line(layout, n, line)
 
 
 class NullEngine(ProcessingEngine):
@@ -87,37 +127,33 @@ class NullEngine(ProcessingEngine):
                 bar = get_bar_from_layout(self.layout, self.manager.my_slice)
                 bar[0].update(bar[1], completed=completed, total=total, description=description)
 
-    def maybe_update_log(self, level, message):
-        # route directly to logger
-        logger = logging.getLogger("lux_pipeline")
-        logger.log(level, message)
-
     def process(self, layout):
         i = self.manager.my_slice
         self.layout = layout
+        if self.manager.log_file_prefix:
+            # single process: keep the local/UI handlers and also write the file
+            logging.getLogger("lux_pipeline").addHandler(make_file_handler(self.manager, max(i, 0)))
         return self._distributed(i, None)
 
 
 class MpEngine(ProcessingEngine):
     # Use multiprocessing to distribute
 
-    def _distributed(self, i, log_details):
-        # deal with log_actor here
-        self.bar = log_details[0]
-        self.messages = log_details[1]
+    def _distributed(self, i, bar):
+        self.bar = bar
         self.my_slice = i
         self.temp_bar = {"total": -1, "completed": -1, "description": ""}
-        self.temp_log = []
 
-        logger = logging.getLogger("lux_pipeline")
-        if logger.handlers:
-            logger.removeHandler(logger.handlers[0])
-        logger.addHandler(TaskLogHandler(self.manager))
+        attach_worker_log_handler(self.manager, i)
 
-        return self.manager._distributed(i)
+        ret = self.manager._distributed(i)
+        # the send throttle would otherwise drop the final bar state
+        self.bar.update(self.temp_bar)
+        return ret
 
     def maybe_update_progress_bar(self, completed, total, description):
-        # Shared memory, so no need to batch and send
+        # The shared dict is a Manager proxy -- every assignment is a round
+        # trip to the Manager server process -- so send at most 2/second
         if completed > -1:
             self.temp_bar["completed"] = completed
         if total > -1:
@@ -126,75 +162,38 @@ class MpEngine(ProcessingEngine):
             self.temp_bar["description"] = description
         if time.time() > self.last_bar_time + 0.5:
             self.last_bar_time = time.time()
-            self.bar["completed"] = self.temp_bar["completed"]
-            self.bar["total"] = self.temp_bar["total"]
-            self.bar["description"] = self.temp_bar["description"]
+            self.bar.update(self.temp_bar)
 
-    def maybe_update_log(self, level, message):
-        self.temp_log.append((level, message))
-        if time.time() > self.last_log_time + 0.5:
-            self.messages[:] = []
-            for entry in self.temp_log:
-                self.messages.append(entry)
-            self.temp_log = []
+    def refresh(self, layout, bars):
+        self.refresh_logs(layout)
+        if layout is not None:
+            for k, v in bars.items():
+                bar = get_bar_from_layout(layout, k)
+                bar[0].update(bar[1], **dict(v))
 
     def process(self, layout):
-        cfgs = self.manager.configs
-
         with multiprocessing.Manager() as mgr:
-            bars = {}  # keep track of tasks across Processes
-            messages = {}
+            # shared progress state per worker; logs go via files, not IPC
+            bars = {}
             for b in range(self.max_workers):
                 bars[b] = mgr.dict({"total": -1, "completed": -1, "description": ""})
-            for b in range(self.max_workers):
-                messages[b] = mgr.list([])
 
-            if hasattr(cfgs, "log_file"):
-                log_fh = open(cfgs.log_file, "a")
-            else:
-                fn = "lux_log_command.txt"  # FIXME: replace command with CLI command
-                if hasattr(cfgs, "log_dir"):
-                    fn = os.path.join(cfgs.log_dir, fn)
-                log_fh = open(fn, "a")
-
+            if self.manager.log_file_prefix:
+                logger.info(f"Worker logs: {self.manager.log_file_prefix}-w*.log")
             logger.info("Starting...")
-            log_fh.write("----- Starting -----\n")
             futures = []
             with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
                 for n in range(self.max_workers):
-                    futures.append(executor.submit(self._distributed, n, [bars[n], messages[n]]))
+                    futures.append(executor.submit(self._distributed, n, bars[n]))
                 if not self.manager.disable_ui:
                     while (sum([future.done() for future in futures])) < len(futures):
-                        for k, v in bars.items():
-                            if v:
-                                bar = get_bar_from_layout(layout, k)
-                                bar[0].update(bar[1], **v)
-                        for k, v in messages.items():
-                            while v:
-                                try:
-                                    lvl, msg = v.pop(0)
-                                    logger.log(lvl, msg)
-                                    log_fh.write(msg + "\n")
-                                except Exception:
-                                    break
-                            log_fh.flush()
+                        self.refresh(layout, bars)
                         time.sleep(0.5)
                 for future in as_completed(futures):
                     future.result()
                 if not self.manager.disable_ui:
                     time.sleep(1)
-                    for k, v in bars.items():
-                        if v:
-                            bar = get_bar_from_layout(layout, k)
-                            bar[0].update(bar[1], **v)
-                        for k, v in messages.items():
-                            while v:
-                                lvl, msg = v.pop(0)
-                                logger.log(lvl, msg)
-                                log_fh.write(msg + "\n")
-                            log_fh.flush()
-                    time.sleep(5)
-                    log_fh.close()
+                    self.refresh(layout, bars)
 
 
 class RayEngine(ProcessingEngine):
@@ -202,6 +201,7 @@ class RayEngine(ProcessingEngine):
 
     def __init__(self, manager):
         super().__init__(manager)
+        self.actor = None
         # Only instantiate the environment once
         # so call init here, not in process
         # init spits out a print() message
@@ -210,78 +210,55 @@ class RayEngine(ProcessingEngine):
 
     # Entry point for distributed tasks
     @ray.remote
-    def _distributed(self, i, log_actor):
-        # deal with log_actor here
-        self.actor = log_actor
+    def _distributed(self, i, actor):
+        self.actor = actor
         self.my_slice = i
-        self.batch_logs = []
+        self.temp_bar = {"total": -1, "completed": -1, "description": ""}
 
-        logger = logging.getLogger("lux_pipeline")
-        if logger.handlers:
-            logger.removeHandler(logger.handlers[0])
-        logger.addHandler(TaskLogHandler(self.manager))
+        attach_worker_log_handler(self.manager, i)
 
-        return self.manager._distributed(i)
+        ret = self.manager._distributed(i)
+        # the send throttle would otherwise drop the final bar state
+        self.actor.update_progress_bar.remote(self.my_slice, **self.temp_bar)
+        return ret
 
     def maybe_update_progress_bar(self, completed, total, description):
+        if completed > -1:
+            self.temp_bar["completed"] = completed
+        if total > -1:
+            self.temp_bar["total"] = total
+        if description:
+            self.temp_bar["description"] = description
         if time.time() > self.last_bar_time + 0.5:
             self.last_bar_time = time.time()
             if self.actor is not None:
-                self.actor.update_progress_bar.remote(self.my_slice, completed, total, description)
+                self.actor.update_progress_bar.remote(self.my_slice, **self.temp_bar)
 
-    def maybe_update_log(self, level, message):
-        # Use same technique as MP engine to batch logs?
-        if self.actor is not None:
-            self.actor.add_to_log.remote(self.my_slice, level, message)
-        return
-        if time.time() > self.last_log_time + 0.5:
-            self.last_log_time = time.time()
-        else:
-            self.batch_logs.append((level, message))
-
-    def process(self, layout):
-        log_actor = LoggingActor.remote()
-        # logger.info(f"Logging Actor: {log_actor}")
-        logger.info("Sending tasks")
-        futures = [self._distributed.remote(self, i, log_actor) for i in range(self.max_workers)]
-        while futures:
-            ready_refs, futures = ray.wait(futures, num_returns=1, timeout=0.5)
-            for n in range(self.max_workers):
-                resp = ray.get(log_actor.get_log.remote(n))
-                for lvl, msg in resp:
-                    # send to log to render
-                    logger.log(lvl, msg)
-                resp = ray.get(log_actor.get_progress_bar.remote(n))
-                if resp["completed"] > -1:
-                    # process log entry r from process n
-                    if layout is not None:
-                        bar = get_bar_from_layout(layout, n)
-                        bar[0].update(bar[1], **resp)
-                    else:
-                        print(f"[{n}]: {resp['completed']}/{resp['total']}")
-            if ready_refs:
-                # Completed tasks
-                res = ray.get(ready_refs[0])
-                if type(res) is int:
-                    # process response from task
-                    pass
-                # logger.log(logging.DEBUG, f"Got {res} from task")
-
-        time.sleep(1)
-        for n in range(self.max_workers):
-            resp = ray.get(log_actor.get_log.remote(n))
-            for lvl, msg in resp:
-                # send to log to render
-                logger.log(lvl, msg)
-            resp = ray.get(log_actor.get_progress_bar.remote(n))
-            if resp["completed"] > -1:
-                # process log entry r from process n
+    def refresh(self, layout, actor):
+        self.refresh_logs(layout)
+        # one round trip for every worker's bar state
+        bars = ray.get(actor.get_progress_bar.remote(-1))
+        for n, state in bars.items():
+            if state["completed"] > -1:
                 if layout is not None:
                     bar = get_bar_from_layout(layout, n)
-                    bar[0].update(bar[1], **resp)
+                    bar[0].update(bar[1], **state)
                 else:
-                    print(f"[{n}]: {resp['completed']}/{resp['total']}")
+                    print(f"[{n}]: {state['completed']}/{state['total']}")
+
+    def process(self, layout):
+        actor = ProgressActor.remote()
+        if self.manager.log_file_prefix:
+            logger.info(f"Worker logs: {self.manager.log_file_prefix}-w*.log")
+        logger.info("Sending tasks")
+        futures = [self._distributed.remote(self, i, actor) for i in range(self.max_workers)]
+        while futures:
+            ready_refs, futures = ray.wait(futures, num_returns=1, timeout=0.5)
+            self.refresh(layout, actor)
+            if ready_refs:
+                ray.get(ready_refs[0])
         time.sleep(1)
+        self.refresh(layout, actor)
         logger.info("Done")
 
 
@@ -295,17 +272,19 @@ class TaskUiManager:
             self.max_workers = configs.max_workers
         self.sources = []
         self.my_slice = -1
+        self.log_level = "INFO"
+        self.log_file_prefix = None
         if args is not None:
             if hasattr(args, "my_worker") and args.my_worker > -1:
                 self.my_slice = args.my_worker
+            if getattr(args, "log", None):
+                self.log_level = args.log
 
         self.engine = None
         self.local_debug = False
         self.command_line_args = args
 
         self.bar = {"total": -1, "completed": -1, "description": None}
-        self.messages = []
-        self.actor = None
 
     def _distributed(self, n):
         self.configs = cfgs
@@ -326,8 +305,7 @@ class TaskUiManager:
     def log(self, level, message):
         if isinstance(message, Exception):
             message = "".join(traceback.format_exception(type(message), message, message.__traceback__))
-        if self.engine is not None:
-            self.engine.maybe_update_log(level, message)
+        logger.log(level, message)
 
     def maybe_add(self, which, cfg):
         # SubClasses should re-define this to actually test

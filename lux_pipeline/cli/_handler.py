@@ -1,4 +1,6 @@
+import os
 from argparse import ArgumentParser
+from datetime import datetime
 from ._rich import Live, get_layout
 
 
@@ -41,6 +43,14 @@ class CommandHandler(BaseHandler):
         xargs = {x: getattr(args, y) for x, y in self.extra_args.items()}
 
         manager = self.make_manager(wks, args)
+        if getattr(args, "log", None):
+            manager.log_level = args.log
+        # Per-worker log files are the log of record; the UI only displays them
+        log_dir = getattr(self.configs, "log_dir", None) or "."
+        os.makedirs(log_dir, exist_ok=True)
+        started = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+        command = getattr(args, "command", None) or "task"
+        manager.log_file_prefix = os.path.join(log_dir, f"{command}-{started}")
         for s in sources:
             manager.prepare_single(s)
 
