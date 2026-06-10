@@ -63,7 +63,7 @@ for child, parents in deletes.items():
 
 with open("fixed_places.jsonl", "w") as fh:
     for rec in all_recs:
-        fh.write(json.dumps(rec) + "\n")
+        fh.write(json.dumps(rec["data"]) + "\n")
 
 with open("equivs.json", "w") as fh:
     json.dump(equivs, fh)
