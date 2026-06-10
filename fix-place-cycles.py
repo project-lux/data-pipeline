@@ -36,11 +36,13 @@ equivs = {}
 for child, parents in deletes.items():
     for parent in parents:
         if parent not in equivs:
-            equivs[parent] = idmap[
-                f"https://lux.collections.yale.edu/data/place/{parent}"
-            ]
+            equivs[parent] = list(
+                idmap[f"https://lux.collections.yale.edu/data/place/{parent}"]
+            )
     if child not in equivs:
-        equivs[child] = idmap[f"https://lux.collections.yale.edu/data/place/{child}"]
+        equivs[child] = list(
+            idmap[f"https://lux.collections.yale.edu/data/place/{child}"]
+        )
 
     rec = ml[child]
     parts = rec["data"]["json"]["part_of"]
