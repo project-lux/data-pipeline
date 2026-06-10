@@ -48,8 +48,9 @@ for child, parents in deletes.items():
     parts = rec["data"]["json"]["part_of"]
     new_parts = []
     for p in parts:
-        if "id" in p and p["id"] not in parents:
-            new_parts.append(p)
+        for par in parents:
+            if "id" in p and par not in p["id"]:
+                new_parts.append(p)
     rec["data"]["json"]["part_of"] = new_parts
 
     new_triples = []
