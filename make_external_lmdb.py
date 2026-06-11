@@ -54,7 +54,7 @@ def build_database():
     txn = env.begin(write=True)
     for name, cache in sources:
         # iterate through records
-        for rec in cache:
+        for rec in cache.iter_records():
             js = rec["data"]
             key = f"{name}:{rec['identifier']}".encode()
 
