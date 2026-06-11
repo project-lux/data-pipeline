@@ -39,60 +39,55 @@ total_size = 2048 * total_recs
 sources.sort()
 
 print(f"total records: {total_recs}")
+print("Starting build...")
+env = lmdb.open(
+    DB_PATH,
+    map_size=total_size,
+    max_dbs=3,
+    metasync=False,
+    sync=False,
+    map_async=True,
+)
+db = env.open_db(b"data", dupsort=False)
 
+n = 0
+dead = 0
 
-def build_database():
-    print("Starting build...")
-    env = lmdb.open(
-        DB_PATH,
-        map_size=total_size,
-        max_dbs=3,
-        metasync=False,
-        sync=False,
-        map_async=True,
-    )
-    db = env.open_db(b"data", dupsort=False)
+start = time()
+txn = env.begin(write=True)
+for name, rcache, dcache in sources:
+    # iterate through records
+    print(f"Building {name}...")
+    for id in rcache.iter_keys():
+        id, _ = id.split("##qua")
+        js = dcache[id]
+        if js is None:
+            sys.stdout.write(".")
+            sys.stdout.flush()
+            dead += 1
+            continue
+        else:
+            js = js["data"]
+        key = f"{name}:{id}".encode()
 
-    n = 0
-    dead = 0
+        try:
+            value = zlib.compress(json.dumps(js).encode("utf-8"), level=1)
+            txn.put(key=key, value=value, db=db, append=True)
+        except Exception as e:
+            print(f"Failed to compress {id}: {e}")
+            continue
 
-    start = time()
-    txn = env.begin(write=True)
-    for name, rcache, dcache in sources:
-        # iterate through records
-        for id in rcache.iter_keys():
-            id, _ = id.split("##qua")
-            js = dcache[id]
-            if js is None:
-                sys.stdout.write(".")
-                sys.stdout.flush()
-                dead += 1
-                continue
-            else:
-                js = js["data"]
-            key = f"{name}:{id}".encode()
+        n += 1
+        if not (n + dead) % 100000:
+            txn.commit()
+            txn = env.begin(write=True)
+            t = time()
+            per = n / (t - start)
+            print(
+                f"{n} records in {t - start:.2f}s = {per:.2f} records/s. Remaining: {(total_recs - (n + dead) / per):.2f}s"
+            )
 
-            try:
-                value = zlib.compress(json.dumps(js).encode("utf-8"), level=1)
-                txn.put(key=key, value=value, db=db, append=True)
-            except Exception as e:
-                print(f"Failed to compress {id}: {e}")
-                continue
-
-            n += 1
-            if not (n + dead) % 100000:
-                txn.commit()
-                txn = env.begin(write=True)
-                t = time()
-                print(
-                    f"{n} records in {t - start:.2f}s = {n / (t - start):.2f} records/s"
-                )
-
-    txn.commit()
-    env.sync()
-    env.close()
-    print(f"Write took {time() - start:.2f}s")
-
-
-if __name__ == "__main__":
-    build_database()
+txn.commit()
+env.sync()
+env.close()
+print(f"Write took {time() - start:.2f}s")
