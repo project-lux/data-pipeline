@@ -62,6 +62,8 @@ def build_database():
             js = dcache[id]
             if js is None:
                 continue
+            else:
+                js = js["data"]
             key = f"{name}:{id}".encode()
 
             try:
