@@ -84,7 +84,7 @@ for name, rcache, dcache in sources:
             t = time()
             per = n / (t - start)
             print(
-                f"{n} records in {t - start:.2f}s = {per:.2f} records/s. Remaining: {(total_recs - (n + dead) / per):.2f}s"
+                f"{n} records in {t - start:.2f}s = {per:.2f} records/s. Remaining: {((total_recs - (n + dead)) / per):.2f}s"
             )
 
 txn.commit()
