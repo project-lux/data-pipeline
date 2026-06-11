@@ -28,13 +28,16 @@ sources = []
 for ext in cfgs.external.values():
     name = ext["name"]
     recordcache = ext["recordcache"]
+    datacache = ext["datacache"]
     recs = recordcache.len_estimate()
     total_recs += recs
-    sources.append((name, recordcache))
+    sources.append((name, recordcache, datacache))
 
 total_size = 2048 * total_recs
 
 sources.sort()
+
+print(f"total records: {total_recs}")
 
 
 def build_database():
@@ -52,11 +55,11 @@ def build_database():
     n = 0
     start = time()
     txn = env.begin(write=True)
-    for name, cache in sources:
+    for name, rcache, dcache in sources:
         # iterate through records
-        for rec in cache.iter_records():
-            js = rec["data"]
-            key = f"{name}:{rec['identifier']}".encode()
+        for id in rcache.iter_keys():
+            js = dcache[id]
+            key = f"{name}:{id}".encode()
 
             value = zlib.compress(json.dumps(js).encode("utf-8"), level=1)
             txn.put(key=key, value=value, db=db, append=True)
