@@ -57,9 +57,14 @@ start = time()
 txn = env.begin(write=True)
 for name, rcache, dcache in sources:
     # iterate through records
+    if name == "wikimedia":
+        continue
     print(f"Building {name}...")
     for id in rcache.iter_keys():
-        id, _ = id.split("##qua")
+        try:
+            id, _ = id.split("##qua")
+        except:
+            continue
         js = dcache[id]
         if js is None:
             sys.stdout.write(".")
