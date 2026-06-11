@@ -1,4 +1,5 @@
 import os
+import sys
 import zlib
 from time import time
 
@@ -53,6 +54,8 @@ def build_database():
     db = env.open_db(b"data", dupsort=False)
 
     n = 0
+    dead = 0
+
     start = time()
     txn = env.begin(write=True)
     for name, rcache, dcache in sources:
@@ -61,6 +64,9 @@ def build_database():
             id, _ = id.split("##qua")
             js = dcache[id]
             if js is None:
+                sys.stdout.write(".")
+                sys.stdout.flush()
+                dead += 1
                 continue
             else:
                 js = js["data"]
@@ -74,7 +80,7 @@ def build_database():
                 continue
 
             n += 1
-            if not n % 100000:
+            if not (n + dead) % 100000:
                 txn.commit()
                 txn = env.begin(write=True)
                 t = time()
