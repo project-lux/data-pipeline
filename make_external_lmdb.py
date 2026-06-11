@@ -58,11 +58,18 @@ def build_database():
     for name, rcache, dcache in sources:
         # iterate through records
         for id in rcache.iter_keys():
+            id, _ = id.split("##qua")
             js = dcache[id]
+            if js is None:
+                continue
             key = f"{name}:{id}".encode()
 
-            value = zlib.compress(json.dumps(js).encode("utf-8"), level=1)
-            txn.put(key=key, value=value, db=db, append=True)
+            try:
+                value = zlib.compress(json.dumps(js).encode("utf-8"), level=1)
+                txn.put(key=key, value=value, db=db, append=True)
+            except Exception as e:
+                print(f"Failed to compress {id}: {e}")
+                continue
 
             n += 1
             if not n % 100000:
