@@ -275,7 +275,6 @@ class PooledCache(AbstractCache):
 
     def get(self, key, _key_type=None):
         # Base class validates key type; raises on bad input.
-        super().get(key, _key_type)
         if _key_type is None:
             _key_type = self.key
         qry = f"SELECT * FROM {self.name} WHERE {_key_type} = %s"

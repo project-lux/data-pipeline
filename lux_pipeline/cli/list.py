@@ -15,9 +15,8 @@ _CLASS_KEYS = [
 ]
 
 
-# Strip the common "lux_pipeline." / "sources." / "process." prefix so the
-# cell stays readable.
 def _short_class(dotted: str) -> str:
+    """Return just the class name from a dotted module path."""
     parts = dotted.rsplit(".", 1)
     return parts[-1] if parts else dotted
 
@@ -26,28 +25,22 @@ def _namespace_display(ns: str) -> str:
     """Trim long namespaces to a readable domain + path stub."""
     if not ns:
         return ""
-    # Drop scheme
-    ns = ns.removeprefix("https://").removeprefix("http://")
-    # Trim trailing slash
-    ns = ns.rstrip("/")
-    # Keep at most 40 chars
+    ns = ns.removeprefix("https://").removeprefix("http://").rstrip("/")
     if len(ns) > 42:
         ns = ns[:39] + "…"
     return ns
 
 
 def _row_values(s: str, cfg: dict | None) -> tuple[str, str, str, str]:
-    """Return the four plain-text cell values for a single source row."""
+    """Return plain-text (source, namespace, order, classes) for width measurement."""
     if cfg is None:
         return s, "(not found)", "", ""
     namespace = _namespace_display(cfg.get("namespace", ""))
     merge_order = str(cfg.get("merge_order", ""))
-    class_lines = []
-    for key, label in _CLASS_KEYS:
-        if key in cfg:
-            class_lines.append(f"{label}: {_short_class(cfg[key])}")
-    classes_text = "\n".join(class_lines)
-    return s, namespace, merge_order, classes_text
+    class_lines = [
+        f"{label}: {_short_class(cfg[key])}" for key, label in _CLASS_KEYS if key in cfg
+    ]
+    return s, namespace, merge_order, "\n".join(class_lines)
 
 
 def _measure_col_widths(
@@ -67,7 +60,6 @@ def _measure_col_widths(
             w_source = max(w_source, len(src))
             w_ns = min(max(w_ns, len(ns)), 44)  # respect the 44-char cap
             w_order = max(w_order, len(order))
-            # classes cell may be multi-line — measure longest line
             for line in classes.splitlines():
                 w_class = max(w_class, len(line))
 
@@ -103,7 +95,6 @@ def _build_table(
         if cfg is None:
             table.add_row(src, Text("(not found)", style="red"), "", "")
             continue
-        # Re-apply markup for the classes cell
         marked_lines = []
         for line in classes_text.splitlines():
             label, _, cls = line.partition(": ")
