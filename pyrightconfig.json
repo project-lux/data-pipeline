@@ -1,0 +1,6 @@
+{
+  "reportArgumentType": false,
+  "reportExplicitAny": false,
+  "reportAny": false,
+  "reportUnreachable": false,
+}

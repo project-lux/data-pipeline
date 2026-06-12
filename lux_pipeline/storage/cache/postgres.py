@@ -1,10 +1,11 @@
-import psycopg2
-from psycopg2.extras import RealDictCursor, Json
-
-import time
-import datetime
-import threading
 import logging
+import threading
+import time
+
+import psycopg2
+from psycopg2.extras import Json, RealDictCursor
+
+from .abstract import AbstractCache
 
 logger = logging.getLogger("lux_pipeline")
 #
@@ -40,11 +41,15 @@ class PoolManager(object):
                     cls._instance = PoolManager()
         return cls._instance
 
-    def make_pool(self, name, host=None, port=None, user=None, password=None, dbname=None):
+    def make_pool(
+        self, name, host=None, port=None, user=None, password=None, dbname=None
+    ):
         if self.conn is None:
             if host:
                 # TCP/IP
-                self.conn = psycopg2.connect(host=host, port=port, user=user, password=password, dbname=dbname)
+                self.conn = psycopg2.connect(
+                    host=host, port=port, user=user, password=password, dbname=dbname
+                )
                 self.iterating_conn = psycopg2.connect(
                     host=host, port=port, user=user, password=password, dbname=dbname
                 )
@@ -64,7 +69,7 @@ class PoolManager(object):
         if close:
             if itr and self.iterating_conn is not None:
                 self.iterating_conn.close()
-                self.iteration_conn = None
+                self.iterating_conn = None  # fix: was self.iteration_conn (typo)
             elif not itr and self.conn is not None:
                 self.conn.close()
                 self.conn = None
@@ -74,10 +79,10 @@ class PoolManager(object):
         self.put_conn(self.pool, close=True, itr=True)
 
 
-class PooledCache(object):
+class PooledCache(AbstractCache):
     def __init__(self, config):
-        self.config = config
-        self.name = config["name"] + "_" + config["tabletype"]
+        # AbstractCache sets self.config, self.name, self.key, self.metadata_fields
+        super().__init__(config)
         self.conn = None
         self.iterating_conn = None
         self.pools = PoolManager.get_instance()
@@ -98,7 +103,9 @@ class PooledCache(object):
             # local socket
             pname = "localsocket"
             self.pool_name = pname
-            self.pools.make_pool(pname, user=self.config["user"], dbname=self.config["dbname"])
+            self.pools.make_pool(
+                pname, user=self.config["user"], dbname=self.config["dbname"]
+            )
 
         # Test that our table exists
         qry = "SELECT 1 FROM pg_tables WHERE tablename = %s"
@@ -118,26 +125,29 @@ class PooledCache(object):
 
     def make_threadsafe(self):
         # Might be calling threadsafe a second time or otherwise have
-        # a poolman floating around
+        # a poolman floating around. Reconnect using the full config so
+        # TCP/IP params (host, port, password) are not lost.
         self.conn = None
         self.iterating_conn = None
         local_pool = PoolManager()
         self.pools = local_pool
-        local_pool.make_pool(self.pool_name, user=self.config["user"], dbname=self.config["dbname"])
+        local_pool.make_pool(
+            self.pool_name,
+            host=self.config.get("host"),
+            port=self.config.get("port"),
+            user=self.config["user"],
+            password=self.config.get("password"),
+            dbname=self.config["dbname"],
+        )
 
-    def _cursor(self, internal=True, iter=False, size=0):
-        # Ensure cursor is managed server-side otherwise select * from table
-        # will return EVERYTHING into python (without a manual LIMIT/OFFSET)
-        # Get a connection from the pool
-
+    def _cursor(self, internal=False, iter=False, size=0):
+        # internal=True  → named server-side cursor, for streaming large result sets
+        # internal=False → plain client-side cursor, for single-row ops and DDL
         if iter and not self.iterating_conn:
             self.iterating_conn = self.pools.get_conn(self.pool_name, itr=True)
-        elif iter is False and not self.conn:
+        elif not iter and not self.conn:
             self.conn = self.pools.get_conn(self.pool_name, itr=False)
-        if iter:
-            conn = self.iterating_conn
-        else:
-            conn = self.conn
+        conn = self.iterating_conn if iter else self.conn
         if internal:
             # ensure uniqueness across multiple instances of the code
             name = f"server_cursor_{self.name}_{time.time()}".replace(".", "_")
@@ -146,7 +156,6 @@ class PooledCache(object):
                 size = self.config["cursor_size"]
             cursor.itersize = size
         else:
-            # Need this for creating the tables/indexes
             cursor = conn.cursor(cursor_factory=RealDictCursor)
         return cursor
 
@@ -174,6 +183,46 @@ class PooledCache(object):
                 logger.error(f"Make table failed: {e}")
                 self.conn.rollback()
 
+    def _build_insert_parts(
+        self,
+        jdata,
+        identifier,
+        yuid,
+        insert_time,
+        record_time,
+        refresh_time,
+        valid,
+        change,
+    ):
+        """Build the column name string, values tuple, and placeholder string for
+        an INSERT, skipping any columns whose value is None."""
+        qnames = [
+            "data",
+            "identifier",
+            "yuid",
+            "insert_time",
+            "record_time",
+            "refresh_time",
+            "valid",
+            "change",
+        ]
+        qvals = (
+            jdata,
+            identifier,
+            yuid,
+            insert_time,
+            record_time,
+            refresh_time,
+            valid,
+            change,
+        )
+        qd = dict(zip(qnames, qvals))
+        qps = [qn for qn in qnames if qd[qn] is not None]
+        qvs = tuple(qv for qv in qvals if qv is not None)
+        pholders = ",".join(["%s"] * len(qps))
+        qpstr = ",".join(qps)
+        return qpstr, qvs, pholders
+
     def len(self):
         qry = f"SELECT COUNT(*) FROM {self.name}"
         with self._cursor(internal=False) as cursor:
@@ -182,37 +231,29 @@ class PooledCache(object):
         return res["count"]
 
     def metadata(self, key, field="insert_time", _key_type=None):
+        # Base class validates key type and field name; raises on bad input.
+        super().metadata(key, field, _key_type)
         if _key_type is None:
             _key_type = self.key
-        if _key_type == "yuid" and len(key) != 36:
-            logger.error(f"{self.name} has UUIDs as keys")
-            return None
-        if field not in ["insert_time", "record_time", "refresh_time", "valid", "change"]:
-            raise ValueError(f"Unknown metadata field in cache: {field}")
         qry = f"SELECT {field} FROM {self.name} WHERE {_key_type} = %s"
-        params = (key,)
-        with self._cursor() as cursor:
-            cursor.execute(qry, params)
+        with self._cursor(internal=False) as cursor:
+            cursor.execute(qry, (key,))
             rows = cursor.fetchone()
         return rows
 
     def set_metadata(self, key, field, value, _key_type=None):
+        # Base class validates key type and field name; raises on bad input.
+        super().set_metadata(key, field, value, _key_type)
         if _key_type is None:
             _key_type = self.key
-        if _key_type == "yuid" and len(key) != 36:
-            logger.error(f"{self.name} has UUIDs as keys")
-            return None
-        if field not in ["record_time", "refresh_time", "valid", "change"]:
-            raise ValueError(f"Attempt to set unsettable metadata field in cache: {field}")
         qry = f"UPDATE {self.name} SET {field} = %s WHERE {_key_type} = %s"
-        params = (value, key)
         with self._cursor(internal=False) as cursor:
-            cursor.execute(qry, params)
+            cursor.execute(qry, (value, key))
             self.conn.commit()
 
     def latest(self):
         qry = f"SELECT insert_time FROM {self.name} ORDER BY insert_time DESC LIMIT 1"
-        with self._cursor() as cursor:
+        with self._cursor(internal=False) as cursor:
             cursor.execute(qry)
             res = cursor.fetchone()
         if res:
@@ -228,43 +269,34 @@ class PooledCache(object):
                 cursor.execute(qry)
                 res = cursor.fetchone()
             except:
-                # logger.debug(f"Called len_estimate, didn't get any hits, rolling back")
                 self.conn.rollback()
                 res = {"count": 0}
         return int(res["count"])
 
     def get(self, key, _key_type=None):
-        # Get a record either by YUID or internal identifier,
+        # Base class validates key type; raises on bad input.
+        super().get(key, _key_type)
         if _key_type is None:
             _key_type = self.key
-        if _key_type == "yuid" and len(key) != 36:
-            logger.error(f"{self.name} has UUIDs as keys")
-            return None
-
         qry = f"SELECT * FROM {self.name} WHERE {_key_type} = %s"
-        params = (key,)
         with self._cursor(internal=False) as cursor:
-            cursor.execute(qry, params)
+            cursor.execute(qry, (key,))
             rows = cursor.fetchone()
         if rows:
             rows["source"] = self.config["name"]
-        # sys.stdout.write('G');sys.stdout.flush()
         return rows
 
     def get_like(self, key, _key_type=None):
         # Get a record either by YUID or internal identifier,
         if _key_type is None:
             _key_type = self.key
-        if _key_type == "yuid" and len(key) != 36:
-            logger.error(f"{self.name} has UUIDs as keys")
-            return None
+        self._validate_key_type(key, _key_type)
 
         # ORDER BY here is in case we have multiple copies from different times
         # We want the most recent
         qry = f"SELECT * FROM {self.name} WHERE {_key_type} LIKE %s"
-        params = (key + "%",)
         with self._cursor(internal=False) as cursor:
-            cursor.execute(qry, params)
+            cursor.execute(qry, (key + "%",))
             rows = cursor.fetchone()
         if rows:
             rows["source"] = self.config["name"]
@@ -272,7 +304,6 @@ class PooledCache(object):
 
     def list(self, timestamp=None):
         # List records changed since timestamp
-        # cast timestamp into datetime it not already
         # FIXME: This should really be an iterator that pages through
         if timestamp is None:
             qry = f"SELECT {self.key} FROM {self.name}"
@@ -280,7 +311,7 @@ class PooledCache(object):
         else:
             qry = f"SELECT {self.key} FROM {self.name} WHERE insert_time >= %s"
             params = (timestamp,)
-        with self._cursor() as cursor:
+        with self._cursor(internal=False) as cursor:
             cursor.execute(qry, params)
             rows = cursor.fetchall()
         return [x[self.key] for x in rows]
@@ -290,25 +321,21 @@ class PooledCache(object):
     #   t WHERE t.row % 10 = 1 LIMIT 10
 
     def iter_records_slice(self, mySlice=0, maxSlice=10):
-        # use row_number() to partition the results into slices for parallel processing
         if mySlice >= maxSlice:
-            raise ValueError(f"{mySlice} cannot be > {maxSlice}")
-
+            raise ValueError(f"{mySlice} cannot be >= {maxSlice}")
         qry = f"""SELECT t.* FROM (SELECT *, row_number() OVER (ORDER BY {self.key} ASC)
             AS row FROM {self.name}) t WHERE t.row % {maxSlice} = {mySlice}"""
-        with self._cursor(iter=True) as cursor:
+        with self._cursor(internal=True, iter=True) as cursor:
             cursor.execute(qry)
             for res in cursor:
                 yield res
 
     def iter_keys_slice(self, mySlice=0, maxSlice=10):
-        # use row_number() to partition the results into slices for parallel processing
         if mySlice >= maxSlice:
-            raise ValueError(f"{mySlice} cannot be > {maxSlice}")
-
+            raise ValueError(f"{mySlice} cannot be >= {maxSlice}")
         qry = f"""SELECT {self.key} FROM (SELECT {self.key}, row_number() OVER (ORDER BY {self.key} ASC)
             AS row FROM {self.name}) t WHERE t.row % {maxSlice} = {mySlice}"""
-        with self._cursor(iter=True, size=50000) as cursor:
+        with self._cursor(internal=True, iter=True, size=50000) as cursor:
             cursor.execute(qry)
             for res in cursor:
                 yield res[self.key]
@@ -316,14 +343,13 @@ class PooledCache(object):
     def iter_keys_slice_mem(self, mySlice=0, maxSlice=10):
         # DON'T use row_number() as it's freaking slow
         if mySlice >= maxSlice:
-            raise ValueError(f"{mySlice} cannot be > {maxSlice}")
-
+            raise ValueError(f"{mySlice} cannot be >= {maxSlice}")
         qry = f"""SELECT {self.key} FROM {self.name} ORDER BY {self.key} ASC"""
         ct = 0
-        with self._cursor(iter=True, size=50000) as cursor:
+        with self._cursor(internal=True, iter=True, size=50000) as cursor:
             cursor.execute(qry)
             for res in cursor:
-                if (ct % maxSlice) - mySlice == 0:
+                if ct % maxSlice == mySlice:
                     yield res[self.key]
                 ct += 1
 
@@ -334,7 +360,7 @@ class PooledCache(object):
         else:
             qry = f"SELECT {self.key} FROM {self.name} WHERE record_time >= %s ORDER BY insert_time DESC"
             params = (timestamp,)
-        with self._cursor(iter=True, size=50000) as cursor:
+        with self._cursor(internal=True, iter=True, size=50000) as cursor:
             cursor.execute(qry, params)
             for res in cursor:
                 yield res[self.key]
@@ -346,21 +372,21 @@ class PooledCache(object):
         else:
             qry = f"SELECT * FROM {self.name} WHERE record_time >= %s ORDER BY insert_time DESC"
             params = (timestamp,)
-        with self._cursor(iter=True) as cursor:
+        with self._cursor(internal=True, iter=True) as cursor:
             cursor.execute(qry, params)
             for res in cursor:
                 yield res
 
     def iter_records(self):
         qry = f"SELECT * FROM {self.name}"
-        with self._cursor(iter=True) as cursor:
+        with self._cursor(internal=True, iter=True) as cursor:
             cursor.execute(qry)
             for res in cursor:
                 yield res
 
     def iter_keys(self):
         qry = f"SELECT {self.key} FROM {self.name}"
-        with self._cursor(iter=True) as cursor:
+        with self._cursor(internal=True, iter=True) as cursor:
             cursor.execute(qry)
             for res in cursor:
                 yield res[self.key]
@@ -370,7 +396,7 @@ class PooledCache(object):
         # CREATE INDEX merged_type_idx ON merged_merged_record_cache USING BTREE ((data->'type'));
         # is important!
         qry = f"SELECT * FROM {self.name} WHERE data->'type' = '\"{t}\"'"
-        with self._cursor(iter=True) as cursor:
+        with self._cursor(internal=True, iter=True) as cursor:
             cursor.execute(qry)
             for res in cursor:
                 yield res
@@ -386,30 +412,22 @@ class PooledCache(object):
         refresh_time=None,
         change=None,
     ):
-        if not identifier and not yuid:
-            raise ValueError("Must give YUID or Identifier or both")
-        if not type(data) == dict:
-            raise ValueError("Data must be a dict()")
-        else:
-            jdata = Json(data)
-        if yuid is not None and not type(yuid) == str:
-            yuid = str(yuid)
-
-        insert_time = datetime.datetime.now()
-        if record_time is None:
-            record_time = insert_time
-        if refresh_time is None:
-            refresh_time = "9999-12-31T00:00:00Z"
-        if format is None:
-            format = "JSON-LD"
-
-        qnames = ["data", "identifier", "yuid", "insert_time", "record_time", "refresh_time", "valid", "change"]
-        qvals = (jdata, identifier, yuid, insert_time, record_time, refresh_time, valid, change)
-        qd = dict(zip(qnames, qvals))
-        qps = [qn for qn in qnames if qd[qn] is not None]
-        qvs = tuple([qv for qv in qvals if qv is not None])
-        pholders = ",".join(["%s"] * len(qps))
-        qpstr = ",".join(qps)
+        yuid, insert_time, record_time, refresh_time, format = (
+            self._prepare_write_params(
+                data, identifier, yuid, format, record_time, refresh_time
+            )
+        )
+        jdata = Json(data)
+        qpstr, qvs, pholders = self._build_insert_parts(
+            jdata,
+            identifier,
+            yuid,
+            insert_time,
+            record_time,
+            refresh_time,
+            valid,
+            change,
+        )
 
         with self._cursor(internal=False) as cursor:
             if self.config["overwrite"]:
@@ -419,7 +437,6 @@ class PooledCache(object):
                     cursor.execute(qry, qvs * 2)
                     self.conn.commit()
                 except Exception as e:
-                    # Could be a psycopg2.errors.UniqueViolation if we're trying to insert without delete
                     logger.critical(f"DATA: {data}")
                     logger.critical(f"Failed to upsert!: {e}?\n{qpstr} = {qvs}")
                     self.conn.rollback()
@@ -429,18 +446,17 @@ class PooledCache(object):
                     cursor.execute(qry, qvs)
                     self.conn.commit()
                 except Exception as e:
-                    # Could be a psycopg2.errors.UniqueViolation if we're trying to insert without delete
-                    logger.critical(f"Duplicate key for {identifier}/{yuid} in {self.name}: {e}?")
+                    logger.critical(
+                        f"Duplicate key for {identifier}/{yuid} in {self.name}: {e}?"
+                    )
                     self.conn.rollback()
-        # sys.stdout.write('S');sys.stdout.flush()
 
     def delete(self, key, _key_type=None):
         if _key_type is None:
             _key_type = self.key
         qry = f"DELETE FROM {self.name} WHERE {_key_type} = %s"
-        params = (key,)
         with self._cursor(internal=False) as cursor:
-            cursor.execute(qry, params)
+            cursor.execute(qry, (key,))
             self.conn.commit()
 
     def clear(self):
@@ -459,11 +475,9 @@ class PooledCache(object):
         else:
             qry = f"SELECT 1 FROM {self.name} WHERE {_key_type} = %s AND record_time >= %s LIMIT 1"
             params = (key, timestamp)
-
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry, params)
             rows = cursor.fetchone()
-        # sys.stdout.write('?');sys.stdout.flush()
         return bool(rows)
 
     def commit(self):
@@ -486,29 +500,27 @@ class PooledCache(object):
         refresh_time=None,
         change=None,
     ):
-        data = Json(data)
-        insert_time = datetime.datetime.now()
-        if record_time is None:
-            record_time = insert_time
-        if refresh_time is None:
-            refresh_time = "9999-12-31T00:00:00Z"
-        if format is None:
-            format = "JSON-LD"
-
-        qnames = ["data", "identifier", "yuid", "insert_time", "record_time", "refresh_time", "valid", "change"]
-        qvals = (data, identifier, yuid, insert_time, record_time, refresh_time, valid, change)
-        qd = dict(zip(qnames, qvals))
-        qps = [qn for qn in qnames if qd[qn] is not None]
-        qvs = tuple([qv for qv in qvals if qv is not None])
-        pholders = ",".join(["%s"] * len(qps))
-        qpstr = ",".join(qps)
-
+        yuid, insert_time, record_time, refresh_time, format = (
+            self._prepare_write_params(
+                data, identifier, yuid, format, record_time, refresh_time
+            )
+        )
+        jdata = Json(data)
+        qpstr, qvs, pholders = self._build_insert_parts(
+            jdata,
+            identifier,
+            yuid,
+            insert_time,
+            record_time,
+            refresh_time,
+            valid,
+            change,
+        )
         try:
             qry = f"INSERT INTO {self.name} ({qpstr}) VALUES ({pholders})"
             self.bulk_cursor.execute(qry, qvs)
         except:
-            # Could be a psycopg2.errors.UniqueViolation if we're trying to insert without delete
-            # BUT this will rollback the entire transaction so bail
+            # A UniqueViolation here will roll back the entire transaction, so bail
             raise
 
     def end_bulk(self):
@@ -517,55 +529,14 @@ class PooledCache(object):
         self.bulk_cursor = None
 
     def optimize(self):
-        # Call VACUUM on the table
-        qry = f"VACUUM (ANALYZE) {self.name}"
-
+        # VACUUM is non-transactional; run it in autocommit mode (isolation_level=0)
         if not self.conn:
             self.conn = self.pools.get_conn(self.pool_name)
         old_iso = self.conn.isolation_level
         self.conn.set_isolation_level(0)
         with self._cursor(internal=False) as cursor:
-            cursor.execute(qry)
-            self.conn.commit()
+            cursor.execute(f"VACUUM (ANALYZE) {self.name}")
         self.conn.set_isolation_level(old_iso)
-
-    ### Behave like a dict
-    def __getitem__(self, what):
-        return self.get(what)
-
-    def __setitem__(self, what, value):
-        if "data" in value:
-            # given a full record; DO NOT MUTATE IT
-            d = value["data"]
-            params = {}
-            if "identifier" in value and what != value["identifier"]:
-                raise ValueError("Record's identifier value and key given to set are different")
-            params[self.key] = what
-            for v in ["identifier", "yuid", "format", "valid", "change", "record_time"]:
-                if v in value:
-                    params[v] = value[v]
-            return self.set(d, **params)
-        else:
-            # given only the json
-            if self.key == "identifier":
-                return self.set(value, identifier=what)
-            elif self.key == "yuid":
-                return self.set(value, yuid=what)
-
-    def __delitem__(self, what):
-        return self.delete(what)
-
-    def __contains__(self, what):
-        return self.has_item(what)
-
-    def __len__(self):
-        return self.len()
-
-    def __bool__(self):
-        # Don't let it go through to len
-        # and warn that the code shouldn't do this
-        logger.critical(f"*** code somewhere is asking for a cache as a boolean value and shouldn't ***")
-        return True
 
 
 class DataCache(PooledCache):

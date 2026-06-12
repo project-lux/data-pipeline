@@ -1,12 +1,16 @@
-import io
-import os
-import gzip
 import bz2
-import zipfile
-import tarfile
-from lxml import etree
-import ujson as json
+import gzip
+import io
 import logging
+import os
+import tarfile
+import zipfile
+import zlib
+
+import lmdb
+import ujson as json
+from lxml import etree
+
 from ._managable import Managable
 
 logger = logging.getLogger("lux_pipeline")
@@ -28,6 +32,7 @@ Where container is one of:
   dirh = directory hierarchy of files
   zip = zipfile of members
   tar = tarfile of members
+  lmdb = lmdb cache of members
   lines = single file where each line is a member
   dict = json file with a top level dictionary where each value is a member
   array = json file with a top level array where each item is a member
@@ -40,10 +45,11 @@ Format is one of:
 And compression, on anything apart from dir and zip is one of:
   gz = gzipped
   bz = bzip2'd
+  z = zlib compressed
 
 dir/tar.gz/lines.bz/json = directory of tgz files, each entry is a jsonl file compressed by bzip2
 datacache exports are "zip.bz2/json"
-
+lmdb/json.z = lmdb cache of json files compressed by zlib
 """
 
 
@@ -73,6 +79,17 @@ class ZipPointer(Pointer):
         return self.parent.open(self.info)
 
 
+class LmdbPointer(Pointer):
+    # parent is an lmdb environment
+    # info is a tuple (key, value)
+    def get_name(self):
+        # info[0] is a memoryview, but name needs a string
+        return self.info[0].tobytes().decode()
+
+    def get_handle(self):
+        return self.info[1]
+
+
 class Loader(Managable):
     def __init__(self, config):
         super().__init__(config)
@@ -89,9 +106,21 @@ class Loader(Managable):
         self.temp_file_handles = {}
         self.overwrite = False
 
-        self.fmt_containers = ["dir", "dirh", "pair", "zip", "tar", "lines", "dict", "array", "arraylines", "xmls"]
+        self.fmt_containers = [
+            "dir",
+            "dirh",
+            "pair",
+            "zip",
+            "tar",
+            "lines",
+            "dict",
+            "array",
+            "arraylines",
+            "xmls",
+            "lmdb",
+        ]
         self.fmt_formats = ["json", "raw", "other"]
-        self.fmt_compressions = ["gz", "bz2"]
+        self.fmt_compressions = ["gz", "bz2", "z"]
         self.step_functions = {
             "dir": self.iterate_directory,
             "dirs": self.iterate_directories,
@@ -103,6 +132,7 @@ class Loader(Managable):
             "dict": self.iterate_dict,
             "array": self.iterate_array,
             "xmls": self.iterate_xmls,
+            "lmdb": self.iterate_lmdb,
             "json": self.make_json,
             "raw": self.make_raw,
             "other": self.make_other,
@@ -175,17 +205,27 @@ class Loader(Managable):
         for b in bits:
             bb = b.split(".")
             if not bb[0] in self.fmt_containers:
-                raise ValueError(f"Cannot process container type {bb[0]} in {self.name} loader")
+                raise ValueError(
+                    f"Cannot process container type {bb[0]} in {self.name} loader"
+                )
             if len(bb) == 2 and bb[1] not in self.fmt_compressions:
-                raise ValueError(f"Cannot process compression type {bb[1]} in {self.name} loader")
+                raise ValueError(
+                    f"Cannot process compression type {bb[1]} in {self.name} loader"
+                )
             if len(bb) > 2:
-                raise ValueError(f"Badly specified container: {bb} in {self.name} loader")
+                raise ValueError(
+                    f"Badly specified container: {bb} in {self.name} loader"
+                )
             spec.append(bb)
         fmts = fmt.split(".")
         if not fmts[0] in self.fmt_formats:
-            raise ValueError(f"Cannot process format type {fmts[0]} in {self.name} loader")
+            raise ValueError(
+                f"Cannot process format type {fmts[0]} in {self.name} loader"
+            )
         if len(fmts) == 2 and fmts[1] not in self.fmt_compressions:
-            raise ValueError(f"Cannot process compression type {fmts[1]} in {self.name} loader")
+            raise ValueError(
+                f"Cannot process compression type {fmts[1]} in {self.name} loader"
+            )
         if len(fmts) > 2:
             raise ValueError(f"Badly specified container: {fmts} in {self.name} loader")
         spec.append(fmts)
@@ -230,6 +270,24 @@ class Loader(Managable):
                     # can't get back to this, so need to yield a file handle like object
                     yield ZipPointer(zh, n)
 
+    def iterate_lmdb(self, path, comp, remaining):
+        if comp:
+            raise NotImplementedError("Compressed LMDB not supported")
+
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"LMDB path not found: {path}")
+
+        env = lmdb.open(path, max_dbs=3, readonly=True, lock=False)
+        db = env.open_db(b"data", dupsort=False)
+
+        with env.begin(buffers=True) as txn:
+            cursor = txn.cursor(db=db)
+            if cursor.set_range(self.name.encode() + b":"):
+                for key, value in cursor:
+                    if not key.tobytes().startswith(self.name.encode() + b":"):
+                        break
+                    yield LmdbPointer(env, (key, value))
+
     def iterate_tar(self, path, comp, remaining):
         if comp:
             mode = f"r:{comp}"
@@ -255,11 +313,26 @@ class Loader(Managable):
                 return path
             elif isinstance(path, Pointer):
                 return path.get_handle()
+        elif isinstance(path, LmdbPointer):
+            # lmdb returns memoryview instances
+            # which are not like filehandles
+            if comp == "z":
+                jstr = zlib.decompress(path.get_handle())
+            elif comp == "gz":
+                jstr = gzip.decompress(path.get_handle())
+            elif comp == "bz2":
+                jstr = bz2.decompress(path.get_handle())
+            else:
+                jstr = path.get_handle().tobytes()
+            return io.BytesIO(jstr)
         elif isinstance(path, Pointer):
             path = path.get_handle()
         elif isinstance(path, dict):
             # URGH
-            self.manager.log(logging.ERROR, f"[red]Got a dict as path in file_opener for {self.name}: {path}")
+            self.manager.log(
+                logging.ERROR,
+                f"[red]Got a dict as path in file_opener for {self.name}: {path}",
+            )
             return None
 
         if comp == "gz":
@@ -270,11 +343,31 @@ class Loader(Managable):
             try:
                 return open(path)
             except:
-                self.manager.log(logging.ERROR, f"[red]Got something we couldn't open for {self.name}: {path}")
+                self.manager.log(
+                    logging.ERROR,
+                    f"[red]Got something we couldn't open for {self.name}: {path}",
+                )
                 return None
         else:
             # Dunno what this is
             return None
+
+    def lmdb_count_entries(self, path):
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"LMDB path not found: {path}")
+
+        env = lmdb.open(path, max_dbs=3, readonly=True, lock=False)
+        db = env.open_db(b"data", dupsort=False)
+        count = 0
+        with env.begin(buffers=True) as txn:
+            cursor = txn.cursor(db=db)
+            prefix = self.name.encode() + b":"
+            if cursor.set_range(prefix):
+                while cursor.key().tobytes().startswith(prefix):
+                    count += 1
+                    if not cursor.next():
+                        break
+        return count
 
     def count_lines(self, fh):
         # Simple method of just read in the lines
@@ -378,7 +471,9 @@ class Loader(Managable):
         data = self.post_process_json(path)
         ident = self.extract_identifier(data)
         if not ident:
-            raise ValueError(f"Could not get an identifier in {self.name} while in {parent}")
+            raise ValueError(
+                f"Could not get an identifier in {self.name} while in {parent}"
+            )
         return {"identifier": ident, "data": data}
 
     def make_json(self, path, comp, parent):
@@ -387,11 +482,18 @@ class Loader(Managable):
         ident = self.make_identifier(path)
         with self.file_opener(path, comp) as fh:
             data = json.load(fh)
-        data = self.post_process_json(data)
+        try:
+            data = self.post_process_json(data, ident)
+        except Exception as e:
+            print(f"Failed to post_process: {e}")
+            print(data)
+            raise
         if not ident:
             ident = self.extract_identifier(data)
             if not ident:
-                raise ValueError(f"Could not get an identifier in {self.name} while in {parent}/{path}")
+                raise ValueError(
+                    f"Could not get an identifier in {self.name} while in {parent}/{path}"
+                )
         return {"identifier": ident, "data": data}
 
     def make_other(self, path, comp, parent):
@@ -427,7 +529,7 @@ class Loader(Managable):
             return self.make_identifier(data["id"])
         return None
 
-    def post_process_json(self, data):
+    def post_process_json(self, data, identifier):
         # This is called after discovering JSON and before extracting identifier
         return data
 
@@ -461,21 +563,31 @@ class Loader(Managable):
 
     def open_temp_files(self):
         if "reconcileDbPath" in self.config:
-            lblfn = os.path.join(self.configs.temp_dir, f"{self.name}_labels_{self.my_slice}.tsv")
+            lblfn = os.path.join(
+                self.configs.temp_dir, f"{self.name}_labels_{self.my_slice}.tsv"
+            )
             lbl = open(lblfn, "w")
             self.temp_file_handles["label"] = lbl
         if "inverseEquivDbPath" in self.config:
-            eqfn = os.path.join(self.configs.temp_dir, f"{self.name}_equivs_{self.my_slice}.tsv")
+            eqfn = os.path.join(
+                self.configs.temp_dir, f"{self.name}_equivs_{self.my_slice}.tsv"
+            )
             eq = open(eqfn, "w")
             self.temp_file_handles["equiv"] = eq
         if "hasDifferentFrom" in self.config:
-            diffn = os.path.join(self.configs_temp_dir, f"{self.name}_diffs_{self.my_slice}.tsv")
+            diffn = os.path.join(
+                self.configs_temp_dir, f"{self.name}_diffs_{self.my_slice}.tsv"
+            )
             diff = open(diffn, "w")
             self.temp_file_handles["diff"] = diff
 
     def close_temp_files(self):
         for t in ["label", "equiv", "diff"]:
-            if t in self.temp_file_handles and (fh := self.temp_file_handles[t]) and not fh.closed:
+            if (
+                t in self.temp_file_handles
+                and (fh := self.temp_file_handles[t])
+                and not fh.closed
+            ):
                 fh.close()
 
     def store_record(self, record):
@@ -522,15 +634,24 @@ class Loader(Managable):
 
         super().prepare(mgr, my_slice, max_slice)
 
+        ifs = self.config.get("input_files", {})
         if load_type == "export":
             # Unknown calculate from file
             self.total = -1
+        elif load_type == "lmdb":
+            # Calculate from lmdb; only one file supported
+            pth = ifs[load_type][0].get("path", "")
+            if pth:
+                self.total = self.lmdb_count_entries(pth)
+            else:
+                self.total = -1
 
         files = []
-        if ifs := self.config.get("input_files", {}):
+        if ifs:
             if not load_type in ifs:
                 self.manager.log(
-                    logging.ERROR, f"No configured file for load type '{load_type}' in source {self.name}"
+                    logging.ERROR,
+                    f"No configured file for load type '{load_type}' in source {self.name}",
                 )
                 return False
             for p in ifs[load_type]:
@@ -552,7 +673,11 @@ class Loader(Managable):
                     path = os.path.join(self.dumps_dir, path)
                 files.append({"path": path, "fmt": fmtspec})
 
-        if not files and load_type == "records" and (dfp := self.config.get("dumpFilePath")):
+        if (
+            not files
+            and load_type == "records"
+            and (dfp := self.config.get("dumpFilePath"))
+        ):
             # look in dfp
             fmt = self.config.get("dumpFileType", None)
             if fmt:
@@ -576,7 +701,10 @@ class Loader(Managable):
         for info in self.my_files:
             if not disable_ui:
                 self.update_progress_bar()
-            self.manager.log(logging.INFO, f"[green]Loading {info['path']} for {self.name} in {self.my_slice}")
+            self.manager.log(
+                logging.INFO,
+                f"[green]Loading {info['path']} for {self.name} in {self.my_slice}",
+            )
             try:
                 self.process_step(info["fmt"], info["path"], None)
             except Exception as e:

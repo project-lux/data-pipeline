@@ -1,5 +1,6 @@
-from lux_pipeline.process.base.loader import Loader
 import logging
+
+from lux_pipeline.process.base.loader import Loader, Pointer
 
 
 class BnfLoader(Loader):
@@ -9,10 +10,16 @@ class BnfLoader(Loader):
     We only want the attribute rdf:about="http://data.bnf.fr/ark:/12148/*"""
 
     def make_identifier(self, value):
-        return None
+        if isinstance(value, Pointer):
+            return value.get_name()
+        else:
+            return None
 
     def extract_identifier(self, data):
         """Extract the identifier from the raw string"""
+        if not data or not "data" in data:
+            return data
+
         rec = data["data"].strip()
         fl = rec.split("\n")[0].split()[-1]
         if not fl.startswith("rdf:about"):
