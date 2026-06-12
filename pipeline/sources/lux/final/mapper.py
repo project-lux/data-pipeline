@@ -30,15 +30,26 @@ class Cleaner(Mapper):
                 data = fh.read()
             self.metatypes = json.loads(data)
 
+        fn = os.path.join(self.configs.data_dir, "place-cycle-fixes.json")
+        if os.path.exists(fn):
+            with open(fn) as fh:
+                self.place_cycle_fixes = json.load(fh)
+        else:
+            self.place_cycle_fixes = {}
+
         # Look for LLM Parsed Person names
         fn = os.path.join(self.configs.indexes_dir, "yuid_personname.lmdb")
         if os.path.exists(fn):
-            self.llm_person_names = JsonLmdb.open(fn, "r", readahead=False, writemap=True)
+            self.llm_person_names = JsonLmdb.open(
+                fn, "r", readahead=False, writemap=True
+            )
         else:
             print("Couldn't find LLM yuid->name lmdb")
         fn2 = os.path.join(self.configs.indexes_dir, "yuid_personname.lmdb")
         if os.path.exists(fn2):
-            self.llm_label_person_names = JsonLmdb.open(fn2, "r", readahead=False, writemap=True)
+            self.llm_label_person_names = JsonLmdb.open(
+                fn2, "r", readahead=False, writemap=True
+            )
         else:
             print("Couldn't find LLM label->name lmdb")
 
@@ -107,7 +118,9 @@ class Cleaner(Mapper):
                         try:
                             do = self.get_commons_license(fn)
                         except:
-                            print(f"Failed to get WM license for {data.get('id', '????')}")
+                            print(
+                                f"Failed to get WM license for {data.get('id', '????')}"
+                            )
                             do = None
                         del rep["digitally_shown_by"]
                         if do:
@@ -196,7 +209,13 @@ class Cleaner(Mapper):
             "id": english,
             "type": "Language",
             "_label": "English",
-            "equivalent": [{"id": "http://vocab.getty.edu/aat/300388277", "type": "Language", "_label": "English"}],
+            "equivalent": [
+                {
+                    "id": "http://vocab.getty.edu/aat/300388277",
+                    "type": "Language",
+                    "_label": "English",
+                }
+            ],
         }
 
         # displayName = self.globals['displayName'] # 300404669
@@ -293,11 +312,19 @@ class Cleaner(Mapper):
                         "language": [lang_en_js],
                     }
 
-                    data["identified_by"] = [llm_primaryname, llm_sortname, *data.get("identified_by", [])]
+                    data["identified_by"] = [
+                        llm_primaryname,
+                        llm_sortname,
+                        *data.get("identified_by", []),
+                    ]
 
                 if birth and "born" not in data:
                     # add birth year
-                    dn = {"type": "Name", "content": birth, "classified_as": [displayType]}
+                    dn = {
+                        "type": "Name",
+                        "content": birth,
+                        "classified_as": [displayType],
+                    }
                     if len(birth) != 4:
                         # 0 pad it
                         birth = birth.zfill(4)
@@ -312,7 +339,11 @@ class Cleaner(Mapper):
 
                 if death and "died" not in data:
                     # add death year
-                    dn = {"type": "Name", "content": death, "classified_as": [displayType]}
+                    dn = {
+                        "type": "Name",
+                        "content": death,
+                        "classified_as": [displayType],
+                    }
                     if len(death) != 4:
                         # 0 pad it
                         death = death.zfill(4)
@@ -332,7 +363,9 @@ class Cleaner(Mapper):
             for nm in data["identified_by"]:
                 if nm["type"] == "Name":
                     # FIXME: Test for 'language': [{'type': 'Language', '_label': 'und'}]
-                    langs = [x.get("id", None) for x in nm.get("language", [{"id": None}])]
+                    langs = [
+                        x.get("id", None) for x in nm.get("language", [{"id": None}])
+                    ]
                     val = nm.get("content", "")
                     val = val.strip()
                     if not val:
@@ -398,7 +431,9 @@ class Cleaner(Mapper):
                         # FIXME: Any other heuristics here to make a better guess?
                         candidates = []
                         for nm in nms:
-                            cxns = [x.get("id", None) for x in nm.get("classified_as", [])]
+                            cxns = [
+                                x.get("id", None) for x in nm.get("classified_as", [])
+                            ]
                             if not cxns:
                                 candidates.insert(0, nm)
                             else:
@@ -429,7 +464,9 @@ class Cleaner(Mapper):
                         # Everything was bad :(
                         target = nms[0]
                         done = False
-                        cxns = [x.get("id", None) for x in target.get("classified_as", [])]
+                        cxns = [
+                            x.get("id", None) for x in target.get("classified_as", [])
+                        ]
                         for a in [alternateName, alternateTitle, translatedTitle]:
                             if a in cxns:
                                 # Gah. Overwrite. We need a primary name
@@ -465,7 +502,9 @@ class Cleaner(Mapper):
                         primaryNameVals.sort(key=lambda x: len(x["content"]))
                         if len(primaryNameVals) > 1 and data["type"] == "Place":
                             if len(primaryNameVals[0]["content"]) < 3:
-                                primaryNameVals = primaryNameVals[1:] + [primaryNameVals[0]]
+                                primaryNameVals = primaryNameVals[1:] + [
+                                    primaryNameVals[0]
+                                ]
 
                         # test for acronyms... prefer Great Britain to GB,
                         #   International Businesss Machines to IBM
@@ -528,7 +567,11 @@ class Cleaner(Mapper):
                 if "classified_as" in target:
                     target["classified_as"].append(sortType)
 
-        if (not "identified_by" in data or not data["identified_by"]) and "_label" in data and data["_label"]:
+        if (
+            (not "identified_by" in data or not data["identified_by"])
+            and "_label" in data
+            and data["_label"]
+        ):
             # copy label to name
             data["identified_by"] = [
                 {
@@ -537,13 +580,20 @@ class Cleaner(Mapper):
                     "classified_as": [primaryType],
                 }
             ]
-        elif not "identified_by" in data and data["type"] == "DigitalObject" and len(data.keys()) == 4:
+        elif (
+            not "identified_by" in data
+            and data["type"] == "DigitalObject"
+            and len(data.keys()) == 4
+        ):
             # bad record ... just a pointer to some other URI (id, type, _label, equivalent)
             return None
         elif (
             not "identified_by" in data
             or not data["identified_by"]
-            or (len(data["identified_by"]) == 1 and not data["identified_by"][0].get("content", ""))
+            or (
+                len(data["identified_by"]) == 1
+                and not data["identified_by"][0].get("content", "")
+            )
         ):
             # Uh oh :(
             print(f"record with no names: {data}")
@@ -781,25 +831,44 @@ class Cleaner(Mapper):
                     data[p].remove(k)
 
         # Trash (mostly) YUL Place parents if we have merged in a better one
-        if data["type"] == "Place" and "part_of" in data and len(data["part_of"]) > 1:
-            # Look up in idmap to see if YUL only
+        # also prevent cycles from happening (per SCC algorithm)
+        if data["type"] == "Place" and "part_of" in data:
+            my_equivs = data["equivalent"] if "equivalent" in data else []
+
             for parent in data["part_of"].copy():
                 try:
+                    # Note that equivs have ##qua suffix
                     equivs = self.idmap[parent["id"]]
-                except:
+                except Exception:
+                    # Parent not found in idmap, could be off the edge of the graph
                     continue
-                okay = False
-                for eq in equivs:
-                    if (
-                        "whosonfirst" in eq
-                        or "geonames" in eq
-                        or "wikidata" in eq
-                        or "getty" in eq
-                        or "loc.gov" in eq
-                        or "viaf" in eq
-                    ):
-                        okay = True
-                        break
+                okay = True
+
+                for meq in my_equivs:
+                    if meq["id"] in self.place_cycle_fixes:
+                        bad_parents = [
+                            f"{x}##quaPlace" for x in self.place_cycle_fixes[meq["id"]]
+                        ]
+                        for peq in equivs:
+                            if peq in bad_parents:
+                                okay = False
+                                break
+                        if not okay:
+                            break
+
+                if okay and len(data["part_of"]) == 1:
+                    okay = False
+                    for eq in equivs:
+                        if (
+                            "whosonfirst" in eq
+                            or "geonames" in eq
+                            or "wikidata" in eq
+                            or "getty" in eq
+                            or "loc.gov" in eq
+                            or "viaf" in eq
+                        ):
+                            okay = True
+                            break
                 if not okay:
                     data["part_of"].remove(parent)
 
