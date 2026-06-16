@@ -18,11 +18,6 @@ class CommandHandler(CH):
         self.extra_args = {"overwrite": "no_overwrite", "load_type": "type"}
 
     def make_manager(self, wks, args):
-        mgr = LoadManager(self.configs, wks)
-        if hasattr(args, "type") and args.type:
-            mgr.load_type = args.type
-            if args.type not in ["records", "export", "lmdb", "all"]:
-                logger.warning(
-                    f"Unknown download type: {args.type}, continuing anyway..."
-                )
+        return LoadManager(self.configs, wks, args)
+
         return mgr

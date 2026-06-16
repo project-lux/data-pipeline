@@ -81,8 +81,6 @@ class ReconcileManager(TaskUiManager):
             self.update_progress_bar(description="references", total=self.total)
         item = True
         done = 0
-        fh = open(f"temp_log_{n}.txt", "w")
-        self.temp_log_h = fh
         while item:
             item = self.ref_mgr.pop_ref()
             if item is None:

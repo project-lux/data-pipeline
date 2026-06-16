@@ -108,6 +108,7 @@ class Loader(Managable):
         self.my_files = []
         self.temp_file_handles = {}
         self.overwrite = False
+        self.max_records = -1
 
         self.fmt_containers = [
             "dir",
@@ -471,7 +472,7 @@ class Loader(Managable):
 
     def make_raw(self, path, comp, parent):
         # path is the actual native JSON record
-        data = self.post_process_json(path)
+        data = self.post_process_json(path, None)
         ident = self.extract_identifier(data)
         if not ident:
             raise ValueError(
@@ -480,18 +481,20 @@ class Loader(Managable):
         return {"identifier": ident, "data": data}
 
     def make_json(self, path, comp, parent):
-        if self.local_debug:
-            print(f"  make_json({path}, {comp}, {parent})")
+        logger.debug(f"  make_json({path}, {comp}, {parent})")
         ident = self.make_identifier(path)
-        with self.file_opener(path, comp) as fh:
-            data = json.load(fh)
+        if type(comp) is dict:
+            data = comp
+        else:
+            with self.file_opener(path, comp) as fh:
+                data = json.load(fh)
         try:
             data = self.post_process_json(data, ident)
         except Exception as e:
-            print(f"Failed to post_process: {e}")
-            print(data)
+            logger.debug(f"Failed to post_process: {e}")
+            logger.debug(data)
             raise
-        if not ident:
+        if data and not ident:
             ident = self.extract_identifier(data)
             if not ident:
                 raise ValueError(
@@ -546,7 +549,9 @@ class Loader(Managable):
         return True
 
     def should_store_record(self, data):
-        if not self.overwrite and data["identifier"] in self.out_cache:
+        if data is None or data['data'] is None or data['identifier'] is None:
+            return False
+        elif not self.overwrite and data["identifier"] in self.out_cache:
             return False
         return True
 
@@ -604,25 +609,31 @@ class Loader(Managable):
         self.increment_progress_bar(1)
         return True
 
+    def should_process_item(self, child):
+        return True
+
+
     def process_step(self, steps, path, parent):
-        if self.local_debug:
-            print(f"  process_step({steps}, {path}, {parent})")
+        logger.debug(f"  process_step({steps}, {path}, {parent})")
         step = steps[0]
         if not step:
-            self.manager.log(logging.ERROR, f"No step provided! {steps}")
+            logger.error(f"No step provided! {steps}")
             return
         comp = step[1] if len(step) > 1 else None
         handler = self.step_functions[step[0]]
 
         if step[0] in self.fmt_containers:
-            # self.manager.log(logging.DEBUG, f"processing path {step[0]}")
+            # logger.debug(f"  for child in {handler.__name__}")
             for child in handler(path, comp, steps[1:]):
-                self.process_step(steps[1:], child, step)
+                if self.should_process_item(child):
+                    self.process_step(steps[1:], child, step)
         elif step[0] in self.fmt_formats:
             # if we don't need to process it, then don't
             self.seen += 1
+            if self.max_records > 0 and self.seen >= self.max_records:
+                return
+            # logger.debug(f"  {handler.__name__}({path}, {comp}, {parent})")
             if self.should_make_record(path):
-                # self.manager.log(logging.DEBUG, f"processing record {step[0]}")
                 record = handler(path, comp, parent)
                 if record and self.should_store_record(record):
                     okay = self.store_record(record)
@@ -631,7 +642,7 @@ class Loader(Managable):
         else:
             raise ValueError(f"Unknown step type {step} in {self.name}")
 
-    def prepare(self, mgr, my_slice=0, max_slice=0, load_type="records"):
+    def prepare(self, mgr, my_slice=0, max_slice=0, load_type="records", max_records=-1):
         if self.is_prepared:
             return
 
@@ -648,6 +659,9 @@ class Loader(Managable):
                 self.total = self.lmdb_count_entries(pth)
             else:
                 self.total = -1
+
+        if max_records != -1:
+            self.max_records = max_records
 
         files = []
         if ifs:
@@ -706,12 +720,12 @@ class Loader(Managable):
                 self.update_progress_bar()
             self.manager.log(
                 logging.INFO,
-                f"[green]Loading {info['path']} for {self.name} in {self.my_slice}",
+                f"Loading {info['path']} for {self.name} in {self.my_slice}",
             )
             try:
                 self.process_step(info["fmt"], info["path"], None)
             except Exception as e:
-                self.manager.log(logging.ERROR, f"[red]Failed to load file:")
+                self.manager.log(logging.ERROR, f"Failed to load file:")
                 self.manager.log(logging.ERROR, e)
             if not disable_ui:
                 self.close_progress_bar()

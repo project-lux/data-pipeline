@@ -57,6 +57,7 @@ def main():
     parser.add_argument("--log", type=str, help="Log level to log messages at")
     parser.add_argument("--debug", action="store_true", help="If provided, raise exceptions")
     parser.add_argument("--source", type=str, help="Source(s) to download separated by commas, or 'all'")
+    parser.add_argument("--max-records", "--max_records",type=int, default=-1, help="Maximum number of records to process")
     parser.add_argument("--max_workers", "--max-workers", type=int, default=0, help="Number of processes to use")
     parser.add_argument(
         "--my_worker", "--my-worker", type=int, default=-1, help="Which process this is (null engine)"

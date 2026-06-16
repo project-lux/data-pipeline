@@ -11,14 +11,24 @@ class LoadManager(TaskUiManager):
         super().__init__(configs, max_workers, args)
         self.overwrite = True
         self.load_type = "records"
+        self.max_records = -1
+        if args is not None:
+            if hasattr(args, "type"):
+                if args.type not in ["records", "export", "lmdb", "all"]:
+                    logger.warning(
+                        f"Unknown download type: {args.type}, continuing anyway..."
+                    )
+                self.load_type = args.type
+            if hasattr(args, "max_records") and args.max_records is not None:
+                self.max_records = args.max_records
+
 
     def _distributed(self, n):
         super()._distributed(n)
         for which, src in self.sources:
             ldr = getattr(self.configs, which)[src]["loader"]
-            ldr.local_debug = self.local_debug
             try:
-                ldr.prepare(self, n, self.max_workers, self.load_type)
+                ldr.prepare(self, n, self.max_workers, self.load_type, self.max_records)
                 ldr.process(disable_ui=self.disable_ui, overwrite=self.overwrite)
             except Exception as e:
                 self.log(logging.CRITICAL, f"Failed to load {which} in {self.my_slice}")
