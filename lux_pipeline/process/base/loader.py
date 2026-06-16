@@ -84,7 +84,10 @@ class LmdbPointer(Pointer):
     # info is a tuple (key, value)
     def get_name(self):
         # info[0] is a memoryview, but name needs a string
-        return self.info[0].tobytes().decode()
+        key = self.info[0].tobytes().decode()
+        if ":" in key:
+            key = key.split(":")[1]
+        return key
 
     def get_handle(self):
         return self.info[1]

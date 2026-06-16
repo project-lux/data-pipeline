@@ -11,7 +11,6 @@ class Acquirer(object):
         self.recordcache = config["recordcache"]
         self.mapper = config["mapper"]
         self.fetcher = config["fetcher"]
-        self.debug = config.get("debug", 0)
         self.name = config["name"]
         # self.force_rebuild = config.get("force_rebuild", False)
         self.validate = config.get("validate_on_acquire", False)
@@ -38,15 +37,13 @@ class Acquirer(object):
         # Don't have it, and config says to ignore
         # XXX Shouldn't this just be "enabled" per source?
         if self.name in self.ignore_sources:
-            if self.debug:
-                logger.debug(f"Skipping {self.name}/{identifier} in acquire due to ignore_sources")
+            logger.debug(f"Skipping {self.name}/{identifier} in acquire due to ignore_sources")
             return None
 
         if self.fetcher.enabled:
             rec = self.fetcher.fetch(identifier)
             if rec is None:
-                if self.debug:
-                    logger.debug(f"Got no record fetching {self.name}/{identifier}; skipping")
+                logger.debug(f"Got no record fetching {self.name}/{identifier}; skipping")
                 return None
             if "identifier" in rec and rec["identifier"] != identifier:
                 # Might have been redirected
@@ -55,8 +52,7 @@ class Acquirer(object):
                 self.datacache[identifier] = rec
         else:
             # don't have it, can't fetch it...
-            if self.debug:
-                logger.debug(f"Fetcher for {self.name}/{identifier} disabled; skipping")
+            logger.debug(f"Fetcher for {self.name}/{identifier} disabled; skipping")
             return None
         return rec
 
@@ -86,8 +82,7 @@ class Acquirer(object):
                 else:
                     self.recordcache[identifier] = rec3
         else:
-            if self.debug:
-                logger.debug(f"Post Mapping killed {rectype} record {self.name}/{identifier}")
+            logger.debug(f"Post Mapping killed {rectype} record {self.name}/{identifier}")
         return rec3
 
     def acquire_all(self, identifier, store=True):
@@ -106,8 +101,7 @@ class Acquirer(object):
 
         # validate identifier
         if self.fetcher and not self.fetcher.validate_identifier(identifier):
-            if self.debug:
-                logger.debug(f"{identifier} is not a valid identifier for {self.name}")
+            logger.debug(f"{identifier} is not a valid identifier for {self.name}")
             return None
 
         # Return already built record
@@ -144,8 +138,7 @@ class Acquirer(object):
             return None
 
         if rec2 is None:
-            if self.debug:
-                logger.debug(f"Cannot map {self.name}/{identifier} into Linked Art (as {rectype})")
+            logger.debug(f"Cannot map {self.name}/{identifier} into Linked Art (as {rectype})")
             return None
         rec2["identifier"] = identifier
 

@@ -1,10 +1,11 @@
 import logging
 import time
 
-from ._task_ui_manager import TaskUiManager
+from lux_pipeline.cli.entry import cfgs
+
 from ..reconciler import Reconciler
 from ..reference_manager import ReferenceManager
-from lux_pipeline.cli.entry import cfgs
+from ._task_ui_manager import TaskUiManager
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -20,14 +21,14 @@ class ReconcileManager(TaskUiManager):
         self.ref_mgr = None
         self.reconciler = None
         self.total = 0
-        self.temp_log_h = None
+        if 'recid' in vars(args):
+            self.recids = args.recid.split(',')
+        else:
+            self.recids = []
 
     def _handle_record(self, recid, cfg, rectype=None, distance=0):
         acquirer = cfg["acquirer"]
         mapper = cfg["mapper"]
-        if self.temp_log_h:
-            self.temp_log_h.write(f"\n{cfg['name']}:{recid} ")
-            self.temp_log_h.flush()
         if acquirer.returns_multiple():
             recs = acquirer.acquire_all(recid, rectype=rectype)
         else:
@@ -37,25 +38,18 @@ class ReconcileManager(TaskUiManager):
             else:
                 recs = []
         if not recs:
-            self.log(logging.DEBUG, f"Failed to acquire any record for {cfg['name']}/{recid} ***")
-        if self.temp_log_h:
-            self.temp_log_h.write("a")
-            self.temp_log_h.flush()
+            self.log(
+                logging.DEBUG,
+                f"Failed to acquire any record for {cfg['name']}/{recid} ***",
+            )
+
         for rec in recs:
             # Reconcile it
+            logger.debug(f"Reconciling {rec['identifier']}")
             rec2 = self.reconciler.reconcile(rec)
-            if self.temp_log_h:
-                self.temp_log_h.write("r")
-                self.temp_log_h.flush()
             mapper.post_reconcile(rec2)
             self.ref_mgr.walk_top_for_refs(rec2["data"], distance)
-            if self.temp_log_h:
-                self.temp_log_h.write("m")
-                self.temp_log_h.flush()
             self.ref_mgr.manage_identifiers(rec2)
-            if self.temp_log_h:
-                self.temp_log_h.write("!")
-                self.temp_log_h.flush()
 
         if not self.disable_ui:
             self.update_progress_bar(advance=1)
@@ -96,7 +90,9 @@ class ReconcileManager(TaskUiManager):
                 if l == 0:
                     break
                 else:
-                    self.log(logging.CRITICAL, "ref_mgr.pop_ref() got None, but len is {l}")
+                    self.log(
+                        logging.CRITICAL, "ref_mgr.pop_ref() got None, but len is {l}"
+                    )
                     # Sleep and let another task get any last one
                     time.sleep(0.5)
                     continue
@@ -149,9 +145,9 @@ class ReconcileManager(TaskUiManager):
 
     def maybe_add(self, which, cfg):
         # Test if we should add it?
-        self.sources.append((which, cfg["name"], []))
+        self.sources.append((which, cfg["name"], self.recids))
 
-    def process(self, layout, **args) -> bool:
+    def process(self, layout, **args):
         if "new_token" in args:
             logger.info("Creating new reconciliation token")
             idmap = cfgs.get_idmap()

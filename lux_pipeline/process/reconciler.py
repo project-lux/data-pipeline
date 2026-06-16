@@ -5,7 +5,6 @@ logger = logging.getLogger('lux_pipeline')
 class Reconciler(object):
     def __init__(self, config, idmap, networkmap):
         self.reconcilers = []
-        self.debug = config.debug_reconciliation
         self.reconcileTypes = config.reconcile_record_types
         self.config = config
 
@@ -37,7 +36,8 @@ class Reconciler(object):
             self.global_reconciler = self.configs.results["merged"]["reconciler"]
 
         # We only process these types...
-        if not record["data"]["type"] in self.reconcileTypes:
+        if record["data"]["type"] not in self.reconcileTypes:
+            logger.debug(f"Skipping {record['data']['id']} of type {record['data']['type']}")
             return record
 
         # Inject the record's URI into equivalents at this point
@@ -48,7 +48,7 @@ class Reconciler(object):
         else:
             record["data"]["equivalent"] = [me]
 
-        if self.debug:
+        if False:
             for eq in record["data"]["equivalent"]:
                 if eq["id"] != record["data"]["id"]:
                     try:
@@ -56,12 +56,11 @@ class Reconciler(object):
                     except Exception:
                         self.debug_graph[record["data"]["id"]] = [(eq["id"], "eq")]
 
-        if self.debug:
-            logger.debug(f"\n--- {record['data']['id']} ---")
+
+        logger.debug(f"\n--- {record['data']['id']} ---")
         leq = len(record["data"].get("equivalent", []))
         try:
-            if self.debug:
-                logger.debug("    (uris)")
+            logger.debug("    (uris)")
             self.reconcile_uris(record)
             leqs = record["data"].get("equivalent", [])
             if self.filter_internal:  ## FIXME: uhhh... huh????
@@ -77,13 +76,12 @@ class Reconciler(object):
             if nleq == leq and nleq < self.min_equivs:
                 # XXX -- this could be smarter perhaps?
                 # Try and reconcile based on names
-                if self.debug:
-                    logger.debug("    (names)")
+
+                logger.debug("    (names)")
                 self.call_reconcilers(record, reconcileType="name")
                 n2leq = len(record["data"].get("equivalent", []))
                 if n2leq > nleq:
-                    if self.debug:
-                        logger.debug("    (uris)")
+                    logger.debug("    (uris)")
                     self.reconcile_uris(record)
         except Exception:
             logger.debug(f"\nERROR --- reconciliation errored for {record['identifier']}")
@@ -98,18 +96,16 @@ class Reconciler(object):
             while r_equivs == 1 or (not cr_equivs.issubset(r_equivs)):
                 self.call_reconcilers(record, reconcileType="uri")
                 r_equivs = set([x["id"] for x in record["data"].get("equivalent", [])])
-                if self.debug:
-                    logger.debug(f"r_equivs: {r_equivs}")
+
+                logger.debug(f"r_equivs: {r_equivs}")
                 if cr_equivs == 2 or (not cr_equivs.issubset(r_equivs)):
-                    if self.debug:
-                        logger.debug("      (collecting)")
+                    logger.debug("      (collecting)")
                     self.collector.collect(record)
                     cr_equivs = set(
                         [x["id"] for x in record["data"].get("equivalent", [])]
                     )
-                    if self.debug:
-                        logger.debug(f"cr_equivs: {cr_equivs}")
-                    if self.debug:
+                    logger.debug(f"cr_equivs: {cr_equivs}")
+                    if False:
                         lg = self.collector.debug_graph
                         for k, v in lg.items():
                             try:
@@ -142,14 +138,6 @@ class Reconciler(object):
                         # Can we do any better?
                         ids.remove(d)
 
-        # [<pipeline.sources.authorities.getty.reconciler.AatReconciler object at 0x7fc89991dbe0>,
-        # <pipeline.sources.authorities.lc.reconciler.LcnafReconciler object at 0x7fc8985b7a00>,
-        # <pipeline.sources.authorities.lc.reconciler.LcshReconciler object at 0x7fc89841a550>,
-        # <pipeline.sources.authorities.getty.reconciler.UlanReconciler object at 0x7fc897c71e20>,
-        # <pipeline.sources.authorities.oclc.reconciler.ViafReconciler object at 0x7fc897b69a00>,
-        # <pipeline.sources.general.wikidata.reconciler.WdReconciler object at 0x7fc8916b6bb0>,
-        # <pipeline.sources.lux.final.reconciler.GlobalReconciler object at 0x7fc8911dd610>]
-
         reconcilers = self.reconcilers
         # FIXME: Order reconcilers based on source of record if reconcileType == names
         while new_equivs:
@@ -160,7 +148,7 @@ class Reconciler(object):
                     # or a list (if the reconciler knows multiple sources,
                     #   or if there's more than one actual match to add from a single source)
                     newids = r.reconcile(record, reconcileType=reconcileType)
-                    if self.debug and r.debug:
+                    if False:
                         # fetch link-graph from reconciler
                         lg = r.debug_graph
                         for k, v in lg.items():
@@ -179,19 +167,17 @@ class Reconciler(object):
                         newids = [newids]
                     for nid in newids:
                         if nid not in ids:
-                            if self.debug:
-                                logger.debug(
-                                    f" --- reconciler {r} / {reconcileType} found {nid} for {record['data']['id']}"
-                                )
+                            logger.debug(
+                                f" --- reconciler {r} / {reconcileType} found {nid} for {record['data']['id']}"
+                            )
                             # Test distinct to avoid adding bad
                             diffs = self.global_reconciler.reconcile(nid, "diffs")
                             okay_to_add = True
                             for d in diffs:
                                 if d in ids:
-                                    if self.debug:
-                                        logger.debug(
-                                            f"Found two distinct entities: {d} and {nid} in {record['data']['id']}"
-                                        )
+                                    logger.debug(
+                                        f"Found two distinct entities: {d} and {nid} in {record['data']['id']}"
+                                    )
                                     okay_to_add = False
                             if okay_to_add:
                                 ids.append(nid)
@@ -204,8 +190,7 @@ class Reconciler(object):
                 curr = [x["id"] for x in record["data"]["equivalent"]]
                 for i in ids:
                     if not i in curr:
-                        if self.debug:
-                            logger.debug(f"Adding {i} to record")
+                        logger.debug(f"Adding {i} to record")
                         record["data"]["equivalent"].append(
                             {"id": i, "type": t, "_label": lbl}
                         )

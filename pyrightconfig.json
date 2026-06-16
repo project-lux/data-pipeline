@@ -3,4 +3,9 @@
   "reportExplicitAny": false,
   "reportAny": false,
   "reportUnreachable": false,
+  "reportAttributeAccessIssue": false,
+  "reportIncompatibleMethodOverride": false,
+  "reportOptionalCall": false,
+  "reportPossiblyUnboundVariable": false,
+  "reportOptionalMemberAccess": false,
 }

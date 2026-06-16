@@ -12,7 +12,6 @@ class Collector(object):
 
         self.idmap = idmap
         self.networkmap = config.instantiate_map("networkmap")["store"]
-        self.debug = config.debug_reconciliation
         self.global_reconciler = config.results["merged"].get("reconciler", None)
         self.debug_graph = {}
         self.acquirer_should_store = True
@@ -28,8 +27,7 @@ class Collector(object):
             ry = int(botbr[:4])
             xy = int(botbx[:4])
             if abs(ry - xy) > 10:
-                if self.debug:
-                    logger.debug(f"Failed as years are too far apart: {botbr} vs {botbx}")
+                logger.debug(f"Failed as years are too far apart: {botbr} vs {botbx}")
                 return False
         except:
             pass
@@ -141,24 +139,21 @@ class Collector(object):
 
         # Reconciliation against indexes will have already been done
         # This function just crawls for records
-        if self.debug:
-            logger.debug(f"    Collecting {rec['id']}")
+
+        logger.debug(f"    Collecting {rec['id']}")
         while equiv:
             uri = equiv.pop(0)
 
-            if self.debug:
-                logger.debug(f"      ... collect processing {uri}")
+            logger.debug(f"      ... collect processing {uri}")
             if uri in done:
-                if self.debug:
-                    logger.debug(f"Skipping {uri} as done")
+                logger.debug(f"Skipping {uri} as done")
                 continue
 
             try:
                 source, identifier = self.configs.split_uri(uri)
             except TypeError:
                 # returned None
-                if self.debug:
-                    logger.debug(f"       couldn't split {uri} to a known source")
+                logger.debug(f"       couldn't split {uri} to a known source")
                 if not uri in base:
                     done.append(uri)
                 continue
@@ -168,6 +163,7 @@ class Collector(object):
                 # Throw out non canonical URIs
                 uri = canon
 
+            logger.debug(f"      acquiring {identifier} from {source['namespace']}")
             xrecord = source["acquirer"].acquire(identifier, cls, store=self.acquirer_should_store)
 
             if xrecord:
@@ -181,8 +177,8 @@ class Collector(object):
                     continue
                 if not okay:
                     # Skip this one
-                    if self.debug:
-                        logger.debug(f"       Not processing {xrec['id']} into {rec['id']}")
+
+                    logger.debug(f"       Not processing {xrec['id']} into {rec['id']}")
                     continue  # go to next equiv
                 else:
                     # Good to add this one
@@ -194,8 +190,7 @@ class Collector(object):
                     xrlbl = xrec.get("_label", lbl)
                     rec["equivalent"].append({"id": xrid, "type": cls, "_label": xrlbl})
                     equiv_recs[xrec["id"]] = xrec
-                    if self.debug:
-                        logger.debug(f"  {xrid} / {xrlbl} into {rec['id']} tested okay")
+                    logger.debug(f"  {xrid} / {xrlbl} into {rec['id']} tested okay")
 
                 # 2. xrec is okay, so process *its* equivalents
                 if "equivalent" in xrec:
@@ -215,8 +210,7 @@ class Collector(object):
                         myxpfx = eqid.rsplit("/", 1)[0]
                         if xpfxs[myxpfx] > 2:
                             # Clearly they don't know what is happening so ignore them all
-                            if self.debug:
-                                logger.debug(f"me: {myxpfx}\nxpfxs: {xpfxs}")
+                            logger.debug(f"me: {myxpfx}\nxpfxs: {xpfxs}")
                             continue
 
                         known = self.configs.split_uri(eqid)
@@ -224,8 +218,7 @@ class Collector(object):
                             # Canonicalize
                             eqid = f"{known[0]['namespace']}{known[1]}"
                         currids = equiv_recs.keys()
-                        if self.debug:
-                            logger.debug(f"     testing {eqid} from {xrec['id']}")
+                        logger.debug(f"     testing {eqid} from {xrec['id']}")
 
                         diffs = self.global_reconciler.reconcile(eqid, "diffs")
                         if diffs is None:
@@ -259,22 +252,19 @@ class Collector(object):
                                     for xid in currids:
                                         if xid.startswith(known[0]["namespace"]):
                                             # Just trash it
-                                            if self.debug:
-                                                logger.debug(f"Dropping {eqid} as already have {xid}")
+                                            logger.debug(f"Dropping {eqid} as already have {xid}")
                                             known = None
                                             break
                             if known or okay:
                                 equiv.append(eqid)
-                                if self.debug:
-                                    logger.debug(f"       --> Adding {eqid} from {xrec['id']}")
-                                if self.debug:
+                                logger.debug(f"       --> Adding {eqid} from {xrec['id']}")
+                                if False:
                                     try:
                                         self.debug_graph[xrec["id"]].append((eqid, "eq"))
                                     except:
                                         self.debug_graph[xrec["id"]] = [(eqid, "eq")]
                             else:
-                                if self.debug:
-                                    logger.debug(f"       --> NOT adding {eqid} from {xrec['id']}")
+                                logger.debug(f"       --> NOT adding {eqid} from {xrec['id']}")
             done.append(uri)
 
         return record

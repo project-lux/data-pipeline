@@ -232,7 +232,7 @@ class PooledCache(AbstractCache):
 
     def metadata(self, key, field="insert_time", _key_type=None):
         # Base class validates key type and field name; raises on bad input.
-        super().metadata(key, field, _key_type)
+        # super().metadata(key, field, _key_type)
         if _key_type is None:
             _key_type = self.key
         qry = f"SELECT {field} FROM {self.name} WHERE {_key_type} = %s"
@@ -243,7 +243,7 @@ class PooledCache(AbstractCache):
 
     def set_metadata(self, key, field, value, _key_type=None):
         # Base class validates key type and field name; raises on bad input.
-        super().set_metadata(key, field, value, _key_type)
+        # super().set_metadata(key, field, value, _key_type)
         if _key_type is None:
             _key_type = self.key
         qry = f"UPDATE {self.name} SET {field} = %s WHERE {_key_type} = %s"

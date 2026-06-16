@@ -68,6 +68,7 @@ class LcMapper(Mapper):
             "Activity": nafreconciler,
             "Material": shreconciler,
             "Language": shreconciler,
+            "Period": shreconciler,
         }
 
         if rectype in reconcilers:
@@ -183,6 +184,14 @@ class LcMapper(Mapper):
     def map_label(self, new, top):
         ### Names of the Entity
         prefs = new.get("madsrdf:authoritativeLabel", [])
+        if type(prefs) is list and prefs:
+            nprefs = []
+            for n in prefs:
+                if type(n) is str:
+                    nprefs.append({"@value": n})
+                else:
+                    nprefs.append(n)
+            prefs = nprefs
         if type(prefs) == str:
             prefs = {"@value": prefs}
         if type(prefs) == dict:
@@ -328,16 +337,6 @@ class LcMapper(Mapper):
                 continue
             doneids.append(eid)
             equiv = topcls(ident=eid)
-            # if 'madsrdf:authoritativeLabel' in e:
-            #    xl = e['madsrdf:authoritativeLabel']
-            #    if type(xl) == list:
-            #        xl = xl[0]
-            #    if type(xl) == dict:
-            #        xl = xl['@value']
-            #    if type(xl) == str:
-            #        equiv._label = xl
-            #    else:
-            #        print(f"found weird equiv label: {xl}")
             top.equivalent = equiv
 
     def reconstitute(self, js, nodes):
@@ -350,6 +349,8 @@ class LcMapper(Mapper):
                 js[k] = self.reconstitute(nodes[v["@id"]], nodes)
             elif type(v) == list:
                 new = []
+                if type(v) is dict:
+                    v = v["@list"]                
                 for vi in v:
                     if type(vi) == dict and "@id" in vi and vi["@id"] in nodes:
                         new.append(self.reconstitute(nodes[vi["@id"]], nodes))
@@ -360,10 +361,24 @@ class LcMapper(Mapper):
 
 
 class LcshMapper(LcMapper):
+
+    def __init__(self, config):
+        LcMapper.__init__(self, config)
+        fn = os.path.join(config["all_configs"].data_dir, "periods_by_name.json")
+        if os.path.exists(fn):
+            with open(fn) as fh:
+                self.period_names = json.load(fh)
+        else:
+            self.period_names = {}
+        self.lcnaf_mapper = None
+
     def transform(self, record, rectype=None, reference=False):
         rec = record["data"]
         if not rec["@graph"] or rec["@graph"] == {}:
             return None
+
+        if self.lcnaf_mapper is None:
+            self.lcnaf_mapper = self.configs.external["lcnaf"]["mapper"]
 
         new = LcMapper.transform(self, record, rectype)
         if not new:
@@ -378,40 +393,89 @@ class LcshMapper(LcMapper):
         if reference:
             self.map_label(new, top)
             del top.identified_by
-
         else:
             self.map_common(new, top)
-
-        if topcls in [
-            model.Type,
-            model.Language,
-            model.Material,
-            model.Currency,
-            model.MeasurementUnit,
-        ]:
-            cxn = new.get("madsrdf:classification", "")
-            if cxn and type(cxn) == str:
-                top.equivalent = topcls(ident=f"https://id.loc.gov/authorities/classification/{cxn}")
-
-            # broader == madsrdf:hasBroaderAuthority
-            brdr = new.get("madsrdf:hasBroaderAuthority", [])
-            if type(brdr) != list:
-                brdr = [brdr]
-            for b in brdr:
-                bident = b["@id"]
-                if bident.startswith("_"):
-                    continue
-                try:
-                    blbl = b["madsrdf:authoritativeLabel"]["@value"]
-                except:
-                    blbl = ""
-                # concept broader concept
-                top.broader = topcls(ident=bident, label=blbl)
-        # Eventually add in handling for member_of Group, broader Place, part_of Events
+            if topcls in [
+                model.Type,
+                model.Language,
+                model.Material,
+                model.Currency,
+                model.MeasurementUnit,
+            ]:
+                cxn = new.get("madsrdf:classification", "")
+                if cxn and type(cxn) == str:
+                    top.equivalent = topcls(ident=f"https://id.loc.gov/authorities/classification/{cxn}")
+    
+                # broader == madsrdf:hasBroaderAuthority
+                brdr = new.get("madsrdf:hasBroaderAuthority", [])
+                if type(brdr) != list:
+                    brdr = [brdr]
+                for b in brdr:
+                    bident = b["@id"]
+                    if bident.startswith("_"):
+                        continue
+                    try:
+                        blbl = b["madsrdf:authoritativeLabel"]["@value"]
+                    except:
+                        blbl = ""
+                    # concept broader concept
+                    top.broader = topcls(ident=bident, label=blbl)
+            # Eventually add in handling for member_of Group, broader Place, part_of Events
+    
+            comps = new.get("madsrdf:componentList", {})
+            if comps:
+                cre = model.Creation()
+                if type(comps) is dict and "@list" in comps:
+                    comps = comps["@list"]
+                if type(comps) is list:
+                    add_comps = True
+                    for c in comps:
+                        # add c to influenced_by in the Creation after mapping it to the right class
+                        if type(c) is dict and "@id" in c:
+                            uri = c["@id"]
+                            if uri[0] == "_":
+                                # blank node, try to reconcile based on name
+                                lbl = c.get("madsrdf:authoritativeLabel", {"@value": ""})
+                                if type(lbl) is list:
+                                    lbl = lbl[0]
+                                if type(lbl) is dict:
+                                    lbl = lbl["@value"]
+                                # first check Periods in the mapper
+                                uri = self.period_names.get(lbl.lower(), "")
+                                if uri:
+                                    uri = uri.replace(
+                                        "yul:", "https://linkedhttps://linked-art.library.yale.edu/node/"
+                                    )
+                                    ref = model.Period(uri, label=lbl)
+                                else:
+                                    # Now do reconciliation
+                                    # ... in practice, this never matches
+                                    ref = None
+                                    add_comps = False
+                                    break
+                                if ref:
+                                    cre.influenced_by = ref
+                            else:
+                                uri = uri.replace("rwo/agents", "authorities/names")
+                                # Need to know what class this is
+                                if "@type" in c and c["@type"] in self.type_map:
+                                    clsnm = self.type_map[c["@type"]]
+                                    cls = getattr(model, clsnm)
+                                    ref = cls(ident=uri)
+                                else:
+                                    ident = uri.rsplit("/", 1)[-1]
+                                    if "subjects" in uri:
+                                        ref = self.get_reference(ident)
+                                    else:
+                                        ref = self.lcnaf_mapper.get_reference(ident)
+                                cre.influenced_by = ref
+                        else:
+                            logger.warning(f"Unknown form of component: {c}")
+                    if add_comps:
+                        top.created_by = cre
 
         js = model.factory.toJSON(top)
         return {"identifier": record["identifier"], "data": js, "source": self.name}
-
 
 class LcnafMapper(LcMapper):
     def __init__(self, config):
@@ -477,36 +541,35 @@ class LcnafMapper(LcMapper):
             del top.identified_by
         else:
             self.map_common(new, top)
-
-        if topcls == model.Place:
-            # Test if () in name and add a broader if we know it
-            # https://id.loc.gov/authorities/names/n96039009.html
-            name = top._label.strip()
-            if name and (m := self.parens_re.match(name)):
-                (nm, parent) = m.groups()
-                if parent.strip() in self.parenthetical_places:
-                    uri = self.parenthetical_places[parent.strip()]
-                    top.part_of = model.Place(ident=uri, label=parent)
-
-        # Now fill out the details from RWO
-        # if we have one
-        if "madsrdf:identifiesRWO" in new:
-            rwo = new["madsrdf:identifiesRWO"]
-            if type(rwo) == list:
-                for r in rwo:
-                    self.process_rwo(r, top)
-            elif type(rwo) == dict:
-                self.process_rwo(rwo, top)
-
-            if top.type == "Person":
-                okay = test_birth_death(top)
-                if not okay:
-                    try:
-                        top.born = None
-                        top.died = None
-                    except:
-                        # This shouldn't ever happen, but not going to die on the hill
-                        pass
+            if topcls == model.Place:
+                # Test if () in name and add a broader if we know it
+                # https://id.loc.gov/authorities/names/n96039009.html
+                name = top._label.strip()
+                if name and (m := self.parens_re.match(name)):
+                    (nm, parent) = m.groups()
+                    if parent.strip() in self.parenthetical_places:
+                        uri = self.parenthetical_places[parent.strip()]
+                        top.part_of = model.Place(ident=uri, label=parent)
+    
+            # Now fill out the details from RWO
+            # if we have one
+            if "madsrdf:identifiesRWO" in new:
+                rwo = new["madsrdf:identifiesRWO"]
+                if type(rwo) == list:
+                    for r in rwo:
+                        self.process_rwo(r, top)
+                elif type(rwo) == dict:
+                    self.process_rwo(rwo, top)
+    
+                if top.type == "Person":
+                    okay = test_birth_death(top)
+                    if not okay:
+                        try:
+                            top.born = None
+                            top.died = None
+                        except Exception:
+                            # This shouldn't ever happen, but not going to die on the hill
+                            pass
 
         js = model.factory.toJSON(top)
         return {"identifier": record["identifier"], "data": js, "source": self.name}
@@ -530,10 +593,8 @@ class LcnafMapper(LcMapper):
                 elif gdr in self.lc_male_uris:
                     txt = "male"
                 else:
-                    # print(f"*** [{recid}] Unknown gender id: {g}")
                     txt = ""
             else:
-                # print(f"*** [{recid}] Unknown gender format: {g}")
                 txt = ""
 
             # FIXME: Actually make use of the transgender URIs
@@ -706,6 +767,7 @@ class LcnafMapper(LcMapper):
                         top.died = death
                     death.took_place_at = where
 
+        act = None
         if "madsrdf:fieldOfActivity" in rwo:
             # fieldOfActivity --> professional activity
             # activityStartDate
@@ -740,6 +802,37 @@ class LcnafMapper(LcMapper):
         if "madsrdf:activityEndDate" in rwo:
             print(f"LCNAF end activity: {rwo['madsrdf:activityEndDate']}")
 
+        ts = None
+        if "madsrdf:activityStartDate" in rwo:
+            asd = rwo["madsrdf:activityStartDate"]
+            if type(asd) is dict and "@value" in dict:
+                asdd = make_datetime(asd["@value"])
+            elif type(asd) is str:
+                asdd = make_datetime(asd)
+            elif type(asd) is int:
+                asdd = make_datetime(str(asd))
+            ts = model.TimeSpan()
+            ts.begin_of_the_begin = asdd[0]
+
+        if "madsrdf:activityEndDate" in rwo:
+            asd = rwo["madsrdf:activityEndDate"]
+            if type(asd) is dict and "@value" in dict:
+                asdd = make_datetime(asd["@value"])
+            elif type(asd) is str:
+                asdd = make_datetime(asd)
+            elif type(asd) is int:
+                asdd = make_datetime(str(asd))
+            if ts is None:
+                ts = model.TimeSpan()
+            ts.end_of_the_end = asdd[1]
+
+        if ts is not None:
+            if act is None:
+                act = vocab.Active()
+                top.carried_out = act
+            act.timespan = ts
+
+        
         if "madsrdf:occupation" in rwo:
             # occupation --> classified_as
             occ = rwo["madsrdf:occupation"]
@@ -900,6 +993,3 @@ class LcnafMapper(LcMapper):
                 dss.timespan = ts
                 top.dissolved_by = dss
 
-        # if 'madsrdf:associatedLanguage' in rwo:
-        # if 'madsrdf:associatedLocale' in rwo:
-        # Could use AttributeAssignment pattern

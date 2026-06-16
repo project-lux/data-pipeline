@@ -1,8 +1,9 @@
-import os
-from .storage.cache.filesystem import FsCache
 import importlib
-import multiprocessing
 import logging
+import multiprocessing
+import os
+
+from .storage.cache.filesystem import FsCache
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -67,7 +68,9 @@ class Config(object):
 
         base = configcache["system"]
         if base is None:
-            raise ValueError(f"Could not find base system configuration (system.json) in {basepath}")
+            raise ValueError(
+                f"Could not find base system configuration (system.json) in {basepath}"
+            )
         else:
             base = base["data"]
         self.process_base(base)
@@ -88,8 +91,8 @@ class Config(object):
             self.indexes_dir = os.path.join(self.base_dir, self.indexes_dir)
 
         if not hasattr(self, "max_workers"):
-            # Default to 2/3rds of our CPUs
-            self.max_workers = multiprocessing.cpu_count() * 2 // 3
+            # Default to three less than max (postgres, redis, control task)
+            self.max_workers = multiprocessing.cpu_count() - 3
 
         # FIXME: Validators should be per source per cache
         # if hasattr(self, "validatorClass"):
@@ -203,7 +206,9 @@ class Config(object):
             identifier = identifier.replace(".html", "")
 
         if "mapper" not in source:
-            logger.error(f"Could not fix identifier {identifier} from {source} as no mapper")
+            logger.error(
+                f"Could not fix identifier {identifier} from {source} as no mapper"
+            )
         elif source["mapper"]:
             identifier = source["mapper"].fix_identifier(identifier)
         return identifier
@@ -444,7 +449,9 @@ class Config(object):
         else:
             cfg = self.external.get(key, self.internal.get(key, None))
             if not cfg:
-                raise ValueError(f"{key} is not a valid key in either internal or external")
+                raise ValueError(
+                    f"{key} is not a valid key in either internal or external"
+                )
 
         for k, ptype in self.path_types.items():
             if k in cfg:
@@ -483,7 +490,9 @@ class Config(object):
                     try:
                         idxcls = importObject(idxcfg["indexClass"])
                     except Exception:
-                        logger.error(f"Failed to import index class {idxcfg['indexClass']}")
+                        logger.error(
+                            f"Failed to import index class {idxcfg['indexClass']}"
+                        )
                         idxcfg["index"] = None
                     idxcfg["name"] = idxname
                     try:
@@ -499,7 +508,9 @@ class Config(object):
             cfg["datacache"] = cls3(tmp_cfg)
 
             if "fetch" in cfg:
-                cls1 = importObject(cfg.get("fetcherClass", "process.base.fetcher.Fetcher"))
+                cls1 = importObject(
+                    cfg.get("fetcherClass", "process.base.fetcher.Fetcher")
+                )
                 cfg["fetcher"] = cls1(cfg)
 
                 nmap_name = cfg.get("networkmap_name", "networkmap")
@@ -510,7 +521,9 @@ class Config(object):
                     else:
                         nmap = self.instantiate_map(nmap_name)["store"]
                 else:
-                    raise ValueError(f"{cfg['name']} references network map store that does not exist: {nmap_name}")
+                    raise ValueError(
+                        f"{cfg['name']} references network map store that does not exist: {nmap_name}"
+                    )
                 cfg["fetcher"].networkmap = nmap
 
             rcl = cfg.get("reconcilerClass", None)
@@ -535,17 +548,26 @@ class Config(object):
                 else:
                     cfg["harvester"] = None
 
-                rrcc = cfg.get("recordcacheReconciledClass", "storage.cache.postgres.ExternalReconciledRecordCache")
+                rrcc = cfg.get(
+                    "recordcacheReconciledClass",
+                    "storage.cache.postgres.ExternalReconciledRecordCache",
+                )
                 cls5 = importObject(rrcc)
                 tmp_cfg = self.merge_configs(cfg, self.defaults["cache"])
                 cfg["reconciledRecordcache"] = cls5(tmp_cfg)
 
-                rcc = cfg.get("recordcacheClass", "storage.cache.postgres.ExternalRecordCache")
+                rcc = cfg.get(
+                    "recordcacheClass", "storage.cache.postgres.ExternalRecordCache"
+                )
             else:
-                rcc = cfg.get("recordcacheClass", "storage.cache.postgres.InternalRecordCache")
+                rcc = cfg.get(
+                    "recordcacheClass", "storage.cache.postgres.InternalRecordCache"
+                )
 
                 if cfg["type"] == "internal":
-                    cls1 = importObject(cfg.get("harvesterClass", "process.base.harvester.ASHarvester"))
+                    cls1 = importObject(
+                        cfg.get("harvesterClass", "process.base.harvester.ASHarvester")
+                    )
                     cfg["harvester"] = cls1(cfg)
                 else:
                     cfg["harvester"] = None
@@ -584,7 +606,9 @@ class Config(object):
             else:
                 cfg["recordcache2"] = None
 
-            acq = importObject(cfg.get("acquirerClass", "process.base.acquirer.Acquirer"))
+            acq = importObject(
+                cfg.get("acquirerClass", "process.base.acquirer.Acquirer")
+            )
             if acq:
                 try:
                     cfg["acquirer"] = acq(cfg)
