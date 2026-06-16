@@ -5,7 +5,6 @@ import ujson as json
 
 class WofFetcher(Fetcher):
     
-
     def __init__(self, config):
         Fetcher.__init__(self, config)
         self.dumpdb = config['dumpFilePath']

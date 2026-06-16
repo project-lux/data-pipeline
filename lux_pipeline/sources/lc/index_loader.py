@@ -47,10 +47,13 @@ class LCIndexLoader(IndexLoader):
         if type(prefs) == dict:
             prefs = [prefs]
         for p in prefs:
-            if type(p) != dict:
+            if type(p) is str:
+                val = p
+            elif type(p) is dict:
+                val = p['@value']
+            else:
                 print(f"Got weird prefLabel {p} in {rec.get('@id', '???')}")
                 continue
-            val = p["@value"]
             vals[val] = 1
         return vals
 

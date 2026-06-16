@@ -10,22 +10,6 @@ def _vec2d_mult(p1, p2):
     return p1[0]*p2[0] + p1[1]*p2[1]
 
 
-#  ... ... ... 8695907b-1828-4bee-b3b1-fc7abdba43cf
-# Fetching https://data.whosonfirst.org/102/051/581/102051581.geojson
-# Failed to map 102051581 to Place
-# Traceback (most recent call last):
-#   File "/Users/rs2668/Development/data/pipeline/./recurse_integration_breadth.py", line 201, in <module>
-#     process_rec(ext, False)
-#   File "/Users/rs2668/Development/data/pipeline/./recurse_integration_breadth.py", line 49, in process_rec
-#     newrec = coller.collect(rec4)
-#   File "/Users/rs2668/Development/data/pipeline/pipeline/collector/collect.py", line 159, in collect
-#     xrec = mapper.transform(dr, cls)
-#   File "/Users/rs2668/Development/data/pipeline/pipeline/sources/wof/mapper.py", line 150, in transform
-#     ncoords = ramerdouglas(coords, factor)
-#   File "/Users/rs2668/Development/data/pipeline/pipeline/sources/wof/mapper.py", line 19, in ramerdouglas
-#     _vec2d_dist(begin, curr) - _vec2d_mult(_vec2d_sub(end, begin), \
-# ZeroDivisionError: float division by zero
-
 def ramerdouglas(line, dist):
     if len(line) < 3:
         return line

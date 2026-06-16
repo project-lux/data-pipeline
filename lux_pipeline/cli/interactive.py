@@ -1,17 +1,17 @@
 import code
 import importlib
 import os
+import atexit
 
 from rich import pretty
 
 from ._handler import BaseHandler as BH
 
+import rlcompleter # Must be imported before readline
 try:
-    import readline
-    import rlcompleter
+    import gnureadline as readline
 except Exception:
     readline = None
-
 
 class LUXREPL(code.InteractiveConsole):
     def runsource(self, source, filename="<input>", symbol="single"):
@@ -29,19 +29,13 @@ class CommandHandler(BH):
         pretty.install()
 
         # Enable command line history
-        fn = os.path.expanduser("~/.python_history")
+        fn = os.path.join(self.configs.base_dir, ".python_history")
         if readline is not None and os.path.exists(fn):
             try:
                 readline.read_history_file(fn)
-            except OSError as e:
-                if e.errno == 22:
-                    # Corrupted, create a new history file
-                    fn = "./.python_history"
-                    if not os.path.exists(fn):
-                        open(fn, "w").close()
-                    readline.clear_history()
-                else:
-                    raise e
+            except:
+                raise
+            atexit.register(readline.write_history_file, fn)
 
         def setup_for(task):
             # make the manager and the task

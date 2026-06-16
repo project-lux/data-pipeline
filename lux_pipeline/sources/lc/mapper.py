@@ -811,8 +811,12 @@ class LcnafMapper(LcMapper):
                 asdd = make_datetime(asd)
             elif type(asd) is int:
                 asdd = make_datetime(str(asd))
-            ts = model.TimeSpan()
-            ts.begin_of_the_begin = asdd[0]
+            else:
+                logger.debug(f"Got weird activityStartDate {asd} in {rec.get('@id', '???')}")
+                asdd = None
+            if asdd is not None:
+                ts = model.TimeSpan()
+                ts.begin_of_the_begin = asdd[0]
 
         if "madsrdf:activityEndDate" in rwo:
             asd = rwo["madsrdf:activityEndDate"]
@@ -822,9 +826,13 @@ class LcnafMapper(LcMapper):
                 asdd = make_datetime(asd)
             elif type(asd) is int:
                 asdd = make_datetime(str(asd))
-            if ts is None:
-                ts = model.TimeSpan()
-            ts.end_of_the_end = asdd[1]
+            else:
+                logger.debug(f"Got weird activityEndDate {asd} in {rec.get('@id', '???')}")
+                asdd = None
+            if asdd is not None:
+                if ts is None:
+                    ts = model.TimeSpan()
+                ts.end_of_the_end = asdd[1]
 
         if ts is not None:
             if act is None:
