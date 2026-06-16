@@ -75,8 +75,12 @@ class Header:
 
 def get_layout(cfgs, max_workers, log_level):
     layout = Layout()
+    # Progress panel: 1 row per worker bar + 2 for the Panel border + 1 whitespace
+    progress_size = max_workers + 3
     layout.split_column(
-        Layout(name="title", size=3), Layout(name="progress", minimum_size=18), Layout(name="log", minimum_size=8)
+        Layout(name="title",    size=3),
+        Layout(name="progress", size=progress_size),
+        Layout(name="log",      minimum_size=8),
     )
 
     hdr = Header()
