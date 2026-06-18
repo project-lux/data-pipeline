@@ -13,12 +13,11 @@ class IndexLoader(Managable):
         super().__init__(config)
         self.in_cache = config["datacache"]
         self.namespace = config["namespace"]
-        self.indexes = {}
+        self.indexes = config.get("indexes", {})
         self.in_path = config.get("reconcileDumpPath", None)
         self.reconciler = config.get("reconciler", None)
         self.acquirer = config.get("acquirer", None)
         self.mapper = config.get("mapper", None)
-
         self.overwrite = True
         self.increment_total = False
 
@@ -106,11 +105,19 @@ class IndexLoader(Managable):
             self.manager.log(logging.ERROR, e)
             return (None, None)
 
+    def prepare(self, manager, my_slice=-1, max_slice=-1):
+        if max_slice > 1:
+            logger.error("Cannot load indexes to LMDB with more than one worker")
+            raise ValueError("Cannot load indexes to LMDB with more than one worker")
+        else:
+            return super().prepare(manager, my_slice, max_slice)
+        
     def process(self, disable_ui=False, overwrite=True):
         self.overwrite = overwrite
         self.increment_total = self.total < 0
+        self.disable_ui = disable_ui
 
-        (index, eqindex) = self.get_storage()
+        # (index, eqindex) = self.get_storage()
         index = self.get_index("reconcile_labels")
         eqindex = self.get_index("reconcile_ids")
         if index is None and eqindex is None:

@@ -13,10 +13,10 @@ class BaseHandler:
         return None
 
     def process(self, args, rest):
-        if rest:
-            ap = ArgumentParser()
-            self.add_args(ap)
-            ap.parse_args(rest, namespace=args)
+        # can't rely on rest being true, as could have extra args with defaults
+        ap = ArgumentParser()
+        self.add_args(ap)
+        ap.parse_args(rest, namespace=args)
 
 
 class CommandHandler(BaseHandler):

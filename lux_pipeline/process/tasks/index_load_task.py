@@ -3,6 +3,16 @@ from lux_pipeline.process.base.index_loader import IndexLoader
 
 class IndexLoadManager(TaskUiManager):
 
+    def __init__(self, configs, max_workers: int = 0, args=None):
+        super().__init__(configs, max_workers, args)
+        if args is not None:
+            self.overwrite = not args.no_overwrite
+            self.load_type = args.type
+        else:
+            self.overwrite = False
+            self.load_type = "records"
+
+
     def _distributed(self, n):
         super()._distributed(n)
         for (which, src) in self.sources:

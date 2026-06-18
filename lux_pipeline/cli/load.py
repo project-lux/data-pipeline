@@ -19,5 +19,3 @@ class CommandHandler(CH):
 
     def make_manager(self, wks, args):
         return LoadManager(self.configs, wks, args)
-
-        return mgr

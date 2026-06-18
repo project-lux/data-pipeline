@@ -1,5 +1,7 @@
 import os
+import lmdb
 from lmdbm import Lmdb
+from lmdbm.lmdbm import remove_lmdbm
 import ujson as json
 
 
@@ -103,6 +105,14 @@ class LmdbIndex:
         index = cls.open(self.path, "c", map_size=2**mapExp, readahead=readahead, writemap=writemap)
         index.commit()
         index.close()
+
+    def clear(self):
+        # just delete the files     
+        if self.index is not None:
+            self.close()
+            self.index = None
+        remove_lmdbm(self.path)
+        self.initialize(self.config)
 
     # Bla. Can't change magic methods dynamically, so here they all are
     def __enter__(self):
