@@ -28,15 +28,17 @@ with open('deletions.csv') as fh:
     for row in reader:
         kid_uu = row['child_uuid']
         parent_uu = row['parent_uuid']
-        parents = row['parent_internal_ids'].split(" ")
-        kids = row['child_internal_ids'].split(" ")
+        parents = row['parent_internal_ids'].strip().split(" ")
+        kids = row['child_internal_ids'].strip().split(" ")
         for p in parents:
-            pt = f"{p}##qua{qua}"
-            p_uus = idmap[pt]
-            if p_uus is None:
-                print(f"Missing parent UUID for {pt}")
+            if p:
+                pt = f"{p}##qua{qua}"
+                p_uus = idmap[pt]
+                if p_uus is None:
+                    print(f"Missing parent UUID for {pt}")
         for k in kids:
-            kt = f"{k}##qua{qua}"
-            k_uus = idmap[kt]
-            if k_uus is None:
-                print(f"Missing child UUID for {kt}")
+            if k:
+                kt = f"{k}##qua{qua}"
+                k_uus = idmap[kt]
+                if k_uus is None:
+                    print(f"Missing child UUID for {kt}")
