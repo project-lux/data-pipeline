@@ -42,7 +42,7 @@ with open('deletions.csv') as fh:
                     missed[pt] = 1
                     print(f"Missing parent UUID for {pt}")
                 else:
-                    p_uu = p_uu.rsplit('/', 1)[0]
+                    p_uu = p_uu.rsplit('/', 1)[1]
                     if p_uu != parent_uu:
                         print(f"Parent UUID mismatch for {pt}: {p_uu} vs {parent_uu}")
         for k in kids:
@@ -55,7 +55,7 @@ with open('deletions.csv') as fh:
                     missed[kt] = 1
                     print(f"Missing child UUID for {kt}")
                 else:
-                    k_uu = k_uu.rsplit('/', 1)[0]
+                    k_uu = k_uu.rsplit('/', 1)[1]
                     if k_uu != kid_uu:
                         print(f"Child UUID mismatch for {kt}: {k_uu} vs {kid_uu}")
 
