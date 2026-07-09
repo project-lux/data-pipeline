@@ -33,12 +33,21 @@ with open('deletions.csv') as fh:
         for p in parents:
             if p:
                 pt = f"{p}##qua{qua}"
-                p_uus = idmap[pt]
-                if p_uus is None:
+                p_uu = idmap[pt]
+                if p_uu is None:
                     print(f"Missing parent UUID for {pt}")
+                else:
+                    p_uu = p_uu.rsplit('/', 1)[0]
+                    if p_uu != parent_uu:
+                        print(f"Parent UUID mismatch for {pt}: {p_uu} vs {parent_uu}")
         for k in kids:
             if k:
                 kt = f"{k}##qua{qua}"
-                k_uus = idmap[kt]
-                if k_uus is None:
+                k_uu = idmap[kt]
+                if k_uu is None:
                     print(f"Missing child UUID for {kt}")
+                else:
+                    k_uu = k_uu.rsplit('/', 1)[0]
+                    if k_uu != kid_uu:
+                        print(f"Child UUID mismatch for {kt}: {k_uu} vs {kid_uu}")
+
