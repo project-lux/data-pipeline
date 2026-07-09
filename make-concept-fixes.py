@@ -23,7 +23,7 @@ idmap = cfgs.get_idmap()
 qua = "Type"
 
 missed = {}
-
+changed = {}
 with open('deletions.csv') as fh:
     reader = csv.DictReader(fh)
 
@@ -44,6 +44,7 @@ with open('deletions.csv') as fh:
                 else:
                     p_uu = p_uu.rsplit('/', 1)[1]
                     if p_uu != parent_uu:
+                        changed[pt] = 1
                         print(f"Parent UUID mismatch for {pt}: {p_uu} vs {parent_uu}")
         for k in kids:
             if k:
@@ -57,5 +58,6 @@ with open('deletions.csv') as fh:
                 else:
                     k_uu = k_uu.rsplit('/', 1)[1]
                     if k_uu != kid_uu:
+                        changed[kt] = 1
                         print(f"Child UUID mismatch for {kt}: {k_uu} vs {kid_uu}")
 
