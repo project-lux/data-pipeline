@@ -22,6 +22,8 @@ idmap = cfgs.get_idmap()
 
 qua = "Type"
 
+missed = {}
+
 with open('deletions.csv') as fh:
     reader = csv.DictReader(fh)
 
@@ -33,8 +35,11 @@ with open('deletions.csv') as fh:
         for p in parents:
             if p:
                 pt = f"{p}##qua{qua}"
+                if pt in missed:
+                    continue
                 p_uu = idmap[pt]
                 if p_uu is None:
+                    missed[pt] = 1
                     print(f"Missing parent UUID for {pt}")
                 else:
                     p_uu = p_uu.rsplit('/', 1)[0]
@@ -43,8 +48,11 @@ with open('deletions.csv') as fh:
         for k in kids:
             if k:
                 kt = f"{k}##qua{qua}"
+                if kt in missed:
+                    continue
                 k_uu = idmap[kt]
                 if k_uu is None:
+                    missed[kt] = 1
                     print(f"Missing child UUID for {kt}")
                 else:
                     k_uu = k_uu.rsplit('/', 1)[0]
