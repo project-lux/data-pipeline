@@ -183,9 +183,12 @@ if DO_REFERENCES:
         if distance > cfgs.max_distance:
             continue
 
-        ref_mgr.did_ref(uri, distance)
-
+        # NB: did_ref (marking the reference done) now happens only after a
+        # successful acquire below. Marking it done up-front meant a transient
+        # fetch failure silently dropped the record AND every concept
+        # reachable only through it, for the whole build.
         if cfgs.is_qua(uri):
+            quri = uri
             uri, rectype = cfgs.split_qua(uri)
         else:
             raise ValueError(f"No qua in referenced {uri} and needed")
@@ -194,6 +197,8 @@ if DO_REFERENCES:
         except:
             if debug:
                 print(f"Not processing: {uri}")
+            # permanently unusable URI: mark done so it isn't re-queued
+            ref_mgr.did_ref(quri, distance)
             continue
         if not source["type"] == "external":
             # Don't process internal or results
@@ -207,6 +212,7 @@ if DO_REFERENCES:
         # Acquire the record from cache or network
         rec = acquirer.acquire(recid, rectype=rectype)
         if rec is not None:
+            ref_mgr.did_ref(quri, distance)
             sys.stdout.write(".")
             sys.stdout.flush()
             # Reconcile it

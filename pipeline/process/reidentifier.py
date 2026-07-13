@@ -108,8 +108,11 @@ class Reidentifier(object):
                 return result
             else:
                 # We have something from the data
-                uus = set(list(equiv_map.values()))
-                uu = uus.pop()
+                # set.pop() picked an arbitrary YUID per process when more
+                # than one was present; pick deterministically instead
+                uus = set(equiv_map.values())
+                uu = min(uus)
+                uus.discard(uu)
                 if len(uus):
                     # This also shouldn't happen
                     if self.debug:

@@ -373,10 +373,14 @@ class PooledCache(object):
         if mySlice >= maxSlice:
             raise ValueError(f"{mySlice} cannot be > {maxSlice}")
 
+        # ORDER BY is required: slicing by row position over an unordered
+        # result set gives each parallel worker a different view of "row N"
+        # (synchronized seq scans start at arbitrary heap offsets), so
+        # records get double-processed by some workers and skipped by others
         if t == "Concept":
-            qry = f"SELECT * FROM {self.name} WHERE data->>'type' IN ('Type', 'Currency', 'Language', 'Material', 'MeasurementUnit')"
+            qry = f"SELECT * FROM {self.name} WHERE data->>'type' IN ('Type', 'Currency', 'Language', 'Material', 'MeasurementUnit') ORDER BY {self.key} ASC"
         else:
-            qry = f"SELECT * FROM {self.name} WHERE data->'type' = '\"{t}\"'"
+            qry = f"SELECT * FROM {self.name} WHERE data->'type' = '\"{t}\"' ORDER BY {self.key} ASC"
         ct = 0
         with self._cursor(iter=True, size=50000) as cursor:
             cursor.execute(qry)

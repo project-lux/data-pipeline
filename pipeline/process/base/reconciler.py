@@ -265,8 +265,10 @@ class LmdbReconciler(Reconciler):
             return f"{self.namespace}{list(matches.keys())[0]}"
         elif matches:
             ms = list(matches.items())
-            ms.sort(key=lambda x: len(x))
-            ms.reverse()
+            # Most supporting matches first; the old key len(x) was always 2
+            # (a (uri, [matches]) tuple), making the "best match" whichever
+            # landed last in dict order. Tie-break on uri for determinism.
+            ms.sort(key=lambda x: (-len(x[1]), x[0]))
             if self.debug:
                 print(f"Found multiple matches: {ms}")
             return f"{self.namespace}{ms[0][0]}"
@@ -358,8 +360,10 @@ class SqliteReconciler(Reconciler):
             return f"{self.namespace}{list(matches.keys())[0]}"
         elif matches:
             ms = list(matches.items())
-            ms.sort(key=lambda x: len(x))
-            ms.reverse()
+            # Most supporting matches first; the old key len(x) was always 2
+            # (a (uri, [matches]) tuple), making the "best match" whichever
+            # landed last in dict order. Tie-break on uri for determinism.
+            ms.sort(key=lambda x: (-len(x[1]), x[0]))
             if self.debug:
                 print(f"Found multiple matches: {ms}")
             return f"{self.namespace}{ms[0][0]}"

@@ -195,10 +195,12 @@ if DO_REFERENCES:
             print(f"FAILED TO BUILD: {uri}")
             continue
         # get a base record
+        # equivs is a redis set; sort so the chosen base record (and thus
+        # label/field precedence in the merged output) is deterministic
         rec2 = None
         stop = False
         for pref in PREF_ORDER:
-            for eq in equivs:
+            for eq in sorted(equivs):
                 if pref in eq:
                     baseUri = eq
                     (src, recid) = cfgs.split_uri(baseUri)

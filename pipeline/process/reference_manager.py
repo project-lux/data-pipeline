@@ -59,15 +59,14 @@ class ReferenceManager(object):
         with open("reference_uris.txt", "r") as fh:
             if my_slice < 0 or max_slice < 0:
                 # just read the whole file
+                # (previously an empty/blank first line yielded a bogus [""]
+                # item because "".split("|") is a truthy [""])
                 line = fh.readline()
-                line = line.strip()
-                line = line.split("|", 1)
                 while line:
-                    yield line
+                    stripped = line.strip()
+                    if stripped:
+                        yield stripped.split("|", 1)
                     line = fh.readline()
-                    line = line.strip()
-                    if line:
-                        line = line.split("|", 1)
             else:
                 okay = True
                 while okay:
