@@ -29,65 +29,81 @@ Regression tests: `tests/test_determinism_fixes.py` (fixed items) and
 | 13 | `merge-metatypes.py` | Unordered `glob` | Per-key metatype list order varied by filesystem |
 | 14 | `pipeline/process/reference_manager.py` `iter_done_refs` | Empty/blank line yielded a bogus `[""]` item (`"".split("|")` is truthy) | Single-process merge crashed/mishandled on empty ref file |
 
-## Flagged, not yet fixed
+## Second wave: previously flagged, now fixed
 
-Larger or riskier changes, ranked by expected impact. The identity
-refactor already removes most idmap *write* traffic from the parallel
-phases, which shrinks the blast radius of several of these.
+Regression tests: `tests/test_store_hardening.py` (fakeredis-backed for
+the redis paths, tmpdir/pure for the rest).
 
-1. **`IdMap.set()` rekey is a non-atomic read-modify-write**
-   (`pipeline/storage/idmap/redis.py:289-311`). Concurrent rekeys/merges
-   can lose set members and leave dangling forward-pointers. Post-identity
-   it is still called from `reidentifier.py` fallback writes. Proper fix:
-   Lua script or `WATCH/MULTI`; or remove the remaining runtime writes
-   entirely and make the idmap read-only outside `run-identify.py`.
-2. **Work-queue pops are non-atomic and random**
-   (`IdMap.popitem` scan+get+delete, `ReferenceMap.popitem` via
-   `randomkey`). Two workers can pop the same ref (duplicate work) or get
-   `(key, None)`; order is random. Identity resolution makes the *ID*
-   consequences harmless, but reference **distances** still race (below).
-   Fix: atomic Lua pop (SPOP-like) — or adopt the generational BFS from
-   the experiment design.
-3. **`add_ref` distance bookkeeping races across 24 workers**
-   (`reference_manager.py:100-139`): min-distance updates are
-   check-then-act over shared redis, and the per-process `ref_cache`
-   layer makes it worse. Concepts near the `max_distance` frontier are
-   included in some builds and dropped in others. This is the main
-   surviving between-builds concept-loss mechanism.
-4. **Merge phase cross-slice TOCTOU** (`run-merge.py` `insert_time`
-   guard): two slices resolving different records to the same YUID both
-   build it; last writer wins. Bounded (each writes a full merge) but
-   non-reproducible.
-5. **Export reuses stale MarkLogic cache** (`run-export.py:52-61`):
-   YUIDs are stable, so changed records short-circuit to last build's
-   export unless the ML recordcache is cleared. Needs an orchestration
-   decision (clear vs. compare timestamps).
-6. **Index-open failures silently disable reconciliation per worker**
-   (`base/reconciler.py` Lmdb/Sqlite `except → index = None`, then
-   `should_reconcile` returns False). A worker that loses the lock race
-   emits zero assertions for its slice, silently. Should be fatal, or at
-   minimum a durable log + retry.
-7. **VIAF equivalents index**: stale `viaf_sort_equivs.csv` reused if
-   present (`oclc/index_loader.py:27`), and ident→VIAF collisions are
-   last-writer-wins over per-slice shards.
-8. **TabLmdb value ambiguity** (`idmap/lmdb.py`): single-member sets
-   round-trip as `str`, members containing tabs split, keys >500 bytes
-   raise (and `__contains__` swallows it → invisible keys, potential
-   re-mints every build).
-9. **Broad exception swallowing that loses writes**: postgres
-   `set()` (`cache/postgres.py:438`) swallows all insert failures;
-   MarkLogic `update_multiple` (`marklogic/rest.py:213-237`) never reads
-   thread results, so failed batch PUTs report success.
-10. **`get_like` has no ORDER BY** despite its own comment saying it
-    must return the most recent match (`cache/postgres.py:243`).
-11. **Broken/latent modules**: `idmap/memory.py` (syntax error),
-    `idmap/filesystem.py` (`cfgs` NameError, non-atomic whole-file
-    rewrites), filesystem record caches sharing one `tabletype`
-    directory, `update_manager.py` delete path is a stub (dangling
-    references on delete).
-12. **NetworkOperationMap caches fetch errors across builds** (db 2
-    persists): a transiently failed external record can stay failed in
-    every subsequent build until the cache is cleared.
+1. **`IdMap.set()` rekey** is now a WATCH/MULTI transaction with retry —
+   concurrent rekeys/merges can no longer lose set members or leave
+   dangling forward-pointers, and the "key deleted between exists and
+   get" race no longer silently drops the requested mapping.
+2. **Work-queue pops are atomic**: `IdMap.popitem` and
+   `ReferenceMap.popitem` claim their key under WATCH/MULTI, so two
+   workers can never process the same item or see `(key, None)`; real
+   redis errors propagate instead of masquerading as an empty queue.
+   (Pop *order* remains arbitrary — harmless now that identity
+   assignment is order-independent.)
+3. **`add_ref` distance bookkeeping**: new `ReferenceMap.merge_ref`
+   applies min-distance / type-if-unset atomically, and re-queueing a
+   done ref adds to `all_refs` *before* deleting from `done_refs` (a
+   crash duplicates work instead of losing the reference). This was the
+   main surviving between-builds concept-loss mechanism.
+4. **Merge phase cross-slice claim** (`run-merge.py`): when several
+   internal records share a YUID, only the lexicographically-smallest
+   member still present in its recordcache builds the merged record —
+   replacing the insert_time TOCTOU race with a deterministic rule.
+5. **Export staleness** (`run-export.py`): the MarkLogic cache entry is
+   re-transformed when the merged record is newer (insert_time
+   comparison) instead of blindly reusing last build's document.
+6. **Index-open failures are fatal and loud** (`base/reconciler.py`):
+   both Lmdb and Sqlite reconcilers retry (0.5s backoff) then raise,
+   instead of silently disabling reconciliation for the whole worker.
+7. **VIAF equivalents index** (`oclc/index_loader.py`): the sorted
+   equivs file regenerates whenever any shard is newer, sorts under
+   `LC_ALL=C`, and ident→VIAF collisions keep the smallest VIAF id
+   deterministically.
+8. **TabLmdb**: members containing tabs are rejected at write time
+   (they silently split into phantom members on read); over-long-key
+   `__contains__` reports absent loudly while real LMDB errors now
+   propagate. (Single-member str round-trip is kept — callers rely on
+   it — and documented.)
+9. **Write failures surface**: postgres `set()` re-raises everything
+   except the expected duplicate-key-without-overwrite case; MarkLogic
+   `update_multiple` now reads the actual thread results (the old check
+   read a field that was never set) and a new `flush_updates()` —
+   called from `run-load.py` — joins and verifies the final batches,
+   which were previously never checked at all.
+10. **`get_like`** orders by `insert_time DESC` as its comment promised.
+11. **Broken/latent modules repaired**: `idmap/memory.py` (syntax
+    error, broken delete) works again for tests; `idmap/filesystem.py`
+    constructs (`cfgs` NameError) and persists atomically (temp+rename);
+    filesystem record caches get distinct directories (internal/external
+    records no longer overwrite each other), a working `delete`, atomic
+    writes, and a `has_item` that applies the same slash-encoding as
+    `set`/`get` (identifiers containing `/` used to be reported absent).
+12. **NetworkOperationMap** error entries (000/4xx/5xx) now expire after
+    a week instead of caching a transient fetch failure forever;
+    successes and redirects still persist.
+13. **`update_manager` deletes are recorded**: each delete appends its
+    required follow-up (rebuild the cluster without the member, or
+    remove the orphaned merged record) to `pending_deletes.jsonl` in the
+    data dir, instead of silently dropping the consequences. Acting on
+    that file (rebuilding dependents) remains future work.
+
+## Still open
+
+- **Reference pop order** is still random (`randomkey`) — harmless for
+  identity but the generational BFS from the experiment design would
+  make the *distance frontier* fully deterministic too; `merge_ref`
+  removes the loss mechanism but a concept discovered at distance
+  `max_distance+1` in one exploration order and `max_distance` in
+  another can still differ between builds in pathological graphs.
+- **Acting on `pending_deletes.jsonl`** (rebuilding dependents of
+  deleted records) needs a small dedicated phase.
+- The per-process `ref_cache` short-circuit only applies to distance-1
+  AAT refs, which cannot be improved upon (1 is the minimum), so it was
+  left in place.
 
 ## Testing through the pipeline with real data
 

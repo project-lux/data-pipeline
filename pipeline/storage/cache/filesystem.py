@@ -25,6 +25,9 @@ class FsCache(object):
         return l
 
     def has_item(self, key):
+        # apply the same slash replacement as set()/get(); without it any
+        # identifier containing '/' was reported absent
+        key = key.replace('/', self.slash_replacement)
         if not key.endswith(self.suffix):
             key = key + self.suffix
         fn = os.path.join(self.directory, key)
@@ -74,8 +77,20 @@ class FsCache(object):
         if 'data' in value and 'identifier' in value:
             value = value['data']
 
-        with open(fn, "w") as fh:
+        # atomic write: a crash mid-write must not leave a truncated record
+        tmp = fn + ".tmp"
+        with open(tmp, "w") as fh:
             fh.write(json.dumps(value))
+        os.replace(tmp, fn)
+
+    def delete(self, key):
+        # was missing entirely: __delitem__ raised AttributeError
+        key = key.replace('/', self.slash_replacement)
+        if not key.endswith(self.suffix):
+            key = key + self.suffix
+        fn = os.path.join(self.directory, key)
+        if os.path.exists(fn):
+            os.remove(fn)
 
     def iter_keys(self):
         for file in self._list():
@@ -138,19 +153,21 @@ class InternalRecordCache(FsCache):
 class ExternalRecordCache(FsCache):
     def __init__(self, config):
         if not 'tabletype' in config:
-            config['tabletype'] = "record_cache"
+            # was "record_cache", colliding with InternalRecordCache
+            config['tabletype'] = "ext_record_cache"
         super().__init__(config)
 
 class ReconciledRecordCache(FsCache):
     def __init__(self, config):
         if not 'tabletype' in config:
-            config['tabletype'] = "reconciled_record_cache"
+            config['tabletype'] = "ext_reconciled_record_cache"
         super().__init__(config)
 
 class RecordCache(FsCache):
     def __init__(self, config):
         if not 'tabletype' in config:
-            config['tabletype'] = "record_cache"
+            # was "record_cache", colliding with InternalRecordCache
+            config['tabletype'] = "rewritten_record_cache"
         super().__init__(config)
         self.key = "yuid"
 

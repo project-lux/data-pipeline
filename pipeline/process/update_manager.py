@@ -1,5 +1,6 @@
 import os
 import sys
+import ujson as json
 
 
 class UpdateManager(object):
@@ -8,6 +9,14 @@ class UpdateManager(object):
         self.idmap = idmap
         self.internal_nss = [x["namespace"] for x in configs.internal.values()]
         self.changed = []
+
+    def _record_pending_delete(self, entry):
+        """Durably record the follow-up a delete requires. The delete path
+        used to silently drop the consequences (dependent records were
+        never rebuilt; orphaned merged records were never removed)."""
+        fn = os.path.join(self.configs.data_dir, "pending_deletes.jsonl")
+        with open(fn, "a") as fh:
+            fh.write(json.dumps(entry) + "\n")
 
     def process_change(self, config, change, ident, record, changeTime):
         storage = config["datacache"]
@@ -33,29 +42,37 @@ class UpdateManager(object):
                 all_ids = idmap[yuid]
                 del idmap[quaUri]
 
-                # Below is rebuild process, not deleting this record
+                # Record what this delete requires so a later pass can act:
+                # rebuild the merged record without this member, or remove
+                # the orphaned merged record entirely.
+                remaining = [i for i in all_ids
+                             if not i.startswith("__") and i != quaUri]
                 has_internal = False
-                for i in all_ids:
+                for i in remaining:
                     for ns in self.internal_nss:
                         if i.startswith(ns):
                             has_internal = True
                             break
                     if has_internal:
                         break
-                if has_internal:
-                    # If there are other internal records then just rebuild
-                    # without deleted record
-                    pass
+                if remaining:
+                    # other members still exist: merged record must be
+                    # rebuilt without the deleted one
+                    action = "rebuild"
                 else:
-                    has_refs = False
-                    # FIXME: find references from other records to this one
-                    if has_refs:
-                        # still need. Rebuild without deleted record
-                        pass
-                    else:
-                        # no references and the source record is gone.
-                        # keep deleting
-                        pass
+                    # nothing left in the cluster: the merged record (and
+                    # any inbound references) should be removed
+                    action = "delete-merged"
+                self._record_pending_delete({
+                    "action": action,
+                    "source": config["name"],
+                    "identifier": ident,
+                    "qua": quaUri,
+                    "yuid": yuid,
+                    "remaining": sorted(remaining),
+                    "has_internal": has_internal,
+                    "changeTime": changeTime,
+                })
         else:
             # upsert
             # if not ident in storage == create

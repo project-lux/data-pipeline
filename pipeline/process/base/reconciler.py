@@ -1,7 +1,8 @@
 from pipeline.process.utils.mapper_utils import get_year_from_timespan
 from sqlitedict import SqliteDict
 from pipeline.storage.idmap.lmdb import TabLmdb
-import re 
+import re
+import time
 
 
 # Abstract class definition, useless without actual data
@@ -173,22 +174,28 @@ class LmdbReconciler(Reconciler):
     def __init__(self, config):
         Reconciler.__init__(self, config)
 
+        # A configured index that fails to open must be LOUD: swallowing it
+        # set the index to None, should_reconcile() then returned False, and
+        # that worker silently emitted zero assertions for its whole slice.
         fn = config.get("reconcileDbPath", "")
         fn2 = config.get("inverseEquivDbPath", "")
-        try:
-            if fn:
-                self.name_index = TabLmdb.open(fn, "r", readahead=False, writemap=True)
-            else:
-                self.name_index = None
-        except Exception:
-            self.name_index = None
-        try:
-            if fn2:
-                self.id_index = TabLmdb.open(fn2, "r", readahead=False, writemap=True)
-            else:
-                self.id_index = None
-        except Exception:
-            self.id_index = None
+        self.name_index = self._open_index(fn, "name")
+        self.id_index = self._open_index(fn2, "id")
+
+    def _open_index(self, fn, which):
+        if not fn:
+            return None
+        last_err = None
+        for attempt in range(3):
+            try:
+                return TabLmdb.open(fn, "r", readahead=False, writemap=True)
+            except Exception as e:
+                last_err = e
+                time.sleep(0.5 * (attempt + 1))
+        raise RuntimeError(
+            f"Could not open {which} index {fn} for {self.config.get('name', '?')}: "
+            f"{last_err}. Reconciliation would silently be disabled for this worker."
+        )
 
     def get_keys_like(self, which, key):
         # Use set_range()
@@ -281,24 +288,28 @@ class SqliteReconciler(Reconciler):
     def __init__(self, config):
         Reconciler.__init__(self, config)
 
+        # Same rationale as LmdbReconciler: a silently-None index disables
+        # reconciliation for the whole worker. Sqlite read-locks are the
+        # known transient failure, so retry before giving up loudly.
         fn = config.get("reconcileDbPath", "")
         fn2 = config.get("inverseEquivDbPath", "")
-        try:
-            if fn:
-                self.name_index = SqliteDict(fn, autocommit=False, flag="r")
-            else:
-                self.name_index = None
-        except:
-            # Can't get a lock, set to None
-            self.name_index = None
-        try:
-            if fn2:
-                self.id_index = SqliteDict(fn2, autocommit=False, flag="r")
-            else:
-                self.id_index = None
-        except Exception:
-            # Can't get a lock, set to None
-            self.id_index = None
+        self.name_index = self._open_index(fn, "name")
+        self.id_index = self._open_index(fn2, "id")
+
+    def _open_index(self, fn, which):
+        if not fn:
+            return None
+        last_err = None
+        for attempt in range(5):
+            try:
+                return SqliteDict(fn, autocommit=False, flag="r")
+            except Exception as e:
+                last_err = e
+                time.sleep(0.5 * (attempt + 1))
+        raise RuntimeError(
+            f"Could not open {which} index {fn} for {self.config.get('name', '?')}: "
+            f"{last_err}. Reconciliation would silently be disabled for this worker."
+        )
 
     def get_keys_like(self, which, key):
         # WARNING: This is HORRIBLY SLOW in Sqlite compared to LMDB

@@ -248,9 +248,10 @@ class PooledCache(object):
             print(f"{self.name} has UUIDs as keys")
             return None
 
-        # ORDER BY here is in case we have multiple copies from different times
-        # We want the most recent
-        qry = f"SELECT * FROM {self.name} WHERE {_key_type} LIKE %s"
+        # ORDER BY in case we have multiple copies from different times:
+        # we want the most recent (the comment promised this but the query
+        # had no ORDER BY, so postgres returned an arbitrary matching row)
+        qry = f"SELECT * FROM {self.name} WHERE {_key_type} LIKE %s ORDER BY insert_time DESC"
         params = (key + "%",)
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry, params)
@@ -447,19 +448,27 @@ class PooledCache(object):
                     cursor.execute(qry, qvs * 2)
                     self.conn.commit()
                 except Exception as e:
-                    # Could be a psycopg2.errors.UniqueViolation if we're trying to insert without delete
-                    print(f"DATA: {data}")
-                    print(f"Failed to upsert!: {e}?\n{qpstr} = {qvs}")
+                    # A swallowed failure here silently loses the write; log
+                    # and re-raise so the caller/build sees it
+                    print(f"Failed to upsert {identifier}/{yuid} in {self.name}: {e}")
                     self.conn.rollback()
+                    raise
             else:
                 try:
                     qry = f"INSERT INTO {self.name} ({qpstr}) VALUES ({pholders})"
                     cursor.execute(qry, qvs)
                     self.conn.commit()
-                except Exception as e:
-                    # Could be a psycopg2.errors.UniqueViolation if we're trying to insert without delete
-                    print(f"Duplicate key for {identifier}/{yuid} in {self.name}: {e}?")
+                except psycopg2.errors.UniqueViolation:
+                    # expected when re-inserting without overwrite; the row
+                    # is already present, keep it
+                    print(f"Duplicate key for {identifier}/{yuid} in {self.name}; keeping existing")
                     self.conn.rollback()
+                except Exception as e:
+                    # anything else (serialization failure, value too long,
+                    # deadlock) used to be silently dropped
+                    print(f"Failed to insert {identifier}/{yuid} in {self.name}: {e}")
+                    self.conn.rollback()
+                    raise
         # sys.stdout.write('S');sys.stdout.flush()
 
     def delete(self, key, _key_type=None):

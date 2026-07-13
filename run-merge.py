@@ -102,6 +102,9 @@ if profiling:
     pr.enable()
 
 
+# namespaces of internal sources, for the cross-slice claim check below
+internal_namespaces = tuple(c["namespace"] for c in cfgs.internal.values())
+
 for src_name, src in to_do:
     rcache = src["recordcache"]
 
@@ -121,20 +124,45 @@ for src_name, src in to_do:
             continue
         recuri = f"{src['namespace']}{recid}"
         qrecid = cfgs.make_qua(recuri, rec["data"]["type"])
-        yuid = idmap[qrecid]
-        if not yuid:
+        full_yuid = idmap[qrecid]
+        if not full_yuid:
             print(f" !!! Couldn't find YUID for internal record: {qrecid}")
             continue
-        yuid = yuid.rsplit("/", 1)[1]
+        yuid = full_yuid.rsplit("/", 1)[1]
         ins_time = merged_cache.metadata(yuid, "insert_time")
         if ins_time is not None and (RESUME or ins_time["insert_time"] > start_time):
             # Already processed this record this build
             continue
-        else:
-            # Always reidentify in case the UUIDs have changed during
-            # subsequent reconcile phases
-            rec2 = reider.reidentify(rec)
-            src["recordcache2"][rec2["yuid"]] = rec2["data"]
+
+        # Deterministic cross-slice claim: when several internal records
+        # share this YUID, the insert_time guard above is a check-then-act
+        # race between slices (whichever wrote first used to win). Instead,
+        # only the lexicographically-smallest internal member that still
+        # exists in its recordcache builds the merged record.
+        cluster = idmap[full_yuid] or set()
+        other_internals = [e for e in cluster
+                           if e != qrecid and not e.startswith("__")
+                           and e.startswith(internal_namespaces)]
+        if other_internals:
+            claimed = False
+            for cand in sorted(other_internals + [qrecid]):
+                if cand == qrecid:
+                    claimed = True
+                    break
+                try:
+                    (csrc, crecid) = cfgs.split_uri(cfgs.split_qua(cand)[0])
+                except Exception:
+                    continue
+                if crecid in csrc["recordcache"]:
+                    # a smaller, still-present member owns this YUID
+                    break
+            if not claimed:
+                continue
+
+        # Always reidentify in case the UUIDs have changed during
+        # subsequent reconcile phases
+        rec2 = reider.reidentify(rec)
+        src["recordcache2"][rec2["yuid"]] = rec2["data"]
 
         equivs = idmap[rec2["data"]["id"]]
         if equivs:

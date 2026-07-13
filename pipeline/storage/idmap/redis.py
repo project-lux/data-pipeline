@@ -82,11 +82,37 @@ class RedisCache(object):
             yield self._manage_key_out(key)
 
     def popitem(self):
-        k = self.conn.scan(count=1)
-        k = k[1][0]
-        val = self.conn.get(k)        
-        self.conn.delete(k)
-        return (self._manage_key_out(k), self._manage_key_out(val))
+        # Atomic claim: the old scan+get+delete let two workers pop the same
+        # key (both process it) or return (key, None) when racing a delete.
+        fruitless = 0
+        while fruitless < 100:
+            cursor, keys = self.conn.scan(cursor=0, count=10)
+            if not keys:
+                return None
+            fruitless += 1
+            for k in keys:
+                with self.conn.pipeline() as pipe:
+                    try:
+                        pipe.watch(k)
+                        val = pipe.get(k)
+                        if val is None:
+                            # claimed by another worker (or not a string key)
+                            pipe.unwatch()
+                            continue
+                        pipe.multi()
+                        pipe.delete(k)
+                        pipe.execute()
+                        return (self._manage_key_out(k), self._manage_key_out(val))
+                    except redis.WatchError:
+                        continue
+                    except redis.ResponseError:
+                        # non-string key (e.g. a set); skip it
+                        continue
+        # 100 rounds without claiming anything: either everything is being
+        # drained by other workers (fine to report empty) or the db holds
+        # only non-string keys. Don't crash the slice either way.
+        print("popitem: no claimable string keys after 100 rounds; treating as empty")
+        return None
 
     # WARNING: this doesn't scale for long, but is useful for debugging and testing
     def keys(self, **kw):
@@ -286,29 +312,45 @@ class IdMap(RedisCache):
         if self.memory_cache_enabled and ikey.startswith('aat:'):
             self.memory_cache[ikey] = value
 
-        if self.conn.exists(ikey):
-            # Could be just setting to the same value
-            old = self.conn.get(ikey)
-            if old is None or old == ivalue:
-                return
-            print(f"key: {key} old: {old} new value: {value}")
-            # Nope, we're changing to a different yuid!
-            # keep all keys assigned to old_yuid assigned to new_yuid
-            all_vals = self.conn.smembers(old)
-            print(f"all vals: {all_vals}")
-            for av in all_vals:
-                # print(f"Resetting {av} from {old} -> {ivalue} due to {key}")
-                self.conn.set(av, ivalue)
-            if all_vals:
-                # Sometimes a ghost yuid survives somewhere else
-                self.conn.sadd(ivalue, *all_vals)
-                # delete old yuid
-                self.conn.delete(old)
-            else:
-                print(f"Requested members for {old} and got [] ???")
-
-        self._add(value, key)
-        return self.conn.set(ikey, ivalue)
+        # The rekey/merge below is a multi-step read-modify-write; done as
+        # separate commands two concurrent workers could interleave, losing
+        # set members and leaving dangling forward-pointers. WATCH/MULTI
+        # makes each attempt atomic; a concurrent modification retries.
+        for _attempt in range(50):
+            with self.conn.pipeline() as pipe:
+                try:
+                    pipe.watch(ikey)
+                    old = pipe.get(ikey)
+                    if old is not None and old == ivalue:
+                        pipe.unwatch()
+                        return
+                    if old is not None:
+                        print(f"key: {key} old: {old} new value: {value}")
+                        # Changing to a different yuid: keep all keys assigned
+                        # to old_yuid assigned to new_yuid
+                        pipe.watch(old)
+                        all_vals = pipe.smembers(old)
+                        pipe.multi()
+                        for av in all_vals:
+                            pipe.set(av, ivalue)
+                        if all_vals:
+                            pipe.sadd(ivalue, *all_vals)
+                            pipe.delete(old)
+                        else:
+                            print(f"Requested members for {old} and got [] ???")
+                        pipe.sadd(ivalue, ikey)
+                        pipe.set(ikey, ivalue)
+                        pipe.execute()
+                        return True
+                    else:
+                        pipe.multi()
+                        pipe.sadd(ivalue, ikey)
+                        pipe.set(ikey, ivalue)
+                        pipe.execute()
+                        return True
+                except redis.WatchError:
+                    continue
+        raise RuntimeError(f"idmap.set({key}) kept losing WATCH races")
 
     def _force_delete(self, key, typ=""):
         if typ in self.configs.ok_record_types:
@@ -345,6 +387,13 @@ class IdMap(RedisCache):
         return None
 
 
+# Cached fetch errors expire after a week; successes/redirects persist.
+# Without a TTL a transient network failure was cached forever, so the
+# record stayed missing from every subsequent build until someone
+# manually cleared the networkmap.
+NETWORK_ERROR_TTL = 7 * 24 * 3600
+
+
 class NetworkOperationMap(RedisCache):
 
     def __init__(self, config):
@@ -371,7 +420,12 @@ class NetworkOperationMap(RedisCache):
 
         ikey = self._manage_key_in(key)
         ival = self._manage_key_in(value)
-        self.conn.set(ikey, ival)
+        is_error = ival in ("0", "000") or (
+            len(ival) == 3 and ival.isnumeric() and int(ival) > 399)
+        if is_error:
+            self.conn.set(ikey, ival, ex=NETWORK_ERROR_TTL)
+        else:
+            self.conn.set(ikey, ival)
 
     def delete(self, key):
         ikey = self._manage_key_in(key)        
@@ -489,6 +543,29 @@ class ReferenceMap(NetworkOperationMap):
             config['db'] = 3
         RedisCache.__init__(self, config)
 
+    def merge_ref(self, key, dist, ctype=""):
+        """Atomically record a reference: dist becomes min(existing, dist),
+        type is set only if not already set. The old read-modify-write let
+        a later worker overwrite a shorter distance with a longer one,
+        which could push a reference past max_distance in some builds."""
+        ikey = self._manage_key_in(key)
+        fdist = self._manage_key_in("dist")
+        ftype = self._manage_key_in("type")
+        for _attempt in range(50):
+            with self.conn.pipeline() as pipe:
+                try:
+                    pipe.watch(ikey)
+                    cur = pipe.hget(ikey, fdist)
+                    pipe.multi()
+                    if cur is None or int(cur) > dist:
+                        pipe.hset(ikey, fdist, self._manage_value_in(dist))
+                    pipe.hsetnx(ikey, ftype, self._manage_value_in(ctype or ""))
+                    pipe.execute()
+                    return
+                except redis.WatchError:
+                    continue
+        raise RuntimeError(f"merge_ref({key}) kept losing WATCH races")
+
     def _export_state(self):
         # return a json dict of the external:yuid values
         state = {}
@@ -542,18 +619,39 @@ class ReferenceMap(NetworkOperationMap):
             yield RedisDictValue(key, self)
 
     def popitem(self):
-        if len(self) ==  0:
-            return None
-        rk = self.conn.randomkey()
-        try:
-            d = self.conn.hgetall(rk)
-            self.conn.delete(rk)
-        except:
-            return None
-        n = {}
-        for (k,v) in d.items():
-            n[self._manage_key_out(k)] = self._manage_value_out(v)
-        return (self._manage_key_out(rk), n)
+        # Atomic claim: the old randomkey+hgetall+delete let two workers pop
+        # the same key, and its bare except hid real redis errors as an
+        # empty queue. randomkey is still random order, which is harmless
+        # now that identity assignment is order-independent.
+        fruitless = 0
+        while fruitless < 100:
+            rk = self.conn.randomkey()
+            if rk is None:
+                return None
+            with self.conn.pipeline() as pipe:
+                try:
+                    pipe.watch(rk)
+                    d = pipe.hgetall(rk)
+                    if not d:
+                        # claimed by another worker, or not a hash key
+                        pipe.unwatch()
+                        fruitless += 1
+                        continue
+                    pipe.multi()
+                    pipe.delete(rk)
+                    pipe.execute()
+                except redis.WatchError:
+                    fruitless += 1
+                    continue
+                except redis.ResponseError:
+                    fruitless += 1
+                    continue
+            n = {}
+            for (k, v) in d.items():
+                n[self._manage_key_out(k)] = self._manage_value_out(v)
+            return (self._manage_key_out(rk), n)
+        print("popitem: no claimable hash keys after 100 rounds; treating as empty")
+        return None
 
     def update(self, values):
         # Iter through all of the pairs in the dict and set
