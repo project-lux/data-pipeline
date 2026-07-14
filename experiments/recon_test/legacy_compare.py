@@ -274,8 +274,8 @@ def run_legacy(records, idmap, seed):
     random.Random(seed).shuffle(order)
     t0 = time.time()
     for rid, eqs in order:
-        rec = {"data": {"id": rid, "type": "Type", "_label": "",
-                        "equivalent": [{"id": e, "type": "Type"} for e in eqs]}}
+        rec = {"data": {"id": rid, "type": QUA, "_label": "",
+                        "equivalent": [{"id": e, "type": QUA} for e in eqs]}}
         rm.manage_identifiers(rec)
     return time.time() - t0
 
