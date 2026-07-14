@@ -49,6 +49,17 @@ DB_PATH = "/Users/wjm55/lux-concepts-scc/concepts.lmdb"
 CONFLICT_SEED = 42
 N_CONFLICTS = 1000
 
+# class -> (qua type, mint slug); QUA is set from --cls at startup
+SLUGS = {
+    "Type": "concept", "Person": "person", "Group": "group",
+    "Place": "place", "Activity": "activity", "Period": "period",
+    "Set": "set", "HumanMadeObject": "object", "LinguisticObject": "text",
+    "VisualItem": "visual", "DigitalObject": "digital",
+    "Language": "concept", "Material": "concept", "Currency": "concept",
+    "MeasurementUnit": "concept",
+}
+QUA = "Type"
+
 
 # ---------------------------------------------------------------------------
 # Shared input: records derived from the production clusters
@@ -185,7 +196,7 @@ class CountingRedis:
 
 class StubConfigs:
     internal_uri = "https://lux.collections.yale.edu/data/"
-    ok_record_types = {"Type": "concept"}
+    ok_record_types = SLUGS
     external = {}
     internal = {}
     debug_reconciliation = False
@@ -196,7 +207,7 @@ class StubConfigs:
     def make_qua(self, recid, typ):
         if "##qua" in recid:
             return recid
-        return f"{recid}##quaType"
+        return f"{recid}##qua{QUA}"
 
     def split_qua(self, recid):
         return recid.split("##qua")
@@ -217,14 +228,14 @@ def make_idmap(token="__20260714__"):
 
 
 def load_prior(idmap, prior):
-    """Preload last build's state: member##quaType -> yuid, yuid set of
+    """Preload last build's state: member##qua{cls} -> yuid, yuid set of
     members WITHOUT the current update token (so legacy rebuild pruning
     engages, as it would with --new-token)."""
     conn = idmap.conn._conn
     pipe = conn.pipeline(transaction=False)
     n = 0
     for m, y in prior.items():
-        qm = f"{m}##quaType"
+        qm = f"{m}##qua{QUA}"
         pipe.set(qm, y)
         pipe.sadd(y, qm, "__old__")
         n += 2
@@ -279,17 +290,17 @@ def run_new(records, idmap, seed, diffs):
     t0 = time.time()
     edges = defaultdict(set)
     for rid, eqs in order:
-        qrid = f"{rid}##quaType"
+        qrid = f"{rid}##qua{QUA}"
         if not eqs:
             edges[(qrid, qrid)].add(qrid)
         for e in eqs:
-            qe = f"{e}##quaType"
+            qe = f"{e}##qua{QUA}"
             a, b = (qrid, qe) if qrid < qe else (qe, qrid)
             edges[(a, b)].add(qrid)
 
     qdiffs = set()
     for (a, b) in diffs:
-        qa, qb = f"{a}##quaType", f"{b}##quaType"
+        qa, qb = f"{a}##qua{QUA}", f"{b}##qua{QUA}"
         qdiffs.add((qa, qb) if qa < qb else (qb, qa))
 
     clusters, conflicts = det_identity.cluster(edges, qdiffs)
@@ -312,12 +323,17 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["legacy", "new"], required=True)
     ap.add_argument("--db", default=DB_PATH)
+    ap.add_argument("--cls", default="Type",
+                    help="LUX class of the records in --db (sets qua + slug)")
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--out", required=True)
     ap.add_argument("--prior", action="store_true",
                     help="preload production idmap state (rebuild scenario)")
     ap.add_argument("--limit", type=int, default=0)
     args = ap.parse_args()
+    global QUA
+    QUA = args.cls
+    StubConfigs.ok_record_types = {args.cls: SLUGS.get(args.cls, "unknown")}
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -342,6 +358,7 @@ def main():
     sha = dump_mapping(idmap, out / "mapping.tsv")
     stats = {
         "mode": args.mode, "seed": args.seed, "prior": args.prior,
+        "cls": args.cls,
         "records": len(records), "prep_s": round(prep_s, 1),
         "identity_wall_s": round(wall, 1),
         "redis_ops": idmap.conn.ops,
