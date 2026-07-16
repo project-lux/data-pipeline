@@ -118,11 +118,14 @@ class Reidentifier(object):
                     if self.debug:
                         print(f"Found more than one YUID for {recid} / {equivs}")
                 elif not recid in equiv_map:
-                    # If recid not in equiv map, then this is a new main id for the same entity
-                    # Seems unlikely, but possible
-                    if self.debug:
-                        print(f"Found YUID only via equivs, not recid {recid} / {equivs}")
-                    self.idmap[qrecid] = uu
+                    # recid not in idmap but its equivalents are: a gap in
+                    # the identify phase. The idmap is read-only outside
+                    # run-identify.py -- writing here from 24 racing merge
+                    # workers would reintroduce nondeterministic identity
+                    # mutations. Use the resolved YUID for output and log
+                    # the gap durably so identify can be fixed instead.
+                    print(f"IDMAP-GAP: {qrecid} resolved to {uu} only via "
+                          f"equivalents; identify phase did not register it")
 
             # And set up the URI on the way out
             result["id"] = uu

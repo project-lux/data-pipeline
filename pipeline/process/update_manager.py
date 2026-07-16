@@ -18,6 +18,69 @@ class UpdateManager(object):
         with open(fn, "a") as fh:
             fh.write(json.dumps(entry) + "\n")
 
+    def process_pending_deletes(self, fn=None):
+        """Consume pending_deletes.jsonl (run-process-deletes.py).
+
+        Both actions drop the stale merged record so the next merge/export
+        cannot serve a version containing the deleted member:
+          rebuild        - remaining members exist; the next merge rebuilds
+                           the record from them (identity map was already
+                           updated at delete time)
+          delete-merged  - nothing left in the cluster; also remove the
+                           token-only YUID set from the idmap
+        Processed entries are rotated to pending_deletes.done.jsonl.
+        """
+        if fn is None:
+            fn = os.path.join(self.configs.data_dir, "pending_deletes.jsonl")
+        if not os.path.exists(fn):
+            return {"processed": 0}
+
+        merged_cache = self.configs.results["merged"]["recordcache"]
+        ml_cache = self.configs.results.get("marklogic", {}).get("recordcache")
+        stats = {"processed": 0, "merged_removed": 0, "yuids_removed": 0,
+                 "errors": 0}
+        done = []
+        with open(fn) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    yuid = entry["yuid"]
+                    uu = yuid.rsplit("/", 1)[-1]
+                    for cache in (merged_cache, ml_cache):
+                        if cache is not None and uu in cache:
+                            del cache[uu]
+                            stats["merged_removed"] += 1
+                    if entry.get("action") == "delete-merged":
+                        try:
+                            if self.idmap.delete_yuid(yuid):
+                                stats["yuids_removed"] += 1
+                        except ValueError as e:
+                            # members re-appeared since the delete was
+                            # recorded; the next merge will rebuild instead
+                            print(f"pending-delete kept yuid: {e}")
+                    stats["processed"] += 1
+                    done.append(line)
+                except Exception as e:
+                    print(f"pending-delete failed for {line[:120]}: {e}")
+                    stats["errors"] += 1
+
+        # rotate: append processed entries to .done, rewrite remainder
+        done_fn = fn.replace(".jsonl", ".done.jsonl")
+        with open(done_fn, "a") as fh:
+            for line in done:
+                fh.write(line + "\n")
+        remaining = []
+        with open(fn) as fh:
+            for line in fh:
+                if line.strip() and line.strip() not in set(done):
+                    remaining.append(line)
+        with open(fn, "w") as fh:
+            fh.writelines(remaining)
+        return stats
+
     def process_change(self, config, change, ident, record, changeTime):
         storage = config["datacache"]
         storage2 = config["recordcache"]

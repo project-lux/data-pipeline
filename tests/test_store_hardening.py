@@ -261,3 +261,55 @@ def test_filesystem_cache_set_get_delete(tmp_path):
     assert "some/ident" in c
     del c["some/ident"]  # was AttributeError: no delete()
     assert "some/ident" not in c
+
+
+# ---------------------------------------------------------------------------
+# pending-deletes consumer: delete_yuid + process_pending_deletes
+# ---------------------------------------------------------------------------
+
+def test_delete_yuid_only_when_token_only(tmp_path):
+    m = make_idmap(tmp_path)
+    y = m.mint("http://ext/a##quaType", "concept")
+    m.conn.sadd(m._manage_value_in(y), "__20260713__")
+    # real member present -> refuse
+    with pytest.raises(ValueError):
+        m.delete_yuid(y)
+    # remove the member; token-only set now deletable
+    m.conn.srem(m._manage_value_in(y), "http://ext/a##quaType")
+    assert m.delete_yuid(y) is True
+    assert m.get(y) is None
+
+
+def test_process_pending_deletes(tmp_path):
+    from pipeline.process.update_manager import UpdateManager
+
+    idmap = make_idmap(tmp_path)
+    y = idmap.mint("http://ext/gone##quaType", "concept")
+    uu = y.rsplit("/", 1)[-1]
+    idmap.conn.srem(idmap._manage_value_in(y),
+                          "http://ext/gone##quaType")
+
+    merged = {uu: {"data": 1}}
+    ml = {uu: {"data": 1}}
+
+    class Cfg(StubConfigs):
+        data_dir = str(tmp_path)
+        internal = {}
+        results = {"merged": {"recordcache": merged},
+                   "marklogic": {"recordcache": ml}}
+
+    mgr = object.__new__(UpdateManager)
+    mgr.configs = Cfg()
+    mgr.idmap = idmap
+
+    fn = tmp_path / "pending_deletes.jsonl"
+    fn.write_text(json.dumps({"action": "delete-merged", "yuid": y,
+                              "identifier": "x", "qua": "q",
+                              "remaining": []}) + "\n")
+    stats = mgr.process_pending_deletes(str(fn))
+    assert stats["processed"] == 1
+    assert uu not in merged and uu not in ml
+    assert idmap.get(y) is None
+    # file rotated: source empty, .done has the entry
+    assert fn.read_text() == ""
+    assert "delete-merged" in (tmp_path / "pending_deletes.done.jsonl").read_text()

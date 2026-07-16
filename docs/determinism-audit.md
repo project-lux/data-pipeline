@@ -91,6 +91,18 @@ the redis paths, tmpdir/pure for the rest).
     data dir, instead of silently dropping the consequences. Acting on
     that file (rebuilding dependents) remains future work.
 
+## Third wave
+
+- **The idmap is now read-only outside `run-identify.py`**: the
+  reidentifier's last fallback write (a merge-phase identity mutation
+  racing across 24 workers) is replaced with a durable `IDMAP-GAP` log
+  line so identify-phase gaps get fixed at the source.
+- **`pending_deletes.jsonl` has a consumer**: `run-process-deletes.py`
+  (logic in `UpdateManager.process_pending_deletes`, tested) drops the
+  stale merged/ML-cache records for deleted members and removes
+  token-only YUID sets via the new guarded `IdMap.delete_yuid`;
+  processed entries rotate to `pending_deletes.done.jsonl`.
+
 ## Still open
 
 - **Reference pop order** is still random (`randomkey`) — harmless for
@@ -99,8 +111,8 @@ the redis paths, tmpdir/pure for the rest).
   removes the loss mechanism but a concept discovered at distance
   `max_distance+1` in one exploration order and `max_distance` in
   another can still differ between builds in pathological graphs.
-- **Acting on `pending_deletes.jsonl`** (rebuilding dependents of
-  deleted records) needs a small dedicated phase.
+  Assessed as best done inside `rob_refactor`'s task manager, where the
+  per-generation barrier has a natural home.
 - The per-process `ref_cache` short-circuit only applies to distance-1
   AAT refs, which cannot be improved upon (1 is the minimum), so it was
   left in place.

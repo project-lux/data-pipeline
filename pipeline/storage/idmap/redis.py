@@ -235,6 +235,23 @@ class IdMap(RedisCache):
     def disable_memory_cache(self):
         self.memory_cache_enabled = False
 
+    def delete_yuid(self, yuid):
+        """Remove a YUID set that no longer has any real members (only
+        update tokens). Refuses if real members remain. Used by the
+        pending-deletes consumer; regular delete() intentionally rejects
+        set keys."""
+        ikey = self._manage_key_in(yuid)
+        if self.conn.type(ikey) != "set":
+            return False
+        members = self.conn.smembers(ikey)
+        out = [self._manage_value_out(x) for x in members]
+        real = [m for m in out if not (m.startswith("__") and m.endswith("__"))]
+        if real:
+            raise ValueError(
+                f"delete_yuid({yuid}): {len(real)} real members remain")
+        self.conn.delete(ikey)
+        return True
+
     def mint(self, key, slug, typ=""):
         if typ in self.configs.ok_record_types:
             key = self.configs.make_qua(key, typ)
