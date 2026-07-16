@@ -150,6 +150,35 @@ concepts corpus.
    onto the same call sites (I verified the equivalent line numbers
    earlier). The identity engine module is layout-agnostic.
 
+## Per-class replication (the whole dataset, not just concepts)
+
+The same 8-build matrix was replayed per LUX class from full production
+snapshots pulled off the cluster (harness:
+`experiments/recon_test/legacy_compare.py --cls`, results in
+`/Users/wjm55/lux-data/cmp-<class>/comparison.json`). Legacy numbers are
+per rebuild with the production idmap preloaded; "missing" is the
+registration gap (members legacy never writes to the idmap at all);
+"order-diff" is how much of the map changes between two arrival orders.
+
+| Class | Members | Legacy order-diff | Legacy stability | Legacy fragmented | Legacy missing | diff-pairs violated | Legacy wall | New engine |
+|---|---|---|---|---|---|---|---|---|
+| Type (concepts) | 970,858 | 16.9% | 86.9% | 3,379 | 5.2% | 902/1000 | 224–289s | identical · 100% · 0 · 0 · 0 — 52s |
+| Place | 1,222,127 | **34.3%** | **78.1%** | 23,466 | 2.3% | 914/1000 | 413s | identical · 100% · 0 · 0 · 0 — 65s |
+| Group | 1,604,893 | 5.1% | 97.6% | 1,717 | 0.9% | 965/1000 | 470s | identical · 100% · 0 · 0 · 0 — 89s |
+| Activity | 210,561 | 1.7% | 99.0% | 58 | 0.1% | 997/1000 | 58s | identical · 100% · 0 · 0 · 0 — 13s |
+| Period | 14,777 | 13.8% | 90.4% | 17 | 0.5% | 994/1000 | 4.4s | identical · 100% · 0 · 0 · 0 — 0.8s |
+| Person | ~12.9M | *legacy rerun in progress (first attempt killed by a machine restart)* | | | | | | new runs complete: identical · 100% · 0 violated |
+
+The gradient is informative: legacy's damage tracks how authority-rich
+and multi-source a class is. **Place is the worst** — 34% of its
+identity map differs between two identical rebuilds and more than 1 in 5
+members loses its production YUID — because place clusters chain many
+authorities (TGN/GeoNames/WoF/Wikidata). Activity and Group are mostly
+single-source and suffer least. differentFrom violations are near-total
+everywhere under legacy (it has no cluster-level enforcement at identity
+time); the deterministic engine violated zero, in every class, in every
+run, while resolving each conflict by vote weight reproducibly.
+
 ## How this will handle people, places, events, works
 
 **The engine is type-agnostic by construction**: nodes are qua-typed
