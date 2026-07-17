@@ -61,8 +61,12 @@ class MergeHandler(object):
                 continue
             to_do.append((ext_src, ext_rec))
 
-        # Find best order to merge in
-        to_do.sort(key=lambda x: x[0]["merge_order"])
+        # Find best order to merge in. to_merge comes from a redis set, so
+        # tie-break equal merge_orders on source name + record identifier
+        # (records share the same yuid id at this point) to keep the merge
+        # order -- and thus first-wins field selection -- deterministic.
+        to_do.sort(key=lambda x: (x[0]["merge_order"], x[0].get("name", ""),
+                                  str(x[1].get("identifier", ""))))
 
         to_do = self.pre_merge_fixes(record, to_do)
 
@@ -424,6 +428,8 @@ class RecordMerger(object):
 
         # Dimensions only match if type, value and unit are identical
         if "dimension" in merge and not "dimension" in skip:
+            if "dimension" not in rec:
+                rec["dimension"] = []
             for dm in merge["dimension"]:
                 found = False
                 for dr in rec["dimension"]:
@@ -436,7 +442,9 @@ class RecordMerger(object):
                         found = True
                         break
                 if not found:
-                    dr.append(dm)
+                    # dr.append(dm) appended to the loop-local dict (or raised
+                    # NameError on an empty list) instead of the record's list
+                    rec["dimension"].append(dm)
 
     def merge_set(self, rec, merge, msource, skip):
         # dimension, created_by,
@@ -463,6 +471,8 @@ class RecordMerger(object):
 
         # Dimensions only match if type, value and unit are identical
         if "dimension" in merge and not "dimension" in skip:
+            if "dimension" not in rec:
+                rec["dimension"] = []
             for dm in merge["dimension"]:
                 found = False
                 for dr in rec["dimension"]:
@@ -475,7 +485,9 @@ class RecordMerger(object):
                         found = True
                         break
                 if not found:
-                    dr.append(dm)
+                    # dr.append(dm) appended to the loop-local dict (or raised
+                    # NameError on an empty list) instead of the record's list
+                    rec["dimension"].append(dm)
 
     def merge_visualitem(self, rec, merge, msource, skip):
         # dimension, part_of, digitally_shown_by, shown_by, about, represents,
@@ -507,6 +519,8 @@ class RecordMerger(object):
 
         # Dimensions only match if type, value and unit are identical
         if "dimension" in merge and not "dimension" in skip:
+            if "dimension" not in rec:
+                rec["dimension"] = []
             for dm in merge["dimension"]:
                 found = False
                 for dr in rec["dimension"]:
@@ -519,7 +533,9 @@ class RecordMerger(object):
                         found = True
                         break
                 if not found:
-                    dr.append(dm)
+                    # dr.append(dm) appended to the loop-local dict (or raised
+                    # NameError on an empty list) instead of the record's list
+                    rec["dimension"].append(dm)
 
     def merge_digitalobject(self, rec, merge, msource, skip):
         # dimension, part_of, format, conforms_to, digitally_carries, digitally_shows,
@@ -529,6 +545,8 @@ class RecordMerger(object):
 
         # Dimensions only match if type, value and unit are identical
         if "dimension" in merge and not "dimension" in skip:
+            if "dimension" not in rec:
+                rec["dimension"] = []
             for dm in merge["dimension"]:
                 found = False
                 for dr in rec["dimension"]:
@@ -541,7 +559,9 @@ class RecordMerger(object):
                         found = True
                         break
                 if not found:
-                    dr.append(dm)
+                    # dr.append(dm) appended to the loop-local dict (or raised
+                    # NameError on an empty list) instead of the record's list
+                    rec["dimension"].append(dm)
 
     def merge_activity(self, rec, merge, msource, skip):
         # part_of, timespan, took_place_at, caused_by, influenced_by, carried_out_by,

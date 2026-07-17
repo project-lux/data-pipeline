@@ -102,8 +102,17 @@ class ExportManager(TaskUiManager):
                 for rec in cache.iter_records_slice(n, self.max_slice):
                     yuid = rec["yuid"]
                     if mapper is not None:
-                        # Need to transform / store, just dump it out
-                        if export_cache is None or not yuid in export_cache:
+                        # The export cache persists across builds while YUIDs
+                        # stay stable, so a bare "in cache" check exported
+                        # LAST build's document for any entity whose merged
+                        # record changed. Re-transform when merged is newer.
+                        stale = False
+                        if export_cache is not None and yuid in export_cache:
+                            ec_time = export_cache.metadata(yuid, "insert_time")
+                            rec_time = rec.get("insert_time")
+                            if ec_time is not None and rec_time is not None:
+                                stale = ec_time["insert_time"] < rec_time
+                        if export_cache is None or stale or not yuid in export_cache:
                             try:
                                 rec2 = mapper.transform(rec, rec["data"]["type"])
                             except Exception as e:
@@ -111,7 +120,7 @@ class ExportManager(TaskUiManager):
                                 continue
                             if export_cache is not None:
                                 export_cache[yuid] = rec2
-                        elif export_cache is not None:
+                        else:
                             rec2 = export_cache[yuid]["data"]
 
                     # Can only write dicts (as json), strings (as strings), or lists of them

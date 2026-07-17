@@ -106,18 +106,24 @@ class Reidentifier(object):
                 return result
             else:
                 # We have something from the data
-                uus = set(list(equiv_map.values()))
-                uu = uus.pop()
+                # set.pop() picked an arbitrary YUID per process when more
+                # than one was present; pick deterministically instead
+                uus = set(equiv_map.values())
+                uu = min(uus)
+                uus.discard(uu)
                 if len(uus):
                     # This also shouldn't happen
                     if self.debug:
                         logger.debug(f"Found more than one YUID for {recid} / {equivs}")
                 elif not recid in equiv_map:
-                    # If recid not in equiv map, then this is a new main id for the same entity
-                    # Seems unlikely, but possible
-                    if self.debug:
-                        logger.debug(f"Found YUID only via equivs, not recid {recid} / {equivs}")
-                    self.idmap[qrecid] = uu
+                    # recid not in idmap but its equivalents are: a gap in
+                    # the identify phase. The idmap is read-only outside
+                    # the identify step -- writing here from racing merge
+                    # workers would reintroduce nondeterministic identity
+                    # mutations. Use the resolved YUID for output and log
+                    # the gap durably so identify can be fixed instead.
+                    logger.warning(f"IDMAP-GAP: {qrecid} resolved to {uu} only via "
+                          f"equivalents; identify phase did not register it")
 
             # And set on way out
             result["id"] = uu

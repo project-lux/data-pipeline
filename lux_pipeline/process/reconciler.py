@@ -130,17 +130,31 @@ class Reconciler(object):
         new_equivs = True
 
         # sameAs is just a reconciler
-        for eq in ids:
+        # Iterate over a snapshot: removing from the live list skipped the
+        # element after each removal, so some ids were never diff-checked.
+        # When two known-distinct entities are both present, keep the
+        # lexicographically smaller one so the outcome is deterministic.
+        dropped = []
+        for eq in list(ids):
+            if eq not in ids:
+                continue
             diffs = self.global_reconciler.reconcile(eq, "diffs")
             if diffs:
-                for d in diffs:
-                    if d in ids:
+                for d in sorted(diffs):
+                    if d in ids and eq in ids and d != eq:
                         logger.debug(
                             f"UHOH... Found two distinct entities already in equivalents: {d} and {eq} in {record['data']['id']}"
                         )
-                        # FIXME: Just trash d and hope it's the right one?
-                        # Can we do any better?
-                        ids.remove(d)
+                        loser = max(d, eq)
+                        ids.remove(loser)
+                        dropped.append(loser)
+        if dropped:
+            # The old code only removed from the local list, so the distinct
+            # entity stayed in the record's own equivalents (the actual
+            # output) -- the filter never took effect downstream.
+            record["data"]["equivalent"] = [
+                x for x in record["data"]["equivalent"] if x["id"] not in dropped
+            ]
 
         # [<pipeline.sources.authorities.getty.reconciler.AatReconciler object at 0x7fc89991dbe0>,
         # <pipeline.sources.authorities.lc.reconciler.LcnafReconciler object at 0x7fc8985b7a00>,

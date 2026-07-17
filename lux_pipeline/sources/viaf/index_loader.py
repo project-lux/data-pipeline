@@ -1,4 +1,5 @@
 from lux_pipeline.process.base.index_loader import IndexLoader
+import glob
 import gzip
 import time
 import os
@@ -22,11 +23,19 @@ class ViafIndexLoader(IndexLoader):
         (index, eqindex) = self.get_storage()
 
         # Now use data extracted from records
-        # Merge and sort
+        # Merge and sort. Regenerate whenever any shard is newer than the
+        # sorted file -- a stale viaf_sort_equivs.csv from a previous build
+        # used to silently feed this build's index. LC_ALL=C pins the sort
+        # order so it doesn't vary with the environment locale.
         outfn = os.path.join(self.configs.temp_dir, f"viaf_sort_equivs.csv")
-        if not os.path.exists(outfn):
-            fns = os.path.join(self.configs.temp_dir, f"viaf_equivs_*.csv")
-            os.system(f"sort {fns} > {outfn}")
+        fns = os.path.join(self.configs.temp_dir, f"viaf_equivs_*.csv")
+        regenerate = not os.path.exists(outfn)
+        if not regenerate:
+            out_mtime = os.path.getmtime(outfn)
+            shards = glob.glob(fns)
+            regenerate = any(os.path.getmtime(s) > out_mtime for s in shards)
+        if regenerate:
+            os.system(f"LC_ALL=C sort {fns} > {outfn}")
 
         with open(outfn) as fh:
             l = fh.readline()
@@ -47,7 +56,20 @@ class ViafIndexLoader(IndexLoader):
                             if ident[0] == "s":
                                 pfx = "LCSH"
                         p = viaf_prefixes[pfx]
-                        updates[f"{p}:{ident}"] = f"{viaf}"
+                        # an ident can appear in multiple VIAF clusters;
+                        # last-writer-wins made the winner depend on shard
+                        # layout. Keep the smallest VIAF id deterministically.
+                        k = f"{p}:{ident}"
+                        prev = updates.get(k)
+                        if prev is None:
+                            updates[k] = f"{viaf}"
+                        else:
+                            try:
+                                smaller = int(viaf) < int(prev)
+                            except ValueError:
+                                smaller = str(viaf) < str(prev)
+                            if smaller:
+                                updates[k] = f"{viaf}"
                 l = fh.readline()
                 n += 1
                 if not n % 100000:

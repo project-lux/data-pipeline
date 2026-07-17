@@ -95,15 +95,14 @@ class ReferenceManager(object):
         with open(fn, "r") as fh:
             if my_slice < 0 or max_slice < 0:
                 # just read the whole file
+                # (previously an empty/blank first line yielded a bogus [""]
+                # item because "".split("|") is a truthy [""])
                 line = fh.readline()
-                line = line.strip()
-                line = line.split("|", 1)
                 while line:
-                    yield line
+                    stripped = line.strip()
+                    if stripped:
+                        yield stripped.split("|", 1)
                     line = fh.readline()
-                    line = line.strip()
-                    if line:
-                        line = line.split("|", 1)
             else:
                 okay = True
                 while okay:
@@ -157,24 +156,26 @@ class ReferenceManager(object):
         if xr is not None:
             # Test distance: In all, and in done, but less distance
             if ddist is not None and ddist > distance:
-                # need to re-add it to all with new distance
+                # need to re-add it to all with new distance.
+                # Re-add BEFORE removing from done: a crash between the two
+                # then duplicates work instead of losing the reference.
+                self.all_refs.merge_ref(ref, distance, ctype)
                 del self.done_refs[ref]
-                self.all_refs[ref] = {"dist": distance, "type": ctype}
-            elif xdist is not None and distance < xdist:
-                # in all, not in done, less distance: update in all
-                xr["dist"] = distance
-            if not xctype and ctype:
-                xr["type"] = ctype
+            else:
+                # merge_ref applies min-distance / type-if-unset atomically;
+                # the old read-then-write let a slower worker overwrite a
+                # shorter distance with a longer one
+                self.all_refs.merge_ref(ref, distance, ctype)
         elif dref is not None:
             # Test Distance
             if ddist is not None and ddist > distance:
-                # Add it back in
+                # Add it back in (add first, then remove from done)
+                self.all_refs.merge_ref(ref, distance, ctype)
                 del self.done_refs[ref]
-                self.all_refs[ref] = {"dist": distance, "type": ctype}
         elif not ref in refs:
             val = {"dist": distance, "type": ctype}
             refs[ref] = val
-            self.all_refs[ref] = val
+            self.all_refs.merge_ref(ref, distance, ctype)
             if distance == 1 and "vocab.getty.edu/aat" in ref:
                 self.ref_cache[ref] = distance
 

@@ -50,7 +50,16 @@ with open(fn, "w") as outh:
     x = 0
     for rec in merged.iter_records_slice(my_slice, max_slice):
         yuid = rec["yuid"]
-        if not yuid in ml:
+        # The ML cache persists across builds while YUIDs stay stable, so a
+        # bare "in ml" check exported LAST build's document for any entity
+        # whose merged record changed. Re-transform when merged is newer.
+        stale = False
+        if yuid in ml:
+            ml_time = ml.metadata(yuid, "insert_time")
+            rec_time = rec.get("insert_time")
+            if ml_time is not None and rec_time is not None:
+                stale = ml_time["insert_time"] < rec_time
+        if stale or not yuid in ml:
             try:
                 rec2 = mapper.transform(rec, rec["data"]["type"])
             except Exception as e:

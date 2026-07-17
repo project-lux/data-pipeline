@@ -84,12 +84,19 @@ class IndexLoader(Managable):
                     typ = self.mapper.guess_type(res["data"])
 
                 if recid and typ:
+                    # Collisions (two records sharing a name or claiming the same
+                    # equivalent) were last-writer-wins over the unordered record
+                    # stream, so the index winner could differ between builds.
+                    # Keep the smallest recid so the index is order-independent.
                     if names:
                         names = self.extract_names(res["data"])
                         for nm in names.keys():
                             if nm:
                                 if len(nm) < 500:
-                                    all_names[nm.lower()] = [recid, typ]
+                                    key = nm.lower()
+                                    prev = all_names.get(key)
+                                    if prev is None or str(recid) < str(prev[0]):
+                                        all_names[key] = [recid, typ]
                                 else:
                                     self.manager.log(
                                         logging.ERROR, f"Dropping name as too long ({len(nm)}>500):\n\t{nm}"
@@ -98,7 +105,9 @@ class IndexLoader(Managable):
                         eqs = self.extract_uris(res["data"])
                         for eq in eqs:
                             if eq:
-                                all_uris[eq] = [recid, typ]
+                                prev = all_uris.get(eq)
+                                if prev is None or str(recid) < str(prev[0]):
+                                    all_uris[eq] = [recid, typ]
 
             return (all_names, all_uris)
         except Exception as e:

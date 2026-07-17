@@ -19,6 +19,8 @@ class MergeManager(TaskUiManager):
             [(x["namespace"], x.get("merge_order", -1)) for x in configs.external.values()], key=lambda x: x[1]
         )
         self.pref_order = [x[0] for x in order if x[1] >= 0]
+        # namespaces of internal sources, for the cross-slice claim check
+        self.internal_namespaces = tuple(c["namespace"] for c in configs.internal.values())
 
     def _handle_record(self, recid, cfg, distance=0):
         rec = cfg["recordcache"][recid]
@@ -27,11 +29,38 @@ class MergeManager(TaskUiManager):
             return None
         recuri = f"{cfg['namespace']}{recid}"
         qrecid = self.configs.make_qua(recuri, rec["data"]["type"])
-        yuid = self.idmap[qrecid]
-        if not yuid:
+        full_yuid = self.idmap[qrecid]
+        if not full_yuid:
             self.log(logging.ERROR, f"Couldn't find YUID for record {qrecid}")
             return None
-        yuid = yuid.rsplit("/", 1)[1]
+        yuid = full_yuid.rsplit("/", 1)[1]
+
+        # Deterministic cross-slice claim: when several internal records
+        # share this YUID, each used to rebuild the merged record with
+        # itself as the merge base, so whichever slice wrote last won --
+        # a different base (hence field precedence) per run. Only the
+        # lexicographically-smallest internal member still present in its
+        # recordcache builds the merged record.
+        if cfg.get("type") == "internal":
+            cluster = self.idmap[full_yuid] or set()
+            other_internals = [e for e in cluster
+                               if e != qrecid and not e.startswith("__")
+                               and e.startswith(self.internal_namespaces)]
+            if other_internals:
+                claimed = False
+                for cand in sorted(other_internals + [qrecid]):
+                    if cand == qrecid:
+                        claimed = True
+                        break
+                    try:
+                        (csrc, crecid) = self.configs.split_uri(self.configs.split_qua(cand)[0])
+                    except Exception:
+                        continue
+                    if crecid in csrc["recordcache"]:
+                        # a smaller, still-present member owns this YUID
+                        break
+                if not claimed:
+                    return None
 
         rec2 = self.reider.reidentify(rec)
         cfg["recordcache2"][rec2["yuid"]] = rec2["data"]
@@ -92,8 +121,10 @@ class MergeManager(TaskUiManager):
                 self.log(logging.WARNING, f"No YUID for reference {ext_uri} from done_refs")
                 continue
 
-            # find the best record to start from
-            equivs = self.idmap[uri]
+            # find the best record to start from; iterate the cluster in
+            # sorted order -- the idmap returns an unordered set, so the
+            # base record (hence label/field precedence) differed per run
+            equivs = sorted(self.idmap[uri] or ())
             stop = False
             for pref in self.pref_order:
                 for eq in equivs:

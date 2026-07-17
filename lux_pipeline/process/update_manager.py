@@ -1,5 +1,6 @@
 import os
 import sys
+import ujson as json
 import logging
 logger = logging.getLogger("lux_pipeline")
 
@@ -9,6 +10,77 @@ class UpdateManager(object):
         self.idmap = idmap
         self.internal_nss = [x["namespace"] for x in configs.internal.values()]
         self.changed = []
+
+    def _record_pending_delete(self, entry):
+        """Durably record the follow-up a delete requires. The delete path
+        used to silently drop the consequences (dependent records were
+        never rebuilt; orphaned merged records were never removed)."""
+        fn = os.path.join(self.configs.data_dir, "pending_deletes.jsonl")
+        with open(fn, "a") as fh:
+            fh.write(json.dumps(entry) + "\n")
+
+    def process_pending_deletes(self, fn=None):
+        """Consume pending_deletes.jsonl (run-process-deletes.py).
+
+        Both actions drop the stale merged record so the next merge/export
+        cannot serve a version containing the deleted member:
+          rebuild        - remaining members exist; the next merge rebuilds
+                           the record from them (identity map was already
+                           updated at delete time)
+          delete-merged  - nothing left in the cluster; also remove the
+                           token-only YUID set from the idmap
+        Processed entries are rotated to pending_deletes.done.jsonl.
+        """
+        if fn is None:
+            fn = os.path.join(self.configs.data_dir, "pending_deletes.jsonl")
+        if not os.path.exists(fn):
+            return {"processed": 0}
+
+        merged_cache = self.configs.results["merged"]["recordcache"]
+        ml_cache = self.configs.results.get("marklogic", {}).get("recordcache")
+        stats = {"processed": 0, "merged_removed": 0, "yuids_removed": 0,
+                 "errors": 0}
+        done = []
+        with open(fn) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    yuid = entry["yuid"]
+                    uu = yuid.rsplit("/", 1)[-1]
+                    for cache in (merged_cache, ml_cache):
+                        if cache is not None and uu in cache:
+                            del cache[uu]
+                            stats["merged_removed"] += 1
+                    if entry.get("action") == "delete-merged":
+                        try:
+                            if self.idmap.delete_yuid(yuid):
+                                stats["yuids_removed"] += 1
+                        except ValueError as e:
+                            # members re-appeared since the delete was
+                            # recorded; the next merge will rebuild instead
+                            logger.warning(f"pending-delete kept yuid: {e}")
+                    stats["processed"] += 1
+                    done.append(line)
+                except Exception as e:
+                    logger.warning(f"pending-delete failed for {line[:120]}: {e}")
+                    stats["errors"] += 1
+
+        # rotate: append processed entries to .done, rewrite remainder
+        done_fn = fn.replace(".jsonl", ".done.jsonl")
+        with open(done_fn, "a") as fh:
+            for line in done:
+                fh.write(line + "\n")
+        remaining = []
+        with open(fn) as fh:
+            for line in fh:
+                if line.strip() and line.strip() not in set(done):
+                    remaining.append(line)
+        with open(fn, "w") as fh:
+            fh.writelines(remaining)
+        return stats
 
     def process_change(self, config, change, ident, record, changeTime):
         storage = config["datacache"]
@@ -34,29 +106,37 @@ class UpdateManager(object):
                 all_ids = idmap[yuid]
                 del idmap[quaUri]
 
-                # Below is rebuild process, not deleting this record
+                # Record what this delete requires so a later pass can act:
+                # rebuild the merged record without this member, or remove
+                # the orphaned merged record entirely.
+                remaining = [i for i in all_ids
+                             if not i.startswith("__") and i != quaUri]
                 has_internal = False
-                for i in all_ids:
+                for i in remaining:
                     for ns in self.internal_nss:
                         if i.startswith(ns):
                             has_internal = True
                             break
                     if has_internal:
                         break
-                if has_internal:
-                    # If there are other internal records then just rebuild
-                    # without deleted record
-                    pass
+                if remaining:
+                    # other members still exist: merged record must be
+                    # rebuilt without the deleted one
+                    action = "rebuild"
                 else:
-                    has_refs = False
-                    # FIXME: find references from other records to this one
-                    if has_refs:
-                        # still need. Rebuild without deleted record
-                        pass
-                    else:
-                        # no references and the source record is gone.
-                        # keep deleting
-                        pass
+                    # nothing left in the cluster: the merged record (and
+                    # any inbound references) should be removed
+                    action = "delete-merged"
+                self._record_pending_delete({
+                    "action": action,
+                    "source": config["name"],
+                    "identifier": ident,
+                    "qua": quaUri,
+                    "yuid": yuid,
+                    "remaining": sorted(remaining),
+                    "has_internal": has_internal,
+                    "changeTime": changeTime,
+                })
         else:
             # upsert
             # if not ident in storage == create

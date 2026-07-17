@@ -1,7 +1,10 @@
+import glob
 import logging
+import os
 import time
 
 from ._task_ui_manager import TaskUiManager
+from ..identity import AssertionWriter, resolve_identity_from_config
 from ..reconciler import Reconciler
 from ..reference_manager import ReferenceManager
 from lux_pipeline.cli.entry import cfgs
@@ -19,6 +22,7 @@ class ReconcileManager(TaskUiManager):
         self.no_refs = False
         self.ref_mgr = None
         self.reconciler = None
+        self.assertion_log = None
         self.total = 0
         self.temp_log_h = None
 
@@ -52,13 +56,17 @@ class ReconcileManager(TaskUiManager):
             if self.temp_log_h:
                 self.temp_log_h.write("m")
                 self.temp_log_h.flush()
-            self.ref_mgr.manage_identifiers(rec2)
+            # Log equivalence assertions; identity is resolved once,
+            # deterministically, after all slices complete (see process()).
+            # Reconcile workers no longer write to the idmap at all.
+            self.assertion_log.write_record(rec2)
             if self.temp_log_h:
                 self.temp_log_h.write("!")
                 self.temp_log_h.flush()
 
         if not self.disable_ui:
             self.update_progress_bar(advance=1)
+        return bool(recs)
 
     def _pool_reconcile_records(self, n):
         self.log(logging.INFO, f"Starting records in {n}")
@@ -111,7 +119,12 @@ class ReconcileManager(TaskUiManager):
                 continue
             if distance > self.configs.max_distance:
                 continue
-            self.ref_mgr.did_ref(uri, distance)
+            # Mark the reference done only after a successful acquire below.
+            # Marking it done up-front meant a transient fetch failure
+            # silently dropped the record -- and everything reachable only
+            # through it -- for the whole build. An unmarked ref is re-queued
+            # the next time something references it.
+            quri = uri
             if self.configs.is_qua(uri):
                 uri, rectype = self.configs.split_qua(uri)
             else:
@@ -119,10 +132,13 @@ class ReconcileManager(TaskUiManager):
             try:
                 (source, recid) = self.configs.split_uri(uri)
             except Exception:
+                # permanently unusable URI: mark done so it doesn't loop
+                self.ref_mgr.did_ref(quri, distance)
                 continue
             if not source["type"] == "external":
                 raise ValueError(f"Got internal reference! {uri}")
-            self._handle_record(recid, source, rectype, distance)
+            if self._handle_record(recid, source, rectype, distance):
+                self.ref_mgr.did_ref(quri, distance)
         fh.close()
         self.log(logging.INFO, f"Writing metatypes in {n}")
         self.ref_mgr.write_metatypes(self.my_slice)
@@ -135,6 +151,7 @@ class ReconcileManager(TaskUiManager):
         self.ref_mgr = ReferenceManager(self.configs, self.idmap)
         networkmap = self.configs.instantiate_map("networkmap")["store"]
         self.reconciler = Reconciler(self.configs, self.idmap, networkmap)
+        self.assertion_log = AssertionWriter(self.configs, n, phase=self.phase)
 
         try:
             if self.phase == 1:
@@ -145,6 +162,8 @@ class ReconcileManager(TaskUiManager):
             self.log(logging.CRITICAL, f"Caught Exception: {e}")
             self.log(logging.CRITICAL, e)
             raise
+        finally:
+            self.assertion_log.close()
         return 1
 
     def maybe_add(self, which, cfg):
@@ -158,6 +177,11 @@ class ReconcileManager(TaskUiManager):
             idmap.make_update_token()
         else:
             logger.info("Rebuilding with existing reconciliation token")
+
+        # Stale assertion logs from a previous build would feed the identify
+        # step assertions for records that no longer exist
+        for fn in glob.glob(os.path.join(cfgs.temp_dir, "assertions-*.tsv")):
+            os.remove(fn)
 
         self.phase = 1
         super().process(layout, **args)
@@ -177,4 +201,21 @@ class ReconcileManager(TaskUiManager):
         ref_mgr.merge_metatypes()
         logger.info("Writing done refs to file from redis")
         ref_mgr.write_done_refs()
+
+        # Identity resolution: the workers above only logged sameAs
+        # assertions; nothing has written to the idmap. Resolve clusters and
+        # YUIDs once, deterministically, and bulk-load the result. Given the
+        # same assertions, diffs and prior idmap this is identical regardless
+        # of worker count or record arrival order.
+        logger.info("Resolving identity")
+        conflicts_fn = os.path.join(cfgs.temp_dir, "identity_conflicts.jsonl")
+        stats = resolve_identity_from_config(cfgs, self.idmap,
+                                             conflicts_file=conflicts_fn)
+        logger.info(f"identity: nodes={stats['nodes']} pairs={stats['pairs']} "
+                    f"diff_pairs={stats['diff_pairs']} clusters={stats['clusters']}")
+        logger.info(f"identity: reused={stats['reused']} minted={stats['minted']} "
+                    f"moved={stats['moved']} deleted_yuids={stats['deleted_yuids']}")
+        if stats["conflicts"]:
+            logger.warning(f"identity: {stats['conflicts']} refused assertions "
+                           f"(see {conflicts_fn})")
         logger.info("Done, ready to merge")
