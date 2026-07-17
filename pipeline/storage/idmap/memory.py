@@ -5,18 +5,22 @@
 # Could be deduplicated with code in redis.py, but value doesn't seem high
 
 
-### XXX FIXME This needs to be updated
-### DO NOT USE 
 
 import uuid
 
 class IdMap(object):
 
-    def __init__(self):
+    def __init__(self, config=None):
+        # config is optional so tests can construct it bare; when given it
+        # matches the redis IdMap constructor shape
         self.data = {}
         self._restoring_data_state = False
+        if config and "all_configs" in config:
+            internal_uri = config["all_configs"].internal_uri
+        else:
+            internal_uri = "https://lux.collections.yale.edu/data/"
         self.prefix_map_out = {
-            "yuid": self.configs.internal_uri
+            "yuid": internal_uri,
             "ycba": "https://lux.britishart.yale.edu/data/",
             "test": "http://test.example.com/"
         }
@@ -138,12 +142,12 @@ class IdMap(object):
 
     def delete(self, key):
         ikey = self._manage_key_in(key)
-        val = self.data.get(key, None)
-        if val == None:
-            raise KeyError()
-        elif type(val) == str:
-            self.conn.delete(ikey)
-            self._remove(val, key)
+        val = self.data.get(ikey, None)
+        if val is None:
+            raise KeyError(key)
+        elif type(val) == bytes:
+            del self.data[ikey]
+            self._remove(self._manage_value_out(val), key)
         else:
             raise ValueError(f"{key} is a YUID and cannot be manually deleted")
         return None

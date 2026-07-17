@@ -29,22 +29,37 @@ class StringLmdb(Lmdb):
             return False
         try:
             return Lmdb.__contains__(self, key)
-        except Exception as e:
-            print(f"\n*** __contains__ got {e} for '{key}' ***")
+        except ValueError as e:
+            # over-long key: cannot exist in this store. Report it, since a
+            # caller treating this as "absent" may mint a duplicate identity.
+            print(f"\n*** __contains__ got {e} for '{str(key)[:100]}' ***")
             return False
+        # real LMDB/environment errors now propagate instead of silently
+        # reporting the key as absent
 
 
 class TabLmdb(StringLmdb):
     # key is string, value is tab separated __strings__
     # eg URI\tURI\tURI or URI\tType
+    # NB: a single-member list/set round-trips back as a bare str (callers
+    # must handle both), and tab is the separator -- so members containing
+    # a literal tab would silently split into phantom members on read.
+    # Reject them at write time instead.
 
     def _pre_value(self, value):
         if type(value) == str:
+            if "\t" in value:
+                raise ValueError(f"TabLmdb member contains a tab: {value!r}")
             return value.encode("utf-8")
         elif type(value) in [list, set]:
             try:
+                for v in value:
+                    if "\t" in v:
+                        raise ValueError(f"TabLmdb member contains a tab: {v!r}")
                 return "\t".join(value).encode("utf-8")
-            except:
+            except ValueError:
+                raise
+            except Exception:
                 raise ValueError(f"TabLmdb cannot accept {value}")
         elif type(value) == bytes:
             return value

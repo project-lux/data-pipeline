@@ -61,3 +61,6 @@ for rec in ml.iter_records_slice(my_slice, max_slice):
 
 if batch:
     store.update_multiple(batch)
+
+# join the in-flight batch threads and surface any failed writes
+store.flush_updates()

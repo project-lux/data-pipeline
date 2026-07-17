@@ -26,17 +26,20 @@ class RedisDataCache(object):
         temp = redis.Redis(host=self.host, port=self.port, db=9)
         # look up our name to get correct int
         iname = self._manage_key_in(name)
-        try:
-
-            db = int(temp[iname])
-        except:
-            try:
-                n = int(temp[b'next'])
-            except:
-                n = 10
-            db = n
-            temp[iname] = n
-            temp[b'next'] = n+1
+        val = temp.get(iname)
+        if val is not None:
+            db = int(val)
+        else:
+            # Atomic allocation: the old check-then-set let two workers read
+            # the same 'next' and share a db, corrupting both caches.
+            # INCR claims a slot atomically; SETNX resolves a same-name race
+            # to a single winner (the loser's slot is wasted, harmlessly).
+            temp.setnx(b'next', 10)
+            n = temp.incr(b'next') - 1
+            if temp.setnx(iname, n):
+                db = n
+            else:
+                db = int(temp.get(iname))
         temp.close()
         self.db = db
         self.conn = redis.Redis(host=self.host, port=self.port, db=self.db)

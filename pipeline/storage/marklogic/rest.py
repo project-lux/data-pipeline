@@ -15,6 +15,15 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 class RequestThread(threading.Thread):
 
     def run(self):
+        try:
+            self._run()
+        except Exception as e:
+            # surface network/encoding failures to the reaper instead of
+            # dying silently with no result set
+            self.error = e
+            self.result = None
+
+    def _run(self):
         params = {'database': self.store.database}
         fields = [self.store.metadata_field]
         bx = 0
@@ -225,16 +234,41 @@ class MarkLogicStore(object):
                     # print('.')
             if kill:
                 self.threads.remove(kill)
-            if kill.resp and kill.resp.status_code != 200:
-                print(f"Previous batch got {kill.resp.status_code}")
+            # The old check read kill.resp, which was only ever None, so
+            # failed batch PUTs were reported as success. The thread stores
+            # its response in .result (or .error on exception).
+            result = getattr(kill, "result", None)
+            error = getattr(kill, "error", None)
+            if error is not None or result is None or result.status_code != 200:
+                status = result.status_code if result is not None else error
+                raise RuntimeError(
+                    f"MarkLogic batch update failed ({status}); "
+                    f"{len(kill.batch)} documents were not written"
+                )
 
         t = RequestThread()
         self.threads.append(t)
         t.store = self
         t.batch = batch
-        t.resp = None
+        t.result = None
+        t.error = None
         t.start()
         return 1
+
+    def flush_updates(self):
+        """Join all in-flight batch threads and verify their results.
+        Without this the final batches were never checked at all."""
+        failed = []
+        for t in self.threads:
+            t.join()
+            result = getattr(t, "result", None)
+            error = getattr(t, "error", None)
+            if error is not None or result is None or result.status_code != 200:
+                status = result.status_code if result is not None else error
+                failed.append((status, len(t.batch)))
+        self.threads = []
+        if failed:
+            raise RuntimeError(f"MarkLogic batch updates failed at flush: {failed}")
         
     def __getitem__(self, key):
         return self.get_record(key)

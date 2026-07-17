@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from pipeline.config import Config
 from pipeline.process.reconciler import Reconciler
 from pipeline.process.reference_manager import ReferenceManager
+from pipeline.process.identity import AssertionWriter
 from pipeline.storage.cache.postgres import PoolManager
 
 import io
@@ -88,6 +89,10 @@ else:
 # --- set up environment ---
 reconciler = Reconciler(cfgs, idmap, networkmap)
 ref_mgr = ReferenceManager(cfgs, idmap)
+# YUIDs are no longer minted/merged per record; each slice logs its
+# equivalence assertions and run-identify.py resolves them deterministically
+# once all slices have finished.
+assertion_log = AssertionWriter(cfgs, my_slice)
 debug = cfgs.debug_reconciliation
 
 if my_slice > -1:
@@ -143,8 +148,9 @@ for name, cfg, recids in to_do:
 
             # Find references from the record
             ref_mgr.walk_top_for_refs(rec2["data"], 0)
-            # Manage identifiers for rec now we've reconciled and collected
-            ref_mgr.manage_identifiers(rec2)
+            # Log equivalence assertions; identity is resolved after all
+            # slices complete (run-identify.py)
+            assertion_log.write_record(rec2)
     recids = []
 
 if profiling:
@@ -177,9 +183,12 @@ if DO_REFERENCES:
         if distance > cfgs.max_distance:
             continue
 
-        ref_mgr.did_ref(uri, distance)
-
+        # NB: did_ref (marking the reference done) now happens only after a
+        # successful acquire below. Marking it done up-front meant a transient
+        # fetch failure silently dropped the record AND every concept
+        # reachable only through it, for the whole build.
         if cfgs.is_qua(uri):
+            quri = uri
             uri, rectype = cfgs.split_qua(uri)
         else:
             raise ValueError(f"No qua in referenced {uri} and needed")
@@ -188,6 +197,8 @@ if DO_REFERENCES:
         except:
             if debug:
                 print(f"Not processing: {uri}")
+            # permanently unusable URI: mark done so it isn't re-queued
+            ref_mgr.did_ref(quri, distance)
             continue
         if not source["type"] == "external":
             # Don't process internal or results
@@ -201,6 +212,7 @@ if DO_REFERENCES:
         # Acquire the record from cache or network
         rec = acquirer.acquire(recid, rectype=rectype)
         if rec is not None:
+            ref_mgr.did_ref(quri, distance)
             sys.stdout.write(".")
             sys.stdout.flush()
             # Reconcile it
@@ -211,15 +223,14 @@ if DO_REFERENCES:
 
             # Find references from this record
             ref_mgr.walk_top_for_refs(rec2["data"], distance)
-            # Manage identifiers for rec now we've reconciled and collected
-
-            # rebuild should be False if this is an equivalent of an internal rec
-            # as we've already seen it, so don't remove URIs (e.g. internal uris)
-            ref_mgr.manage_identifiers(rec2)
+            # Log equivalence assertions; identity is resolved after all
+            # slices complete (run-identify.py)
+            assertion_log.write_record(rec2)
         else:
             print(f"Failed to acquire {rectype} reference: {source['name']}:{recid}")
 
 # final tidy up
+assertion_log.close()
 ref_mgr.write_metatypes(my_slice)
 # force all postgres connections to close
 poolman = PoolManager.get_instance()
