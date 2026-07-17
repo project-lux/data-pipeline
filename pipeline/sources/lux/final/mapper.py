@@ -37,6 +37,13 @@ class Cleaner(Mapper):
         else:
             self.place_cycle_fixes = {}
 
+        fn = os.path.join(self.configs.data_dir, "concept-cycle-fixes.json")
+        if os.path.exists(fn):
+            with open(fn) as fh:
+                self.concept_cycle_fixes = json.load(fh)
+        else:
+            self.concept_cycle_fixes = {}
+
         # Look for LLM Parsed Person names
         fn = os.path.join(self.configs.indexes_dir, "yuid_personname.lmdb")
         if os.path.exists(fn):
@@ -871,6 +878,29 @@ class Cleaner(Mapper):
                             break
                 if not okay:
                     data["part_of"].remove(parent)
+        elif data['type'] in ['Type', 'Language', 'Currency', 'MeasurementUnit', 'Material'] and "broader" in data:
+            for parent in data["broader"].copy():
+                try:
+                    # Note that equivs have ##qua suffix
+                    equivs = self.idmap[parent["id"]]
+                except Exception:
+                    # Parent not found in idmap, could be off the edge of the graph
+                    continue
+                okay = True
+
+                for meq in my_equivs:
+                    if meq["id"] in self.concept_cycle_fixes:
+                        bad_parents = [
+                            f"{x}##quaPlace" for x in self.concept_cycle_fixes[meq["id"]]
+                        ]
+                        for peq in equivs:
+                            if peq in bad_parents:
+                                okay = False
+                                break
+                        if not okay:
+                            break
+                if not okay:
+                    data["broader"].remove(parent)
 
         rec = self.process_xpath_fixes(rec)
 
