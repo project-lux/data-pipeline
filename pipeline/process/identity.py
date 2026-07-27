@@ -65,10 +65,10 @@ class AssertionWriter:
             if not eqid or eqid == recid:
                 continue
             qeq = self.configs.make_qua(eqid, typ)
-            self.fh.write(f"{qrecid}\t{qrecid}\t{qeq}\n")
+            self.fh.write(f"{qrecid}\t{qeq}\n")
             wrote = True
         if not wrote:
-            self.fh.write(f"{qrecid}\t{qrecid}\t{qrecid}\n")
+            self.fh.write(f"{qrecid}\t{qrecid}\n")
 
     def close(self):
         self.fh.close()
@@ -85,9 +85,10 @@ def load_assertions(files):
         with open(fn) as fh:
             for line in fh:
                 try:
-                    asserter, a, b = line.rstrip("\n").split("\t")
+                    a, b = line.rstrip("\n").split("\t")
                 except ValueError:
                     continue
+                asserter = a
                 if a > b:
                     a, b = b, a
                 edges[(a, b)].add(asserter)

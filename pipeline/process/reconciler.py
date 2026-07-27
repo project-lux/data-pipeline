@@ -54,9 +54,8 @@ class Reconciler(object):
                         self.debug_graph[record["data"]["id"]].append((eq["id"], "eq"))
                     except Exception:
                         self.debug_graph[record["data"]["id"]] = [(eq["id"], "eq")]
-
-        if self.debug:
             print(f"\n--- {record['data']['id']} ---")
+
         leq = len(record["data"].get("equivalent", []))
         try:
             if self.debug:
@@ -95,6 +94,8 @@ class Reconciler(object):
         # Check distinct / sameAs now
         try:
             while r_equivs == 1 or (not cr_equivs.issubset(r_equivs)):
+                print(cr_equivs)
+                print(r_equivs)
                 self.call_reconcilers(record, reconcileType="uri")
                 r_equivs = set([x["id"] for x in record["data"].get("equivalent", [])])
                 if self.debug:
@@ -125,6 +126,8 @@ class Reconciler(object):
         return record
 
     def call_reconcilers(self, record, reconcileType="all"):
+        if not "equivalent" in record["data"]:
+            record["data"]["equivalent"] = []
         ids = [x["id"] for x in record["data"].get("equivalent", [])]
         new_equivs = True
 
@@ -212,8 +215,6 @@ class Reconciler(object):
             if ids:
                 t = record["data"]["type"]
                 lbl = record["data"].get("_label", "")
-                if not "equivalent" in record["data"]:
-                    record["data"]["equivalent"] = []
                 curr = [x["id"] for x in record["data"]["equivalent"]]
                 for i in ids:
                     if not i in curr:
