@@ -50,7 +50,7 @@ stats["seconds"] = round(time.time() - start, 1)
 
 print(f"nodes={stats['nodes']} pairs={stats['pairs']} "
       f"diff_pairs={stats['diff_pairs']} clusters={stats['clusters']}")
-print(f"reused={stats['reused']} minted={stats['minted']} "
-      f"moved={stats['moved']} deleted_yuids={stats['deleted_yuids']}")
+#print(f"reused={stats['reused']} minted={stats['minted']} "
+#      f"moved={stats['moved']} deleted_yuids={stats['deleted_yuids']}")
 print(f"conflicts={stats['conflicts']} (see identity_conflicts.jsonl)")
 print(f"done in {stats['seconds']}s")

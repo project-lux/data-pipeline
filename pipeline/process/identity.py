@@ -373,7 +373,5 @@ def resolve_identity(configs, idmap, assertion_files, diff_index=None,
         "nodes": len(nodes),
         "diff_pairs": len(diffs),
         "conflicts": len(conflicts),
-        # "reused": sum(1 for y in yuids.values() if y in set(prior.values())),
     })
-    stats["minted"] = stats["clusters"] # - stats["reused"]
     return stats
