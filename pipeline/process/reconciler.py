@@ -96,7 +96,8 @@ class Reconciler(object):
             all_seen = set([x["id"] for x in record["data"].get("equivalent", [])])
             # This should exit when after reconciling and collecting there are no new equivalent IDs to process
             while r_equivs == 1 or (not cr_equivs.issubset(all_seen)):
-                all_seen.update(cr_equivs)
+                if r_equivs != 1:
+                    all_seen.update(cr_equivs)
                 self.call_reconcilers(record, reconcileType="uri")
                 r_equivs = set([x["id"] for x in record["data"].get("equivalent", [])])
                 if cr_equivs == 2 or (not r_equivs.issubset(all_seen)):
