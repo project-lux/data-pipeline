@@ -1,14 +1,6 @@
 #!/bin/bash
 
-export TQDM_DISABLE=1
-
 ### Clear records
-
-if [ ! -n "$1" ]
-then
-  echo "Usage: `basename $0` --all|--[source]"
-  exit 0
-fi
 
 echo "Did you clear and update the token?"
 echo "    python ./manage-data --clear-all --new-token"
@@ -29,12 +21,11 @@ echo "Starting Reconciliation Phase"
 
 rm ../data/logs/flags/reconcile_is_done*txt
 rm metatypes-*.json
-rm -f assertions-*.tsv
 
 for count in `seq 0 23`;
 do
     echo $count
-    nohup python ./run-reconcile.py $count 24 $1 > ../data/logs/reconcile_$count.txt 2>&1 &
+    nohup python ./run-reconcile.py $count 24 --ipch --ycba --yuag --ypm > ../data/logs/reconcile_$count.txt 2>&1 &
 done
 
 # Wait while the processes spin up and write to the log files
@@ -70,6 +61,7 @@ then
 fi
 rm assertions-*.tsv
 
+
 ### Merge metatypes
 echo "Merging Metatypes"
 python ./merge-metatypes.py
@@ -91,7 +83,7 @@ rm ../data/logs/flags/merge_is_done-*txt
 for count in `seq 0 23`;
 do
     echo $count
-    nohup python ./run-merge.py $count 24 $1 > ../data/logs/merge_$count.txt 2>&1 &
+    nohup python ./run-merge.py $count 24 --ipch --ycba --yuag --ypm > ../data/logs/merge_$count.txt 2>&1 &
 done
 
 # And wait for merge to finish
@@ -113,15 +105,10 @@ rm ../data/logs/flags/merge_is_done-*.txt
 
 sleep 30
 
-# Now run post-build-portal to tag YPM records
-python ./post-build-portal.py --no-tqdm
-sleep 10
-
-
 ### Export Phase
 #
 echo "Starting Export"
-rm /data-export/output/lux/latest/*jsonl
+rm /data-io2-2/output/lux/latest/*jsonl
 rm ../data/logs/flags/export_is_done-*txt
 for count in `seq 0 23`;
 do
@@ -146,4 +133,8 @@ do
     sleep 30
 done
 rm ../data/logs/flags/export_is_done-*.txt
+
 echo `date` [Success] Build was successful >> /data/logs/pipeline_process_status.txt
+
+#echo "Loading Sandbox"
+#../tools/mlcp-11.0.0/bin/mlcp.sh import -ssl -host lux-ml-sbx.collections.yale.edu -port 8000 -username s_lux_deployer_sbx -password 'PASSWORD-HERE' -input_file_path /data-io2-2/output/lux/latest -database lux-content  -input_file_type delimited_json -output_permissions lux-endpoint-consumer,read,lux-writer,update -uri_id id -fastload -thread_count 64
