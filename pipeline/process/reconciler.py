@@ -93,31 +93,17 @@ class Reconciler(object):
         cr_equivs = 2
         # Check distinct / sameAs now
         try:
-            while r_equivs == 1 or (not cr_equivs.issubset(r_equivs)):
-                print(cr_equivs)
-                print(r_equivs)
+            all_seen = set([x["id"] for x in record["data"].get("equivalent", [])])
+            # This should exit when after reconciling and collecting there are no new equivalent IDs to process
+            while r_equivs == 1 or (not cr_equivs.issubset(all_seen)):
+                all_seen.update(cr_equivs)
                 self.call_reconcilers(record, reconcileType="uri")
                 r_equivs = set([x["id"] for x in record["data"].get("equivalent", [])])
-                if self.debug:
-                    print(f"r_equivs: {r_equivs}")
-                if cr_equivs == 2 or (not cr_equivs.issubset(r_equivs)):
-                    if self.debug:
-                        print("      (collecting)")
+                if cr_equivs == 2 or (not r_equivs.issubset(all_seen)):
                     self.collector.collect(record)
                     cr_equivs = set(
                         [x["id"] for x in record["data"].get("equivalent", [])]
                     )
-                    if self.debug:
-                        print(f"cr_equivs: {cr_equivs}")
-                    if self.debug:
-                        lg = self.collector.debug_graph
-                        for k, v in lg.items():
-                            try:
-                                self.debug_graph[k].extend(v)
-                            except Exception:
-                                self.debug_graph[k] = v
-                        self.collector.debug_graph = {}
-
         except Exception as e:
             print(
                 f"\nERROR: Reconciling broke for {record['source']}/{record['identifier']}: {e}"
