@@ -345,20 +345,28 @@ def apply_assignments(idmap, clusters, yuids, prior):
 def resolve_identity(configs, idmap, assertion_files, diff_index=None,
                      conflicts_file="identity_conflicts.jsonl"):
     """Aggregate -> cluster -> assign -> bulk-load. Returns stats."""
+    print("loading assertions...")
     edges = load_assertions(assertion_files)
     nodes = set()
     for (a, b) in edges:
         nodes.add(a)
         nodes.add(b)
+
+    print("loading diff pairs...")
     diffs = load_diff_pairs(diff_index, nodes)
 
+    print("clustering...")
     clusters, conflicts = cluster(edges, diffs)
     with open(conflicts_file, "w") as fh:
         for c in conflicts:
             fh.write(json.dumps(c) + "\n")
 
+    print("fetching prior...")
     prior = fetch_prior(idmap, nodes)
+    print("assigning...")
     yuids = assign(clusters, prior, configs)
+
+    print("applying assignments...")
     stats = apply_assignments(idmap, clusters, yuids, prior)
     stats.update({
         "pairs": len(edges),
