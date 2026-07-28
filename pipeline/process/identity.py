@@ -772,7 +772,7 @@ def resolve_identity(configs, idmap, assertion_files, diff_index=None,
     buffer = os.getenv("LUX_SORT_BUFFER", "1G")
 
     if work_dir is None:
-        work_dir = "."
+        work_dir = configs.temp_dir
     td = tempfile.mkdtemp(prefix="identity-", dir=work_dir)
     p = lambda name: os.path.join(td, name)
     try:
