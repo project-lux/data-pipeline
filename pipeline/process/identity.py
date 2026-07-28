@@ -120,6 +120,7 @@ class AssertionWriter:
             fn = f"assertions-{my_slice}.tsv"
         else:
             fn = "assertions-single.tsv"
+        fn = os.path.join(configs.temp_dir, fn)
         self.filename = fn
         self.fh = open(fn, "w")
 
