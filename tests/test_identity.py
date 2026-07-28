@@ -10,8 +10,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pipeline.process.identity import (AssertionWriter, assign, cluster,
-                                       load_assertions, mint_yuid)
+from pipeline.process.identity import (AssertionWriter, assign,
+                                       build_prefix_maps, cluster, expand,
+                                       load_assertions, mint_yuid, shorten)
 
 
 class StubConfigs:
@@ -19,6 +20,12 @@ class StubConfigs:
     ok_record_types = {"Type": "concept", "Person": "person",
                        "Material": "concept"}
     parent_record_types = {"Material": "Type"}
+    # mirrors the shape Config exposes to build_prefix_maps: name -> cfg
+    external = {
+        "aat": {"name": "aat", "namespace": "http://vocab.getty.edu/aat/"},
+        "wikidata": {"name": "wikidata",
+                     "namespace": "http://www.wikidata.org/entity/"},
+    }
 
     def is_qua(self, recid):
         return "##qua" in recid
@@ -137,8 +144,23 @@ def test_mint_is_deterministic_and_slugged():
     assert mint_yuid(CFGS, "http://example.org/p/1##quaPerson") != y1
 
 
+def test_shorten_expand_round_trip():
+    prefix_in, prefix_out = build_prefix_maps(CFGS)
+    for full in ("http://vocab.getty.edu/aat/300055647##quaType",
+                 "http://www.wikidata.org/entity/Q1##quaType",
+                 "https://lux.collections.yale.edu/data/concept/x##quaType",
+                 # no matching namespace -> passes through unchanged
+                 "http://example.org/rec/1##quaType"):
+        short = shorten(full, prefix_in)
+        assert expand(short, prefix_out) == full
+    # the qua suffix survives shortening
+    assert shorten("http://vocab.getty.edu/aat/1##quaType",
+                   prefix_in) == "aat:1##quaType"
+
+
 def test_assertion_writer_round_trip(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+    prefix_in, _ = build_prefix_maps(CFGS)
     w = AssertionWriter(CFGS, 3)
     w.write_record({"data": {
         "id": "http://example.org/rec/1", "type": "Material",
@@ -150,13 +172,17 @@ def test_assertion_writer_round_trip(tmp_path, monkeypatch):
     w.close()
 
     edges = load_assertions([tmp_path / "assertions-3.tsv"])
-    rec1 = "http://example.org/rec/1##quaType"  # Material quas to Type
     pairs = set(edges)
-    assert (sorted([rec1, "http://vocab.getty.edu/aat/1##quaType"])[0],
-            sorted([rec1, "http://vocab.getty.edu/aat/1##quaType"])[1]) in pairs
+    # URIs are stored in shortened (curie) form; the record id has no
+    # matching namespace so it stays full
+    rec1 = "http://example.org/rec/1##quaType"  # Material quas to Type
+    aat1 = "aat:1##quaType"
+    assert tuple(sorted([rec1, aat1])) in pairs
     self_pair = ("http://example.org/rec/2##quaPerson",
                  "http://example.org/rec/2##quaPerson")
     assert self_pair in pairs
+    # asserter (col3) is always the record's own id
+    assert all(a == rec1 for a in edges[tuple(sorted([rec1, aat1]))])
     # self assertions register the node but never merge anything
     clusters, _ = cluster(edges, set())
     assert len(clusters) == 2
