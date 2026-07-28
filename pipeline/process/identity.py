@@ -749,7 +749,7 @@ def _distinct(path):
 
 def resolve_identity(configs, idmap, assertion_files, diff_index=None,
                      conflicts_file="identity_conflicts.jsonl",
-                     work_dir=None, keep_temp=False):
+                     work_dir=None, keep_temp=True):
     """Resolve the identity map from the assertion logs, streaming through
     unix ``sort`` so peak memory scales with the non-singleton subgraph
     rather than the total record count. Returns stats.
