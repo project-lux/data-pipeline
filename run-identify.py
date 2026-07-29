@@ -12,15 +12,13 @@ processed records. Refused (conflicting) assertions are written to
 identity_conflicts.jsonl for review.
 """
 
-import glob
 import os
 import sys
 import time
 
 from dotenv import load_dotenv
 from pipeline.config import Config
-from pipeline.process.identity import resolve_identity
-from pipeline.storage.idmap.lmdb import TabLmdb
+from pipeline.process.identity import IdentityResolver
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")
@@ -28,33 +26,13 @@ cfgs = Config(basepath=basepath)
 idmap = cfgs.get_idmap()
 cfgs.cache_globals()
 
-
-# All of this should live in resolve_identity()
-
-flist = os.path.join(cfgs.temp_dir, "assertions-*.tsv")
-files = sorted(glob.glob(flist))
-if not files:
-    print("No assertions-*.tsv files found; did reconcile run?")
-    sys.exit(1)
-print(f"Resolving identity from {len(files)} assertion files")
-
-diff_index = None
-fn = cfgs.results["merged"].get("differentDbPath", "")
-if fn:
-    try:
-        diff_index = TabLmdb.open(fn, "r", readahead=False, writemap=True)
-    except Exception as e:
-        print(f"Could not open differents index {fn}: {e}")
-else:
-    print("No differentDbPath configured; clustering without diff constraints")
+resolver = IdentityResolver(cfgs, idmap)
 
 start = time.time()
-stats = resolve_identity(cfgs, idmap, files, diff_index=diff_index)
+stats = resolver.resolve_identity()
 stats["seconds"] = round(time.time() - start, 1)
 
 print(f"nodes={stats['nodes']} pairs={stats['pairs']} "
       f"diff_pairs={stats['diff_pairs']} clusters={stats['clusters']}")
-#print(f"reused={stats['reused']} minted={stats['minted']} "
-#      f"moved={stats['moved']} deleted_yuids={stats['deleted_yuids']}")
 print(f"conflicts={stats['conflicts']} (see identity_conflicts.jsonl)")
 print(f"done in {stats['seconds']}s")

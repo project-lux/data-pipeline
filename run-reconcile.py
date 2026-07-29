@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from pipeline.config import Config
 from pipeline.process.reconciler import Reconciler
 from pipeline.process.reference_manager import ReferenceManager
-from pipeline.process.identity import AssertionWriter
+from pipeline.process.identity_resolver import IdentityResolver
 from pipeline.storage.cache.postgres import PoolManager
 
 import io
@@ -89,10 +89,7 @@ else:
 # --- set up environment ---
 reconciler = Reconciler(cfgs, idmap, networkmap)
 ref_mgr = ReferenceManager(cfgs, idmap)
-# YUIDs are no longer minted/merged per record; each slice logs its
-# equivalence assertions and run-identify.py resolves them deterministically
-# once all slices have finished.
-assertion_log = AssertionWriter(cfgs, my_slice)
+assertion_log = IdentityResolver(cfgs, idmap, my_slice)
 debug = cfgs.debug_reconciliation
 
 if my_slice > -1:
