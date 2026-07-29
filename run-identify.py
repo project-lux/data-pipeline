@@ -28,7 +28,11 @@ cfgs = Config(basepath=basepath)
 idmap = cfgs.get_idmap()
 cfgs.cache_globals()
 
-files = sorted(glob.glob("assertions-*.tsv"))
+
+# All of this should live in resolve_identity()
+
+flist = os.path.join(cfgs.temp_dir, "assertions-*.tsv")
+files = sorted(glob.glob(flist))
 if not files:
     print("No assertions-*.tsv files found; did reconcile run?")
     sys.exit(1)

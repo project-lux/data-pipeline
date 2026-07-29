@@ -1,3 +1,4 @@
+import google.auth
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -33,22 +34,25 @@ with open(os.path.join(directory, 'populate-timestamps.txt')) as fh:
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
-tokfn = os.path.join(directory, 'token-timestamps.json')
-credfn = os.path.join(directory, 'credentials.json')
-creds = None
-if os.path.exists(tokfn):
-    creds = Credentials.from_authorized_user_file(tokfn, SCOPES)
 
-# If there are no (valid) credentials available, let the user log in.
-if not creds or not creds.valid:
-    if creds and creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-    else:
-        flow = InstalledAppFlow.from_client_secrets_file(credfn, SCOPES)
-        creds = flow.run_local_server(port=0)
-    # Save the credentials for the next run
-    with open(tokfn, 'w') as token:
-        token.write(creds.to_json())
+try:
+    creds, project = google.auth.default()
+except:
+
+    tokfn = os.path.join(cfgs.data_dir, "token.json")
+    credfn = os.path.join(cfgs.data_dir, "credentials.json")
+    if os.path.exists(tokfn):
+        creds = Credentials.from_authorized_user_file(tokfn, SCOPES)
+    # If there are no (valid) credentials available, let the user log in.
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(credfn, SCOPES)
+            creds = flow.run_local_server(port=0)
+        # Save the credentials for the next run
+        with open(tokfn, "w") as token:
+            token.write(creds.to_json())
 
 def format_rows(data):
     return [
@@ -137,6 +141,7 @@ def populate_google_sheet(data):
 def check_datacache_times(cache, cachetimes):
     internal = cache in cfgs.internal
     datacache = (cfgs.internal if internal else cfgs.external)[cache]['datacache']
+    logging.info(f"Checking timestamp for {cache}")
     cachets = datacache.latest()
     if cachets.startswith("0000"):
         logging.warning(f"{cache} failed: invalid timestamp")
