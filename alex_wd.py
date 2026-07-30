@@ -11,18 +11,22 @@ cfgs.instantiate_all()
 
 wd = cfgs.external['wikidata']['datacache']
 
-oafh = open("oa_wd.tsv", "w")
+all_oas = []
+
 x = 0
 for d in wd.iter_records():
     x += 1
-    if x % 1000 == 0:
-        print(x)
     oas = d['data'].get("P10283", [])
     if oas:
         id = d['identifier']
         for oa in oas:
-            oafh.write(f"{oa}\t{id}\n")
+            all_oas.append((oa, id))
     if not x % 1000000:
         print(f"Processed {x} records")
-        oafh.flush()
-oafh.close()
+
+all_oas.sort(key=lambda x: x[0])
+print(f"Total OAs: {len(all_oas)}")
+
+with open("oa_wd.tsv", "w") as oafh:
+    for oa, id in all_oas:
+        oafh.write(f"{oa}\t{id}\n")
