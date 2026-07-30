@@ -24,3 +24,5 @@ for d in wd.iter_records():
             oafh.write(f"{oa}\t{id}\n")
     if not x % 1000000:
         print(f"Processed {x} records")
+        oafh.flush()
+oafh.close()
