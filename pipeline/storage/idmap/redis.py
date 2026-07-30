@@ -287,28 +287,55 @@ class IdMap(RedisCache):
         if self.memory_cache_enabled and key.startswith("aat:") and key in self.memory_cache:
             return self.memory_cache[key]
 
-        t = self.conn.type(key)
-        if t == 'string':
-            val = self.conn.get(key)
-            if not val:
+        if key.startswith("yuid:"):
+            try:
+                val = self.conn.smembers(key)
+            except Exception as e:
                 print(f"idmap was asked for {key} but got {val}")
                 return None
-            out = self._manage_value_out(val)
-        elif t == 'set':
-            val = self.conn.smembers(key)
             if not val:
                 print(f"idmap was asked for {key} but got {val}")
                 return None
             out = {self._manage_value_out(x) for x in val}
-        elif t == 'none':
-            # Asked for a non-existent key
-            return None
         else:
-            raise ValueError(f"Unknown key type {t}")
+            try:
+                val = self.conn.get(key)
+            except Exception as e:
+                print(f"idmap was asked for {key} but got {val}")
+                return None
+            if not val:
+                print(f"idmap was asked for {key} but got {val}")
+                return None
+            out = self._manage_value_out(val)   
 
-        if self.memory_cache_enabled and key.startswith("aat:"): 
+        if self.memory_cache_enabled:
             self.memory_cache[key] = out
         return out
+
+        ### old code that calls conn.type() unnecessarily
+
+        # t = self.conn.type(key)
+        # if t == 'string':
+        #     val = self.conn.get(key)
+        #     if not val:
+        #         print(f"idmap was asked for {key} but got {val}")
+        #         return None
+        #     out = self._manage_value_out(val)
+        # elif t == 'set':
+        #     val = self.conn.smembers(key)
+        #     if not val:
+        #         print(f"idmap was asked for {key} but got {val}")
+        #         return None
+        #     out = {self._manage_value_out(x) for x in val}
+        # elif t == 'none':
+        #     # Asked for a non-existent key
+        #     return None
+        # else:
+        #     raise ValueError(f"Unknown key type {t}")
+
+        # if self.memory_cache_enabled and key.startswith("aat:"): 
+        #     self.memory_cache[key] = out
+        # return out
 
     def set(self, key, value, typ=""):
 

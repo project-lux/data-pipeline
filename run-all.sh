@@ -29,7 +29,6 @@ echo "Starting Reconciliation Phase"
 
 rm ../data/logs/flags/reconcile_is_done*txt
 rm metatypes-*.json
-rm -f assertions-*.tsv
 
 for count in `seq 0 23`;
 do
@@ -68,7 +67,6 @@ then
     echo `date` [Error] Error in identify >> /data/logs/pipeline_process_status.txt
     exit
 fi
-rm assertions-*.tsv
 
 ### Merge metatypes
 echo "Merging Metatypes"

@@ -129,10 +129,10 @@ for src_name, src in to_do:
             print(f" !!! Couldn't find YUID for internal record: {qrecid}")
             continue
         yuid = full_yuid.rsplit("/", 1)[1]
-        ins_time = merged_cache.metadata(yuid, "insert_time")
-        if ins_time is not None and (RESUME or ins_time["insert_time"] > start_time):
-            # Already processed this record this build
-            continue
+        if RESUME:
+            ins_time = merged_cache.metadata(yuid, "insert_time")
+            if ins_time is not None: # and (RESUME or ins_time["insert_time"] > start_time):
+                continue
 
         # Deterministic cross-slice claim: when several internal records
         # share this YUID, the insert_time guard above is a check-then-act
@@ -159,8 +159,6 @@ for src_name, src in to_do:
             if not claimed:
                 continue
 
-        # Always reidentify in case the UUIDs have changed during
-        # subsequent reconcile phases
         rec2 = reider.reidentify(rec)
         src["recordcache2"][rec2["yuid"]] = rec2["data"]
 

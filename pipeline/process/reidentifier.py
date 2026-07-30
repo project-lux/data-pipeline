@@ -98,7 +98,8 @@ class Reidentifier(object):
                 uu = self.idmap[qrecid]
                 if uu is not None:
                     # We know about this entity/record already
-                    uu = self.idmap[qrecid]
+                    # 2026-07-30 -- RS: WHY was this called twice??
+                    # uu = self.idmap[qrecid]
                     equiv_map[recid] = uu
 
             if not equiv_map:

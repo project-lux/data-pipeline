@@ -180,7 +180,7 @@ class PooledCache(object):
             raise ValueError(f"Unknown metadata field in cache: {field}")
         qry = f"SELECT {field} FROM {self.name} WHERE {_key_type} = %s"
         params = (key,)
-        with self._cursor() as cursor:
+        with self._cursor(internal=False) as cursor:
             cursor.execute(qry, params)
             rows = cursor.fetchone()
         return rows
@@ -201,7 +201,7 @@ class PooledCache(object):
 
     def latest(self):
         qry = f"SELECT insert_time FROM {self.name} ORDER BY insert_time DESC LIMIT 1"
-        with self._cursor() as cursor:
+        with self._cursor(internal=False) as cursor:
             cursor.execute(qry)
             res = cursor.fetchone()
         if res:
@@ -261,6 +261,9 @@ class PooledCache(object):
         return rows
 
     def list(self, timestamp=None):
+
+        raise NotImplementedError("list is not implemented for PostgresCache")
+
         # List records changed since timestamp
         # cast timestamp into datetime it not already
         # FIXME: This should really be an iterator that pages through
@@ -505,7 +508,7 @@ class PooledCache(object):
 
     def commit(self):
         # We commit after every transaction, so no need
-        pass
+        self.conn.commit()
 
     def start_bulk(self):
         if self.iterating_conn is None:
