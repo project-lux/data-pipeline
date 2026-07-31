@@ -287,55 +287,68 @@ class IdMap(RedisCache):
         if self.memory_cache_enabled and key.startswith("aat:") and key in self.memory_cache:
             return self.memory_cache[key]
 
-        if key.startswith("yuid:"):
-            try:
-                val = self.conn.smembers(key)
-            except Exception as e:
-                print(f"idmap was asked for {key} but got {val}")
-                return None
-            if not val:
-                print(f"idmap was asked for {key} but got {val}")
-                return None
+        is_set = key.startswith("yuid:")
+        try:
+            val = self.conn.smembers(key) if is_set else self.conn.get(key)
+        except Exception as e:
+            print(f"idmap lookup failed for {key}: {e}")
+            return None
+        if not val:
+            return None
+            
+        if is_set:
             out = {self._manage_value_out(x) for x in val}
         else:
-            try:
-                val = self.conn.get(key)
-            except Exception as e:
-                print(f"idmap was asked for {key} but got {val}")
-                return None
-            if not val:
-                print(f"idmap was asked for {key} but got {val}")
-                return None
             out = self._manage_value_out(val)   
 
-        if self.memory_cache_enabled:
+        if self.memory_cache_enabled and key.startswith("aat:"):
             self.memory_cache[key] = out
         return out
 
-        ### old code that calls conn.type() unnecessarily
 
-        # t = self.conn.type(key)
-        # if t == 'string':
-        #     val = self.conn.get(key)
-        #     if not val:
-        #         print(f"idmap was asked for {key} but got {val}")
-        #         return None
-        #     out = self._manage_value_out(val)
-        # elif t == 'set':
-        #     val = self.conn.smembers(key)
-        #     if not val:
-        #         print(f"idmap was asked for {key} but got {val}")
-        #         return None
-        #     out = {self._manage_value_out(x) for x in val}
-        # elif t == 'none':
-        #     # Asked for a non-existent key
-        #     return None
-        # else:
-        #     raise ValueError(f"Unknown key type {t}")
+    def get_multi(self, keys, chunk=1000):
+        """Resolve many keys in one round trip. Returns {key: value_or_None}
+        for every key given. Same semantics as get(), just batched."""
+        out = {}
+        need_str, need_set = [], []
+        for key in keys:
+            if not self.configs.is_qua(key) and not self.prefix_map_out['yuid'] in key:
+                raise ValueError(f"Need a type: {key}")
+            ikey = self._manage_key_in(key)
+            if self.memory_cache_enabled and ikey in self.memory_cache:
+                out[key] = self.memory_cache[ikey]
+            elif ikey.startswith("yuid:"):
+                need_set.append((key, ikey))
+            else:
+                need_str.append((key, ikey))
 
-        # if self.memory_cache_enabled and key.startswith("aat:"): 
-        #     self.memory_cache[key] = out
-        # return out
+        for i in range(0, len(need_str), chunk):
+            batch = need_str[i:i + chunk]
+            try:
+                vals = self.conn.mget([ik for _, ik in batch])
+            except Exception as e:
+                print(f"idmap mget failed ({len(batch)} keys): {e}")
+                vals = [None] * len(batch)
+            for (key, ikey), val in zip(batch, vals):
+                v = self._manage_value_out(val) if val else None
+                out[key] = v
+                #if self.memory_cache_enabled and (v is not None or self.cache_misses):
+                #    self._memo(ikey, v)
+
+        for i in range(0, len(need_set), chunk):
+            batch = need_set[i:i + chunk]
+            try:
+                with self.conn.pipeline(transaction=False) as pipe:
+                    for _, ik in batch:
+                        pipe.smembers(ik)
+                    res = pipe.execute()
+            except Exception as e:
+                print(f"idmap pipelined smembers failed ({len(batch)} keys): {e}")
+                res = [None] * len(batch)
+            for (key, ikey), val in zip(batch, res):
+                v = {self._manage_value_out(x) for x in val} if val else None
+                out[key] = v
+        return out
 
     def set(self, key, value, typ=""):
 
