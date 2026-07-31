@@ -5,6 +5,59 @@ import uuid
 import sys
 import random
 
+from collections import OrderedDict
+from typing import Union, Set, Optional
+
+class URICache:
+    # Use __slots__ to prevent dynamic dictionary creation for the instance, 
+    # saving memory overhead and slightly speeding up attribute access.
+    __slots__ = ('capacity', 'cache')
+
+    def __init__(self, capacity: int):
+        if capacity <= 0:
+            raise ValueError("Capacity must be greater than 0") 
+        self.capacity = capacity
+        # Keys are URIs (str), Values are either a URI (str) or Set of URIs (Set[str])
+        self.cache: OrderedDict[str, Union[str, Set[str]]] = OrderedDict()
+        self.missing = -1
+
+
+    def get(self, key: str, missing=self.missing) -> Optional[Union[str, Set[str]]]:
+        """
+        Retrieve a value by its URI key. 
+        Returns self.missing if not found to avoid conflicts with actual None values.
+        """
+        if key not in self.cache:
+            return missing
+        self.cache.move_to_end(key)
+        return self.cache[key]
+
+    def put(self, key: str, value: Union[str, Set[str]]) -> None:
+        """
+        Insert or update a URI or Set of URIs.
+        """
+        if key in self.cache:
+            # If it exists, update its position to most recently used.
+            self.cache.move_to_end(key)
+        self.cache[key] = value
+        # If we exceed capacity, pop the least recently used item.
+        if len(self.cache) > self.capacity:
+            # popitem(last=False) removes and returns the first inserted (LRU) key-value pair in O(1) time.
+            self.cache.popitem(last=False)
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.cache
+
+    def __getitem__(self, key: str) -> Union[str, Set[str]]:
+        return self.get(key)
+
+    def __setitem__(self, key: str, value: Union[str, Set[str]]) -> None:
+        self.put(key, value)
+
+    def __delitem__(self, key: str) -> None:
+        self.cache.popitem(key)
+
+
 class RedisCache(object):
 
     def __init__(self, config):
@@ -158,7 +211,7 @@ class IdMap(RedisCache):
         for (k,v) in self.prefix_map_out.items():
             self.prefix_map_in[v] = k
         self.memory_cache_enabled = False
-        self.memory_cache = {}
+        self.memory_cache = URICache(capacity=200000)
         self.clean_on_remove = False
 
         with open(os.path.join(self.configs.data_dir, 'idmap_update_token.txt')) as fh:
@@ -284,8 +337,10 @@ class IdMap(RedisCache):
 
         # memory cache for frequent lookups (aat terms) to avoid the network
         # Causes errors with multiple processes for writing
-        if self.memory_cache_enabled and key.startswith("aat:") and key in self.memory_cache:
-            return self.memory_cache[key]
+        if self.memory_cache_enabled:
+            maybe = self.memory_cache[key]
+            if maybe != self.missing:
+                return maybe
 
         is_set = key.startswith("yuid:")
         try:
@@ -301,7 +356,7 @@ class IdMap(RedisCache):
         else:
             out = self._manage_value_out(val)   
 
-        if self.memory_cache_enabled and key.startswith("aat:"):
+        if self.memory_cache_enabled:
             self.memory_cache[key] = out
         return out
 
@@ -315,8 +370,10 @@ class IdMap(RedisCache):
             if not self.configs.is_qua(key) and not self.prefix_map_out['yuid'] in key:
                 raise ValueError(f"Need a type: {key}")
             ikey = self._manage_key_in(key)
-            if self.memory_cache_enabled and ikey in self.memory_cache:
-                out[key] = self.memory_cache[ikey]
+            if self.memory_cache_enabled:
+                maybe = self.memory_cache[ikey]
+                if maybe != self.memory_cache.missing:
+                    out[key] = maybe
             elif ikey.startswith("yuid:"):
                 need_set.append((key, ikey))
             else:
@@ -332,8 +389,8 @@ class IdMap(RedisCache):
             for (key, ikey), val in zip(batch, vals):
                 v = self._manage_value_out(val) if val else None
                 out[key] = v
-                #if self.memory_cache_enabled and (v is not None or self.cache_misses):
-                #    self._memo(ikey, v)
+                if self.memory_cache_enabled:
+                    self.memory_cache[ikey] = v
 
         for i in range(0, len(need_set), chunk):
             batch = need_set[i:i + chunk]
@@ -348,6 +405,8 @@ class IdMap(RedisCache):
             for (key, ikey), val in zip(batch, res):
                 v = {self._manage_value_out(x) for x in val} if val else None
                 out[key] = v
+                if self.memory_cache_enabled:
+                    self.memory_cache[ikey] = v
         return out
 
     def set(self, key, value, typ=""):
@@ -366,7 +425,7 @@ class IdMap(RedisCache):
         ikey = self._manage_key_in(key)
         ivalue = self._manage_value_in(value)
 
-        if self.memory_cache_enabled and ikey.startswith('aat:'):
+        if self.memory_cache_enabled:
             self.memory_cache[ikey] = value
 
         # The rekey/merge below is a multi-step read-modify-write; done as
@@ -432,7 +491,7 @@ class IdMap(RedisCache):
             value = self.get(key)
             self.conn.delete(ikey)
             self._remove(value, key)
-            if self.memory_cache_enabled and ikey.startswith('aat:') and ikey in self.memory_cache:
+            if self.memory_cache_enabled and ikey in self.memory_cache:
                 del self.memory_cache[ikey]
         elif t == 'none':
             # Key doesn't exist, already deleted / never existed
