@@ -8,10 +8,13 @@ import random
 from collections import OrderedDict
 from typing import Union, Set, Optional
 
+_MISSING = object()
+
 class URICache:
     # Use __slots__ to prevent dynamic dictionary creation for the instance, 
     # saving memory overhead and slightly speeding up attribute access.
     __slots__ = ('capacity', 'cache')
+    missing = _MISSING
 
     def __init__(self, capacity: int):
         if capacity <= 0:
@@ -19,10 +22,8 @@ class URICache:
         self.capacity = capacity
         # Keys are URIs (str), Values are either a URI (str) or Set of URIs (Set[str])
         self.cache: OrderedDict[str, Union[str, Set[str]]] = OrderedDict()
-        self.missing = -1
-
-
-    def get(self, key: str, missing=self.missing) -> Optional[Union[str, Set[str]]]:
+        
+    def get(self, key: str, missing=_MISSING) -> Optional[Union[str, Set[str]]]:
         """
         Retrieve a value by its URI key. 
         Returns self.missing if not found to avoid conflicts with actual None values.
@@ -55,7 +56,7 @@ class URICache:
         self.put(key, value)
 
     def __delitem__(self, key: str) -> None:
-        self.cache.popitem(key)
+        self.cache.pop(key, None)
 
 
 class RedisCache(object):
@@ -339,7 +340,7 @@ class IdMap(RedisCache):
         # Causes errors with multiple processes for writing
         if self.memory_cache_enabled:
             maybe = self.memory_cache[key]
-            if maybe != self.missing:
+            if maybe is not self.memory_cache.missing:
                 return maybe
 
         is_set = key.startswith("yuid:")
@@ -372,9 +373,10 @@ class IdMap(RedisCache):
             ikey = self._manage_key_in(key)
             if self.memory_cache_enabled:
                 maybe = self.memory_cache[ikey]
-                if maybe != self.memory_cache.missing:
+                if maybe is not self.memory_cache.missing:
                     out[key] = maybe
-            elif ikey.startswith("yuid:"):
+                    continue
+            if ikey.startswith("yuid:"):
                 need_set.append((key, ikey))
             else:
                 need_str.append((key, ikey))
@@ -425,9 +427,6 @@ class IdMap(RedisCache):
         ikey = self._manage_key_in(key)
         ivalue = self._manage_value_in(value)
 
-        if self.memory_cache_enabled:
-            self.memory_cache[ikey] = value
-
         # The rekey/merge below is a multi-step read-modify-write; done as
         # separate commands two concurrent workers could interleave, losing
         # set members and leaving dangling forward-pointers. WATCH/MULTI
@@ -457,13 +456,19 @@ class IdMap(RedisCache):
                         pipe.sadd(ivalue, ikey)
                         pipe.set(ikey, ivalue)
                         pipe.execute()
-                        return True
+                        if self.memory_cache_enabled:
+                            for av in all_vals:
+                                del self.memory_cache[av]
+                            del self.memory_cache[old]
+                            del self.memory_cache[ivalue]
                     else:
                         pipe.multi()
                         pipe.sadd(ivalue, ikey)
                         pipe.set(ikey, ivalue)
                         pipe.execute()
-                        return True
+                    if self.memory_cache_enabled:
+                        self.memory_cache[ikey] = value
+                    return True
                 except redis.WatchError:
                     continue
         raise RuntimeError(f"idmap.set({key}) kept losing WATCH races")
