@@ -81,6 +81,22 @@ class RedisDataCache(object):
     def commit(self):
         return self.conn.save()
 
+    # Write batching API, matching postgres.PooledCache. Redis has no
+    # transaction to hold open here, so these are no-ops; they exist so
+    # callers can batch against any cache backend without checking which
+    # one they have.
+    def defer_commits(self, every=100):
+        pass
+
+    def resume_commits(self):
+        pass
+
+    def checkpoint(self):
+        pass
+
+    def flush(self):
+        pass
+
     # Make an iterator for keys, that match type and/or pattern
     def iter_keys(self, **kw):
         # match: glob style expression for keys to match

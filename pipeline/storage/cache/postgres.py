@@ -28,6 +28,15 @@ class PoolManager(object):
         self.conn = None
         self.iterating_conn = None
         self.pool = None
+        # When True, PooledCache.set() leaves the transaction open and
+        # commits are driven by checkpoint()/flush() instead. Every cache in
+        # the process shares self.conn, so the deferral state and the write
+        # count are necessarily process-wide -- which is the point: one
+        # commit then covers a merged record and all of its recordcache2
+        # rows together, so another worker never sees a half-written record.
+        self.deferring = False
+        self.commit_every = 0
+        self.pending_writes = 0
 
     @classmethod
     def get_instance(cls):
@@ -67,7 +76,16 @@ class PoolManager(object):
                 self.conn.close()
                 self.conn = None
 
+    def commit_all(self):
+        # Commit everything outstanding on the shared write connection
+        if self.conn is not None:
+            self.conn.commit()
+        self.pending_writes = 0
+
     def put_all(self, name):
+        # Closing a connection with an open transaction rolls it back, so
+        # anything deferred has to land first
+        self.commit_all()
         self.put_conn(self.pool, close=True)
         self.put_conn(self.pool, close=True, itr=True)
 
@@ -113,6 +131,46 @@ class PooledCache(object):
         self.pools.put_all(self.pool_name)
         self.conn = None
         self.iterating_conn = None
+
+    def defer_commits(self, every=100):
+        """Stop committing inside every set(). Committing per write cost an
+        fsync per write -- for merge, ~5 per record per worker.
+
+        `every` is how many writes may accumulate before the cache commits
+        itself; the counting is done here so callers don't each reimplement
+        it. The commit happens in checkpoint(), not in set(), so it always
+        lands on a boundary the caller chose: a unit of work spanning
+        several writes (merge writes a merged record plus its recordcache2
+        rows) is never left half-committed. Call checkpoint() at the end of
+        each unit -- for most callers that is once per loop iteration.
+
+        Deferral is process-wide, not per-cache, because every cache shares
+        one write connection -- see PoolManager.deferring. Nothing commits
+        on its own without checkpoint(), so pair this with resume_commits()
+        or flush() when the loop ends."""
+        self.pools.deferring = True
+        self.pools.commit_every = int(every)
+
+    def resume_commits(self):
+        """Land anything outstanding and go back to committing per set()."""
+        self.flush()
+        self.pools.deferring = False
+        self.pools.commit_every = 0
+
+    def checkpoint(self):
+        """Mark the end of a unit of work: commit if enough writes have
+        accumulated since the last one. No-op when not deferring."""
+        if not self.pools.deferring:
+            return
+        if self.pools.commit_every and self.pools.pending_writes >= self.pools.commit_every:
+            self.flush()
+
+    def flush(self):
+        """Commit outstanding writes on the shared write connection. Safe to
+        call when nothing is deferred (an empty commit is a no-op)."""
+        if self.conn is None:
+            self.conn = self.pools.get_conn(self.pool_name)
+        self.pools.commit_all()
 
     def _cursor(self, internal=True, iter=False, size=0):
         # Ensure cursor is managed server-side otherwise select * from table
@@ -197,7 +255,7 @@ class PooledCache(object):
         params = (value, key)
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry, params)
-            self.conn.commit()
+            self.pools.commit_all()
 
     def latest(self):
         qry = f"SELECT insert_time FROM {self.name} ORDER BY insert_time DESC LIMIT 1"
@@ -278,29 +336,41 @@ class PooledCache(object):
             rows = cursor.fetchall()
         return [x[self.key] for x in rows]
 
-    # SELECT t.* FROM (SELECT *, row_number() OVER
-    #   (ORDER BY identifier ASC) AS row FROM ycba_data_cache)
-    #   t WHERE t.row % 10 = 1 LIMIT 10
+    def _slice_predicate(self, mySlice, maxSlice):
+        """WHERE clause partitioning the table into maxSlice disjoint parts.
 
-    def iter_records_slice(self, mySlice=0, maxSlice=10):
-        # use row_number() to partition the results into slices for parallel processing
+        row_number() OVER (ORDER BY key) made every one of the N workers sort
+        the entire table just to find its 1/N of it. Hashing the key gives
+        the same partition in every worker with no window and no sort, and
+        leaves a predicate postgres can parallel-scan.
+
+        hashtext() is internal to postgres rather than a documented API, but
+        it only has to agree between workers running against one server at
+        one time, which it does.
+
+        The mask matters: postgres % takes the sign of its left operand, so
+        without it every row with a negative hash -- about half the table --
+        would match no slice at all and never be processed."""
+        mySlice = int(mySlice)
+        maxSlice = int(maxSlice)
         if mySlice >= maxSlice:
             raise ValueError(f"{mySlice} cannot be > {maxSlice}")
+        return f"(hashtext({self.key}::text) & 2147483647) % {maxSlice} = {mySlice}"
 
-        qry = f"""SELECT t.* FROM (SELECT *, row_number() OVER (ORDER BY {self.key} ASC)
-            AS row FROM {self.name}) t WHERE t.row % {maxSlice} = {mySlice}"""
+    # NOTE: none of the iter_records* methods set the "source" key that
+    # get() adds, so rows from an iterator and rows from a per-key fetch are
+    # not quite the same shape. Callers that need it (run-merge) set it
+    # themselves; changing it here would add a key to every existing
+    # iterator caller's rows.
+    def iter_records_slice(self, mySlice=0, maxSlice=10):
+        qry = f"SELECT * FROM {self.name} WHERE {self._slice_predicate(mySlice, maxSlice)}"
         with self._cursor(iter=True) as cursor:
             cursor.execute(qry)
             for res in cursor:
                 yield res
 
     def iter_keys_slice(self, mySlice=0, maxSlice=10):
-        # use row_number() to partition the results into slices for parallel processing
-        if mySlice >= maxSlice:
-            raise ValueError(f"{mySlice} cannot be > {maxSlice}")
-
-        qry = f"""SELECT {self.key} FROM (SELECT {self.key}, row_number() OVER (ORDER BY {self.key} ASC)
-            AS row FROM {self.name}) t WHERE t.row % {maxSlice} = {mySlice}"""
+        qry = f"SELECT {self.key} FROM {self.name} WHERE {self._slice_predicate(mySlice, maxSlice)}"
         with self._cursor(iter=True, size=50000) as cursor:
             cursor.execute(qry)
             for res in cursor:
@@ -449,14 +519,28 @@ class PooledCache(object):
                     qry = f"""INSERT INTO {self.name} ({qpstr}) VALUES ({pholders})
                     ON CONFLICT ({self.key}) DO UPDATE SET ({qpstr}) = ({pholders})"""
                     cursor.execute(qry, qvs * 2)
-                    self.conn.commit()
+                    if self.pools.deferring:
+                        self.pools.pending_writes += 1
+                    else:
+                        self.conn.commit()
                 except Exception as e:
                     # A swallowed failure here silently loses the write; log
                     # and re-raise so the caller/build sees it
                     print(f"Failed to upsert {identifier}/{yuid} in {self.name}: {e}")
+                    if self.pools.deferring:
+                        print("  ... discarding all writes since the last flush()")
                     self.conn.rollback()
                     raise
             else:
+                # The UniqueViolation below is expected and survivable, but
+                # its rollback would take the whole open transaction with it.
+                # Land anything deferred first so one duplicate can't
+                # silently discard every record written since the last
+                # flush(). Merge writes only to overwrite caches, so this
+                # costs nothing there. This branch therefore never defers,
+                # and the insert below stays committed per statement.
+                if self.pools.deferring:
+                    self.pools.commit_all()
                 try:
                     qry = f"INSERT INTO {self.name} ({qpstr}) VALUES ({pholders})"
                     cursor.execute(qry, qvs)
@@ -481,14 +565,14 @@ class PooledCache(object):
         params = (key,)
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry, params)
-            self.conn.commit()
+            self.pools.commit_all()
 
     def clear(self):
         # WARNING WARNING ... trash all the data in the cache
         qry = f"TRUNCATE TABLE {self.name} RESTART IDENTITY"
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry)
-            self.conn.commit()
+            self.pools.commit_all()
 
     def has_item(self, key, _key_type=None, timestamp=None):
         if _key_type is None:
@@ -507,8 +591,8 @@ class PooledCache(object):
         return bool(rows)
 
     def commit(self):
-        # We commit after every transaction, so no need
-        self.conn.commit()
+        # Normally a no-op: we commit after every write unless deferring
+        self.flush()
 
     def start_bulk(self):
         if self.iterating_conn is None:

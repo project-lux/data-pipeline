@@ -96,6 +96,26 @@ start_time = datetime.datetime.now()
 # merge only reads, so enable AAT memory cache
 idmap.enable_memory_cache()
 
+# Committing inside every set() cost an fsync per write -- roughly five per
+# merged record, times however many workers. Batch instead: all caches in the
+# process share one write connection, so one commit covers the merged row and
+# its recordcache2 rows together and no other worker ever sees a partially
+# written record. checkpoint() below marks the record boundary the commit is
+# allowed to land on; the cache does the counting. Anything not yet committed
+# when a worker dies is simply redone (--resume skips on
+# merged_cache.metadata, which only sees committed rows).
+merged_cache.defer_commits(every=500)
+
+
+def fetch_records(rcache, ids, name):
+    # explicit --recid list: still one fetch per id
+    for r in ids:
+        rec = rcache[r]
+        if rec is None:
+            print(f"Couldn't find {name} / {r}")
+            continue
+        yield rec
+
 # -------------------------------------------------
 if profiling:
     pr = cProfile.Profile()
@@ -108,20 +128,24 @@ internal_namespaces = tuple(c["namespace"] for c in cfgs.internal.values())
 for src_name, src in to_do:
     rcache = src["recordcache"]
 
-    if not recids:
-        if my_slice > -1:
-            print(f"*** {src['name']}: slice {my_slice} ***")
-            recids = rcache.iter_keys_slice(my_slice, max_slice)
-        else:
-            print(f"*** {src['name']} ***")
-            recids = rcache.iter_keys()
+    # Iterate whole records rather than keys-then-fetch-each-key: the rows
+    # come back in the same server-side cursor that found them, which drops
+    # one round trip per record.
+    if recids:
+        records = fetch_records(rcache, recids, src["name"])
+    elif my_slice > -1:
+        print(f"*** {src['name']}: slice {my_slice} ***")
+        records = rcache.iter_records_slice(my_slice, max_slice)
+    else:
+        print(f"*** {src['name']} ***")
+        records = rcache.iter_records()
 
-    for recid in recids:
+    for rec in records:
         distance = 0
-        rec = rcache[recid]
-        if not rec:
-            print(f"Couldn't find {src['name']} / {recid}")
-            continue
+        recid = rec["identifier"]
+        # get() stamps this on every row it returns and merger.merge() needs
+        # it; the iterators don't, so set it here for all three paths
+        rec["source"] = src["name"]
         recuri = f"{src['namespace']}{recid}"
         qrecid = cfgs.make_qua(recuri, rec["data"]["type"])
         full_yuid = idmap[qrecid]
@@ -191,6 +215,10 @@ for src_name, src in to_do:
             merged_cache[rec3["yuid"]] = rec3
         else:
             print(f"*** Final transform returned None")
+
+        # record complete: a safe point for the cache to commit its batch
+        merged_cache.checkpoint()
+    merged_cache.flush()
     recids = []
 
 if profiling:
@@ -267,6 +295,11 @@ if DO_REFERENCES:
                 merged_cache[rec3["yuid"]] = rec3
             else:
                 print(f"*** Final transform returned None")
+
+        merged_cache.checkpoint()
+
+# stop deferring and land everything still outstanding
+merged_cache.resume_commits()
 
 # force all postgres connections to close
 poolman = PoolManager.get_instance()

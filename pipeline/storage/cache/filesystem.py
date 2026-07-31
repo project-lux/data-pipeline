@@ -24,6 +24,22 @@ class FsCache(object):
         l.sort()
         return l
 
+    # Write batching API, matching postgres.PooledCache. There is no
+    # transaction here -- set() writes the file and that's that -- so these
+    # are no-ops, present so callers can batch against any cache backend
+    # without checking which one they have.
+    def defer_commits(self, every=100):
+        pass
+
+    def resume_commits(self):
+        pass
+
+    def checkpoint(self):
+        pass
+
+    def flush(self):
+        pass
+
     def has_item(self, key):
         # apply the same slash replacement as set()/get(); without it any
         # identifier containing '/' was reported absent
@@ -103,13 +119,19 @@ class FsCache(object):
         for file in self._list():
             yield file.replace(self.suffix, '').replace(self.slash_replacement, '/')
 
+    def _file_to_key(self, file):
+        # same transform iter_keys() yields; passing the raw filename to
+        # get() worked but returned rows whose identifier still carried the
+        # suffix and the escaped slashes
+        return file.replace(self.suffix, '').replace(self.slash_replacement, '/')
+
     def iter_records(self):
         for file in self._list():
-            yield self.get(file)
+            yield self.get(self._file_to_key(file))
 
     def iter_records_slice(self, mySlice, maxSlice):
         for file in self._list()[mySlice::maxSlice]:
-            yield self.get(file)
+            yield self.get(self._file_to_key(file))
 
     def len(self):
         return len(self._list())
