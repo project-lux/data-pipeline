@@ -96,6 +96,7 @@ class PooledCache(object):
         self.name = config["name"] + "_" + config["tabletype"]
         self.conn = None
         self.iterating_conn = None
+        self._cols = None
         self.pools = PoolManager.get_instance()
 
         if config["host"]:
@@ -280,7 +281,34 @@ class PooledCache(object):
                 res = {"count": 0}
         return int(res["count"])
 
-    def get(self, key, _key_type=None):
+    def _select_list(self, raw=False):
+        """Column list for a full-row SELECT.
+
+        With raw=True the data column comes back as the JSON text postgres
+        already stores, instead of psycopg2 parsing the jsonb into python
+        objects. A caller that only wants to write the document out (export)
+        shouldn't pay for a parse and then a re-serialise of the same bytes;
+        one that needs to work on the record json.loads() it itself.
+
+        SELECT * can't express this -- there's no way to exclude a column --
+        so raw needs the real column list, read once per table."""
+        if not raw:
+            return "*"
+        if self._cols is None:
+            qry = """SELECT column_name FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = %s
+                ORDER BY ordinal_position"""
+            with self._cursor(internal=False) as cursor:
+                cursor.execute(qry, (self.name,))
+                self._cols = [r["column_name"] for r in cursor.fetchall()]
+        if not self._cols:
+            # __init__ creates the table if it's absent, so this shouldn't
+            # happen; fail loudly rather than silently handing back parsed
+            # data to a caller that is about to json.loads() it
+            raise ValueError(f"Could not read columns of {self.name} for a raw select")
+        return ", ".join("data::text AS data" if c == "data" else c for c in self._cols)
+
+    def get(self, key, _key_type=None, raw=False):
         # Get a record either by YUID or internal identifier,
         if _key_type is None:
             _key_type = self.key
@@ -288,7 +316,7 @@ class PooledCache(object):
             print(f"{self.name} has UUIDs as keys")
             return None
 
-        qry = f"SELECT * FROM {self.name} WHERE {_key_type} = %s"
+        qry = f"SELECT {self._select_list(raw)} FROM {self.name} WHERE {_key_type} = %s"
         params = (key,)
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry, params)
@@ -296,6 +324,36 @@ class PooledCache(object):
         if rows:
             rows["source"] = self.config["name"]
         # sys.stdout.write('G');sys.stdout.flush()
+        return rows
+
+    def get_fresh(self, key, since=None, raw=False, _key_type=None):
+        """Fetch a record only if it is at least as new as `since`.
+
+        Collapses the has_item() + metadata() + get() sequence callers were
+        writing by hand -- presence, freshness and the payload -- into one
+        round trip. Returns None when the row is absent or older than
+        `since`; since=None means any cached row will do.
+
+        Pair with raw=True to write a cached document straight out without
+        parsing it."""
+        if _key_type is None:
+            _key_type = self.key
+        if _key_type == "yuid" and len(key) != 36:
+            print(f"{self.name} has UUIDs as keys")
+            return None
+
+        cols = self._select_list(raw)
+        if since is None:
+            qry = f"SELECT {cols} FROM {self.name} WHERE {_key_type} = %s"
+            params = (key,)
+        else:
+            qry = f"SELECT {cols} FROM {self.name} WHERE {_key_type} = %s AND insert_time >= %s"
+            params = (key, since)
+        with self._cursor(internal=False) as cursor:
+            cursor.execute(qry, params)
+            rows = cursor.fetchone()
+        if rows:
+            rows["source"] = self.config["name"]
         return rows
 
     def get_like(self, key, _key_type=None):
@@ -362,8 +420,9 @@ class PooledCache(object):
     # not quite the same shape. Callers that need it (run-merge) set it
     # themselves; changing it here would add a key to every existing
     # iterator caller's rows.
-    def iter_records_slice(self, mySlice=0, maxSlice=10):
-        qry = f"SELECT * FROM {self.name} WHERE {self._slice_predicate(mySlice, maxSlice)}"
+    def iter_records_slice(self, mySlice=0, maxSlice=10, raw=False):
+        qry = (f"SELECT {self._select_list(raw)} FROM {self.name} "
+               f"WHERE {self._slice_predicate(mySlice, maxSlice)}")
         with self._cursor(iter=True) as cursor:
             cursor.execute(qry)
             for res in cursor:

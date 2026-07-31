@@ -42,7 +42,6 @@ class MlMapper(Mapper):
             "assigned_by",
             "exemplary_member_of",
         ]
-        self.external_types = {}
 
         self.ref_ctr_excludes = set([x[-36:] for x in list(self.configs.globals.values()) if x])
         non_global_externals = [
@@ -95,23 +94,6 @@ class MlMapper(Mapper):
                         node[f"_seconds_since_epoch_{p}"] = int(secs)
                     except:
                         print(f"Could not get seconds for {val}")
-
-        if (
-            not top
-            and "id" in node
-            and node["id"] is not None
-            and node["id"].startswith(self.configs.internal_uri)
-            and "classified_as" in node
-        ):
-            # some other record has one or more classifications in this record
-            # these will likely disappear if not captured
-            t = node["id"]
-            if not t in self.external_types:
-                self.external_types[t] = []
-            cxns = [x["id"] for x in node.get("classified_as", []) if "id" in x]
-            for c in cxns:
-                if not c in self.external_types[t]:
-                    self.external_types[t].append(c)
 
         for k, v in node.items():
             if not type(v) in [list, dict]:

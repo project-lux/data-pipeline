@@ -62,14 +62,19 @@ class FsCache(object):
         else:
             return None
 
-    def get(self, key):
+    def get(self, key, raw=False):
         key2 = key.replace('/', self.slash_replacement)
         if not key2.endswith(self.suffix):
             key2 = key2 + self.suffix
 
         js = self._read_file(key2)
         if js is not None:
-            return {self.key: key, 'data': js, 'source': self.source, 'insert_time':'', 'record_time':''}
+            # raw means "data is JSON text, not parsed objects"; postgres
+            # gets that for free from the column, here it costs a dumps()
+            # -- but the contract is what lets callers not care which
+            # backend they have
+            return {self.key: key, 'data': json.dumps(js) if raw else js,
+                    'source': self.source, 'insert_time':'', 'record_time':''}
         else:
             print(f"File does not exist: {self.directory}/{key2}")
             return None
@@ -125,13 +130,13 @@ class FsCache(object):
         # suffix and the escaped slashes
         return file.replace(self.suffix, '').replace(self.slash_replacement, '/')
 
-    def iter_records(self):
+    def iter_records(self, raw=False):
         for file in self._list():
-            yield self.get(self._file_to_key(file))
+            yield self.get(self._file_to_key(file), raw=raw)
 
-    def iter_records_slice(self, mySlice, maxSlice):
+    def iter_records_slice(self, mySlice, maxSlice, raw=False):
         for file in self._list()[mySlice::maxSlice]:
-            yield self.get(self._file_to_key(file))
+            yield self.get(self._file_to_key(file), raw=raw)
 
     def len(self):
         return len(self._list())
