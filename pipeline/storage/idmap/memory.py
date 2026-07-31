@@ -130,6 +130,11 @@ class IdMap(object):
         else:
             raise ValueError(f"Unknown key type {type(val)}")
 
+    def get_multi(self, keys, chunk=1000):
+        # No network to batch, but callers (reidentifier.prefetch) test for
+        # this method to decide whether batching is available
+        return {k: self.get(k) for k in keys}
+
     def set(self, key, value):
         # key is external identifier
         # value is an existing yuid

@@ -391,7 +391,12 @@ class IdMap(RedisCache):
             for (key, ikey), val in zip(batch, vals):
                 v = self._manage_value_out(val) if val else None
                 out[key] = v
-                if self.memory_cache_enabled:
+                # Don't cache misses: they cost nothing to re-fetch once
+                # batched (they ride along in the MGET) but would evict
+                # positives, and merge records are full of external
+                # equivalents that aren't in the idmap. get() likewise only
+                # caches hits.
+                if self.memory_cache_enabled and v is not None:
                     self.memory_cache[ikey] = v
 
         for i in range(0, len(need_set), chunk):
@@ -407,7 +412,7 @@ class IdMap(RedisCache):
             for (key, ikey), val in zip(batch, res):
                 v = {self._manage_value_out(x) for x in val} if val else None
                 out[key] = v
-                if self.memory_cache_enabled:
+                if self.memory_cache_enabled and v is not None:
                     self.memory_cache[ikey] = v
         return out
 

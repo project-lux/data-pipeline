@@ -1,4 +1,14 @@
 class Reidentifier(object):
+    # Prefetched {qua_key: yuid_or_None} for the record currently being
+    # processed, populated by prefetch() at the top of each record tree.
+    # Class-level defaults so partially-built instances (tests construct via
+    # object.__new__) still work; batch is always rebound, never mutated.
+    batch = {}
+    # Count of lookups that missed the batch and had to go to the idmap. A
+    # non-zero value means _node_keys has drifted out of step with
+    # process_entity: still correct, but a round trip per miss.
+    batch_misses = 0
+
     def __init__(self, configs, idmap):
         self.configs = configs
         self.ignore_ns = []
@@ -39,6 +49,103 @@ class Reidentifier(object):
             t = record.get("type", "")
             slug = self.configs.ok_record_types.get(t, "unknown")
         return slug
+
+    ### Batched idmap lookups ###
+    # process_entity used to issue one blocking idmap lookup per node, so a
+    # record with ~100 references cost ~100 sequential round trips. Instead
+    # walk the record first to collect every key it will need, resolve them
+    # in one pipelined request, and have process_entity read the answers
+    # from that batch. Two round trips per record instead of ~100.
+    #
+    # This is only sound because the idmap is read-only outside
+    # run-identify.py -- see the note in process_entity. Do not reuse the
+    # batch in a phase that mints.
+
+    def _node_keys(self, node, qcls, top=False):
+        """The idmap keys process_entity will look up for THIS node alone.
+
+        Returns (keys, recurse). keys is empty wherever process_entity
+        short-circuits before any lookup; recurse is False only in the one
+        case where it returns None, which stops _reidentify descending.
+        MUST stay in step with process_entity."""
+        recid = node.get("id", "")
+        if not recid:
+            # bnode-with-equivalents (early return) or nothing to do: no
+            # lookups either way, but _reidentify still descends
+            return (), True
+        for dnri in self.do_not_reidentify:
+            if dnri in recid:
+                return (), True
+        redir = self.redirects.get(recid)
+        if redir:
+            recid = redir
+        if not top or not qcls:
+            qcls = node.get("type", None)
+            if not qcls:
+                # process_entity returns None
+                return (), False
+        try:
+            keys = [self.configs.make_qua(recid, qcls)]
+            for eq in node.get("equivalent", []):
+                if type(eq) == dict and "id" in eq:
+                    keys.append(self.configs.make_qua(eq["id"], qcls))
+        except ValueError:
+            # unknown type: let the real pass raise where it does today
+            return (), True
+        return keys, True
+
+    def _collect_keys(self, node, qcls, keys, top=False):
+        node_keys, recurse = self._node_keys(node, qcls, top)
+        keys.update(node_keys)
+        if not recurse:
+            return keys
+        # recurse exactly as _reidentify does
+        for k, v in node.items():
+            if k in ("id", "equivalent") or k in self.ignore_props:
+                continue
+            if type(v) == dict:
+                v = [v]
+            elif type(v) != list:
+                continue
+            for i in v:
+                if type(i) == dict:
+                    self._collect_keys(i, i.get("type", None), keys)
+        return keys
+
+    def prefetch(self, record, rectype=None):
+        """Every idmap key this record needs, in two round trips. Returns
+        {key: value_or_None}; {} means batching is off for this record and
+        every lookup falls back to the live idmap."""
+        mget = getattr(self.idmap, "get_multi", None)
+        if mget is None:
+            # memory IdMap, test stubs
+            return {}
+        try:
+            keys = self._collect_keys(record, rectype, set(), top=True)
+            if not keys:
+                return {}
+            batch = mget(keys)
+            # The top-level branch of process_entity also reads the member
+            # set of the resolved YUID. That key isn't known until the
+            # strings above resolve, so it needs a second hop; mirror the
+            # same min() the real pass uses to choose it.
+            top_keys, _ = self._node_keys(record, rectype, top=True)
+            uus = {batch[k] for k in top_keys if batch.get(k)}
+            if uus:
+                batch.update(mget([min(uus)]))
+            return batch
+        except Exception as e:
+            print(f"reidentifier prefetch failed ({e}); using per-node lookups")
+            return {}
+
+    def _lookup(self, key):
+        """Prefetched value if this record's batch has it, else a live
+        lookup. A miss is correct but costs a round trip, so count it."""
+        try:
+            return self.batch[key]
+        except KeyError:
+            self.batch_misses += 1
+            return self.idmap[key]
 
     def process_entity(self, record, qcls=None, top=False):
         result = {}
@@ -86,7 +193,7 @@ class Reidentifier(object):
                 uu = None
                 for eq in equivs:
                     qeq = self.configs.make_qua(eq, qcls)
-                    myqeq = self.idmap[qeq]
+                    myqeq = self._lookup(qeq)
                     if myqeq is not None:
                         equiv_map[eq] = myqeq
                     else:
@@ -95,7 +202,7 @@ class Reidentifier(object):
                         pass
 
             if recid:
-                uu = self.idmap[qrecid]
+                uu = self._lookup(qrecid)
                 if uu is not None:
                     # We know about this entity/record already
                     # 2026-07-30 -- RS: WHY was this called twice??
@@ -132,7 +239,7 @@ class Reidentifier(object):
             result["id"] = uu
 
             if top:
-                all_equivs = self.idmap[uu]
+                all_equivs = self._lookup(uu)
                 if not all_equivs:
                     print(f"\n!!! Found missing yuid: {uu} from: {recid} / {equivs}")
                     all_equivs = []
@@ -163,6 +270,10 @@ class Reidentifier(object):
         return result
 
     def _reidentify(self, record, rectype=None, top=False):
+        if top:
+            # single entry point for a whole record tree: batch every idmap
+            # lookup the walk below will need
+            self.batch = self.prefetch(record, rectype)
         result = self.process_entity(record, rectype, top)
         if result is None:
             return result
