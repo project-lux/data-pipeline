@@ -40,9 +40,12 @@ import shutil
 import subprocess
 import tempfile
 import uuid
+import glob
 from collections import defaultdict
 
 import ujson as json
+
+from pipeline.storage.idmap.lmdb import TabLmdb
 
 # ---------------------------------------------------------------------------
 # Union-find implementation
@@ -125,7 +128,7 @@ class IdentityResolver(object):
             fn = "assertions-single.tsv"
         fn = os.path.join(configs.temp_dir, fn)
         self.filename = fn
-        self.fh = open(fn, "w")
+        self.fh = open(fn, "w", buffering=1024 * 1024)
         
 
     def shorten(self, uri):
@@ -161,19 +164,22 @@ class IdentityResolver(object):
             return
         recid = rec["data"]["id"]
         typ = rec["data"]["type"]
-        qrecid = shorten(self.configs.make_qua(recid, typ), self.prefix_in)
+        qrecid = self.shorten(self.configs.make_qua(recid, typ))
         wrote = False
         for eq in rec["data"].get("equivalent", []):
             eqid = eq.get("id")
             if not eqid or eqid == recid:
                 continue
-            qeq = shorten(self.configs.make_qua(eqid, typ), self.prefix_in)
+            qeq = self.shorten(self.configs.make_qua(eqid, typ))
             lo, hi = (qrecid, qeq) if qrecid <= qeq else (qeq, qrecid)
             self.fh.write(f"{lo}\t{hi}\t{qrecid}\n")
             wrote = True
         if not wrote:
             self.fh.write(f"{qrecid}\t{qrecid}\t{qrecid}\n")
-        self.fh.flush()
+        # No flush per record: that was a write syscall for every one of tens
+        # of millions of records. close() flushes, and a worker that dies
+        # mid-slice has to be re-run anyway -- its assertions are only
+        # consumed once every slice has finished.
 
     def close(self):
         self.fh.close()
@@ -215,9 +221,7 @@ class IdentityResolver(object):
             by_uri[n.split("##qua")[0]].append(n)
         
         def key_of(uri):
-            if prefix_in is not None:
-                uri = shorten(uri, prefix_in)
-            return uri.split("##qua")[0]
+            return self.shorten(uri).split("##qua")[0]
     
         for k in diff_index.keys():
             vals = diff_index[k]
@@ -366,7 +370,7 @@ class IdentityResolver(object):
         """
         claims = defaultdict(list)
         for key, members in clusters.items():
-            claim = _best_claim(prior.get(m) for m in members)
+            claim = self._best_claim(prior.get(m) for m in members)
             if claim:
                 best, votes = claim
                 claims[best].append((votes, key))
@@ -400,10 +404,10 @@ class IdentityResolver(object):
             chunk = members[i:i + self.batch_size]
             pipe = conn.pipeline(transaction=False)
             for m in chunk:
-                pipe.get(idmap._manage_key_in(m))
+                pipe.get(self.idmap._manage_key_in(m))
             for m, val in zip(chunk, pipe.execute(raise_on_error=False)):
                 if isinstance(val, str) and val:
-                    prior[m] = idmap._manage_value_out(val)
+                    prior[m] = self.idmap._manage_value_out(val)
         return prior
     
     
@@ -443,7 +447,7 @@ class IdentityResolver(object):
                 pipe.sadd(iyuid, *imembers, token)
             pipe.execute(raise_on_error=False)
     
-        stats["deleted_yuids"] = _delete_dead_yuids(sorted(touched_old))
+        stats["deleted_yuids"] = self._delete_dead_yuids(sorted(touched_old))
         return stats
     
     
@@ -615,8 +619,8 @@ class IdentityResolver(object):
         clusters file and writes ``root<TAB>member<TAB>prior`` (prior blank when
         the member had none), preserving order so the file stays grouped."""
         conn = self.idmap.conn
-        with open(self.clusters_prior_path, "w") as fout:
-            for chunk in self._chunks(self._iter_tsv(self.clusters_sorted_path)):
+        with open(self.prior_path, "w") as fout:
+            for chunk in self._chunks(self._iter_tsv(self.clusters_sorted_path), self.batch_size):
                 pipe = conn.pipeline(transaction=False)
                 for root, member in chunk:
                     pipe.get(self.idmap._manage_key_in(member))
@@ -748,9 +752,8 @@ class IdentityResolver(object):
         if not files:
             raise ValueError("No assertions-*.tsv files found; did reconcile run?")
                     
-
         if work_dir is None:
-            work_dir = configs.temp_dir
+            work_dir = self.configs.temp_dir
         td = tempfile.mkdtemp(prefix="identity-", dir=work_dir)
         self.temp_work_dir_path = td
 
@@ -774,7 +777,7 @@ class IdentityResolver(object):
             self.touched_sorted_path = p("touched.sorted")
     
             # print("sorting assertions...")
-            self._sort(assertion_files, self.sorted_path,
+            self._sort(files, self.sorted_path,
                 ["-k1,1", "-k2,2", "-k3,3"], td)
     
             # print("aggregating voted edges...")
@@ -794,7 +797,7 @@ class IdentityResolver(object):
                         fh.write(json.dumps(c) + "\n")
     
             # print("adding singletons...")
-            self._sort([self.selfs_path]], self.selfs_sorted_path, ["-u", "-k1,1"], td)
+            self._sort([self.selfs_path], self.selfs_sorted_path, ["-u", "-k1,1"], td)
             n_singletons = self._append_singletons(dsu_nodes)
             self._sort([self.clusters_path], self.clusters_sorted_path, ["-k1,1"], td)
     

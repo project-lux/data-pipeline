@@ -326,6 +326,26 @@ class PooledCache(object):
         # sys.stdout.write('G');sys.stdout.flush()
         return rows
 
+    def get_multi(self, keys, _key_type=None, raw=False):
+        """Fetch several records in one query. {key: row} with missing keys
+        left out. Saves a round trip wherever a caller probes more than one
+        form of an identifier."""
+        if _key_type is None:
+            _key_type = self.key
+        keys = [k for k in keys if not (_key_type == "yuid" and len(k) != 36)]
+        if not keys:
+            return {}
+        qry = (f"SELECT {self._select_list(raw)} FROM {self.name} "
+               f"WHERE {_key_type} = ANY(%s)")
+        with self._cursor(internal=False) as cursor:
+            cursor.execute(qry, (keys,))
+            rows = cursor.fetchall()
+        out = {}
+        for row in rows:
+            row["source"] = self.config["name"]
+            out[row[_key_type]] = row
+        return out
+
     def get_fresh(self, key, since=None, raw=False, _key_type=None):
         """Fetch a record only if it is at least as new as `since`.
 

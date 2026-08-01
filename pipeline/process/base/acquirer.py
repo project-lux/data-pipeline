@@ -107,14 +107,24 @@ class Acquirer(object):
 
         # Return already built record
         if not dataonly and not reference and not refetch:
-            rec = self.recordcache[identifier]
-            if rec is not None:
-                return rec
-            elif rectype is not None and self.config["type"] == "external":
+            # Both forms of the identifier in one query: this was two SELECTs,
+            # and on the cold path both of them miss. The bare identifier
+            # still wins when both are present.
+            keys = [identifier]
+            if rectype is not None and self.config["type"] == "external":
                 qrecid = self.configs.make_qua(identifier, rectype)
-                rec = self.recordcache[qrecid]
+                if qrecid != identifier:
+                    keys.append(qrecid)
+            if len(keys) == 1:
+                rec = self.recordcache[identifier]
                 if rec is not None:
                     return rec
+            else:
+                found = self.recordcache.get_multi(keys)
+                for k in keys:
+                    rec = found.get(k)
+                    if rec is not None:
+                        return rec
 
         rec = self.do_fetch(identifier, store, refetch)
         if dataonly or rec is None:

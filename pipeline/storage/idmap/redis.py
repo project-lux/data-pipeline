@@ -662,18 +662,214 @@ class RedisDictValue(object):
         return self.persistence._items(self.pkey)
 
 
+# dist becomes min(existing, dist); type is set only if not already set.
+# Lua runs atomically in redis, so this is the WATCH/MULTI retry loop's
+# semantics in a single round trip -- and unlike WATCH it can be pipelined,
+# which is what lets a whole record's references be written at once.
+MERGE_REF_LUA = """
+local d = redis.call('HGET', KEYS[1], 'dist')
+if (not d) or (tonumber(d) > tonumber(ARGV[1])) then
+    redis.call('HSET', KEYS[1], 'dist', ARGV[1])
+end
+redis.call('HSETNX', KEYS[1], 'type', ARGV[2])
+return 1
+"""
+
+# Read-and-claim a reference in one atomic step. Returns the hash and deletes
+# it, or returns empty if another worker got there first -- so exactly one
+# worker ever processes a given reference. Doing this as HGETALL + DEL in a
+# plain pipeline would leave a window in which a concurrent merge_ref could
+# re-add the reference at a shorter distance and have it deleted unprocessed;
+# inside Lua there is no window.
+POP_REF_LUA = """
+local d = redis.call('HGETALL', KEYS[1])
+if #d > 0 then
+    redis.call('DEL', KEYS[1])
+end
+return d
+"""
+
+
 class ReferenceMap(NetworkOperationMap):
 
     def __init__(self, config):
         if not 'db' in config:
             config['db'] = 3
         RedisCache.__init__(self, config)
+        self._merge_script = None
+        self._pop_script = None
+        self._scripting = True
+        self._scan_cursor = 0
+
+    # NOTE: reads here use the raw key (as get()/_items() always have) while
+    # writes go through _manage_key_in() (as merge_ref()/delete() always
+    # have). Both are no-ops for this class -- RedisCache leaves the prefix
+    # maps empty and only IdMap fills them in -- but don't populate them for
+    # a ReferenceMap without reconciling the two.
+
+    def get_multi(self, keys, chunk=1000):
+        """One pipelined HGETALL per key: {key: {field: value}}, with keys
+        that don't exist left out. Replaces the EXISTS + HGET + HGET per key
+        that RedisDictValue's lazy field access cost -- it holds a reference
+        into redis, so every field read was another round trip."""
+        out = {}
+        keys = list(keys)
+        for i in range(0, len(keys), chunk):
+            batch = keys[i:i + chunk]
+            try:
+                with self.conn.pipeline(transaction=False) as pipe:
+                    for k in batch:
+                        pipe.hgetall(k)
+                    res = pipe.execute()
+            except Exception as e:
+                print(f"refmap pipelined hgetall failed ({len(batch)} keys): {e}")
+                res = [None] * len(batch)
+            for k, d in zip(batch, res):
+                if d:
+                    out[k] = {self._manage_key_out(f): self._manage_value_out(v)
+                              for (f, v) in d.items()}
+        return out
+
+    def merge_refs(self, items, chunk=1000):
+        """merge_ref for many (key, dist, ctype) triples in one round trip."""
+        items = list(items)
+        if not items:
+            return
+        if self._scripting:
+            if self._merge_script is None:
+                self._merge_script = self.conn.register_script(MERGE_REF_LUA)
+            for i in range(0, len(items), chunk):
+                batch = items[i:i + chunk]
+                try:
+                    with self.conn.pipeline(transaction=False) as pipe:
+                        for (key, dist, ctype) in batch:
+                            self._merge_script(
+                                keys=[self._manage_key_in(key)],
+                                args=[self._manage_value_in(dist),
+                                      self._manage_value_in(ctype or "")],
+                                client=pipe)
+                        pipe.execute()
+                except redis.ResponseError as e:
+                    # scripting unavailable/disabled: fall back for good
+                    print(f"refmap merge script unusable ({e}); "
+                          f"falling back to per-ref WATCH transactions")
+                    self._scripting = False
+                    for it in items[i:]:
+                        self._merge_ref_watch(*it)
+                    return
+        else:
+            for it in items:
+                self._merge_ref_watch(*it)
 
     def merge_ref(self, key, dist, ctype=""):
-        """Atomically record a reference: dist becomes min(existing, dist),
-        type is set only if not already set. The old read-modify-write let
-        a later worker overwrite a shorter distance with a longer one,
-        which could push a reference past max_distance in some builds."""
+        """Atomically record a single reference. The record walk uses
+        merge_refs() so a record's references cost one round trip."""
+        self.merge_refs([(key, dist, ctype)])
+
+    def _out(self, flat):
+        """Lua returns a hash as a flat [field, value, ...] array."""
+        return {self._manage_key_out(flat[i]): self._manage_value_out(flat[i + 1])
+                for i in range(0, len(flat), 2)}
+
+    def popitems(self, count=100):
+        """Claim up to `count` references in two round trips -- one SCAN, one
+        pipelined batch of atomic read-and-delete scripts -- rather than the
+        RANDOMKEY + WATCH + HGETALL + MULTI/EXEC that popitem() spends on
+        every single reference.
+
+        Returns [(key, {field: value}), ...] of approximately `count` items
+        -- SCAN's COUNT is a hint and everything a scan returns is claimed,
+        so the batch can run slightly over. An empty list means the map is
+        empty. Claiming is exclusive: a reference goes to exactly one
+        caller."""
+        if not self._scripting:
+            out = []
+            for _ in range(count):
+                it = self.popitem()
+                if it is None:
+                    break
+                out.append(it)
+            return out
+
+        if self._pop_script is None:
+            self._pop_script = self.conn.register_script(POP_REF_LUA)
+
+        out = []
+        # Returning [] means "empty", which ends the caller's loop -- so only
+        # say it after a COMPLETE pass of the keyspace claimed nothing. The
+        # cursor is carried between calls so a drained prefix isn't rewalked
+        # every time, and a wrap to 0 starts the next pass.
+        claimed_this_pass = False
+        wraps = 0
+        while len(out) < count and wraps < 2:
+            # ask only for what's still wanted: everything a scan returns
+            # gets claimed, and claimed-but-unprocessed work is what a dying
+            # worker loses. SCAN's COUNT is a hint, so this bounds the
+            # overshoot rather than eliminating it.
+            cursor, keys = self.conn.scan(cursor=self._scan_cursor,
+                                          count=max(count - len(out), 10))
+            self._scan_cursor = cursor
+            if keys:
+                try:
+                    with self.conn.pipeline(transaction=False) as pipe:
+                        for k in keys:
+                            self._pop_script(keys=[k], args=[], client=pipe)
+                        res = pipe.execute()
+                except redis.ResponseError as e:
+                    print(f"refmap pop script unusable ({e}); falling back to popitem()")
+                    self._scripting = False
+                    return out + self.popitems(count - len(out))
+                for k, flat in zip(keys, res):
+                    # empty => another worker claimed it first
+                    if flat:
+                        out.append((self._manage_key_out(k), self._out(flat)))
+                        claimed_this_pass = True
+            if cursor == 0:
+                # wrapped: a whole pass with nothing claimed means empty
+                if not claimed_this_pass:
+                    break
+                claimed_this_pass = False
+                wraps += 1
+        return out
+
+    def iter_items(self, chunk=1000):
+        """Stream (key, {field: value}) with one round trip per chunk.
+
+        iter_keys() yields RedisDictValue, which is a reference into redis
+        rather than a copy -- a caller that reads two fields off it pays two
+        round trips per key."""
+        batch = []
+        for key in self.conn.scan_iter(count=chunk):
+            batch.append(key)
+            if len(batch) >= chunk:
+                yield from self._items_multi(batch)
+                batch = []
+        if batch:
+            yield from self._items_multi(batch)
+
+    def _items_multi(self, keys):
+        with self.conn.pipeline(transaction=False) as pipe:
+            for k in keys:
+                pipe.hgetall(k)
+            res = pipe.execute()
+        for k, d in zip(keys, res):
+            if d:
+                yield (self._manage_key_out(k),
+                       {self._manage_key_out(f): self._manage_value_out(v)
+                        for (f, v) in d.items()})
+
+    def delete_multi(self, keys, chunk=1000):
+        """Pipelined delete of many keys."""
+        keys = list(keys)
+        for i in range(0, len(keys), chunk):
+            with self.conn.pipeline(transaction=False) as pipe:
+                for k in keys[i:i + chunk]:
+                    pipe.delete(self._manage_key_in(k))
+                pipe.execute()
+
+    def _merge_ref_watch(self, key, dist, ctype=""):
+        """Pre-Lua implementation, kept as the fallback when scripting is
+        unavailable. Correct but 4 round trips plus retries."""
         ikey = self._manage_key_in(key)
         fdist = self._manage_key_in("dist")
         ftype = self._manage_key_in("type")

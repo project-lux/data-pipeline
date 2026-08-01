@@ -2,6 +2,10 @@ import os
 import time
 import ujson as json
 
+# properties whose contents are never followed for references; a frozenset
+# rather than a list literal rebuilt on every key of every node
+SKIP_PROPS = frozenset(["equivalent", "access_point", "conforms_to"])
+
 
 class ReferenceManager(object):
     def __init__(self, configs, idmap):
@@ -15,6 +19,9 @@ class ReferenceManager(object):
         self.internal_uris = [configs.internal_uri]
         for c in configs.internal.values():
             self.internal_uris.append(c["namespace"])
+        # str.startswith takes a tuple and tests them all in one C call,
+        # instead of a python loop per node
+        self.internal_uris_t = tuple(self.internal_uris)
 
         # XXX FIXME: This should be a CSV or sane JSON
         with open(os.path.join(configs.data_dir, "replacements.json")) as fh:
@@ -29,31 +36,47 @@ class ReferenceManager(object):
         self.redirects = getty_redirects
         self.ref_cache = {}
 
+        # pop_ref() hands out one reference at a time, but claims them from
+        # redis in batches -- popitem() cost four round trips per reference.
+        # Keep the batch modest: references claimed but not yet processed
+        # when a worker dies are dropped for this build, and that was already
+        # true of the one reference popitem() held.
+        self.ref_batch = 50
+        self._ref_buffer = []
+
     def write_metatypes(self, my_slice):
         # write out our slice of metatypes
         if my_slice > -1:
             fn = f"metatypes-{my_slice}.json"
         else:
             fn = f"metatypes-single.json"
+        # values are sets (membership testing them was a list scan per
+        # classification per node); sorted on the way out so the file is
+        # also stable between runs
+        out = {k: sorted(v) for (k, v) in self.metatypes_seen.items()}
         with open(fn, "w") as fh:
-            fh.write(json.dumps(self.metatypes_seen))
+            fh.write(json.dumps(out))
 
     def write_done_refs(self):
         # step through all entries in done_refs and write URI
         # to a file, if distance <= MAX_DISTANCE
+        # iter_items() fetches a chunk per round trip; iter_keys() handed back
+        # a live reference into redis, and reading k['dist'] off it -- which
+        # this loop did three times per key -- was a round trip each time.
         maxd = self.configs.max_distance
         with open("reference_uris.txt", "w") as fh:
             x = 0
-            for k in self.done_refs.iter_keys():
+            for (key, vals) in self.done_refs.iter_items():
                 x += 1
                 if not x % 100000:
                     fh.flush()
                     print(x)
-                if k['dist'] == None:
+                dist = vals.get("dist")
+                if dist is None:
                     print("Got distance of 'None' from done_refs")
                     continue
-                if k["dist"] <= maxd:
-                    fh.write(f"{k['dist']}|{k.pkey}\n")
+                if dist <= maxd:
+                    fh.write(f"{dist}|{key}\n")
 
     def iter_done_refs(self, my_slice, max_slice):
         with open("reference_uris.txt", "r") as fh:
@@ -79,7 +102,11 @@ class ReferenceManager(object):
                         yield uri
 
     def pop_ref(self):
-        return self.all_refs.popitem()
+        if not self._ref_buffer:
+            self._ref_buffer = self.all_refs.popitems(self.ref_batch)
+            if not self._ref_buffer:
+                return None
+        return self._ref_buffer.pop()
 
     def pop_done_ref(self):
         return self.done_refs.popitem()
@@ -96,50 +123,79 @@ class ReferenceManager(object):
 
     # type is needed for Concepts, as the qua is Type but the type is Material (etc)
     # a ref is {'dist': int, 'type': str}
-    def add_ref(self, ref, refs, distance, ctype):
+
+    def collect_ref(self, ref, pending, distance, ctype):
+        """Record a reference for the batched resolve at the end of the
+        record. Pure bookkeeping -- no redis. Keeps the shortest distance
+        seen, and the first non-empty ctype (matching the HSETNX the merge
+        does, where the first writer sets the type)."""
         if ref in self.ref_cache:
             return None
-
-        xr = self.all_refs[ref]
-        if xr is not None:
-            xdist = xr["dist"]
-            xctype = xr["type"]
+        cur = pending.get(ref)
+        if cur is None:
+            pending[ref] = [distance, ctype]
         else:
-            xdist = None
-            xctype = None
-        dref = self.done_refs[ref]
-        if dref is not None:
-            ddist = dref["dist"]
-        else:
-            ddist = None
+            if distance < cur[0]:
+                cur[0] = distance
+            if not cur[1] and ctype:
+                cur[1] = ctype
 
-        if xr is not None:
-            # Test distance: In all, and in done, but less distance
-            if ddist is not None and ddist > distance:
-                # need to re-add it to all with new distance.
-                # Re-add BEFORE removing from done: a crash between the two
-                # then duplicates work instead of losing the reference.
-                self.all_refs.merge_ref(ref, distance, ctype)
-                del self.done_refs[ref]
+    def resolve_refs(self, pending):
+        """Resolve one record's collected references in four round trips --
+        one pipelined HGETALL against each map, one pipelined merge, one
+        pipelined delete -- instead of the 7 to 11 per reference that the
+        per-reference EXISTS/HGET/WATCH-MULTI path cost.
+
+        Returns the refs newly added to all_refs, as add_ref always did."""
+        refs = {}
+        if not pending:
+            return refs
+
+        keys = list(pending)
+        xrs = self.all_refs.get_multi(keys)
+        drefs = self.done_refs.get_multi(keys)
+
+        to_merge = []
+        to_undone = []
+        for ref in keys:
+            distance, ctype = pending[ref]
+            xr = xrs.get(ref)
+            dref = drefs.get(ref)
+            ddist = dref.get("dist") if dref is not None else None
+
+            if xr is not None:
+                # In all, and in done at a greater distance: re-add to all
+                # with the new distance. Re-add BEFORE removing from done: a
+                # crash between the two duplicates work rather than losing
+                # the reference, so the merge batch is executed first below.
+                to_merge.append((ref, distance, ctype))
+                if ddist is not None and ddist > distance:
+                    to_undone.append(ref)
+            elif dref is not None:
+                if ddist is not None and ddist > distance:
+                    to_merge.append((ref, distance, ctype))
+                    to_undone.append(ref)
             else:
-                # merge_ref applies min-distance / type-if-unset atomically;
-                # the old read-then-write let a slower worker overwrite a
-                # shorter distance with a longer one
-                self.all_refs.merge_ref(ref, distance, ctype)
-        elif dref is not None:
-            # Test Distance
-            if ddist is not None and ddist > distance:
-                # Add it back in (add first, then remove from done)
-                self.all_refs.merge_ref(ref, distance, ctype)
-                del self.done_refs[ref]
-        elif not ref in refs:
-            val = {"dist": distance, "type": ctype}
-            refs[ref] = val
-            self.all_refs.merge_ref(ref, distance, ctype)
-            if distance == 1 and "vocab.getty.edu/aat" in ref:
-                self.ref_cache[ref] = distance
+                refs[ref] = {"dist": distance, "type": ctype}
+                to_merge.append((ref, distance, ctype))
+                if distance == 1 and "vocab.getty.edu/aat" in ref:
+                    self.ref_cache[ref] = distance
 
-    def walk_for_refs(self, node, refs, distance, top=False):
+        if to_merge:
+            self.all_refs.merge_refs(to_merge)
+        if to_undone:
+            self.done_refs.delete_multi(to_undone)
+        return refs
+
+    def add_ref(self, ref, refs, distance, ctype):
+        """Collect and resolve a single reference immediately. The record
+        walk uses collect_ref/resolve_refs so a whole record's references
+        cost four round trips rather than four per reference."""
+        if ref in refs:
+            return None
+        refs.update(self.resolve_refs({ref: [distance, ctype]}))
+
+    def walk_for_refs(self, node, pending, distance, top=False):
         # Test if we need to record the node
 
         if not top and "id" in node and not node["id"].startswith("_"):
@@ -147,48 +203,46 @@ class ReferenceManager(object):
                 node["id"] = self.redirects[node["id"]]
 
             val = self.configs.make_qua(node["id"], node["type"])
-            should_add_ref = True
-            for i in self.internal_uris:
-                if val.startswith(i):
-                    # these will get built as 0 regardless
-                    # so don't record refs to them
-                    should_add_ref = False
-                    break
-            if should_add_ref:
+            # internal ones get built at distance 0 regardless, so aren't
+            # recorded as references
+            if not val.startswith(self.internal_uris_t):
                 t = node.get("type", "")
                 ct = t if t in self.configs.parent_record_types else ""
-                self.add_ref(val, refs, distance, ct)
+                self.collect_ref(val, pending, distance, ct)
 
             # but still want to save meta-types
             if (node["type"] in self.configs.parent_record_types or node["type"] == "Type") and "classified_as" in node:
-                cxids = [x["id"] for x in node["classified_as"] if "id" in x]
-                if not node["id"] in self.metatypes_seen:
-                    self.metatypes_seen[node["id"]] = []
-                for cx in cxids:
-                    if not cx in self.metatypes_seen[node["id"]]:
-                        self.metatypes_seen[node["id"]].append(cx)
+                seen = self.metatypes_seen.get(node["id"])
+                if seen is None:
+                    seen = self.metatypes_seen[node["id"]] = set()
+                for x in node["classified_as"]:
+                    if "id" in x:
+                        seen.add(x["id"])
 
         for k, v in node.items():
-            if k in ["equivalent", "access_point", "conforms_to"]:
+            if k in SKIP_PROPS:
                 continue
-            if type(v) == list:
+            if type(v) is list:
                 for vi in v:
-                    if type(vi) == dict:
-                        self.walk_for_refs(vi, refs, distance)
-            elif type(v) == dict:
-                self.walk_for_refs(v, refs, distance)
+                    if type(vi) is dict:
+                        self.walk_for_refs(vi, pending, distance)
+            elif type(v) is dict:
+                self.walk_for_refs(v, pending, distance)
 
     def walk_top_for_refs(self, rec, distance):
-        refs = {}
         if rec is None:
-            return refs
+            return {}
         if "data" in rec:
             rec = rec["data"]
         if not "id" in rec:
             return {}
 
+        # Collect the whole record's references first, then hit redis once
+        # for all of them: this walk used to issue 7-11 round trips per
+        # reference node inline.
+        pending = {}
         try:
-            self.walk_for_refs(rec, refs, distance + 1, top=True)
+            self.walk_for_refs(rec, pending, distance + 1, top=True)
         except ValueError as e:
             print(f"\nERROR: Reference walk error in {rec['id']}: {e}")
             raise
@@ -196,19 +250,14 @@ class ReferenceManager(object):
         if "equivalent" in rec:
             for eq in rec["equivalent"]:
                 k = self.configs.make_qua(eq["id"], rec["type"])
-                should_add_ref = True
-                for i in self.internal_uris:
-                    if k.startswith(i):
-                        # these will get built as 0 regardless
-                        # so don't record refs to them
-                        should_add_ref = False
-                        break
-                if should_add_ref:
+                if not k.startswith(self.internal_uris_t):
                     t = rec.get("type", "")
                     ct = t if t in self.configs.parent_record_types else ""
-                    self.add_ref(k, refs, distance, ct)
+                    # note: equivalents are recorded at `distance`, the walk
+                    # above at `distance + 1`; collect_ref keeps the smaller
+                    self.collect_ref(k, pending, distance, ct)
 
-        return refs
+        return self.resolve_refs(pending)
 
     def manage_identifiers(self, rec):
         if not rec or not "data" in rec or not "id" in rec["data"]:
