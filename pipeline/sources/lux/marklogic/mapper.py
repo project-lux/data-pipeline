@@ -2,9 +2,10 @@ import datetime
 import re
 from ctypes import c_int32
 
+import lxml.etree
+import lxml.html
 import numpy as np
 import ujson as json
-from bs4 import BeautifulSoup
 
 from pipeline.process.base.mapper import Mapper
 
@@ -18,7 +19,9 @@ class MlMapper(Mapper):
         self.dot_re = re.compile("(.[0-9]{4,10})([^0-9]|$)")
         self.coord_180 = re.compile("180[.0]*")
         self.coord_90 = re.compile("90[.0]*")
-        self.ignore_props = [
+        # a set, not a list: this is membership-tested once per container
+        # valued key of every node of every record
+        self.ignore_props = {
             "identified_by",
             "referred_to_by",
             "equivalent",
@@ -41,7 +44,7 @@ class MlMapper(Mapper):
             "subject_to",
             "assigned_by",
             "exemplary_member_of",
-        ]
+        }
 
         self.ref_ctr_excludes = set([x[-36:] for x in list(self.configs.globals.values()) if x])
         non_global_externals = [
@@ -69,15 +72,27 @@ class MlMapper(Mapper):
         non_global_excludes = [idmap[x][-36:] for x in non_global_externals if x in idmap]
         self.ref_ctr_excludes.update(set(non_global_excludes))
 
-    def _walk_node_ref(self, node, refs, all_refs, top=False, ignore=False):
-        if not top and "id" in node and node["id"] is not None and node["id"].startswith(self.configs.internal_uri):
-            # record node['id']
-            if not node["id"] in all_refs:
-                all_refs.append(node["id"])
-            if not ignore and not node["id"] in refs:
-                refs.append(node["id"])
-        elif not top and "id" in node and node["id"] is None:
-            print(f"ID is None?? {node}")
+    def _walk_node_ref(self, node, refs, all_refs, top=False, ignore=False, seen=None, seen_all=None):
+        # refs/all_refs stay ordered lists -- the order they are built in is
+        # the order the triples come out in -- but testing membership against
+        # them was O(n^2) in the number of distinct references: 233us versus
+        # 7.5us for a record with 300 of them. The sets carry the membership.
+        if seen is None:
+            seen = set(refs)
+            seen_all = set(all_refs)
+
+        if not top and "id" in node:
+            nid = node["id"]
+            if nid is None:
+                print(f"ID is None?? {node}")
+            elif nid.startswith(self.configs.internal_uri):
+                # record node['id']
+                if nid not in seen_all:
+                    seen_all.add(nid)
+                    all_refs.append(nid)
+                if not ignore and nid not in seen:
+                    seen.add(nid)
+                    refs.append(nid)
 
         if "type" in node and node["type"] == "TimeSpan":
             # Add integer seconds for properties
@@ -96,36 +111,49 @@ class MlMapper(Mapper):
                         print(f"Could not get seconds for {val}")
 
         for k, v in node.items():
-            if not type(v) in [list, dict]:
+            # `type(v) in [list, dict]` rebuilt the list on every key of
+            # every node; this is the same test for half the cost
+            is_list = type(v) is list
+            if not (is_list or type(v) is dict):
                 continue
             ignore_now = ignore
             if not ignore:
                 ignore = k in self.ignore_props
-            if type(v) == list:
+            if is_list:
                 for vi in v:
-                    if type(vi) == dict:
-                        self._walk_node_ref(vi, refs, all_refs, False, ignore)
+                    if type(vi) is dict:
+                        self._walk_node_ref(vi, refs, all_refs, False, ignore, seen, seen_all)
                     else:
                         print(f"found non dict in a list :( {node}")
-            elif type(v) == dict:
-                self._walk_node_ref(v, refs, all_refs, False, ignore)
+            else:
+                self._walk_node_ref(v, refs, all_refs, False, ignore, seen, seen_all)
             ignore = ignore_now
 
     def find_named_refs(self, data):
         refs = []
         all_refs = []
-        self._walk_node_ref(data, refs, all_refs, True, False)
+        self._walk_node_ref(data, refs, all_refs, True, False, set(), set())
         return refs, all_refs
 
     def do_bs_html(self, part):
+        # BeautifulSoup(features="lxml") parsed with lxml and then built a
+        # second, complete bs4 tree on top of it -- all of which was thrown
+        # away for the text. Going straight to lxml is ~10x faster and was
+        # the single largest cost in transform().
         content = part.get("content", "")
         content = content.strip()
         if content.startswith("<"):
-            soup = BeautifulSoup(content, features="lxml")
-            clncont = soup.get_text()
-            if clncont == "":
-                pass
-            else:
+            try:
+                tree = lxml.html.fromstring(content)
+            except lxml.etree.ParserError:
+                # starts with '<' but isn't parseable as markup; leave as-is
+                return
+            # bs4's get_text() leaves script/style contents out. text_content()
+            # would splice css and javascript into the description, so drop
+            # those subtrees first -- with_tail keeps the text after them.
+            lxml.etree.strip_elements(tree, "script", "style", with_tail=False)
+            clncont = tree.text_content()
+            if clncont != "":
                 part["content"] = clncont
                 part["_content_html"] = content
 
@@ -756,11 +784,14 @@ class MlMapper(Mapper):
                 t4 = {"subject": me, "predicate": f"{luxns}referenceAny", "object": r}
                 ml["triples"].append({"triple": t4})
 
+        # all_reffed is a superset of reffed, so this test runs for every
+        # reference in the record -- against a list it was the second O(n^2)
+        reffed_set = set(reffed)
         for r in all_reffed:
             if r[-36:] in self.ref_ctr_excludes:
                 # exclude globals and top 20
                 continue
-            elif r in reffed:
+            elif r in reffed_set:
                 # exclude lux:any
                 continue
             else:
