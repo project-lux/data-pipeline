@@ -136,8 +136,6 @@ for name, cfg, recids in to_do:
             recids = in_db.iter_keys()
 
     for recid in recids:
-        sys.stdout.write(".")
-        sys.stdout.flush()
         # Acquire the record from cache or network
         # XXX acquire_all() to get multiple records from a single one?
         if acquirer.returns_multiple():
@@ -227,8 +225,6 @@ if DO_REFERENCES:
         rec = acquirer.acquire(recid, rectype=rectype)
         if rec is not None:
             ref_mgr.did_ref(quri, distance)
-            sys.stdout.write(".")
-            sys.stdout.flush()
             # Reconcile it
             rec2 = reconciler.reconcile(rec)
             # Do any post-reconciliation clean up

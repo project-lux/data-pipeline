@@ -1,5 +1,6 @@
 import os
 from .storage.cache.filesystem import FsCache
+from .storage.uricache import URICache, _MISSING
 
 
 # c.f. https://github.com/cheshire3/cheshire3/blob/develop/cheshire3/dynamic.py#L43
@@ -55,6 +56,12 @@ class Config(object):
         self.configcache = None
         # Flattened (match, source) pairs; built lazily on first split_uri()
         self._match_pairs = None
+        # canonicalize() is a pure function of the URI (the fix_identifier
+        # implementations it reaches are all plain string manipulation) and
+        # gets called tens of times per record on a small set of repeating
+        # URIs. Bounded so memory stays predictable across parallel workers;
+        # invalidated wherever _match_pairs is.
+        self._canon_cache = URICache(capacity=100000)
 
         # This (thus) needs a directory called 'config_cache'
         if configcache:
@@ -212,6 +219,8 @@ class Config(object):
             for m in ms:
                 pairs.append((m, s))
         self._match_pairs = tuple(pairs)
+        # canonicalize()'s answers depend on these pairs, so they go too
+        self._canon_cache.clear()
         return self._match_pairs
 
     def _finish_split(self, uri, m, source):
@@ -259,6 +268,17 @@ class Config(object):
         return None
 
     def canonicalize(self, uri):
+        # ~7us of string work, called tens of times per record on a heavily
+        # repeating set of URIs. The sentinel matters: None is a real result
+        # here (an unmatched URI) and is worth caching.
+        hit = self._canon_cache.get(uri)
+        if hit is not _MISSING:
+            return hit
+        result = self._canonicalize(uri)
+        self._canon_cache.put(uri, result)
+        return result
+
+    def _canonicalize(self, uri):
         for bad, good in self.external_uri_rewrites.items():
             if bad in uri:
                 uri = uri.replace(bad, good)
