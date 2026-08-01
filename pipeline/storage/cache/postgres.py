@@ -3,7 +3,25 @@ import threading
 import time
 
 import psycopg2
+import ujson
 from psycopg2.extras import Json, RealDictCursor
+
+
+def _dumps(obj):
+    """Serialiser for the jsonb columns. ~1.7x faster than the stdlib json
+    psycopg2 uses by default, which showed up as `iterencode` in the reconcile
+    profile. escape_forward_slashes stays off: postgres parses either form to
+    the same jsonb, but escaping every / would inflate these URI-heavy
+    documents on the wire for nothing."""
+    return ujson.dumps(obj, escape_forward_slashes=False)
+
+
+# Reading is the same swap in the other direction. Global because psycopg2
+# resolves the jsonb typecaster per connection at connect time and the caches
+# open theirs in PoolManager; the gain here is smaller than on the write side
+# (~1.1x at our document sizes) so this is the half to drop if it ever gets in
+# the way.
+psycopg2.extras.register_default_jsonb(globally=True, loads=ujson.loads)
 
 #
 # How to index into JSONB arrays:
@@ -572,7 +590,7 @@ class PooledCache(object):
         if not type(data) == dict:
             raise ValueError("Data must be a dict()")
         else:
-            jdata = Json(data)
+            jdata = Json(data, dumps=_dumps)
         if yuid is not None and not type(yuid) == str:
             yuid = str(yuid)
 
@@ -689,7 +707,7 @@ class PooledCache(object):
         refresh_time=None,
         change=None,
     ):
-        data = Json(data)
+        data = Json(data, dumps=_dumps)
         insert_time = datetime.datetime.now()
         if record_time is None:
             record_time = insert_time
