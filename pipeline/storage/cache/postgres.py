@@ -1,9 +1,15 @@
 import datetime
+import random
 import threading
 import time
 
 import psycopg2
 import ujson
+
+# Parallel workers upserting the same row can be picked as a deadlock victim.
+# It is transient, so retry the statement rather than killing the build.
+DEADLOCK_RETRIES = 5
+DEADLOCK_BACKOFF = 0.05
 from psycopg2.extras import Json, RealDictCursor
 
 
@@ -166,7 +172,15 @@ class PooledCache(object):
         Deferral is process-wide, not per-cache, because every cache shares
         one write connection -- see PoolManager.deferring. Nothing commits
         on its own without checkpoint(), so pair this with resume_commits()
-        or flush() when the loop ends."""
+        or flush() when the loop ends.
+
+        ONLY safe when parallel workers write disjoint keys. Merge and export
+        qualify: each worker owns a slice of YUIDs. Reconcile does not --
+        collect() stores shared external authority records, so every worker
+        upserts the same rows, and holding those locks across a batch made
+        two workers wait on each other until postgres killed one with
+        `deadlock detected`. If workers can write the same key, commit per
+        write so each lock lives microseconds."""
         self.pools.deferring = True
         self.pools.commit_every = int(every)
 
@@ -610,49 +624,77 @@ class PooledCache(object):
         pholders = ",".join(["%s"] * len(qps))
         qpstr = ",".join(qps)
 
+        if self.config["overwrite"]:
+            qry = f"""INSERT INTO {self.name} ({qpstr}) VALUES ({pholders})
+            ON CONFLICT ({self.key}) DO UPDATE SET ({qpstr}) = ({pholders})"""
+            for attempt in range(DEADLOCK_RETRIES):
+                with self._cursor(internal=False) as cursor:
+                    try:
+                        cursor.execute(qry, qvs * 2)
+                        if self.pools.deferring:
+                            self.pools.pending_writes += 1
+                        else:
+                            self.conn.commit()
+                        return
+                    except psycopg2.extensions.TransactionRollbackError as e:
+                        # NB: the shared base of DeadlockDetected (40P01) and
+                        # SerializationFailure (40001). errors.TransactionRollback
+                        # is a *sibling* of those, not a parent, so catching it
+                        # instead silently catches nothing.
+                        # Deadlock or serialization failure: postgres picked
+                        # this transaction as the victim, which happens when
+                        # parallel workers upsert the same rows. Transient by
+                        # definition -- the statement just needs running again.
+                        self.conn.rollback()
+                        if self.pools.deferring:
+                            # the rollback took every deferred write with it,
+                            # so retrying this one statement fixes nothing
+                            print(f"Deadlock in {self.name} while deferring; "
+                                  f"lost all writes since the last flush(). "
+                                  f"Deferral is only safe when workers write "
+                                  f"disjoint keys -- see defer_commits().")
+                            raise
+                        if attempt == DEADLOCK_RETRIES - 1:
+                            print(f"Failed to upsert {identifier}/{yuid} in "
+                                  f"{self.name} after {DEADLOCK_RETRIES} "
+                                  f"attempts: {e}")
+                            raise
+                        # jittered so two victims don't collide again in step
+                        time.sleep(DEADLOCK_BACKOFF * (attempt + 1) * (0.5 + random.random()))
+                    except Exception as e:
+                        # A swallowed failure here silently loses the write; log
+                        # and re-raise so the caller/build sees it
+                        print(f"Failed to upsert {identifier}/{yuid} in {self.name}: {e}")
+                        if self.pools.deferring:
+                            print("  ... discarding all writes since the last flush()")
+                        self.conn.rollback()
+                        raise
+
+        # Not an overwrite cache: plain insert, duplicates expected.
+        # The UniqueViolation below is survivable, but its rollback would take
+        # the whole open transaction with it. Land anything deferred first so
+        # one duplicate can't silently discard every record written since the
+        # last flush(). Merge writes only to overwrite caches, so this costs
+        # nothing there. This branch therefore never defers, and the insert
+        # stays committed per statement.
+        if self.pools.deferring:
+            self.pools.commit_all()
         with self._cursor(internal=False) as cursor:
-            if self.config["overwrite"]:
-                try:
-                    qry = f"""INSERT INTO {self.name} ({qpstr}) VALUES ({pholders})
-                    ON CONFLICT ({self.key}) DO UPDATE SET ({qpstr}) = ({pholders})"""
-                    cursor.execute(qry, qvs * 2)
-                    if self.pools.deferring:
-                        self.pools.pending_writes += 1
-                    else:
-                        self.conn.commit()
-                except Exception as e:
-                    # A swallowed failure here silently loses the write; log
-                    # and re-raise so the caller/build sees it
-                    print(f"Failed to upsert {identifier}/{yuid} in {self.name}: {e}")
-                    if self.pools.deferring:
-                        print("  ... discarding all writes since the last flush()")
-                    self.conn.rollback()
-                    raise
-            else:
-                # The UniqueViolation below is expected and survivable, but
-                # its rollback would take the whole open transaction with it.
-                # Land anything deferred first so one duplicate can't
-                # silently discard every record written since the last
-                # flush(). Merge writes only to overwrite caches, so this
-                # costs nothing there. This branch therefore never defers,
-                # and the insert below stays committed per statement.
-                if self.pools.deferring:
-                    self.pools.commit_all()
-                try:
-                    qry = f"INSERT INTO {self.name} ({qpstr}) VALUES ({pholders})"
-                    cursor.execute(qry, qvs)
-                    self.conn.commit()
-                except psycopg2.errors.UniqueViolation:
-                    # expected when re-inserting without overwrite; the row
-                    # is already present, keep it
-                    print(f"Duplicate key for {identifier}/{yuid} in {self.name}; keeping existing")
-                    self.conn.rollback()
-                except Exception as e:
-                    # anything else (serialization failure, value too long,
-                    # deadlock) used to be silently dropped
-                    print(f"Failed to insert {identifier}/{yuid} in {self.name}: {e}")
-                    self.conn.rollback()
-                    raise
+            try:
+                qry = f"INSERT INTO {self.name} ({qpstr}) VALUES ({pholders})"
+                cursor.execute(qry, qvs)
+                self.conn.commit()
+            except psycopg2.errors.UniqueViolation:
+                # expected when re-inserting without overwrite; the row
+                # is already present, keep it
+                print(f"Duplicate key for {identifier}/{yuid} in {self.name}; keeping existing")
+                self.conn.rollback()
+            except Exception as e:
+                # anything else (serialization failure, value too long,
+                # deadlock) used to be silently dropped
+                print(f"Failed to insert {identifier}/{yuid} in {self.name}: {e}")
+                self.conn.rollback()
+                raise
         # sys.stdout.write('S');sys.stdout.flush()
 
     def delete(self, key, _key_type=None):

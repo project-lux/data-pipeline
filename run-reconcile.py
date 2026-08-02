@@ -99,19 +99,18 @@ else:
     # Running single, memory cache will remain accurate
     idmap.enable_memory_cache()
 
-# Acquiring a record writes it to the datacache and the recordcache, and each
-# of those committed on the spot -- an fsync per write, per worker. Every
-# cache in the process shares one write connection, so deferring on any one
-# of them defers all of them; checkpoint() below marks the per-record
-# boundary a commit is allowed to land on. Anything uncommitted when a worker
-# dies is simply re-fetched next run.
-commit_cache = None
-for _cfg in list(cfgs.internal.values()) + list(cfgs.external.values()):
-    if _cfg.get("datacache") is not None:
-        commit_cache = _cfg["datacache"]
-        break
-if commit_cache is not None:
-    commit_cache.defer_commits(every=500)
+# DO NOT defer commits here, however tempting the fsync saving looks.
+#
+# Deferral is safe in merge and export because each worker owns a disjoint
+# set of keys -- its slice of YUIDs -- so two workers never hold locks on the
+# same row. Reconcile is the opposite: collect() acquires and stores shared
+# external authority records, so every worker upserts into the same bnf/ulan/
+# aat rows. Holding those row locks open across a batch of writes lets two
+# workers each wait on a row the other has already written, and postgres
+# kills one with `deadlock detected`.
+#
+# Committing per write keeps each lock held for microseconds, so contention
+# degrades to a brief wait instead of a deadlock.
 
 print("Starting...")
 print(f"Update token is: {idmap.update_token}")
@@ -160,9 +159,6 @@ for name, cfg, recids in to_do:
             # Log equivalence assertions; identity is resolved after all
             # slices complete (run-identify.py)
             assertion_log.write_record(rec2)
-        # record complete: a safe point for the caches to commit their batch
-        if commit_cache is not None:
-            commit_cache.checkpoint()
     recids = []
 
 if profiling:
@@ -238,12 +234,8 @@ if DO_REFERENCES:
             assertion_log.write_record(rec2)
         else:
             print(f"Failed to acquire {rectype} reference: {source['name']}:{recid}")
-        if commit_cache is not None:
-            commit_cache.checkpoint()
 
 # final tidy up
-if commit_cache is not None:
-    commit_cache.resume_commits()
 assertion_log.close()
 ref_mgr.write_metatypes(my_slice)
 # force all postgres connections to close

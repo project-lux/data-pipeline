@@ -832,7 +832,7 @@ class LcnafMapper(LcMapper):
         ts = None
         if "madsrdf:activityStartDate" in rwo:
             asd = rwo["madsrdf:activityStartDate"]
-            if type(asd) is dict and "@value" in dict:
+            if type(asd) is dict and "@value" in asd:
                 asdd = make_datetime(asd["@value"])
             elif type(asd) is str:
                 asdd = make_datetime(asd)
@@ -843,7 +843,7 @@ class LcnafMapper(LcMapper):
 
         if "madsrdf:activityEndDate" in rwo:
             asd = rwo["madsrdf:activityEndDate"]
-            if type(asd) is dict and "@value" in dict:
+            if type(asd) is dict and "@value" in asd:
                 asdd = make_datetime(asd["@value"])
             elif type(asd) is str:
                 asdd = make_datetime(asd)
