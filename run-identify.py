@@ -18,7 +18,7 @@ import time
 
 from dotenv import load_dotenv
 from pipeline.config import Config
-from pipeline.process.identity import IdentityResolver
+from pipeline.process.identity_resolver import IdentityResolver
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")
