@@ -248,14 +248,43 @@ def test_pop_ref_yields_one_at_a_time_from_a_batch():
 class StubConfigs:
     max_distance = 3
 
+    def is_qua(self, recid):
+        return "##qua" in recid
+
+
+class StubIdMap:
+    """Resolves each reference URI to a YUID. By default every URI gets its
+    own, so nothing dedupes; `shared` maps URIs onto one YUID."""
+
+    def __init__(self, shared=None):
+        self.shared = shared or {}
+        self.calls = 0
+
+    def get_multi(self, keys, chunk=1000):
+        self.calls += 1
+        out = {}
+        for k in keys:
+            if k in self.shared:
+                out[k] = self.shared[k]
+            else:
+                digest = f"{abs(hash(k)):032x}"[:32]
+                out[k] = f"https://lux.collections.yale.edu/data/concept/{digest}"
+        return out
+
+
+def make_rm(store, idmap=None):
+    rm = object.__new__(ReferenceManager)
+    rm.configs = StubConfigs()
+    rm.done_refs = refmap(store)
+    rm.idmap = idmap if idmap is not None else StubIdMap()
+    return rm
+
 
 def test_write_done_refs_batches_and_filters(tmp_path, monkeypatch):
     store = Store(100)
     for i, k in enumerate(store.order):
         store[k] = {"dist": "9" if i < 10 else "1", "type": "Type"}
-    rm = object.__new__(ReferenceManager)
-    rm.configs = StubConfigs()
-    rm.done_refs = refmap(store)
+    rm = make_rm(store)
 
     monkeypatch.chdir(tmp_path)
     rm.write_done_refs()
@@ -265,3 +294,39 @@ def test_write_done_refs_batches_and_filters(tmp_path, monkeypatch):
     assert all(line.startswith("1|") for line in lines)
     # was three round trips per reference
     assert rm.done_refs.conn.round_trips < 10
+
+
+def test_write_done_refs_dedupes_by_yuid(tmp_path, monkeypatch):
+    """Sibling URIs in one identity cluster must produce ONE line.
+
+    iter_done_refs() slices this file by line number, so two lines for the
+    same YUID go to different merge workers, which then build the same
+    merged record and upsert the same rows in the same tables -- the
+    cross-worker deadlock the merge phase hit once commits were deferred."""
+    store = Store(10)
+    yuid = "https://lux.collections.yale.edu/data/concept/" + "a" * 32
+    cluster = {store.order[0]: yuid, store.order[3]: yuid, store.order[7]: yuid}
+    rm = make_rm(store, StubIdMap(shared=cluster))
+
+    monkeypatch.chdir(tmp_path)
+    rm.write_done_refs()
+
+    lines = (tmp_path / "reference_uris.txt").read_text().splitlines()
+    assert len(lines) == 8, "the three-member cluster must collapse to one line"
+    uris = [line.split("|", 1)[1] for line in lines]
+    assert len(set(uris) & set(cluster)) == 1
+
+
+def test_write_done_refs_keeps_refs_with_no_yuid(tmp_path, monkeypatch):
+    """A reference the idmap doesn't know can't collide with anything, and
+    run-merge reports it -- keep the line so the gap stays visible."""
+    store = Store(5)
+    idmap = StubIdMap()
+    idmap.get_multi = lambda keys, chunk=1000: {k: None for k in keys}
+    rm = make_rm(store, idmap)
+
+    monkeypatch.chdir(tmp_path)
+    rm.write_done_refs()
+
+    lines = (tmp_path / "reference_uris.txt").read_text().splitlines()
+    assert len(lines) == 5

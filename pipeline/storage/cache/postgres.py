@@ -61,6 +61,12 @@ class PoolManager(object):
         self.deferring = False
         self.commit_every = 0
         self.pending_writes = 0
+        # Statements executed since the last commit while deferring. A
+        # deadlock aborts the whole transaction, not just the statement that
+        # lost, so without these the batch is simply gone; with them it can
+        # be replayed. Bounded by commit_every, which is therefore also the
+        # bound on how many records are held in memory at once.
+        self.deferred_stmts = []
 
     @classmethod
     def get_instance(cls):
@@ -105,6 +111,26 @@ class PoolManager(object):
         if self.conn is not None:
             self.conn.commit()
         self.pending_writes = 0
+        # committed, so there is nothing left to replay
+        self.deferred_stmts.clear()
+
+    def record_deferred(self, qry, params):
+        self.deferred_stmts.append((qry, params))
+        self.pending_writes += 1
+
+    def replay_deferred(self):
+        """Re-execute the deferred batch after a rollback threw it away.
+
+        Only upserts are ever deferred (see PooledCache.set), so replaying a
+        statement that had already landed before the rollback is a no-op --
+        which is what makes recovering from a deadlock possible at all
+        rather than just reporting the loss."""
+        if self.conn is None or not self.deferred_stmts:
+            return
+        with self.conn.cursor() as cursor:
+            for (qry, params) in self.deferred_stmts:
+                cursor.execute(qry, params)
+        self.pending_writes = len(self.deferred_stmts)
 
     def put_all(self, name):
         # Closing a connection with an open transaction rolls it back, so
@@ -174,13 +200,23 @@ class PooledCache(object):
         on its own without checkpoint(), so pair this with resume_commits()
         or flush() when the loop ends.
 
-        ONLY safe when parallel workers write disjoint keys. Merge and export
-        qualify: each worker owns a slice of YUIDs. Reconcile does not --
+        Expects parallel workers to write disjoint keys. Merge and export
+        qualify: each worker owns a slice of YUIDs, and every write a merged
+        record makes is keyed by that record's YUID (run-merge's
+        claim_member() is what keeps it true). Reconcile does not --
         collect() stores shared external authority records, so every worker
         upserts the same rows, and holding those locks across a batch made
         two workers wait on each other until postgres killed one with
         `deadlock detected`. If workers can write the same key, commit per
-        write so each lock lives microseconds."""
+        write so each lock lives microseconds.
+
+        A deadlock in a deferred batch is recovered from rather than lost
+        (the batch is replayed -- see PoolManager.replay_deferred), but it
+        still means two workers are writing the same rows, so treat one as a
+        bug in the partitioning rather than as normal contention.
+
+        `every` also bounds memory: the records in the current batch are held
+        until it commits, so they can be replayed."""
         self.pools.deferring = True
         self.pools.commit_every = int(every)
 
@@ -588,6 +624,70 @@ class PooledCache(object):
             for res in cursor:
                 yield res[self.key]
 
+    def _upsert(self, qry, params, identifier=None, yuid=None):
+        """Run one upsert, surviving the transient deadlocks that parallel
+        workers touching the same row produce.
+
+        Postgres aborts the whole transaction when it picks one as a deadlock
+        victim, not just the statement that lost. Committing per write made
+        that a non-event -- there was nothing else in the transaction -- but
+        while deferring it takes every write since the last commit with it.
+        So the batch is replayed before the losing statement is retried;
+        deferred statements are all upserts, so replaying one that had
+        already landed changes nothing."""
+        replay = False
+        for attempt in range(DEADLOCK_RETRIES):
+            try:
+                if replay:
+                    self.pools.replay_deferred()
+                    replay = False
+                with self._cursor(internal=False) as cursor:
+                    cursor.execute(qry, params)
+                if self.pools.deferring:
+                    self.pools.record_deferred(qry, params)
+                else:
+                    self.conn.commit()
+                return
+            except psycopg2.extensions.TransactionRollbackError as e:
+                # NB: the shared base of DeadlockDetected (40P01) and
+                # SerializationFailure (40001). errors.TransactionRollback
+                # is a *sibling* of those, not a parent, so catching it
+                # instead silently catches nothing.
+                # Deadlock or serialization failure: postgres picked this
+                # transaction as the victim, which happens when parallel
+                # workers upsert the same rows. Transient by definition --
+                # the statement just needs running again.
+                self.conn.rollback()
+                if self.pools.deferring:
+                    # the rollback threw the batch away; put it back before
+                    # retrying, otherwise the retry succeeds into a hole
+                    replay = True
+                if attempt == DEADLOCK_RETRIES - 1:
+                    if self.pools.deferring:
+                        print(f"Deadlock in {self.name} while deferring, and "
+                              f"{len(self.pools.deferred_stmts)} replayed writes "
+                              f"could not land either. Deferral expects workers "
+                              f"to write disjoint keys -- see defer_commits().")
+                    print(f"Failed to upsert {identifier}/{yuid} in "
+                          f"{self.name} after {DEADLOCK_RETRIES} "
+                          f"attempts: {e}")
+                    self.pools.deferred_stmts.clear()
+                    self.pools.pending_writes = 0
+                    raise
+                # jittered so two victims don't collide again in step
+                time.sleep(DEADLOCK_BACKOFF * (attempt + 1) * (0.5 + random.random()))
+            except Exception as e:
+                # A swallowed failure here silently loses the write; log
+                # and re-raise so the caller/build sees it
+                print(f"Failed to upsert {identifier}/{yuid} in {self.name}: {e}")
+                self.conn.rollback()
+                if self.pools.deferring:
+                    print(f"  ... discarding {len(self.pools.deferred_stmts)} "
+                          f"writes since the last flush()")
+                    self.pools.deferred_stmts.clear()
+                    self.pools.pending_writes = 0
+                raise
+
     def set(
         self,
         data,
@@ -627,48 +727,8 @@ class PooledCache(object):
         if self.config["overwrite"]:
             qry = f"""INSERT INTO {self.name} ({qpstr}) VALUES ({pholders})
             ON CONFLICT ({self.key}) DO UPDATE SET ({qpstr}) = ({pholders})"""
-            for attempt in range(DEADLOCK_RETRIES):
-                with self._cursor(internal=False) as cursor:
-                    try:
-                        cursor.execute(qry, qvs * 2)
-                        if self.pools.deferring:
-                            self.pools.pending_writes += 1
-                        else:
-                            self.conn.commit()
-                        return
-                    except psycopg2.extensions.TransactionRollbackError as e:
-                        # NB: the shared base of DeadlockDetected (40P01) and
-                        # SerializationFailure (40001). errors.TransactionRollback
-                        # is a *sibling* of those, not a parent, so catching it
-                        # instead silently catches nothing.
-                        # Deadlock or serialization failure: postgres picked
-                        # this transaction as the victim, which happens when
-                        # parallel workers upsert the same rows. Transient by
-                        # definition -- the statement just needs running again.
-                        self.conn.rollback()
-                        if self.pools.deferring:
-                            # the rollback took every deferred write with it,
-                            # so retrying this one statement fixes nothing
-                            print(f"Deadlock in {self.name} while deferring; "
-                                  f"lost all writes since the last flush(). "
-                                  f"Deferral is only safe when workers write "
-                                  f"disjoint keys -- see defer_commits().")
-                            raise
-                        if attempt == DEADLOCK_RETRIES - 1:
-                            print(f"Failed to upsert {identifier}/{yuid} in "
-                                  f"{self.name} after {DEADLOCK_RETRIES} "
-                                  f"attempts: {e}")
-                            raise
-                        # jittered so two victims don't collide again in step
-                        time.sleep(DEADLOCK_BACKOFF * (attempt + 1) * (0.5 + random.random()))
-                    except Exception as e:
-                        # A swallowed failure here silently loses the write; log
-                        # and re-raise so the caller/build sees it
-                        print(f"Failed to upsert {identifier}/{yuid} in {self.name}: {e}")
-                        if self.pools.deferring:
-                            print("  ... discarding all writes since the last flush()")
-                        self.conn.rollback()
-                        raise
+            self._upsert(qry, qvs * 2, identifier, yuid)
+            return
 
         # Not an overwrite cache: plain insert, duplicates expected.
         # The UniqueViolation below is survivable, but its rollback would take
@@ -789,7 +849,10 @@ class PooledCache(object):
         self.conn.set_isolation_level(0)
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry)
-            self.conn.commit()
+            # commit_all, not conn.commit: VACUUM needs its own transaction,
+            # so anything deferred lands here whether we like it or not, and
+            # the replay buffer has to be told
+            self.pools.commit_all()
         self.conn.set_isolation_level(old_iso)
 
     ### Behave like a dict

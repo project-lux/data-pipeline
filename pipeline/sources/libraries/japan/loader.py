@@ -34,6 +34,7 @@ class JapanDereferencer(object):
                         # we have it
                         pass
                     else:
-                        # Try sh
-                        
-                        
+                        # XXX Try sh -- never written. Left unimplemented
+                        # rather than left as a SyntaxError that stops the
+                        # whole package from being imported.
+                        pass

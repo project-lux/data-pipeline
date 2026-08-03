@@ -88,9 +88,9 @@ merged_cache = cfgs.results["merged"]["recordcache"]
 merged_cache.config["overwrite"] = True
 final = cfgs.results["merged"]["mapper"]
 
-# if merged is not empty, then only want to write to it if the record
-# hasn't already been written this build
-# OTOH, if merged starts off empty, it must have been this build
+# Which worker builds which merged record is decided by claim_member() and
+# the slice predicate, not by what has already been written -- see the
+# reference loop below, which used to compare insert_time against this.
 start_time = datetime.datetime.now()
 
 # merge only reads, so enable AAT memory cache
@@ -116,6 +116,7 @@ def fetch_records(rcache, ids, name):
             continue
         yield rec
 
+
 # -------------------------------------------------
 if profiling:
     pr = cProfile.Profile()
@@ -124,6 +125,34 @@ if profiling:
 
 # namespaces of internal sources, for the cross-slice claim check below
 internal_namespaces = tuple(c["namespace"] for c in cfgs.internal.values())
+# the internal sources this run is actually merging
+todo_names = {s["name"] for (n, s) in to_do}
+
+
+def claim_member(cluster, present=()):
+    """Which internal record builds this cluster's merged record, if any.
+
+    Every write a merged record makes -- the merged row and the rewritten
+    row in each contributing source's cache -- is keyed by the cluster's
+    YUID, so two workers may only build the same cluster if they are
+    prepared to deadlock over those rows. This is the single rule that
+    decides which one does it: the lexicographically smallest internal
+    member that still exists in its recordcache. Members in `present` are
+    known to exist and skip the lookup.
+
+    Returns (member_uri, source_config), or (None, None) when the cluster
+    has no internal member -- those clusters belong to the reference pass.
+    """
+    for cand in sorted(m for m in cluster
+                       if not m.startswith("__") and m.startswith(internal_namespaces)):
+        try:
+            (csrc, crecid) = cfgs.split_uri(cfgs.split_qua(cand)[0])
+        except Exception:
+            continue
+        if cand in present or crecid in csrc["recordcache"]:
+            return (cand, csrc)
+    return (None, None)
+
 
 for src_name, src in to_do:
     rcache = src["recordcache"]
@@ -168,19 +197,10 @@ for src_name, src in to_do:
                            if e != qrecid and not e.startswith("__")
                            and e.startswith(internal_namespaces)]
         if other_internals:
-            claimed = False
-            for cand in sorted(other_internals + [qrecid]):
-                if cand == qrecid:
-                    claimed = True
-                    break
-                try:
-                    (csrc, crecid) = cfgs.split_uri(cfgs.split_qua(cand)[0])
-                except Exception:
-                    continue
-                if crecid in csrc["recordcache"]:
-                    # a smaller, still-present member owns this YUID
-                    break
-            if not claimed:
+            # our own record is in hand, so it doesn't need a cache lookup
+            (claimed, _) = claim_member(set(other_internals) | {qrecid}, present=(qrecid,))
+            if claimed != qrecid:
+                # a smaller, still-present member owns this YUID
                 continue
 
         rec2 = reider.reidentify(rec)
@@ -239,14 +259,26 @@ if DO_REFERENCES:
             print(f" *** No YUID for reference {ext_uri} from done_refs")
             continue
         yuid = uri.rsplit("/", 1)[-1]
-        ins_time = merged_cache.metadata(yuid, "insert_time")
-        if ins_time is not None and ins_time["insert_time"] > start_time:
-            # Already processed this record this build
-            continue
+        if RESUME:
+            ins_time = merged_cache.metadata(yuid, "insert_time")
+            if ins_time is not None:
+                continue
 
         equivs = idmap[uri]
         if not equivs:
             print(f"FAILED TO BUILD: {uri}")
+            continue
+
+        # Don't rebuild what the loop above owns. This used to be an
+        # insert_time > start_time check, which is a check-then-act race: the
+        # worker that owns this YUID may not have committed it yet (or may
+        # still be running), so both built it and both upserted the same rows
+        # -- nondeterministic as to which version survived, and the source of
+        # the cross-worker `deadlock detected` once commits were deferred.
+        # claim_member() gives the same answer in every worker without
+        # looking at what has been written so far.
+        (_, claim_src) = claim_member(equivs)
+        if claim_src is not None and claim_src["name"] in todo_names:
             continue
         # get a base record
         # equivs is a redis set; sort so the chosen base record (and thus

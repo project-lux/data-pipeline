@@ -57,26 +57,88 @@ class ReferenceManager(object):
         with open(fn, "w") as fh:
             fh.write(json.dumps(out))
 
+    @staticmethod
+    def _batched(itr, size):
+        batch = []
+        for item in itr:
+            batch.append(item)
+            if len(batch) >= size:
+                yield batch
+                batch = []
+        if batch:
+            yield batch
+
+    @staticmethod
+    def _yuid_token(yuid):
+        """Compact stand-in for a YUID, for the dedupe set in
+        write_done_refs(). Tens of millions of these are held at once and a
+        128 bit int is about a third of the memory the 36 character string
+        costs. Anything that isn't uuid-shaped falls back to the string."""
+        tail = yuid.rsplit("/", 1)[-1]
+        try:
+            return int(tail.replace("-", ""), 16)
+        except ValueError:
+            return yuid
+
     def write_done_refs(self):
         # step through all entries in done_refs and write URI
         # to a file, if distance <= MAX_DISTANCE
         # iter_items() fetches a chunk per round trip; iter_keys() handed back
         # a live reference into redis, and reading k['dist'] off it -- which
         # this loop did three times per key -- was a round trip each time.
+        #
+        # One line per YUID, not one per URI. Several external URIs in the
+        # same identity cluster resolve to the same YUID, and iter_done_refs()
+        # slices this file by line number, so those siblings land in different
+        # merge workers. Each then builds the SAME merged record and upserts
+        # the same rows in merged_ and every <source>_rewritten_record_cache --
+        # duplicated work, and with commits deferred two workers hold those row
+        # locks across a whole batch until postgres kills one with `deadlock
+        # detected`. Resolving the YUID once here, in the single process that
+        # writes the file, is what makes the merge workers key-disjoint.
+        #
+        # Which sibling URI survives doesn't affect the merged output: merge
+        # only uses the line to look up the YUID, and picks the base record
+        # from the whole cluster by PREF_ORDER.
         maxd = self.configs.max_distance
+        seen = set()
+        x = kept = deduped = unresolved = reported = 0
         with open("reference_uris.txt", "w") as fh:
-            x = 0
-            for (key, vals) in self.done_refs.iter_items():
-                x += 1
-                if not x % 100000:
+            for chunk in self._batched(self.done_refs.iter_items(), 10000):
+                wanted = []
+                for (key, vals) in chunk:
+                    x += 1
+                    dist = vals.get("dist")
+                    if dist is None:
+                        print("Got distance of 'None' from done_refs")
+                        continue
+                    if dist <= maxd:
+                        wanted.append((key, dist))
+                if x - reported >= 100000:
+                    reported = x
                     fh.flush()
                     print(x)
-                dist = vals.get("dist")
-                if dist is None:
-                    print("Got distance of 'None' from done_refs")
+                if not wanted:
                     continue
-                if dist <= maxd:
+                # get_multi rejects unqua'd keys; those can't be looked up at
+                # all, so treat them as unresolved rather than failing the run
+                yuids = self.idmap.get_multi([k for (k, d) in wanted if self.configs.is_qua(k)])
+                for (key, dist) in wanted:
+                    yuid = yuids.get(key)
+                    if yuid is None:
+                        # No YUID: nothing to collide with, and run-merge
+                        # reports it. Keep the line so the gap stays visible.
+                        unresolved += 1
+                    else:
+                        token = self._yuid_token(yuid)
+                        if token in seen:
+                            deduped += 1
+                            continue
+                        seen.add(token)
+                    kept += 1
                     fh.write(f"{dist}|{key}\n")
+        print(f"reference_uris.txt: {kept} lines from {x} done refs "
+              f"({deduped} duplicate YUIDs dropped, {unresolved} with no YUID)")
 
     def iter_done_refs(self, my_slice, max_slice):
         with open("reference_uris.txt", "r") as fh:
