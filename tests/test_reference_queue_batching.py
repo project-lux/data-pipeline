@@ -14,6 +14,7 @@ The batched versions must keep two guarantees that matter more than speed:
 """
 
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -100,6 +101,10 @@ class Conn:
     def scan_iter(self, count=1000, **kw):
         self.round_trips += 1
         return list(self.store.keys())
+
+    def dbsize(self):
+        # all_refs has a redis db to itself, so this is the queue length
+        return len(self.store)
 
 
 def refmap(store):
@@ -227,12 +232,20 @@ def test_falls_back_when_scripting_is_unavailable():
 
 # --- pop_ref keeps handing out one at a time --------------------------------
 
-def test_pop_ref_yields_one_at_a_time_from_a_batch():
-    store = Store(120)
+def popper(store, workers=1, idle_timeout=0, idle_poll=0):
     rm = object.__new__(ReferenceManager)
     rm.all_refs = refmap(store)
     rm.ref_batch = 50
     rm._ref_buffer = []
+    rm.ref_workers = workers
+    rm.ref_idle_timeout = idle_timeout
+    rm.ref_idle_poll = idle_poll
+    return rm
+
+
+def test_pop_ref_yields_one_at_a_time_from_a_batch():
+    store = Store(120)
+    rm = popper(store)
     seen = []
     while True:
         item = rm.pop_ref()
@@ -241,6 +254,71 @@ def test_pop_ref_yields_one_at_a_time_from_a_batch():
         seen.append(item)
     assert len(seen) == 120
     assert sorted(k for k, _ in seen) == sorted(store.order)
+
+
+# --- the queue going empty is not the phase being over ----------------------
+
+def test_pop_ref_waits_for_work_another_worker_is_still_generating():
+    """Processing a reference enqueues the references it finds, so an empty
+    read while other workers are still expanding is transient. Quitting on it
+    left whichever worker claimed the last batch to do the entire remaining
+    expansion alone -- 23 of 24 workers exited within the same minute and the
+    survivor ran on for 21 more."""
+    store = Store(1)
+    rm = popper(store, workers=24, idle_timeout=5, idle_poll=0)
+
+    # drain what's there, then have a "peer" enqueue more mid-wait
+    assert rm.pop_ref() is not None
+    polls = []
+    real_popitems = rm.all_refs.popitems
+
+    def refill_on_second_poll(count=100):
+        polls.append(count)
+        if len(polls) == 2:
+            store.add(f"{AAT}9999999##quaType")
+        return real_popitems(count)
+
+    rm.all_refs.popitems = refill_on_second_poll
+    item = rm.pop_ref()
+    assert item is not None, "gave up while a peer was still producing work"
+    assert item[0] == f"{AAT}9999999##quaType"
+
+
+def test_pop_ref_gives_up_once_the_queue_stays_empty():
+    """The wait is bounded, so a finished phase still ends and no shared
+    state is needed to decide that."""
+    rm = popper(Store(0), workers=24, idle_timeout=0.05, idle_poll=0.01)
+    start = time.time()
+    assert rm.pop_ref() is None
+    assert time.time() - start < 5, "idle wait should be bounded by the timeout"
+
+
+def test_a_single_worker_does_not_wait_at_all():
+    """With one process nothing else can enqueue, so an empty queue really is
+    the end -- don't make single-source runs sit through the idle timeout."""
+    rm = popper(Store(0), workers=1, idle_timeout=30, idle_poll=30)
+    start = time.time()
+    assert rm.pop_ref() is None
+    assert time.time() - start < 1
+
+
+# --- claim size shrinks as the queue drains ---------------------------------
+
+def test_claim_size_spreads_the_tail_across_workers():
+    rm = popper(Store(48), workers=24)
+    # 48 left over 24 workers: take 2, not all 48
+    assert rm._claim_size() == 2
+    # plenty of work: the flat batch is still the right answer
+    rm.all_refs = refmap(Store(100000))
+    assert rm._claim_size() == 50
+    # never zero, or the worker would claim nothing and spin
+    rm.all_refs = refmap(Store(1))
+    assert rm._claim_size() == 1
+
+
+def test_claim_size_is_unchanged_for_a_single_worker():
+    rm = popper(Store(48), workers=1)
+    assert rm._claim_size() == 50
 
 
 # --- write_done_refs --------------------------------------------------------

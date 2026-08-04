@@ -88,7 +88,10 @@ else:
 
 # --- set up environment ---
 reconciler = Reconciler(cfgs, idmap, networkmap)
-ref_mgr = ReferenceManager(cfgs, idmap)
+# workers: how many processes share the reference queue. Lets pop_ref() shrink
+# its claim as the queue drains, so the last references spread over all the
+# workers instead of one worker taking the final batch and expanding it alone.
+ref_mgr = ReferenceManager(cfgs, idmap, workers=max_slice if max_slice > 0 else 1)
 assertion_log = IdentityResolver(cfgs, idmap, my_slice)
 debug = cfgs.debug_reconciliation
 
@@ -177,7 +180,11 @@ if DO_REFERENCES:
     print("\nProcessing References...")
     item = 1
     while item:
-        # Item is uri, {dist, type} or None
+        # Item is uri, {dist, type} or None. None means the shared queue has
+        # been empty for the whole idle timeout, not merely empty right now:
+        # processing a reference enqueues the references IT finds, so an
+        # empty read while other workers are still going is transient. See
+        # ReferenceManager._wait_for_refs.
         item = ref_mgr.pop_ref()
         try:
             (uri, dct) = item

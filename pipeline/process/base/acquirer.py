@@ -1,3 +1,7 @@
+import os
+import traceback
+
+
 class Acquirer(object):
     def __init__(self, config):
         self.config = config
@@ -147,7 +151,14 @@ class Acquirer(object):
             rec2 = self.mapper.transform(rec, rectype, reference=reference)
         except Exception as e:
             # raise
-            print(f"Failed to map record {identifier} for {self.name}: {e}")
+            # The message alone doesn't say where it came from -- "'xml'" or
+            # "not enough values to unpack" could be anywhere in a mapper and
+            # its whole dependency tree, so working one out meant reading the
+            # mapper looking for candidates. The innermost frame is one short
+            # field and answers it outright.
+            tb = traceback.extract_tb(e.__traceback__)
+            where = f" [{os.path.basename(tb[-1].filename)}:{tb[-1].lineno}]" if tb else ""
+            print(f"Failed to map record {identifier} for {self.name}: {e}{where}")
             return None
 
         if rec2 is None:

@@ -8,7 +8,7 @@ SKIP_PROPS = frozenset(["equivalent", "access_point", "conforms_to"])
 
 
 class ReferenceManager(object):
-    def __init__(self, configs, idmap):
+    def __init__(self, configs, idmap, workers=1):
         self.configs = configs
         self.metatypes_seen = {}
         self.all_refs = configs.instantiate_map("all_refs")["store"]
@@ -43,6 +43,13 @@ class ReferenceManager(object):
         # true of the one reference popitem() held.
         self.ref_batch = 50
         self._ref_buffer = []
+        # How many workers are draining the shared queue, so the claim size
+        # can be scaled down as it empties -- see _claim_size().
+        self.ref_workers = max(1, int(workers))
+        # How long the queue must stay empty before a worker accepts that the
+        # phase is over -- see _wait_for_refs().
+        self.ref_idle_timeout = getattr(configs, "reference_idle_timeout", 60)
+        self.ref_idle_poll = getattr(configs, "reference_idle_poll", 2)
 
     def write_metatypes(self, my_slice):
         # write out our slice of metatypes
@@ -187,9 +194,59 @@ class ReferenceManager(object):
                     else:
                         yield self._split_done_ref(uri)
 
+    def _claim_size(self):
+        """How many references to claim in one go.
+
+        A flat batch is right through the bulk of the phase and wrong at the
+        end of it: one worker claiming the last 50 leaves the other 23 with
+        nothing, and each of those 50 expands into more references that the
+        one worker then owns alone. Scale the claim to what is left so the
+        tail spreads across the workers instead of landing on whoever asked
+        first. all_refs has its own redis db, so DBSIZE is an exact O(1)
+        queue length."""
+        if self.ref_workers <= 1:
+            return self.ref_batch
+        try:
+            remaining = len(self.all_refs)
+        except Exception:
+            # never let a bookkeeping query stop the phase
+            return self.ref_batch
+        return max(1, min(self.ref_batch, remaining // self.ref_workers))
+
+    def _wait_for_refs(self):
+        """Poll for more work rather than accepting the first empty read.
+
+        The queue going empty does NOT mean the phase is over. Processing a
+        reference discovers more references and pushes them straight back
+        onto the same shared queue (walk_top_for_refs -> resolve_refs ->
+        all_refs.merge_refs), so empty is routinely a transient state while
+        other workers are still expanding what they claimed.
+
+        Treating it as termination meant whichever worker claimed the last
+        batch inherited the entire remaining expansion by itself: in a 24-way
+        build the other 23 exited within the same minute and the survivor ran
+        on for another 21, with nobody left to steal from it.
+
+        So give up only once the queue has stayed empty for the whole idle
+        timeout. This needs no shared state and cannot hang -- the worst case
+        is ref_idle_timeout seconds of waiting per worker at the end of the
+        phase, and the deadline restarts whenever work does turn up."""
+        if self.ref_workers <= 1:
+            # nobody else can be producing, so empty really does mean done
+            return []
+        deadline = time.time() + self.ref_idle_timeout
+        while time.time() < deadline:
+            time.sleep(self.ref_idle_poll)
+            items = self.all_refs.popitems(self._claim_size())
+            if items:
+                return items
+        return []
+
     def pop_ref(self):
         if not self._ref_buffer:
-            self._ref_buffer = self.all_refs.popitems(self.ref_batch)
+            self._ref_buffer = self.all_refs.popitems(self._claim_size())
+            if not self._ref_buffer:
+                self._ref_buffer = self._wait_for_refs()
             if not self._ref_buffer:
                 return None
         return self._ref_buffer.pop()
