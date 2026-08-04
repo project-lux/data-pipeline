@@ -204,6 +204,19 @@ for src_name, src in to_do:
                 continue
 
         rec2 = reider.reidentify(rec)
+        if rec2 is None:
+            # reidentify already reported why; indexing it would just turn
+            # that into a TypeError mid-build
+            print(f" *** Could not reidentify {src['name']}/{recid}")
+            continue
+        if rec2["yuid"] != yuid:
+            # This worker owns `yuid`, not whatever the reidentifier came
+            # back with; writing there would collide with the worker that
+            # does own it. Means the idmap disagrees with itself about this
+            # record, so leave it for identify to fix rather than guessing.
+            print(f"CLUSTER-ESCAPE: {src['name']}/{recid} is in {yuid} but "
+                  f"reidentifies to {rec2['yuid']}; skipping")
+            continue
         src["recordcache2"][rec2["yuid"]] = rec2["data"]
 
         equivs = idmap[rec2["data"]["id"]]
@@ -253,8 +266,9 @@ if profiling:
 
 if DO_REFERENCES:
     item = 1
-    for dist, ext_uri in ref_mgr.iter_done_refs(my_slice, max_slice):
-        uri = idmap[ext_uri]
+    # the YUID comes from the file: write_done_refs resolved it once, which
+    # is also what guarantees one line -- and so one worker -- per YUID
+    for dist, uri, ext_uri in ref_mgr.iter_done_refs(my_slice, max_slice):
         if not uri:
             print(f" *** No YUID for reference {ext_uri} from done_refs")
             continue
@@ -294,7 +308,18 @@ if DO_REFERENCES:
                         rec = src["recordcache"][recid]
                         if rec is not None:
                             rec2 = reider.reidentify(rec)
-                            if rec2:
+                            if rec2 and rec2["yuid"] != yuid:
+                                # The base record decides the YUID every row
+                                # below is keyed by, so one that reidentifies
+                                # out of this cluster would write the merged
+                                # record AND its rewritten row into a YUID
+                                # another worker owns -- while this cluster
+                                # went unbuilt. Try the next candidate.
+                                print(f"CLUSTER-ESCAPE: {src['name']}/{recid} is in "
+                                      f"{yuid} but reidentifies to {rec2['yuid']}; "
+                                      f"not using it as the base record")
+                                rec2 = None
+                            elif rec2:
                                 equivs.remove(baseUri)
                                 del rec2["identifier"]
                                 src["recordcache2"][rec2["yuid"]] = rec2
@@ -317,7 +342,10 @@ if DO_REFERENCES:
             try:
                 rec3 = final.transform(rec3, rec3["data"]["type"])
             except:
-                print(f"*** Final transform raised exception for {rec2['identifier']}")
+                # NB: identifier was deleted above, so reporting it here
+                # raised KeyError from inside the handler and buried the
+                # real exception
+                print(f"*** Final transform raised exception for {uri}")
             # Store it
             if rec3 is not None:
                 try:

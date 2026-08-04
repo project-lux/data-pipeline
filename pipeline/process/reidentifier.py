@@ -128,11 +128,17 @@ class Reidentifier(object):
             # The top-level branch of process_entity also reads the member
             # set of the resolved YUID. That key isn't known until the
             # strings above resolve, so it needs a second hop; mirror the
-            # same min() the real pass uses to choose it.
+            # same choice the real pass makes -- the record's own key first
+            # (_node_keys puts it at index 0), equivalents only as fallback.
+            # A mismatch here is only a wasted round trip, but keeping the
+            # two rules written the same way is what stops it drifting.
             top_keys, _ = self._node_keys(record, rectype, top=True)
-            uus = {batch[k] for k in top_keys if batch.get(k)}
-            if uus:
-                batch.update(mget([min(uus)]))
+            uu = batch.get(top_keys[0]) if top_keys else None
+            if uu is None:
+                uus = {batch[k] for k in top_keys if batch.get(k)}
+                uu = min(uus) if uus else None
+            if uu is not None:
+                batch.update(mget([uu]))
             return batch
         except Exception as e:
             print(f"reidentifier prefetch failed ({e}); using per-node lookups")
@@ -215,13 +221,29 @@ class Reidentifier(object):
                 print(f"\n!!! reidentifier couldn't find YUID for {recid} --> {equivs}")
                 return result
             else:
-                # We have something from the data
-                # set.pop() picked an arbitrary YUID per process when more
-                # than one was present; pick deterministically instead
+                # The record's OWN assignment wins. min() over the whole
+                # equiv_map -- the record's YUID plus one per equivalent --
+                # let an equivalent outvote the record itself whenever the
+                # two disagreed, which handed back a YUID this record is not
+                # a member of. That is not just a wrong id: merge writes the
+                # rewritten row under it, so a worker building cluster X
+                # would write a row keyed Y, in a table another worker owns.
+                # Two workers then upsert the same primary key and postgres
+                # kills one with `deadlock detected` -- and no amount of
+                # partitioning by YUID upstream can prevent it, because the
+                # write has left the cluster it belongs to.
+                #
+                # The disagreement is not exotic: run-identify refuses
+                # assertions that violate a differentFrom (it logs them to
+                # identity_conflicts.jsonl), so a record's equivalents
+                # spanning two clusters is a designed-for outcome.
                 uus = set(equiv_map.values())
-                uu = min(uus)
-                uus.discard(uu)
-                if len(uus):
+                uu = equiv_map.get(recid)
+                if uu is None:
+                    # not in the idmap under its own id: fall back to the
+                    # equivalents, deterministically
+                    uu = min(uus)
+                if len(uus) > 1:
                     # This also shouldn't happen
                     if self.debug:
                         print(f"Found more than one YUID for {recid} / {equivs}")

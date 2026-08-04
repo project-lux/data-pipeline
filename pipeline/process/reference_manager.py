@@ -100,6 +100,14 @@ class ReferenceManager(object):
         # Which sibling URI survives doesn't affect the merged output: merge
         # only uses the line to look up the YUID, and picks the base record
         # from the whole cluster by PREF_ORDER.
+        #
+        # Format is `dist|yuid|uri`. The YUID is written out rather than left
+        # for each merge worker to look up again -- 24 workers resolving the
+        # same reference is 24 redis round trips for one answer -- and it
+        # makes the file self-describing, so a merge run against a file left
+        # over from before the dedupe fails immediately and loudly instead of
+        # deadlocking an hour in. The yuid field is empty for references the
+        # idmap doesn't know.
         maxd = self.configs.max_distance
         seen = set()
         x = kept = deduped = unresolved = reported = 0
@@ -136,9 +144,26 @@ class ReferenceManager(object):
                             continue
                         seen.add(token)
                     kept += 1
-                    fh.write(f"{dist}|{key}\n")
+                    fh.write(f"{dist}|{yuid or ''}|{key}\n")
         print(f"reference_uris.txt: {kept} lines from {x} done refs "
               f"({deduped} duplicate YUIDs dropped, {unresolved} with no YUID)")
+
+    @staticmethod
+    def _split_done_ref(line):
+        """`dist|yuid|uri` -> (dist, yuid, uri).
+
+        A two-field line is the pre-dedupe format, which has one line per URI
+        instead of per YUID -- so sibling URIs in one cluster go to different
+        merge workers, which then upsert the same rows and deadlock. That is
+        not something to limp along with, so say what to do about it."""
+        parts = line.split("|", 2)
+        if len(parts) != 3:
+            raise ValueError(
+                f"reference_uris.txt is in the old dist|uri format ({line!r}). "
+                f"It is stale: regenerate it with "
+                f"`python ./manage-data.py --write-refs` before merging, or "
+                f"parallel merge workers will contend for the same rows.")
+        return parts
 
     def iter_done_refs(self, my_slice, max_slice):
         with open("reference_uris.txt", "r") as fh:
@@ -150,7 +175,7 @@ class ReferenceManager(object):
                 while line:
                     stripped = line.strip()
                     if stripped:
-                        yield stripped.split("|", 1)
+                        yield self._split_done_ref(stripped)
                     line = fh.readline()
             else:
                 okay = True
@@ -160,8 +185,7 @@ class ReferenceManager(object):
                     if not uri:
                         okay = False
                     else:
-                        uri = uri.split("|", 1)
-                        yield uri
+                        yield self._split_done_ref(uri)
 
     def pop_ref(self):
         if not self._ref_buffer:

@@ -311,10 +311,14 @@ def test_write_done_refs_dedupes_by_yuid(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     rm.write_done_refs()
 
-    lines = (tmp_path / "reference_uris.txt").read_text().splitlines()
+    lines = [line.split("|", 2) for line in
+             (tmp_path / "reference_uris.txt").read_text().splitlines()]
     assert len(lines) == 8, "the three-member cluster must collapse to one line"
-    uris = [line.split("|", 1)[1] for line in lines]
+    uris = [uri for (_, _, uri) in lines]
     assert len(set(uris) & set(cluster)) == 1
+    # the surviving line carries the cluster's YUID, so merge doesn't have to
+    # resolve it again in all 24 workers
+    assert [y for (_, y, uri) in lines if uri in cluster] == [yuid]
 
 
 def test_write_done_refs_keeps_refs_with_no_yuid(tmp_path, monkeypatch):

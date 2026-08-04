@@ -153,10 +153,18 @@ def test_diff_resolution_is_order_independent():
 # reidentifier.py: set.pop() chose an arbitrary YUID when >1 present
 # ---------------------------------------------------------------------------
 
+class StubIdMap(dict):
+    """The real IdMap returns None for a key it doesn't hold; a bare dict
+    would raise KeyError out of _lookup and mask what is being tested."""
+
+    def __getitem__(self, key):
+        return self.get(key)
+
+
 def make_reidentifier(idmap):
     r = object.__new__(Reidentifier)
     r.configs = StubConfigs()
-    r.idmap = idmap
+    r.idmap = StubIdMap(idmap)
     r.debug = False
     r.do_not_reidentify = []
     r.redirects = {}
@@ -170,13 +178,37 @@ def make_reidentifier(idmap):
 
 def test_reidentifier_multi_yuid_is_deterministic():
     # A record whose equivalents resolve to two different YUIDs ("shouldn't
-    # happen", but does): the chosen id must not depend on set ordering.
+    # happen", but does -- run-identify refuses assertions that violate a
+    # differentFrom, so a record's equivalents CAN span clusters): the chosen
+    # id must not depend on set ordering, and it must be the record's own.
+    #
+    # This asserted min() over {own} | {equivalents}, which let an equivalent
+    # outvote the record itself. merge writes the record's rewritten row
+    # under whatever comes back, so the losing case wrote a row keyed by a
+    # cluster this worker does not own -- two workers upserting one primary
+    # key, which postgres resolves with `deadlock detected`.
     idmap = {
         "http://rec/1##quaType": "https://lux.test/data/concept/zzz",
         "http://ext/a##quaType": "https://lux.test/data/concept/aaa",
     }
     record = {"id": "http://rec/1", "type": "Type",
               "equivalent": [{"id": "http://ext/a", "type": "Type"}]}
+    for _ in range(20):
+        r = make_reidentifier(dict(idmap))
+        result = r.process_entity(dict(record), "Type", top=False)
+        assert result["id"] == "https://lux.test/data/concept/zzz"
+
+
+def test_reidentifier_falls_back_to_equivalents_deterministically():
+    """A record the idmap doesn't know under its own id still has to resolve,
+    and the fallback must not depend on set ordering."""
+    idmap = {
+        "http://ext/z##quaType": "https://lux.test/data/concept/zzz",
+        "http://ext/a##quaType": "https://lux.test/data/concept/aaa",
+    }
+    record = {"id": "http://rec/unknown", "type": "Type",
+              "equivalent": [{"id": "http://ext/z", "type": "Type"},
+                             {"id": "http://ext/a", "type": "Type"}]}
     for _ in range(20):
         r = make_reidentifier(dict(idmap))
         result = r.process_entity(dict(record), "Type", top=False)
@@ -322,10 +354,26 @@ def test_iter_done_refs_skips_blank_lines(tmp_path, monkeypatch):
     rm = object.__new__(ReferenceManager)
     monkeypatch.chdir(tmp_path)
     (tmp_path / "reference_uris.txt").write_text(
-        "1|http://a##quaType\n\n2|http://b##quaType\n")
+        "1|yuid:a|http://a##quaType\n\n2||http://b##quaType\n")
     got = list(rm.iter_done_refs(-1, -1))
-    assert got == [["1", "http://a##quaType"], ["2", "http://b##quaType"]]
+    assert got == [["1", "yuid:a", "http://a##quaType"],
+                   ["2", "", "http://b##quaType"]]
 
     # empty file yields nothing (previously yielded a bogus [""])
     (tmp_path / "reference_uris.txt").write_text("")
     assert list(rm.iter_done_refs(-1, -1)) == []
+
+
+def test_iter_done_refs_rejects_the_pre_dedupe_format(tmp_path, monkeypatch):
+    """A file left over from before the YUID dedupe has one line per URI, so
+    sibling URIs in one cluster go to different merge workers and those
+    workers upsert the same rows. Fail at the first line, not an hour in with
+    `deadlock detected`."""
+    import pytest
+    from pipeline.process.reference_manager import ReferenceManager
+
+    rm = object.__new__(ReferenceManager)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "reference_uris.txt").write_text("1|http://a##quaType\n")
+    with pytest.raises(ValueError, match="--write-refs"):
+        list(rm.iter_done_refs(-1, -1))
