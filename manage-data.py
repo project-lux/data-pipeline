@@ -232,18 +232,35 @@ if "--nt" in sys.argv:
     rc = cfgs.results["merged"]["recordcache"]
     # FIXME: this path should go to config
     with gzip.open(f"/data-export/output/lux/nt/lux_{my_slice}.nt.gz", "wt", 1) as fh:
+        # Iterate whole records rather than keys-then-fetch-each-key: the rows
+        # arrive in the server-side cursor that found them, so this drops a
+        # round trip per record -- tens of millions of them. Nothing here
+        # writes back, so there is no reason to go and re-read each row.
+        #
+        # The jsonb -> dict parse already runs through ujson: postgres.py
+        # registers it as the global jsonb loads, so raw=True plus an explicit
+        # ujson.loads would be the same work in a different place. It only
+        # pays where the JSON is passed straight through unparsed, as in
+        # run-export.py, and the mapper needs the dict.
         if my_slice == -1:
-            itr = rc.iter_keys()
+            itr = rc.iter_records()
         else:
-            itr = rc.iter_keys_slice(my_slice, max_slice)
+            itr = rc.iter_records_slice(my_slice, max_slice)
 
         x = 0
         start = time.time()
-        for recid in itr:
-            rec = rc[recid]
-            res = mpr.transform(rec)
-            for r in res:
-                fh.write(f"{r}\n")
+        for rec in itr:
+            try:
+                res = mpr.transform(rec)
+            except Exception as e:
+                # One unmappable record used to end the whole slice's export
+                print(f"*** {rec.get('yuid', '?')} failed in the qlever mapper: {e}")
+                continue
+            # One write per record rather than one per triple: there are tens
+            # of triples each, and every write goes through gzip
+            if res:
+                fh.write("\n".join(res))
+                fh.write("\n")
             x += 1
             if not x % 100000:
                 print(f"{x} {time.time() - start}")

@@ -1,7 +1,8 @@
 import unicodedata
 from string import punctuation, whitespace
 
-from bs4 import BeautifulSoup
+import lxml.etree
+import lxml.html
 from shapely.wkt import loads
 
 from pipeline.process.base.mapper import Mapper
@@ -13,6 +14,37 @@ If there isn't a search, then there isn't a triple.
 
 ### TO DO
 # Consider: make different text fields for case sensitive/insensitive, diacritics/not diacritics
+
+
+# A dict lookup rather than the chain of `in [list]` tests it replaces:
+# get_prefix is called once per record plus once per subject and per
+# influence, and the chain walked up to six list scans to answer "concept".
+PREFIX_BY_TYPE = {
+    "VisualItem": "work",
+    "LinguisticObject": "work",
+    "HumanMadeObject": "item",
+    "DigitalObject": "item",
+    "Person": "agent",
+    "Group": "agent",
+    "Place": "place",
+    # Set here is Collection / Holdings. UI decision to put in with concepts
+    "Type": "concept",
+    "Language": "concept",
+    "Material": "concept",
+    "Currency": "concept",
+    "MeasurementUnit": "concept",
+    "Activity": "event",
+    "Event": "event",
+    "Period": "event",
+    "Set": "set",
+}
+
+# One pass instead of six: str.translate walks the string once, where the
+# chained .replace() calls each scanned it and allocated a new string. Value
+# None deletes the character. Order didn't matter in the chained form either
+# -- no replacement produces a character a later one would match -- so this
+# is exactly equivalent.
+SANITIZE_TABLE = str.maketrans({"\r": " ", "\n": " ", "\t": " ", "-": " ", '"': None, "\\": None})
 
 
 class QleverMapper(Mapper):
@@ -38,8 +70,14 @@ class QleverMapper(Mapper):
         self.depth = self.idmap["http://vocab.getty.edu/aat/300072633##quaType"]
         self.weight = self.idmap["http://vocab.getty.edu/aat/300056240##quaType"]
 
-        self.triple_pattern = "<{subject}> <{predicate}> <{object}> ."
-        self.literal_pattern = '<{subject}> <{predicate}> "{value}"{datatype} .'
+        # Triples are emitted as f-strings inline in transform():
+        #   <subject> <predicate> <object> .
+        #   <subject> <predicate> "value"datatype .
+        # They were str.format(**dict), which re-parses the pattern and builds
+        # a kwargs dict on every call -- and this is the innermost loop of the
+        # whole export, tens of triples for each of tens of millions of
+        # records. The f-string form is several times faster for identical
+        # output (tests/test_qlever_mapper.py pins it).
         self.number_type = "^^<http://www.w3.org/2001/XMLSchema#decimal>"
         self.date_type = "^^<http://www.w3.org/2001/XMLSchema#dateTime>"
         self.wkt_type = "^^<http://www.opengis.net/ont/geosparql#wktLiteral>"
@@ -66,13 +104,7 @@ class QleverMapper(Mapper):
     def sanitize_string(self, string):
         if not string:
             return ""
-        string = string.lower()
-        string = string.replace("\r", " ")
-        string = string.replace("\n", " ")
-        string = string.replace("\t", " ")
-        string = string.replace('"', "")
-        string = string.replace("\\", "")
-        string = string.replace("-", " ")
+        string = string.lower().translate(SANITIZE_TABLE)
         # remove diacritics
         if self.remove_diacritics:
             nfkd_form = unicodedata.normalize("NFD", string)
@@ -88,35 +120,35 @@ class QleverMapper(Mapper):
         return string
 
     def do_bs_html(self, content):
+        # Same change as the marklogic mapper: BeautifulSoup(features="lxml")
+        # parsed with lxml and then built a second, complete bs4 tree on top
+        # of it, all of which was discarded for the text. Going straight to
+        # lxml is several times faster, and this runs over every statement of
+        # every record in the export.
         content = content.strip()
         if content.startswith("<"):
-            soup = BeautifulSoup(content, features="lxml")
-            clncont = soup.get_text()
-            return clncont
+            try:
+                tree = lxml.html.fromstring(content)
+            except lxml.etree.ParserError:
+                # starts with '<' but isn't parseable as markup; leave as-is
+                return content
+            # bs4's get_text() leaves script/style contents out. text_content()
+            # would splice css and javascript into the record text, so drop
+            # those subtrees first -- with_tail keeps the text after them.
+            lxml.etree.strip_elements(tree, "script", "style", with_tail=False)
+            return tree.text_content()
         return content
 
     def get_prefix(self, which):
         if type(which) is dict and "type" in which:
             which = which["type"]
-        if which in ["VisualItem", "LinguisticObject"]:
-            pfx = "work"
-        elif which in ["HumanMadeObject", "DigitalObject"]:
-            pfx = "item"
-        elif which in ["Person", "Group"]:
-            pfx = "agent"
-        elif which == "Place":
-            pfx = "place"
-        elif which in ["Type", "Language", "Material", "Currency", "MeasurementUnit"]:
-            # Set here is Collection / Holdings. UI decision to put in with concepts
-            pfx = "concept"
-        elif which in ["Activity", "Event", "Period"]:
-            pfx = "event"
-        elif which == "Set":
-            pfx = "set"
-        else:
+        try:
+            return PREFIX_BY_TYPE[which]
+        except (KeyError, TypeError):
+            # TypeError: `which` is still an unhashable dict, i.e. a node with
+            # no type at all
             print(f"Failed to find a prefix for {which}")
-            pfx = "other"
-        return pfx
+            return "other"
 
     def transform(self, record, rectype=None, reference=False):
         data = record["data"]
@@ -126,29 +158,39 @@ class QleverMapper(Mapper):
         triples = []
         recordText = []
 
-        anyt = {"subject": me, "predicate": f"{self.luxns}{pfx}Any", "object": ""}
+        # Bind the namespaces and the title-cased prefix to locals. Every
+        # predicate below interpolates luxns, and there are tens of them per
+        # record over tens of millions of records -- a local is a LOAD_FAST
+        # where self.luxns is a LOAD_ATTR plus a dict lookup each time.
+        luxns = self.luxns
+        pfx_title = pfx.title()
+
+        anyt = {"subject": me, "predicate": f"{luxns}{pfx}Any", "object": ""}
         lt = {"subject": me, "predicate": "", "value": "", "datatype": ""}
 
         # Otherwise can't distinguish between event category and event vs period vs activity
-        t = {"subject": me, "predicate": f"{self.rdfns}type", "object": f"{self.luxns}{pfx.title()}"}
-        triples.append(self.triple_pattern.format(**t))
+        t = {"subject": me, "predicate": f"{self.rdfns}type", "object": f"{luxns}{pfx_title}"}
+        triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
         t["object"] = f"{self.lans}{rectype}"
-        triples.append(self.triple_pattern.format(**t))
+        triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
 
         # meta-metadata -- sources for the record
         if "change" in record and record["change"]:
             sources = record["change"].split("|")
             okay = ["ipch", "pmc", "ils", "yuag", "ycba", "ypm"]
-            t["predicate"] = f"{self.luxns}source"
+            t["predicate"] = f"{luxns}source"
             for s in sources[:]:
                 if s in okay:
                     # add triple
-                    t["object"] = f"{self.luxns}{s.upper()}"
-                    triples.append(self.triple_pattern.format(**t))
+                    t["object"] = f"{luxns}{s.upper()}"
+                    triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
 
         # names
         lt["datatype"] = ""
-        for idb in data["identified_by"]:
+        # .get: this was the one unguarded access in the mapper, and
+        # manage-data.py --nt had no error handling around transform, so a
+        # single record without identified_by ended the whole slice's export
+        for idb in data.get("identified_by", []):
             if "content" not in idb or not idb["content"]:
                 continue
             val = self.sanitize_string(idb["content"])
@@ -156,27 +198,32 @@ class QleverMapper(Mapper):
             lt["value"] = val
             if idb["type"] == "Name":
                 # primaryName
-                cxns = [x.get("id", None) for x in idb.get("classified_as", [])]
+                # `x.get("id", None)` put None in the list for classifications
+                # without an id. self.sortIdentifier and friends are idmap
+                # lookups that are themselves None when the aat term is
+                # missing, and `None in cxns` then matched anything untyped
+                # and mislabelled the field. Only real ids belong here.
+                cxns = [x["id"] for x in idb.get("classified_as", []) if "id" in x]
                 if self.primaryName in cxns:
-                    lt["predicate"] = f"{self.luxns}{pfx}PrimaryName"
-                    triples.append(self.literal_pattern.format(**lt))
-                    lt["predicate"] = f"{self.luxns}primaryName"
-                    triples.append(self.literal_pattern.format(**lt))
+                    lt["predicate"] = f"{luxns}{pfx}PrimaryName"
+                    triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
+                    lt["predicate"] = f"{luxns}primaryName"
+                    triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
                 if self.sortName in cxns:
-                    lt["predicate"] = f"{self.luxns}{pfx}SortName"
-                    triples.append(self.literal_pattern.format(**lt))
-                lt["predicate"] = f"{self.luxns}{pfx}Name"
-                triples.append(self.literal_pattern.format(**lt))
-                lt["predicate"] = f"{self.luxns}name"
-                triples.append(self.literal_pattern.format(**lt))
+                    lt["predicate"] = f"{luxns}{pfx}SortName"
+                    triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
+                lt["predicate"] = f"{luxns}{pfx}Name"
+                triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
+                lt["predicate"] = f"{luxns}name"
+                triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
             else:
-                cxns = [x.get("id", None) for x in idb.get("classified_as", [])]
+                cxns = [x["id"] for x in idb.get("classified_as", []) if "id" in x]
                 if self.sortIdentifier in cxns:
-                    lt["predicate"] = f"{self.luxns}sortIdentifier"
-                    triples.append(self.literal_pattern.format(**lt))
+                    lt["predicate"] = f"{luxns}sortIdentifier"
+                    triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
                 else:
-                    lt["predicate"] = f"{self.luxns}{pfx}Identifier"
-                    triples.append(self.literal_pattern.format(**lt))
+                    lt["predicate"] = f"{luxns}{pfx}Identifier"
+                    triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
 
         # statements
         for rtb in data.get("referred_to_by", []):
@@ -193,7 +240,7 @@ class QleverMapper(Mapper):
         for eq in data.get("equivalent", []):
             if eqid := eq.get("id", None):
                 t["object"] = eqid
-                triples.append(self.triple_pattern.format(**t))
+                triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
 
         # digital image
         # true iff representation/digitally_shown_by/access_point/id
@@ -206,21 +253,21 @@ class QleverMapper(Mapper):
                 if rep:
                     rep = rep[0].get("id", None)
                     if rep:
-                        lt["predicate"] = f"{self.luxns}{pfx}HasDigitalImage"
+                        lt["predicate"] = f"{luxns}{pfx}HasDigitalImage"
                         lt["value"] = 1
                         hasDigitalImage = 1
                         lt["datatype"] = self.number_type
-                        triples.append(self.literal_pattern.format(**lt))
+                        triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
 
         # all classifications
         # agentClassification, workClassification (etc)
-        t["predicate"] = f"{self.luxns}{pfx}Classification"
+        t["predicate"] = f"{luxns}{pfx}Classification"
         for cls in data.get("classified_as", []):
             if "id" in cls:
                 t["object"] = cls["id"]
-                triples.append(self.triple_pattern.format(**t))
+                triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
                 anyt["object"] = cls["id"]
-                triples.append(self.triple_pattern.format(**anyt))
+                triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
         # beginning/ending
         drels = {}
@@ -250,62 +297,64 @@ class QleverMapper(Mapper):
                 continue
             if type(vals) is not list:
                 vals = [vals]
+            # depends only on the prefix and the relation, not on val
+            pcls = f"{pfx_title}{dtyp}"
             for val in vals:
                 if type(val) is not dict:
                     print(f"*** string not dict: {dprop} in {me} ***")
                     continue
-                pcls = f"{pfx.title()}{dtyp}"
                 check = [val]
                 check.extend(val.get("part", []))
                 for bit in check:
                     whos = bit.get("carried_out_by", [])
-                    t["predicate"] = f"{self.luxns}agentOf{pcls}"
+                    t["predicate"] = f"{luxns}agentOf{pcls}"
                     for who in whos:
                         if "id" in who:
                             t["object"] = who["id"]
-                            triples.append(self.triple_pattern.format(**t))
+                            triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
                             anyt["object"] = who["id"]
-                            triples.append(self.triple_pattern.format(**anyt))
+                            triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
                     wheres = bit.get("took_place_at", [])
-                    t["predicate"] = f"{self.luxns}placeOf{pcls}"
+                    t["predicate"] = f"{luxns}placeOf{pcls}"
                     for where in wheres:
                         if "id" in where:
                             t["object"] = where["id"]
-                            triples.append(self.triple_pattern.format(**t))
+                            triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
                             anyt["object"] = where["id"]
-                            triples.append(self.triple_pattern.format(**anyt))
+                            triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
-                    types = bit.get("classified_as", [])
-                    types.extend(bit.get("technique", []))
-                    t["predicate"] = f"{self.luxns}typeOf{pcls}"
+                    # concatenate, don't extend: bit.get() returns the
+                    # record's own list and extending it appended the
+                    # technique entries into its classified_as
+                    types = bit.get("classified_as", []) + bit.get("technique", [])
+                    t["predicate"] = f"{luxns}typeOf{pcls}"
                     for typ in types:
                         if "id" in typ:
                             t["object"] = typ["id"]
-                            triples.append(self.triple_pattern.format(**t))
+                            triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
                             anyt["object"] = typ["id"]
-                            triples.append(self.triple_pattern.format(**anyt))
+                            triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
                     causes = bit.get("caused_by", [])
-                    t["predicate"] = f"{self.luxns}causeOf{pcls}"
+                    t["predicate"] = f"{luxns}causeOf{pcls}"
                     for cause in causes:
                         if "id" in cause:
                             t["object"] = cause["id"]
-                            triples.append(self.triple_pattern.format(**t))
+                            triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
                             anyt["object"] = cause["id"]
-                            triples.append(self.triple_pattern.format(**anyt))
-                    infs = bit.get("influenced_by", [])
-                    infs.extend(bit.get("used_specific_object", []))
+                            triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
+                    infs = bit.get("influenced_by", []) + bit.get("used_specific_object", [])
                     for inf in infs:
                         if "type" in inf:
                             infpfx = self.get_prefix(inf["type"])
-                            t["predicate"] = f"{self.luxns}{infpfx}InfluenceOf{pcls}"
+                            t["predicate"] = f"{luxns}{infpfx}InfluenceOf{pcls}"
                         else:
                             continue
                         if "id" in inf:
                             t["object"] = inf["id"]
-                            triples.append(self.triple_pattern.format(**t))
+                            triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
                             anyt["object"] = inf["id"]
-                            triples.append(self.triple_pattern.format(**anyt))
+                            triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
                     # timespan
                     timespan = bit.get("timespan", {})
                     if timespan:
@@ -313,33 +362,33 @@ class QleverMapper(Mapper):
                         lt["datatype"] = self.date_type
                         startval = timespan.get("begin_of_the_begin", "")
                         if startval:
-                            lt["predicate"] = f"{self.luxns}startOf{pcls}"
+                            lt["predicate"] = f"{luxns}startOf{pcls}"
                             lt["value"] = startval
-                            triples.append(self.literal_pattern.format(**lt))
+                            triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
                         endval = timespan.get("end_of_the_end", "")
                         if endval:
-                            lt["predicate"] = f"{self.luxns}endOf{pcls}"
+                            lt["predicate"] = f"{luxns}endOf{pcls}"
                             lt["value"] = endval
-                            triples.append(self.literal_pattern.format(**lt))
+                            triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
 
         # memberOf
         for member in data.get("member_of", []):
             if "id" in member:
                 t["object"] = member["id"]
-                t["predicate"] = f"{self.luxns}{pfx}MemberOf{member['type']}"
-                triples.append(self.triple_pattern.format(**t))
+                t["predicate"] = f"{luxns}{pfx}MemberOf{member['type']}"
+                triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
                 anyt["object"] = member["id"]
-                triples.append(self.triple_pattern.format(**anyt))
+                triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
         # partOf
         parents = data.get("part_of", [])
         for parent in parents:
             if "id" in parent:
-                t["predicate"] = f"{self.luxns}{pfx}PartOf"
+                t["predicate"] = f"{luxns}{pfx}PartOf"
                 t["object"] = parent["id"]
-                triples.append(self.triple_pattern.format(**t))
+                triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
                 anyt["object"] = parent["id"]
-                triples.append(self.triple_pattern.format(**anyt))
+                triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
         # isOnline for items, works, sets
         if pfx in ["item", "work", "set"]:
@@ -364,34 +413,33 @@ class QleverMapper(Mapper):
                                                 and not ap.startswith("https://archives.yale.edu/")
                                             ):
                                                 isOnline = 1
-            lt["predicate"] = f"{self.luxns}{pfx}IsOnline"
+            lt["predicate"] = f"{luxns}{pfx}IsOnline"
             lt["value"] = isOnline
             lt["datatype"] = self.number_type
-            triples.append(self.literal_pattern.format(**lt))
+            triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
 
         # Class Specific relationships
         if pfx in ["work", "set"]:
             # Language
             langs = data.get("language", [])
-            t["predicate"] = f"{self.luxns}{pfx}Language"
+            t["predicate"] = f"{luxns}{pfx}Language"
             for lang in langs:
                 if "id" in lang:
                     t["object"] = lang["id"]
-                    triples.append(self.triple_pattern.format(**t))
+                    triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
                     anyt["object"] = lang["id"]
-                    triples.append(self.triple_pattern.format(**anyt))
+                    triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
             # Subjects
-            abouts = data.get("about", [])
-            abouts.extend(data.get("represents", []))
+            abouts = data.get("about", []) + data.get("represents", [])
             for about in abouts:
                 if "id" in about:
                     t["object"] = about["id"]
                     abpfx = self.get_prefix(about)
-                    t["predicate"] = f"{self.luxns}{pfx}About{abpfx.title()}"
-                    triples.append(self.triple_pattern.format(**t))
+                    t["predicate"] = f"{luxns}{pfx}About{abpfx.title()}"
+                    triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
                     anyt["object"] = about["id"]
-                    triples.append(self.triple_pattern.format(**anyt))
+                    triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
             # Public Domain
             #
@@ -406,44 +454,43 @@ class QleverMapper(Mapper):
 
             lt["datatype"] = self.number_type
             lt["value"] = isPublicDomain
-            lt["predicate"] = f"{self.luxns}{pfx}IsPublicDomain"
-            triples.append(self.literal_pattern.format(**lt))
+            lt["predicate"] = f"{luxns}{pfx}IsPublicDomain"
+            triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
 
             # Set specific predicates
             if pfx == "set":
                 curates = data.get("used_for", [])
-                t["predicate"] = f"{self.luxns}setCuratedBy"
+                t["predicate"] = f"{luxns}setCuratedBy"
                 for c in curates:
                     for cby in c.get("carried_out_by", []):
                         if "id" in cby:
                             t["object"] = cby["id"]
-                            triples.append(self.triple_pattern.format(**t))
+                            triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
                             anyt["object"] = cby["id"]
-                            triples.append(self.triple_pattern.format(**anyt))
+                            triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
         elif pfx == "item":
             # carries/shows
-            carries = data.get("carries", [])
-            carries.extend(data.get("shows", []))
-            carries.extend(data.get("digitally_carries", []))
-            carries.extend(data.get("digitally_shows", []))
+            carries = (data.get("carries", []) + data.get("shows", [])
+                       + data.get("digitally_carries", [])
+                       + data.get("digitally_shows", []))
             for c in carries:
                 if "id" in c:
                     t["object"] = c["id"]
-                    t["predicate"] = f"{self.luxns}carries"
-                    triples.append(self.triple_pattern.format(**t))
+                    t["predicate"] = f"{luxns}carries"
+                    triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
                     anyt["object"] = c["id"]
-                    triples.append(self.triple_pattern.format(**anyt))
+                    triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
             # materials
             mats = data.get("made_of", [])
-            t["predicate"] = f"{self.luxns}material"
+            t["predicate"] = f"{luxns}material"
             for mat in mats:
                 if "id" in mat:
                     t["object"] = mat["id"]
-                    triples.append(self.triple_pattern.format(**t))
+                    triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
                     anyt["object"] = mat["id"]
-                    triples.append(self.triple_pattern.format(**anyt))
+                    triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
             # dimensions
             dims = data.get("dimension", [])
@@ -453,18 +500,18 @@ class QleverMapper(Mapper):
                     lt["value"] = d["value"]
                     cxns = [x["id"] for x in d.get("classified_as", []) if "id" in x]
                     if self.height in cxns:
-                        lt["predicate"] = f"{self.luxns}height"
+                        lt["predicate"] = f"{luxns}height"
                     elif self.width in cxns:
-                        lt["predicate"] = f"{self.luxns}width"
+                        lt["predicate"] = f"{luxns}width"
                     elif self.depth in cxns:
-                        lt["predicate"] = f"{self.luxns}depth"
+                        lt["predicate"] = f"{luxns}depth"
                     elif self.weight in cxns:
-                        lt["predicate"] = f"{self.luxns}weight"
+                        lt["predicate"] = f"{luxns}weight"
                     else:
                         continue
-                    triples.append(self.literal_pattern.format(**lt))
-                    lt["predicate"] = f"{self.luxns}dimension"
-                    triples.append(self.literal_pattern.format(**lt))
+                    triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
+                    lt["predicate"] = f"{luxns}dimension"
+                    triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
 
         elif pfx == "agent":
             # nationality, occupation, gender
@@ -473,25 +520,25 @@ class QleverMapper(Mapper):
                 if "id" in cxn:
                     metas = [x["id"] for x in cxn.get("classified_as", []) if "id" in x]
                     if self.nationality in metas:
-                        t["predicate"] = f"{self.luxns}nationality"
+                        t["predicate"] = f"{luxns}nationality"
                     elif self.occupation in metas:
-                        t["predicate"] = f"{self.luxns}occupation"
+                        t["predicate"] = f"{luxns}occupation"
                     elif self.gender in metas:
-                        t["predicate"] = f"{self.luxns}gender"
+                        t["predicate"] = f"{luxns}gender"
                     else:
                         continue
                     t["object"] = cxn["id"]
-                    triples.append(self.triple_pattern.format(**t))
+                    triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
 
         elif pfx == "concept":
             broaders = data.get("broader", [])
             for b in broaders:
                 if "id" in b:
-                    t["predicate"] = f"{self.luxns}broader"
+                    t["predicate"] = f"{luxns}broader"
                     t["object"] = b["id"]
-                    triples.append(self.triple_pattern.format(**t))
+                    triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
                     anyt["object"] = b["id"]
-                    triples.append(self.triple_pattern.format(**anyt))
+                    triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
         elif pfx == "place":
             wkt = data.get("defined_by", "")
@@ -517,49 +564,48 @@ class QleverMapper(Mapper):
                                 okay = False
                                 break
                     if okay:
-                        lt["predicate"] = f"{self.luxns}placeWKT"
+                        lt["predicate"] = f"{luxns}placeWKT"
                         lt["value"] = wkt
                         lt["datatype"] = self.wkt_type
-                        triples.append(self.literal_pattern.format(**lt))
+                        triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
 
         elif pfx == "event":
             whos = data.get("carried_out_by", [])
-            t["predicate"] = f"{self.luxns}agentOfEvent"
+            t["predicate"] = f"{luxns}agentOfEvent"
             for who in whos:
                 if "id" in who:
                     t["object"] = who["id"]
-                    triples.append(self.triple_pattern.format(**t))
+                    triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
                     anyt["object"] = who["id"]
-                    triples.append(self.triple_pattern.format(**anyt))
+                    triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
             wheres = data.get("took_place_at", [])
-            t["predicate"] = f"{self.luxns}placeOfEvent"
+            t["predicate"] = f"{luxns}placeOfEvent"
             for where in wheres:
                 if "id" in where:
                     t["object"] = where["id"]
-                    triples.append(self.triple_pattern.format(**t))
+                    triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
                     anyt["object"] = where["id"]
-                    triples.append(self.triple_pattern.format(**anyt))
+                    triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
             causes = data.get("caused_by", [])
-            t["predicate"] = f"{self.luxns}causeOfEvent"
+            t["predicate"] = f"{luxns}causeOfEvent"
             for cause in causes:
                 if "id" in cause:
                     t["object"] = cause["id"]
-                    triples.append(self.triple_pattern.format(**t))
+                    triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
                     anyt["object"] = cause["id"]
-                    triples.append(self.triple_pattern.format(**anyt))
-            infs = data.get("influenced_by", [])
-            infs.extend(data.get("used_specific_object", []))
+                    triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
+            infs = data.get("influenced_by", []) + data.get("used_specific_object", [])
             for inf in infs:
                 if "type" in inf:
                     infpfx = self.get_prefix(inf["type"])
-                    t["predicate"] = f"{self.luxns}eventUsed{infpfx.title()}"
+                    t["predicate"] = f"{luxns}eventUsed{infpfx.title()}"
                 else:
                     continue
                 if "id" in inf:
                     t["object"] = inf["id"]
-                    triples.append(self.triple_pattern.format(**t))
+                    triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
                     anyt["object"] = inf["id"]
-                    triples.append(self.triple_pattern.format(**anyt))
+                    triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
             # timespan
             timespan = data.get("timespan", {})
             if timespan:
@@ -567,25 +613,28 @@ class QleverMapper(Mapper):
                 lt["datatype"] = self.date_type
                 startval = timespan.get("begin_of_the_begin", "")
                 if startval:
-                    lt["predicate"] = f"{self.luxns}startOfEvent"
+                    lt["predicate"] = f"{luxns}startOfEvent"
                     lt["value"] = startval
-                    triples.append(self.literal_pattern.format(**lt))
+                    triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
                 endval = timespan.get("end_of_the_end", "")
                 if endval:
-                    lt["predicate"] = f"{self.luxns}endOfEvent"
+                    lt["predicate"] = f"{luxns}endOfEvent"
                     lt["value"] = endval
-                    triples.append(self.literal_pattern.format(**lt))
+                    triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
         else:
             raise ValueError(f"Unsupported prefix: {pfx}")
 
         # add in recordText, with prefix
 
+        # Every element was sanitized as it went in, and joining with a space
+        # can't introduce anything the sanitizer strips -- so re-sanitizing
+        # here was a second full scan of the largest string in the record for
+        # no change to it.
         rtxt = " ".join([x for x in recordText if x])
-        rtxt = self.sanitize_string(rtxt)
-        lt["predicate"] = f"{self.luxns}{pfx}RecordText"
+        lt["predicate"] = f"{luxns}{pfx}RecordText"
         lt["value"] = rtxt
         lt["datatype"] = ""
-        triples.append(self.literal_pattern.format(**lt))
+        triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
 
         # Experiment: Try keeping recordTexts in separate triples
 
