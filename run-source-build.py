@@ -32,7 +32,7 @@ print("Starting...")
 print(f"Update token is: {idmap.update_token}")
 sys.stdout.flush()
 
-sources = ['aat', 'ulan', 'lcsh']
+sources = ['aat', 'ulan', 'lcsh', 'tgn']
 
 for source in sources:
     src = cfgs.external[source]
