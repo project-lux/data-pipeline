@@ -4,10 +4,6 @@ import json
 import time
 from dotenv import load_dotenv
 from pipeline.config import Config
-from pipeline.process.reconciler import Reconciler
-from pipeline.process.reference_manager import ReferenceManager
-from pipeline.process.identity_resolver import IdentityResolver
-from pipeline.storage.cache.postgres import PoolManager
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")
@@ -48,7 +44,7 @@ for source in sources:
 
     out_db.defer_commits(every=1000)
     for rec in in_db.iter_records_slice(my_slice, max_slice):
-        rec2 = mapper.transform(rec)
+        rec2 = mapper.transform(rec, None)
         out_db.store_record(rec2)
         out_db.checkpoint()
     out_db.flush()
