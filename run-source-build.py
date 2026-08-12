@@ -39,9 +39,9 @@ for source in sources:
     print(f" *** {source} ***")
     sys.stdout.flush()
     in_db = src["datacache"]
-    acq = src['acquirer']
+    #acq = src['acquirer']
     out_db = src['recordcache']
-    # mapper = src["mapper"]
+    mapper = src["mapper"]
 
     out_db.defer_commits(every=1000)
     for rec in in_db.iter_records_slice(my_slice, max_slice):
