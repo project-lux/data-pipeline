@@ -33,20 +33,17 @@ print("Starting...")
 print(f"Update token is: {idmap.update_token}")
 sys.stdout.flush()
 
-sources = ['aat', 'ulan', 'tgn', 'lcsh']
+sources = ['aat', 'ulan', 'lcsh']
 
 for source in sources:
     src = cfgs.external[source]
-
-for name, cfg, recids in to_do:
-    print(f" *** {name} ***")
+    print(f" *** {source} ***")
     sys.stdout.flush()
-    in_db = cfg["datacache"]
-    out_db = cfg['recordcache']
-    mapper = cfg["mapper"]
+    in_db = src["datacache"]
+    out_db = src['recordcache']
+    mapper = src["mapper"]
 
     out_db.defer_commits(every=1000)
-
     for rec in in_db.iter_records_slice(my_slice, max_slice):
         rec2 = mapper.transform(rec)
         out_db.store_record(rec2)
