@@ -21,6 +21,9 @@ cfgs.instantiate_all()
 my_slice = -1
 max_slice = -1
 
+if len(sys.argv) > 2 and sys.argv[1].isnumeric() and sys.argv[2].isnumeric():
+    my_slice = int(sys.argv[1])
+    max_slice = int(sys.argv[2])
 
 if my_slice > -1:
     # Running in parallel, will cause cross-process errors
