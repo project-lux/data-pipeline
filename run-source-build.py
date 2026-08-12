@@ -39,14 +39,16 @@ for source in sources:
     print(f" *** {source} ***")
     sys.stdout.flush()
     in_db = src["datacache"]
+    acq = src['acquirer']
     out_db = src['recordcache']
-    mapper = src["mapper"]
+    # mapper = src["mapper"]
 
     out_db.defer_commits(every=1000)
     for rec in in_db.iter_records_slice(my_slice, max_slice):
         rec2 = mapper.transform(rec, None)
         if rec2 is not None:
             idq = cfgs.make_qua(rec2['identifier'], rec2['data']['type'])
+            rec2['identifier'] = idq
             out_db[idq] = rec2
             out_db.checkpoint()
     out_db.flush()
