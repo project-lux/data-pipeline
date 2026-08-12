@@ -45,6 +45,7 @@ for source in sources:
     out_db.defer_commits(every=1000)
     for rec in in_db.iter_records_slice(my_slice, max_slice):
         rec2 = mapper.transform(rec, None)
-        out_db[rec2['identifier']] = rec2
-        out_db.checkpoint()
+        if rec2 is not None:
+            out_db[rec2['identifier']] = rec2
+            out_db.checkpoint()
     out_db.flush()
