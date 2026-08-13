@@ -36,7 +36,7 @@ sys.stdout.flush()
 sources = ['aat', 'ulan', 'lcsh', 'tgn']
 
 x = 0
-with gzip.open(f"/data-export/output/lux/nt/sources_{my_slice}.nt.gz", "wt", 1) as fh,
+with gzip.open(f"/data-export/output/lux/nt/sources_{my_slice}.nt.gz", "wt", 1) as fh,\
      gzip.open(f"/data-export/output/lux/latest/sources_{my_slice}.jsonl.gz", "wt", 1) as fh2:
     for source in sources:
         src = cfgs.external[source]
