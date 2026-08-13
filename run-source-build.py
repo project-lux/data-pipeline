@@ -1,6 +1,6 @@
 import os
 import sys
-import json
+import ujson as json
 import time
 from dotenv import load_dotenv
 from pipeline.config import Config
@@ -36,7 +36,8 @@ sys.stdout.flush()
 sources = ['aat', 'ulan', 'lcsh', 'tgn']
 
 x = 0
-with gzip.open(f"/data-export/output/lux/nt/sources_{my_slice}.nt.gz", "wt", 1) as fh:
+with gzip.open(f"/data-export/output/lux/nt/sources_{my_slice}.nt.gz", "wt", 1) as fh,
+     gzip.open(f"/data-export/output/lux/latest/sources_{my_slice}.jsonl.gz", "wt", 1) as fh2:
     for source in sources:
         src = cfgs.external[source]
         print(f" *** {source} ***")
@@ -56,6 +57,11 @@ with gzip.open(f"/data-export/output/lux/nt/sources_{my_slice}.nt.gz", "wt", 1) 
                 out_db[idq] = rec2
                 out_db.checkpoint()
 
+                # Export JSON to JSONL files
+                jstr = json.dumps(rec2['data'])
+                fh2.write(jstr + "\n")
+
+                # Export NTriples
                 try:    
                     res = ql_mpr.transform(rec2)
                     if res:
