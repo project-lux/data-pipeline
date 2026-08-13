@@ -1,5 +1,6 @@
 import os
 import sys
+import gzip
 import ujson as json
 import time
 from dotenv import load_dotenv
