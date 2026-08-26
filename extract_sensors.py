@@ -19,6 +19,8 @@ for hmo in yuag.iter_records_type('HumanMadeObject'):
     identifiers = hmo['data']['identified_by']
     acts = hmo['data'].get('used_for', [])
     if acts:
+        if type(acts) is dict:
+            acts = [acts]
         sids = []
         acc_no = ""
         sys_no = ""
