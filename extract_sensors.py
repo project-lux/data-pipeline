@@ -42,7 +42,5 @@ for hmo in yuag.iter_records_type('HumanMadeObject'):
                         acc_no = ident['content']
                     elif "http://vocab.getty.edu/aat/300435704" in cxns:
                         sys_no = ident['content']
-            print(sids)
-            print(acc_no)
-            print(sys_no)
+            print(f"{acc_no}|{sys_no}|{';'.join(sids)}")
 
