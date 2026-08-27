@@ -282,7 +282,8 @@ if "--clean-idmap" in sys.argv:
         kill = False
         for v in val:
             if v.startswith("__"):
-                if v.startswith("__2024"):
+                d = int(v[2:10])
+                if d < 20260600:
                     kill = True
                 done = True
                 break
