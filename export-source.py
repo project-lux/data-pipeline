@@ -54,8 +54,9 @@ for src, cfg in to_do:
     with gzip.open(outfn, "wt", 1) as fh:
         for rec in itr:
             x += 1
+            ident = rec['identifier']
             rec = rec['data']
-            outs = json.dumps(rec, separators=(",", ":"), escape_forward_slashes=False) + "\n"
+            outs = ident + "\t" + json.dumps(rec, separators=(",", ":"), escape_forward_slashes=False) + "\n"
             fh.write(outs)
             if not x % 25000:
                 print(f"  {x} in {time.time() - start}")
