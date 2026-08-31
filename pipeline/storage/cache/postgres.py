@@ -561,8 +561,8 @@ class PooledCache(object):
             for res in cursor:
                 yield res
 
-    def iter_records(self):
-        qry = f"SELECT * FROM {self.name}"
+    def iter_records(self, raw=False):
+        qry = f"SELECT {self._select_list(raw)} FROM {self.name}"
         with self._cursor(iter=True) as cursor:
             cursor.execute(qry)
             for res in cursor:

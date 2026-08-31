@@ -41,12 +41,18 @@ for src, cfg in to_do:
 
     print(f"Exporting ~{ttl} records from {src}")
 
-    outfn = f"/data-export/output/external/export_{src}_{my_slice}.zip"
+    if my_slice == -1:
+        my_slice = 0
+        outfn = f"/data-export/output/external/export_{src}.zip"
+        itr = dc.iter_records(raw=True)
+    else:
+        itr = dc.iter_records_slice(my_slice, max_slice, raw=True)
+        outfn = f"/data-export/output/external/export_{src}_{my_slice}.zip"
 
     start = time.time()
     x = 0
     with zipfile.ZipFile(outfn, "w", compression=zipfile.ZIP_BZIP2) as fh:
-        for rec in dc.iter_records_slice(my_slice, max_slice, raw=True):
+        for rec in itr:
             x += 1
             rec = rec['data']
             outs = json.dumps(rec, separators=(",", ":"))
