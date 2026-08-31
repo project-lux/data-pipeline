@@ -1,7 +1,7 @@
 import os
 import sys
 import ujson as json
-import zipfile
+import gzip
 import time
 from dotenv import load_dotenv
 from pipeline.config import Config
@@ -43,19 +43,19 @@ for src, cfg in to_do:
 
     if my_slice == -1:
         my_slice = 0
-        outfn = f"/data-export/output/external/export_{src}.zip"
+        outfn = f"/data-export/output/external/export_{src}.jsonl.gz"
         itr = dc.iter_records(raw=True)
     else:
         itr = dc.iter_records_slice(my_slice, max_slice, raw=True)
-        outfn = f"/data-export/output/external/export_{src}_{my_slice}.zip"
+        outfn = f"/data-export/output/external/export_{src}_{my_slice}.jsonl.gz"
 
     start = time.time()
     x = 0
-    with zipfile.ZipFile(outfn, "w", compression=zipfile.ZIP_BZIP2) as fh:
+    with gzip.open(outfn, "wt", 1) as fh:
         for rec in itr:
             x += 1
             rec = rec['data']
-            outs = json.dumps(rec, separators=(",", ":"), escape_forward_slashes=False)
+            outs = json.dumps(rec, separators=(",", ":"), escape_forward_slashes=False) + "\n"
             fh.write(outs)
             if not x % 25000:
                 print(f"  {x} in {time.time() - start}")
