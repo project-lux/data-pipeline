@@ -54,8 +54,8 @@ for src, cfg in to_do:
         for rec in itr:
             x += 1
             ident = rec['identifier']
-            rec = rec['data']
-            outs = ident + "\t" + json.dumps(rec, separators=(",", ":"), escape_forward_slashes=False) + "\n"
+            rec = rec['data'] # this is still a string due to raw=True
+            outs = f"{ident}\t{rec}\n"
             fh.write(outs)
             if not x % 25000:
                 print(f"  {x} in {time.time() - start}")
