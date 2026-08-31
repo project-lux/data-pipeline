@@ -56,7 +56,7 @@ for src, cfg in to_do:
             x += 1
             rec = rec['data']
             outs = json.dumps(rec, separators=(",", ":"), escape_forward_slashes=False)
-            fh.write(outb)
+            fh.write(outs)
             if not x % 25000:
                 print(f"  {x} in {time.time() - start}")
                 sys.stdout.flush()
