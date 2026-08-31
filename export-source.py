@@ -55,8 +55,7 @@ for src, cfg in to_do:
         for rec in itr:
             x += 1
             rec = rec['data']
-            outs = json.dumps(rec, separators=(",", ":"))
-            outb = outs.encode("utf-8")
+            outs = json.dumps(rec, separators=(",", ":"), escape_forward_slashes=False)
             fh.write(outb)
             if not x % 25000:
                 print(f"  {x} in {time.time() - start}")
