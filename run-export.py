@@ -3,14 +3,6 @@ import sys
 
 import ujson
 from dotenv import load_dotenv
-
-
-def dumps(obj):
-    # ujson is ~2x faster than stdlib json on these documents, but it escapes
-    # every / by default -- that would change the output bytes and inflate
-    # these URI-heavy documents by ~9%. Off, this is byte-identical to the
-    # json.dumps(obj, separators=(",", ":")) it replaces.
-    return ujson.dumps(obj, escape_forward_slashes=False)
 from pipeline.config import Config
 from pipeline.storage.cache.postgres import PoolManager
 
@@ -19,6 +11,9 @@ import io
 import cProfile
 import pstats
 from pstats import SortKey
+
+def dumps(obj):
+    return ujson.dumps(obj, escape_forward_slashes=False)
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")
