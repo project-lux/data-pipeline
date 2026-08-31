@@ -42,7 +42,6 @@ for src, cfg in to_do:
     print(f"Exporting ~{ttl} records from {src}")
 
     if my_slice == -1:
-        my_slice = 0
         outfn = f"/data-export/output/external/export_{src}.jsonl.gz"
         itr = dc.iter_records(raw=True)
     else:
