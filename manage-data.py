@@ -58,6 +58,15 @@ if "--load" in sys.argv:
         my_slice = int(sys.argv[1])
         max_slice = int(sys.argv[2])
         cfgs.external["wikidata"]["loader"].load(my_slice, max_slice)
+    if "--orcid" in sys.argv:
+        # Slices are optional here: the summaries archive is one gzip stream,
+        # so a worker still walks all of it and only the per-record work is
+        # divided. Worth it via import_parallel.sh on a big machine, but a
+        # single process (no slice arguments) loads the whole thing too.
+        if len(sys.argv) > 2 and sys.argv[1].isnumeric() and sys.argv[2].isnumeric():
+            cfgs.external["orcid"]["loader"].load(int(sys.argv[1]), int(sys.argv[2]))
+        else:
+            cfgs.external["orcid"]["loader"].load()
 
 ### LOAD INDEXES
 if "--load-index" in sys.argv:
@@ -381,22 +390,63 @@ if "--clear" in sys.argv:
         c = cfgs.results[src][ctype]
         c.clear()
 
+### MAINTAIN DATABASES
+
+
+def _maintenance_caches():
+    """Every cache the vacuum, bloat and rewrite commands walk."""
+    for cfgset, types in (
+        (cfgs.internal, ["datacache", "recordcache", "recordcache2"]),
+        (cfgs.external, ["datacache", "recordcache", "recordcache2"]),
+        (cfgs.results, ["recordcache", "recordcache2"]),
+    ):
+        for c in cfgset.values():
+            for t in types:
+                if t in c and c[t] is not None:
+                    yield c["name"], t, c[t]
+
+
+def _named_cache(name):
+    """Resolve a `<source>_<cachetype>` argument, as --clear takes."""
+    (src, ctype) = name.split("_", 1)
+    for cfgset in (cfgs.internal, cfgs.external, cfgs.results):
+        if src in cfgset and ctype in cfgset[src] and cfgset[src][ctype] is not None:
+            return cfgset[src][ctype]
+    return None
+
+
 if "--vacuum" in sys.argv or "--optimize" in sys.argv:
-    for c in cfgs.internal.values():
-        for t in ["datacache", "recordcache", "recordcache2"]:
-            if t in c and c[t] is not None:
-                print(f"{c['name']}/{t}...")
-                c[t].optimize()
-    for c in cfgs.external.values():
-        for t in ["datacache", "recordcache", "recordcache2"]:
-            if t in c and c[t] is not None:
-                print(f"{c['name']}/{t}...")
-                c[t].optimize()
-    for c in cfgs.results.values():
-        for t in ["recordcache", "recordcache2"]:
-            if t in c and c[t] is not None:
-                print(f"{c['name']}/{t}...")
-                c[t].optimize()
+    # VACUUM (ANALYZE, FREEZE) per table. Reports what each one is carrying
+    # first: vacuuming zeroes the dead tuple count, and it is the number that
+    # says whether the table wants a --rewrite as well.
+    for name, t, cache in _maintenance_caches():
+        print(f"{name}/{t}...")
+        cache.optimize()
+
+if "--bloat" in sys.argv:
+    # Report only: which tables are holding space VACUUM cannot give back
+    for name, t, cache in _maintenance_caches():
+        print(cache.bloat_line())
+
+if "--drop-time-indexes" in sys.argv:
+    # One-off DDL: remove the insert_time index from every cache that has no
+    # query for it. The data caches keep theirs -- latest() reads it.
+    for name, t, cache in _maintenance_caches():
+        cache.drop_time_index()
+
+if "--rewrite" in sys.argv:
+    # CLUSTER one named table, eg --rewrite orcid_datacache. Takes an
+    # exclusive lock on it for the duration and needs as much free disk as the
+    # table occupies, so it names its target rather than walking the config.
+    ridx = sys.argv.index("--rewrite")
+    if len(sys.argv) <= ridx + 1:
+        print("--rewrite needs a cache, eg --rewrite orcid_datacache")
+    else:
+        cache = _named_cache(sys.argv[ridx + 1])
+        if cache is None:
+            print(f"No such cache: {sys.argv[ridx + 1]}")
+        else:
+            cache.rewrite()
 
 
 if "--counts" in sys.argv:

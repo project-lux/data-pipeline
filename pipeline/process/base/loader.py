@@ -85,6 +85,32 @@ class Loader(object):
         fh.close()
         self.out_cache.commit()
 
+    def load_export2(self):
+        where = self.config["all_configs"].dumps_dir +"/harvested"
+        fn = os.path.join(where, f"export_{self.config['name']}.jsonl.gz")
+        if not os.path.exists(fn):
+            print(fn)
+            return None
+
+        self.out_cache.defer_commits(every=1000)
+
+        fh = gzip.open(fn, "rt")
+        x = 0
+        start = time.time()
+        for line in fh:
+            x += 1
+            ident, json_data = line.strip().split("\t", 1)
+            js = json.loads(json_data)
+            self.out_cache[ident] = js
+            self.out_cache.checkpoint()
+            if not x % 10000:
+                t = time.time() - start
+                xps = x / t
+                print(f"{x} in {t} = {xps}/s")
+        fh.close()
+        self.out_cache.flush()
+
+
     def load_export(self):
         where = self.config["all_configs"].dumps_dir
         zipfn = os.path.join(where, f"export_{self.config['name']}.zip")

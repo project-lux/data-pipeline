@@ -2,6 +2,7 @@ import datetime
 import random
 import threading
 import time
+from contextlib import contextmanager
 
 import psycopg2
 import ujson
@@ -11,6 +12,12 @@ import ujson
 DEADLOCK_RETRIES = 5
 DEADLOCK_BACKOFF = 0.05
 from psycopg2.extras import Json, RealDictCursor
+
+
+def _fmt_bytes(n):
+    """GB for the tables this is really about, MB below that."""
+    n = float(n or 0)
+    return f"{n / 1e9:.1f}GB" if n >= 1e9 else f"{n / 1e6:.0f}MB"
 
 
 def _dumps(obj):
@@ -141,6 +148,13 @@ class PoolManager(object):
 
 
 class PooledCache(object):
+    # latest() is the only query that reads insert_time in an order, and it is
+    # only ever asked of the data caches (update_manager.harvest,
+    # checkDataUpdates, populate-timestamps). Everywhere else the index cost
+    # 11-21% of a load's WAL and about as much disk as the primary key, to
+    # serve nothing -- see drop_time_index().
+    TIME_INDEX = False
+
     def __init__(self, config):
         self.config = config
         self.name = config["name"] + "_" + config["tabletype"]
@@ -284,7 +298,8 @@ class PooledCache(object):
         with self._cursor(internal=False) as cursor:
             try:
                 cursor.execute(qry)
-                cursor.execute(idxQry)
+                if self.TIME_INDEX:
+                    cursor.execute(idxQry)
                 self.conn.commit()
             except Exception as e:
                 print(f"Make table failed: {e}")
@@ -295,6 +310,7 @@ class PooledCache(object):
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry)
             res = cursor.fetchone()
+        self.end_read()
         return res["count"]
 
     def metadata(self, key, field="insert_time", _key_type=None):
@@ -326,12 +342,55 @@ class PooledCache(object):
             cursor.execute(qry, params)
             self.pools.commit_all()
 
+    def end_read(self):
+        """End a transaction that a read left open.
+
+        Reads share the write connection, and psycopg2 opens a transaction for
+        the first statement whether or not anything is written -- a SELECT
+        never commits, so the transaction stays open until something else does.
+        This is not new with defer_commits(): the read methods have never
+        closed their transaction.
+
+        What that costs is the ACCESS SHARE lock the read took, which blocks
+        DDL on those tables -- measured: with one read transaction left open,
+        CLUSTER (rewrite()) and TRUNCATE (clear()) both fail with
+        LockNotAvailable, while VACUUM and ANALYZE go through untouched. It
+        does NOT hold back the vacuum horizon: in READ COMMITTED the snapshot
+        is released at the end of each statement, so backend_xmin is already
+        NULL while the session sits idle in transaction.
+
+        Inside a write loop it doesn't matter, because the transaction is
+        bounded by the next checkpoint()/flush(). It matters when a read is
+        followed by a long pause -- a harvest crawl, a monitoring script
+        between polls -- which is why latest(), len() and len_estimate() call
+        this and the per-record reads don't: a ROLLBACK is a round trip, and
+        get()/metadata()/has_item() run millions of times per build.
+
+        No-op while a deferred batch is outstanding: that transaction belongs
+        to the writes and rolling it back would discard them."""
+        if self.conn is None:
+            return
+        if self.pools.pending_writes:
+            return
+        self.conn.rollback()
+
     def latest(self):
-        qry = f"SELECT insert_time FROM {self.name} ORDER BY insert_time DESC LIMIT 1"
+        # max() reads one entry off the insert_time index. The obvious
+        # spelling, ORDER BY insert_time DESC LIMIT 1, could not: DESC implies
+        # NULLS FIRST while the index is built NULLS LAST, so the pathkeys
+        # don't match and postgres scanned and sorted the whole table instead
+        # -- 42ms and 14798 buffers against 0.009ms and 4, measured on 2M rows.
+        qry = f"SELECT max(insert_time) AS insert_time FROM {self.name}"
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry)
             res = cursor.fetchone()
-        if res:
+        # max() of no rows is a row containing NULL, where ORDER BY ... LIMIT 1
+        # returned no row at all; callers test for the sentinel (see
+        # checkDataUpdates.py), so it still has to come back for an empty table
+        # harvest() and the monitoring scripts read this and then go away for
+        # a while -- a crawl, a sleep -- so don't leave a snapshot open
+        self.end_read()
+        if res and res["insert_time"] is not None:
             return res["insert_time"].isoformat()
         else:
             return "0000-01-01T00:00:00"
@@ -347,6 +406,7 @@ class PooledCache(object):
                 # print(f"Called len_estimate, didn't get any hits, rolling back")
                 self.conn.rollback()
                 res = {"count": 0}
+        self.end_read()
         return int(res["count"])
 
     def _select_list(self, raw=False):
@@ -839,21 +899,195 @@ class PooledCache(object):
         self.bulk_cursor.close()
         self.bulk_cursor = None
 
-    def optimize(self):
-        # Call VACUUM on the table
-        qry = f"VACUUM (ANALYZE) {self.name}"
+    # VACUUM's index phase can use parallel workers (postgres 13+), and its
+    # default 64MB of maintenance_work_mem makes it take repeated index passes
+    # on a table of this size. Both are session-level, so they are set here
+    # rather than left to whatever the server was configured with.
+    MAINTENANCE_WORK_MEM = "1GB"
+    MAINTENANCE_PARALLEL = 4
 
-        if not self.conn:
+    @contextmanager
+    def _maintenance(self):
+        """Run one maintenance statement outside any transaction.
+
+        VACUUM and CLUSTER need a transaction of their own, so the connection
+        goes to autocommit first. psycopg2's set_isolation_level ABORTS an open
+        transaction rather than committing it, so anything deferred has to land
+        before the switch or it is silently discarded -- and commit_all() would
+        then clear the replay buffer that could have put it back."""
+        self.flush()
+        if self.conn is None:
             self.conn = self.pools.get_conn(self.pool_name)
         old_iso = self.conn.isolation_level
         self.conn.set_isolation_level(0)
+        try:
+            with self._cursor(internal=False) as cursor:
+                # Only read by maintenance statements, so it can be left set
+                # on the connection rather than reset on the way out
+                cursor.execute("SET maintenance_work_mem = %s", (self.MAINTENANCE_WORK_MEM,))
+                yield cursor
+        finally:
+            # However this ends, hand the connection back committing per
+            # write. It is shared with every other cache in the process, and
+            # left in autocommit it makes defer_commits() a silent no-op for
+            # the rest of the run.
+            self.conn.set_isolation_level(old_iso)
+
+    def optimize(self, freeze=True, report=True):
+        """VACUUM (ANALYZE, FREEZE) the table: what a load should end with.
+
+        ANALYZE is the part that matters most -- until it runs the planner is
+        working from whatever the table looked like before the load. FREEZE
+        sets the visibility map, which lets index-only scans work and, more to
+        the point, means autovacuum won't later have to read the whole table
+        to freeze it at a moment of its own choosing.
+
+        What this cannot do is give space back. VACUUM marks dead tuples
+        reusable and leaves the file the size it grew to, so a reload that
+        upserts every row leaves the table at twice the size it needs, and
+        every iter_records_slice() scan then reads twice the pages. bloat()
+        reports that and rewrite() is what fixes it."""
+        if report:
+            # before the VACUUM: it zeroes the dead tuple count
+            print(self.bloat_line())
+        start = time.time()
+        with self._maintenance() as cursor:
+            opts = ["ANALYZE"]
+            if freeze:
+                opts.append("FREEZE")
+            if self.MAINTENANCE_PARALLEL and self.conn.server_version >= 130000:
+                # the index phase only; ANALYZE is single-threaded either way
+                opts.append(f"PARALLEL {self.MAINTENANCE_PARALLEL}")
+            cursor.execute(f"VACUUM ({', '.join(opts)}) {self.name}")
+        if report:
+            print(f"  vacuumed {self.name} in {time.time() - start:.0f}s")
+
+    def bloat(self):
+        """How much of the table is space that VACUUM will not give back.
+
+        n_dead_tup is the honest number right after a load: one dead tuple per
+        row that was upserted over. It is not reliable later, because VACUUM
+        zeroes it while leaving every page allocated -- so it can read 0 on
+        exactly the bloated table this is meant to find. pgstattuple_approx
+        answers it properly and cheaply (it skips all-visible pages), but the
+        extension isn't installed everywhere, so it is used when present and
+        the tuple counts stand in when it isn't.
+
+        Either way the counts are main-heap tuples, and for these tables the
+        documents are nearly all of the size (orcid: 100GB of TOAST behind a
+        9GB heap), so treat a dead tuple count as a signal that a rewrite is
+        worth doing rather than as a measure of what it will return."""
+        out = {"name": self.name, "live": 0, "dead": 0, "heap": 0, "indexes": 0,
+               "toast": 0, "total": 0, "free_percent": None}
         with self._cursor(internal=False) as cursor:
-            cursor.execute(qry)
-            # commit_all, not conn.commit: VACUUM needs its own transaction,
-            # so anything deferred lands here whether we like it or not, and
-            # the replay buffer has to be told
-            self.pools.commit_all()
-        self.conn.set_isolation_level(old_iso)
+            cursor.execute(
+                "SELECT n_live_tup, n_dead_tup FROM pg_stat_user_tables WHERE relname = %s",
+                (self.name,),
+            )
+            row = cursor.fetchone()
+            if row is not None:
+                out["live"] = row["n_live_tup"]
+                out["dead"] = row["n_dead_tup"]
+            cursor.execute(
+                "SELECT pg_relation_size(%s) AS heap, pg_indexes_size(%s) AS indexes, "
+                "pg_total_relation_size(%s) AS total",
+                (self.name, self.name, self.name),
+            )
+            out.update(cursor.fetchone())
+            # The documents live in the TOAST table, which is most of the size
+            # here -- pg_relation_size counts only the main heap
+            out["toast"] = out["total"] - out["heap"] - out["indexes"]
+            cursor.execute("SELECT 1 FROM pg_extension WHERE extname = 'pgstattuple'")
+            if cursor.fetchone() is not None:
+                cursor.execute(
+                    "SELECT approx_free_percent, dead_tuple_percent FROM pgstattuple_approx(%s)",
+                    (self.name,),
+                )
+                row = cursor.fetchone()
+                out["free_percent"] = float(row["approx_free_percent"]) + float(row["dead_tuple_percent"])
+        return out
+
+    def bloat_line(self):
+        b = self.bloat()
+        parts = [
+            f"{b['name']}: {b['live']} live rows, {_fmt_bytes(b['total'])} "
+            f"({_fmt_bytes(b['heap'])} heap + {_fmt_bytes(b['toast'])} documents "
+            f"+ {_fmt_bytes(b['indexes'])} indexes)"
+        ]
+        if not b["live"] and b["total"]:
+            # n_live_tup comes from the stats collector, so a table that has
+            # never been analysed reads as empty however much it holds
+            parts.append("no statistics -- ANALYZE has never run on it")
+        if b["free_percent"] is not None:
+            parts.append(f"{b['free_percent']:.0f}% of it dead or free")
+        elif b["dead"]:
+            parts.append(f"{b['dead']} dead rows "
+                         f"({b['dead'] / max(b['live'] + b['dead'], 1) * 100:.0f}%)")
+        if (b["free_percent"] or 0) > 30 or (b["dead"] and b["dead"] > b["live"] * 0.3):
+            parts.append("rewrite() would return that space; VACUUM will not")
+        return " | ".join(parts)
+
+    def drop_time_index(self):
+        """Drop the insert_time index from a cache that has no use for it.
+
+        Nothing queries these tables in insert_time order -- latest() is the
+        only such query and only the data caches are asked it -- while the
+        index was costing 11-21% of the WAL of a load, and on
+        wikidata_record_cache about as much disk as the primary key. Kept
+        separate from optimize() because it is DDL: it changes the table
+        rather than tidying it."""
+        if self.TIME_INDEX:
+            print(f"{self.name}: keeping its insert_time index, latest() uses it")
+            return False
+        idx = f"{self.name}_time_idx"
+        with self._maintenance() as cursor:
+            cursor.execute("SELECT pg_relation_size(to_regclass(%s)) AS size", (idx,))
+            row = cursor.fetchone()
+            if row["size"] is None:
+                print(f"{self.name}: no insert_time index")
+                return False
+            cursor.execute(f"DROP INDEX IF EXISTS {idx}")
+            print(f"{self.name}: dropped {idx}, {_fmt_bytes(row['size'])} returned")
+        return True
+
+    def _pk_index(self):
+        qry = ("SELECT i.relname AS name FROM pg_index x "
+               "JOIN pg_class i ON i.oid = x.indexrelid "
+               "JOIN pg_class t ON t.oid = x.indrelid "
+               "WHERE t.relname = %s AND x.indisprimary")
+        with self._cursor(internal=False) as cursor:
+            cursor.execute(qry, (self.name,))
+            row = cursor.fetchone()
+        return row["name"] if row else None
+
+    def rewrite(self):
+        """Rewrite the heap in primary key order, returning the space VACUUM
+        can only mark reusable and rebuilding every index on the way.
+
+        This is CLUSTER: it holds an ACCESS EXCLUSIVE lock for the duration --
+        nothing can read the table while it runs -- and it needs as much free
+        disk as the table and its indexes occupy. Hence a separate call rather
+        than part of optimize(): it wants a maintenance window. pg_repack does
+        the same job without the lock where that extension is available.
+
+        Key order is the useful order: it is how get() looks rows up and what
+        iter_records_type() sorts on. iter_records_slice() hashes the key
+        instead so it gains nothing from the ordering -- but it scans the whole
+        table, so it gets the full benefit of a smaller one."""
+        idx = self._pk_index()
+        if idx is None:
+            raise ValueError(f"{self.name} has no primary key index to cluster on")
+        before = self.bloat()
+        print(f"{before['name']}: rewriting {_fmt_bytes(before['total'])} on {idx} "
+              f"(exclusive lock, needs that much free disk)")
+        start = time.time()
+        with self._maintenance() as cursor:
+            cursor.execute(f"CLUSTER {self.name} USING {idx}")
+            # CLUSTER leaves the statistics alone
+            cursor.execute(f"ANALYZE {self.name}")
+        after = self.bloat()
+        print(f"  {_fmt_bytes(after['total'])} after {time.time() - start:.0f}s "
+              f"({_fmt_bytes(before['total'] - after['total'])} returned)")
 
     ### Behave like a dict
     def __getitem__(self, what):
@@ -895,6 +1129,9 @@ class PooledCache(object):
 
 class DataCache(PooledCache):
     # YUID is informative, Identifier is PK, data is bespoke
+
+    # the caches latest() is called on, so the one kind that keeps the index
+    TIME_INDEX = True
 
     def __init__(self, config):
         self.pk_defn = """            yuid uuid,

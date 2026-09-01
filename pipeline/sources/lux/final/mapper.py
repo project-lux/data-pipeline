@@ -47,9 +47,12 @@ class Cleaner(Mapper):
             print("Couldn't find LLM yuid->name lmdb")
         fn2 = os.path.join(self.configs.indexes_dir, "yuid_personname.lmdb")
         if os.path.exists(fn2):
-            self.llm_label_person_names = JsonLmdb.open(
-                fn2, "r", readahead=False, writemap=True
-            )
+            try:
+                self.llm_label_person_names = JsonLmdb.open(
+                    fn2, "r", readahead=False, writemap=True
+                )
+            except:
+                print(f"Couldn't open LMDB: {fn2}")
         else:
             print("Couldn't find LLM label->name lmdb")
 

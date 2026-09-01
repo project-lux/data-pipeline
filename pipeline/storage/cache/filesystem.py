@@ -37,6 +37,9 @@ class FsCache(object):
     def checkpoint(self):
         pass
 
+    def end_read(self):
+        pass
+
     def flush(self):
         pass
 
