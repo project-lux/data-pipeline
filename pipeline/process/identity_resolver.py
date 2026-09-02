@@ -399,15 +399,13 @@ class IdentityResolver(object):
         reference; the streaming path fetches priors in batches on the fly)."""
         prior = {}
         members = list(members)
-        conn = self.idmap.conn
         for i in range(0, len(members), self.batch_size):
             chunk = members[i:i + self.batch_size]
-            pipe = conn.pipeline(transaction=False)
-            for m in chunk:
-                pipe.get(self.idmap._manage_key_in(m))
-            for m, val in zip(chunk, pipe.execute(raise_on_error=False)):
+            for m, val in self.idmap.get_multi(chunk).items():
+                # A member key resolves to a single YUID; anything else here
+                # would be a yuid key, which members never are
                 if isinstance(val, str) and val:
-                    prior[m] = self.idmap._manage_value_out(val)
+                    prior[m] = val
         return prior
     
     
@@ -421,55 +419,34 @@ class IdentityResolver(object):
         moved between YUIDs are removed from their old set; YUID sets left
         holding only tokens are deleted.
         """
-        conn = self.idmap.conn
-        token = self.idmap.update_token
         touched_old = set()
-        stats = {"set": 0, "moved": 0, "clusters": len(clusters)}
-    
+        stats = {"set": 0, "moved": 0, "clusters": 0}
+
         items = list(clusters.items())
         for i in range(0, len(items), self.batch_size):
-            pipe = conn.pipeline(transaction=False)
+            batch = []
             for key, members in items[i:i + self.batch_size]:
                 yuid = yuids[key]
-                iyuid = self.idmap._manage_value_in(yuid)
-                imembers = []
                 for m in members:
-                    im = self.idmap._manage_key_in(m)
-                    imembers.append(im)
                     old = prior.get(m)
                     if old and old != yuid:
-                        iold = self.idmap._manage_value_in(old)
-                        pipe.srem(iold, im)
-                        touched_old.add(iold)
-                        stats["moved"] += 1
-                    pipe.set(im, iyuid)
-                    stats["set"] += 1
-                pipe.sadd(iyuid, *imembers, token)
-            pipe.execute(raise_on_error=False)
-    
+                        touched_old.add(old)
+                batch.append((yuid, list(members), prior))
+            got = self.idmap.assign_bulk(batch)
+            for k in ("set", "moved", "clusters"):
+                stats[k] += got.get(k, 0)
+
         stats["deleted_yuids"] = self._delete_dead_yuids(sorted(touched_old))
         return stats
     
     
-    def _delete_dead_yuids(self, iold_keys):
-        """Remove yuid sets that lost all real members (only update tokens left).
-        ``iold_keys`` is an iterable of already-internal (short) yuid keys."""
-        conn = self.idmap.conn
-        dead = 0
-        iold_keys = list(iold_keys)
-        for i in range(0, len(iold_keys), self.batch_size):
-            chunk = iold_keys[i:i + self.batch_size]
-            pipe = conn.pipeline(transaction=False)
-            for iold in chunk:
-                pipe.smembers(iold)
-            left = pipe.execute(raise_on_error=False)
-            pipe = conn.pipeline(transaction=False)
-            for iold, vals in zip(chunk, left):
-                if isinstance(vals, set) and all(v.startswith("__") for v in vals):
-                    pipe.delete(iold)
-                    dead += 1
-            pipe.execute(raise_on_error=False)
-        return dead
+    def _delete_dead_yuids(self, old_keys):
+        """Remove YUIDs that lost all their real members.
+
+        ``old_keys`` is an iterable of full YUID URIs. What "empty" means
+        differs per backend -- a redis set holding only update tokens, a
+        postgres registry row with no member rows -- so the backend decides."""
+        return self.idmap.delete_empty_yuids(list(old_keys))
     
     
     # ---------------------------------------------------------------------------
@@ -618,17 +595,12 @@ class IdentityResolver(object):
         """Batched member -> prior-YUID lookup, streamed. Reads the by-root
         clusters file and writes ``root<TAB>member<TAB>prior`` (prior blank when
         the member had none), preserving order so the file stays grouped."""
-        conn = self.idmap.conn
         with open(self.prior_path, "w") as fout:
             for chunk in self._chunks(self._iter_tsv(self.clusters_sorted_path), self.batch_size):
-                pipe = conn.pipeline(transaction=False)
-                for root, member in chunk:
-                    pipe.get(self.idmap._manage_key_in(member))
-                vals = pipe.execute(raise_on_error=False)
-                for (root, member), val in zip(chunk, vals):
-                    prior = ""
-                    if isinstance(val, str) and val:
-                        prior = self.idmap._manage_value_out(val)
+                got = self.idmap.get_multi([member for _root, member in chunk])
+                for (root, member) in chunk:
+                    val = got.get(member)
+                    prior = val if isinstance(val, str) and val else ""
                     fout.write(f"{root}\t{member}\t{prior}\n")
         
     def _emit_claims(self):
@@ -665,10 +637,8 @@ class IdentityResolver(object):
         cluster kept no prior YUID, and bulk-load the result into redis. Old
         yuid keys that lost a member are appended to touched_path for the final
         dead-set sweep."""
-        conn = self.idmap.conn
-        token = self.idmap.update_token
         stats = {"set": 0, "moved": 0, "clusters": 0}
-    
+
         won = self._grouped(self.won_sorted_path)
         won_key = None
         won_yuid = None
@@ -686,8 +656,22 @@ class IdentityResolver(object):
                     return
                 won_key, won_yuid = k, rows[0][1]
     
-        pipe = conn.pipeline(transaction=False)
-        ops = 0
+        # One batch of clusters at a time, handed to the backend whole: it
+        # knows whether that is a redis pipeline or a pair of upserts. Batched
+        # by member count, as before, so memory does not scale with the file.
+        batch = []
+        pending = 0
+
+        def flush():
+            nonlocal batch, pending
+            if not batch:
+                return
+            got = self.idmap.assign_bulk(batch)
+            for k in ("set", "moved", "clusters"):
+                stats[k] += got.get(k, 0)
+            batch = []
+            pending = 0
+
         with open(self.touched_path, "w") as ftouched:
             for full_key, rows in self._grouped(self.detail_sorted_path):
                 advance_to(full_key)
@@ -695,30 +679,23 @@ class IdentityResolver(object):
                     yuid = won_yuid
                 else:
                     yuid = self.mint_yuid(full_key)
-                iyuid = self.idmap._manage_value_in(yuid)
-                imembers = []
+                members = []
+                prior_map = {}
                 for r in rows:
                     member = r[1]
                     prior = r[2] if len(r) > 2 else ""
-                    im = self.idmap._manage_key_in(member)
-                    imembers.append(im)
+                    members.append(member)
                     if prior and prior != yuid:
-                        iold = self.idmap._manage_value_in(prior)
-                        pipe.srem(iold, im)
-                        ftouched.write(f"{iold}\n")
-                        stats["moved"] += 1
-                    pipe.set(im, iyuid)
-                    stats["set"] += 1
-                    ops += 1
-                pipe.sadd(iyuid, *imembers, token)
-                ops += 1
-                stats["clusters"] += 1
-                if ops >= self.batch_size:
-                    pipe.execute(raise_on_error=False)
-                    pipe = conn.pipeline(transaction=False)
-                    ops = 0
-            if ops:
-                pipe.execute(raise_on_error=False)
+                        prior_map[member] = prior
+                        # full URI now, not the internal short form: the sweep
+                        # takes what every other public call takes
+                        ftouched.write(f"{prior}\n")
+                    pending += 1
+                batch.append((yuid, members, prior_map))
+                pending += 1
+                if pending >= self.batch_size:
+                    flush()
+            flush()
         return stats
     
     

@@ -241,6 +241,18 @@ class IdMap(RedisCache):
     def disable_memory_cache(self):
         self.memory_cache_enabled = False
 
+    # No snapshot tier in this backend. These exist so the read-only phases can
+    # ask for one unconditionally -- the postgres backend serves them from LMDB,
+    # this one just carries on.
+    def enable_snapshot(self):
+        return False
+
+    def disable_snapshot(self):
+        pass
+
+    def snapshot_report(self):
+        return "idmap snapshot: not supported by this backend"
+
     def delete_yuid(self, yuid):
         """Remove a YUID set that no longer has any real members (only
         update tokens). Refuses if real members remain. Used by the
@@ -257,6 +269,71 @@ class IdMap(RedisCache):
                 f"delete_yuid({yuid}): {len(real)} real members remain")
         self.conn.delete(ikey)
         return True
+
+    def assign_bulk(self, items, batch_ops=10000):
+        """Assign whole clusters at once: the identity phase's write path.
+
+        `items` is an iterable of (yuid, members, prior) where members are full
+        member URIs and prior maps a member to the YUID it is leaving, if any.
+
+        This is the pipeline IdentityResolver used to run against .conn
+        directly, moved behind the interface so the resolver works on any
+        backend. The order of operations is unchanged: per member, SREM from
+        the old set if it moved, then SET the forward pointer; then one SADD of
+        every member plus the update token."""
+        stats = {"set": 0, "moved": 0, "clusters": 0}
+        pipe = self.conn.pipeline(transaction=False)
+        ops = 0
+        for yuid, members, prior in items:
+            iyuid = self._manage_value_in(yuid)
+            imembers = []
+            for m in members:
+                im = self._manage_key_in(m)
+                imembers.append(im)
+                old = (prior or {}).get(m)
+                if old and old != yuid:
+                    pipe.srem(self._manage_value_in(old), im)
+                    stats["moved"] += 1
+                    ops += 1
+                pipe.set(im, iyuid)
+                stats["set"] += 1
+                ops += 1
+            if imembers:
+                pipe.sadd(iyuid, *imembers, self.update_token)
+                ops += 1
+            stats["clusters"] += 1
+            if ops >= batch_ops:
+                pipe.execute(raise_on_error=False)
+                pipe = self.conn.pipeline(transaction=False)
+                ops = 0
+        if ops:
+            pipe.execute(raise_on_error=False)
+        if self.memory_cache_enabled:
+            self.memory_cache.clear()
+        return stats
+
+    def delete_empty_yuids(self, yuids, batch_size=10000):
+        """Drop the YUIDs among `yuids` whose sets hold nothing but update
+        tokens. Also lifted out of IdentityResolver."""
+        ikeys = [self._manage_value_in(y) for y in yuids]
+        dead = 0
+        for i in range(0, len(ikeys), batch_size):
+            chunk = ikeys[i:i + batch_size]
+            pipe = self.conn.pipeline(transaction=False)
+            for ikey in chunk:
+                pipe.smembers(ikey)
+            left = pipe.execute(raise_on_error=False)
+            pipe = self.conn.pipeline(transaction=False)
+            for ikey, vals in zip(chunk, left):
+                # An empty result counts too: redis drops a set when its last
+                # member leaves, so the yuid is already gone and the DELETE is
+                # a no-op -- but it is dead either way, and postgres reports it
+                # the same (its registry row does survive and is removed here)
+                if isinstance(vals, set) and all(v.startswith("__") for v in vals):
+                    pipe.delete(ikey)
+                    dead += 1
+            pipe.execute(raise_on_error=False)
+        return dead
 
     def mint(self, key, slug, typ=""):
         if typ in self.configs.ok_record_types:

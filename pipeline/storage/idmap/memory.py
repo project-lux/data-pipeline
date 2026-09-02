@@ -104,6 +104,43 @@ class IdMap(object):
         except:
             pass
 
+    # No snapshot tier in this backend. These exist so the read-only phases can
+    # ask for one unconditionally -- the postgres backend serves them from LMDB,
+    # this one just carries on.
+    def enable_snapshot(self):
+        return False
+
+    def disable_snapshot(self):
+        pass
+
+    def snapshot_report(self):
+        return "idmap snapshot: not supported by this backend"
+
+    def assign_bulk(self, items):
+        """In-memory equivalent of the backends' bulk cluster assignment."""
+        stats = {"set": 0, "moved": 0, "clusters": 0}
+        for yuid, members, prior in items:
+            stats["clusters"] += 1
+            for m in members:
+                old = (prior or {}).get(m)
+                if old and old != yuid:
+                    self._remove(old, m)
+                    stats["moved"] += 1
+                self.set(m, yuid)
+                stats["set"] += 1
+            self._add(yuid, *members)
+        return stats
+
+    def delete_empty_yuids(self, yuids):
+        dead = 0
+        for y in yuids:
+            members = self.get(y)
+            real = [m for m in (members or ()) if not (m.startswith("__") and m.endswith("__"))]
+            if members and not real:
+                self._dropdb_key(y) if hasattr(self, "_dropdb_key") else self.__delitem__(y)
+                dead += 1
+        return dead
+
     def _dropdb(self):
         self.data = {}
 

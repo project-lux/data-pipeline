@@ -95,6 +95,10 @@ start_time = datetime.datetime.now()
 
 # merge only reads, so enable AAT memory cache
 idmap.enable_memory_cache()
+# ... and, on a backend that has one, the frozen LMDB copy of the map.
+# Nothing writes identity in this phase, which is what makes a snapshot
+# safe to read: it cannot go stale underneath us. No-op on redis.
+idmap.enable_snapshot()
 
 # Committing inside every set() cost an fsync per write -- roughly five per
 # merged record, times however many workers. Batch instead: all caches in the
