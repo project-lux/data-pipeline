@@ -45,17 +45,7 @@ class Cleaner(Mapper):
             )
         else:
             print("Couldn't find LLM yuid->name lmdb")
-        fn2 = os.path.join(self.configs.indexes_dir, "yuid_personname.lmdb")
-        if os.path.exists(fn2):
-            try:
-                self.llm_label_person_names = JsonLmdb.open(
-                    fn2, "r", readahead=False, writemap=True
-                )
-            except:
-                print(f"Couldn't open LMDB: {fn2}")
-                raise
-        else:
-            print("Couldn't find LLM label->name lmdb")
+            self.llm_person_names = None
 
     def get_commons_license(self, img):
         # Can't store reidentified version as it would need a YUID
