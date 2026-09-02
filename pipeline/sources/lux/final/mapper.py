@@ -53,6 +53,7 @@ class Cleaner(Mapper):
                 )
             except:
                 print(f"Couldn't open LMDB: {fn2}")
+                raise
         else:
             print("Couldn't find LLM label->name lmdb")
 
