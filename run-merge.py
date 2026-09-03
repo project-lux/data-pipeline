@@ -98,7 +98,7 @@ idmap.enable_memory_cache()
 # ... and, on a backend that has one, the frozen LMDB copy of the map.
 # Nothing writes identity in this phase, which is what makes a snapshot
 # safe to read: it cannot go stale underneath us. No-op on redis.
-idmap.enable_snapshot()
+# idmap.enable_snapshot()
 
 # Committing inside every set() cost an fsync per write -- roughly five per
 # merged record, times however many workers. Batch instead: all caches in the
@@ -158,6 +158,7 @@ def claim_member(cluster, present=()):
     return (None, None)
 
 
+t_done = 0
 for src_name, src in to_do:
     rcache = src["recordcache"]
 
@@ -174,6 +175,10 @@ for src_name, src in to_do:
         records = rcache.iter_records()
 
     for rec in records:
+        t_done += 1
+        if not t_done % 100000:
+            print(f" ... {t_done}")
+
         distance = 0
         recid = rec["identifier"]
         # get() stamps this on every row it returns and merger.merge() needs
@@ -233,8 +238,6 @@ for src_name, src in to_do:
                 equivs.remove(idmap.update_token)
         else:
             equivs = []
-        sys.stdout.write(".")
-        sys.stdout.flush()
 
         rec3 = merger.merge(rec2, equivs)
         # Final tidy up after merges
@@ -339,8 +342,6 @@ if DO_REFERENCES:
             # raise ValueError()
         else:
             # print(f" ... Processing equivs for {recid}")
-            sys.stdout.write("+")
-            sys.stdout.flush()
             rec3 = merger.merge(rec2, equivs)
             # Final tidy up
             try:
