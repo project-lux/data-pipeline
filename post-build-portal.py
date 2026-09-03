@@ -4,8 +4,6 @@ import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from dotenv import load_dotenv
-from tqdm import tqdm
-
 from pipeline.config import Config
 from pipeline.storage.cache.postgres import PoolManager
 
@@ -19,9 +17,6 @@ cfgs.instantiate_all()
 # Strategy:  Iterate the YPM recordcache2 records
 # and then walk the merged equivalents to find referenced records
 # record them all as YPM portal required
-
-TQDM_DISABLE = "--no-tqdm" in sys.argv
-
 
 def walk_for_refs(node, distance, distances, added, top=False):
     if not top and "id" in node and node["id"] and not node["id"].startswith("_"):
@@ -44,13 +39,6 @@ def walk_for_refs(node, distance, distances, added, top=False):
 
 
 def process_recids(recids, thr):
-    pbar = tqdm(
-        total=len(recids),
-        desc=f"Process {thr}",
-        position=thr,  # Position the progress bar based on process number
-        leave=True,
-        disable=TQDM_DISABLE,
-    )
     merged = cfgs.results["merged"]["recordcache"]
     local_dists = {}
     local_added = {}
@@ -63,29 +51,18 @@ def process_recids(recids, thr):
         except KeyError:
             missing[k] = 1
             print(f"missing: {recid}")
-        pbar.update(1)
-    pbar.close()
     return [local_dists, local_added]
 
 
 def set_portal(portal_ids, portal, thr):
-    pbar = tqdm(
-        total=len(portal_ids),
-        desc=f"Process {thr}",
-        position=thr,  # Position the progress bar based on process number
-        leave=True,
-        disable=TQDM_DISABLE,
-    )
     merged = cfgs.results["merged"]["recordcache"]
     done = 0
     for recid in portal_ids:
         try:
             merged.set_metadata(recid, "change", portal)
-            pbar.update(1)
             done += 1
         except:
             print(f"Failed to set metadata on {recid}")
-    pbar.close()
     return done
 
 
@@ -99,7 +76,7 @@ if __name__ == "__main__":
     all_distances = {}
     print("Keys...")
     # populate all at distance 0
-    for k in tqdm(rc.iter_keys(), total=len(rc), disable=TQDM_DISABLE):
+    for k in rc.iter_keys():
         # k is the uuid
         all_distances[k] = 0
 
@@ -123,7 +100,6 @@ if __name__ == "__main__":
             added_refs.update(local_added)
 
     print(f"Added refs: {len(added_refs)} base")
-    pbar = tqdm(total=len(added_refs), desc="Referenced", disable=TQDM_DISABLE)
     merged = cfgs.results["merged"]["recordcache"]
     done = 0
     while added_refs:
@@ -135,8 +111,6 @@ if __name__ == "__main__":
         if not rec:
             continue
         walk_for_refs(rec["data"], d + 1, all_distances, added_refs, top=True)
-        pbar.update(1)
-        pbar.total = done + len(added_refs)
 
     print(f"Setting metadata: {procs} processes, {len(all_distances)}")
     portal_ids = list(all_distances.keys())
