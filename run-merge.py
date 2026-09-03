@@ -158,6 +158,7 @@ def claim_member(cluster, present=()):
     return (None, None)
 
 
+print(start_time)
 t_done = 0
 for src_name, src in to_do:
     rcache = src["recordcache"]
