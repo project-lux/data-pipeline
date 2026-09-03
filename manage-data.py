@@ -9,7 +9,7 @@ from pipeline.config import Config
 from pipeline.process.reference_manager import ReferenceManager
 from pipeline.process.update_manager import UpdateManager
 
-print(time.time()
+print(time.time())
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")
 cfgs = Config(basepath=basepath)
