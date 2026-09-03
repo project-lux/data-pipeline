@@ -540,10 +540,30 @@ class IdMap(object):
         return list(self.iter_keys(**kw))
 
     def __len__(self):
+        """Estimated, not exact -- and deliberately so.
+
+        Redis answers this with DBSIZE in O(1), so callers assume it costs
+        nothing. base Mapper.__init__ calls it once per source purely to ask
+        whether the map has anything in it at all, and instantiate_all() builds
+        a mapper per source: taken literally that is ~30 full counts of a 97M
+        row map per process, 7.5s each, 3.7 minutes of startup before any work
+        begins. The catalog estimate costs 3ms.
+
+        reltuples is maintained by ANALYZE and autovacuum and drifts between
+        them, which is fine for every caller here (a truthiness test and a
+        report). It reads -1 on a table that has never been analysed, so a
+        non-positive estimate falls back to an existence check rather than
+        claiming the map is empty."""
         with self._cursor() as cur:
-            cur.execute(f"SELECT (SELECT count(*) FROM {self.table}) "
-                        f"+ (SELECT count(*) FROM {self.yuid_table})")
-            return cur.fetchone()[0]
+            cur.execute("SELECT coalesce(sum(reltuples), 0)::bigint FROM pg_class "
+                        "WHERE oid IN (to_regclass(%s), to_regclass(%s))",
+                        (self.table, self.yuid_table))
+            row = cur.fetchone()
+            n = int(row[0]) if row and row[0] is not None else 0
+            if n > 0:
+                return n
+            cur.execute(f"SELECT 1 FROM {self.table} LIMIT 1")
+            return 1 if cur.fetchone() else 0
 
     # ----------------------------------------------------------------- writes
 

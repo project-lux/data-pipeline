@@ -15,12 +15,8 @@ cfgs = Config(basepath=basepath)
 idmap = cfgs.get_idmap()
 #all_refs = cfgs.instantiate_map("all_refs")["store"]
 #done_refs = cfgs.instantiate_map("done_refs")["store"]
-print(time.time())
 cfgs.cache_globals()
-print(time.time())
 cfgs.instantiate_all()
-print(time.time())
-
 
 #update_mgr = UpdateManager(cfgs, idmap)
 #ref_mgr = ReferenceManager(cfgs, idmap)
@@ -486,7 +482,10 @@ if "--counts" in sys.argv:
                 print(f"{c['name']} {t}: {pref}{est}")
                 ttl += est
     print(f"Total in Postgres: {ttl}")
-    print(f"idmap: {len(idmap)}")
+    # ~ because the postgres backend answers len() from the catalog estimate:
+    # an exact count is a full scan of ~100M rows, and every other caller of
+    # len() only wants to know whether the map has anything in it
+    print(f"idmap: ~{len(idmap):,}")
     print(f"references found: {len(all_refs)}")
     print(f"references done: {len(done_refs)}")
 
