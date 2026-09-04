@@ -49,7 +49,7 @@ class OrcidMapper(Mapper):
             # KeyError('xml') printed by the caller as just `'xml'` -- around
             # 2000 lines per worker with no indication of which record, which
             # source, or what was wrong. Nothing to map either way.
-            print(f"orcid {ident}: no xml in the cached record; skipping")
+            # print(f"orcid {ident}: no xml in the cached record; skipping")
             return None
         try:
             # str from the cache, bytes if it came straight off the wire
