@@ -69,8 +69,13 @@ def _connect_kwargs(config, configs):
     return kw
 
 
-def _connect(kw):
-    key = tuple(sorted(kw.items()))
+def _connect(kw, tag="", async_commit=False):
+    """A shared connection, one per (target, tag) per process.
+
+    `tag` separates pools that need different session settings -- the
+    reference queues run with synchronous_commit off, which must not apply to
+    the identity map sharing the same database."""
+    key = (tuple(sorted(kw.items())), tag)
     conn = _SHARED_CONNECTIONS.get(key)
     if conn is None or conn.closed:
         conn = psycopg2.connect(**kw)
@@ -78,6 +83,16 @@ def _connect(kw):
         # other workers immediately, and a read must not leave a transaction or
         # a lock behind.
         conn.autocommit = True
+        if async_commit:
+            # In autocommit every merge is its own transaction, and its row
+            # locks are held until the commit's WAL sync completes -- so on a
+            # server where fsync costs milliseconds, 24 workers merging a
+            # converging reference graph queue behind each other's syncs
+            # rather than behind the work. These tables are rebuilt from
+            # nothing every build, so their durability is worth nothing: a
+            # crash loses a queue that gets refilled anyway.
+            with conn.cursor() as cur:
+                cur.execute("SET synchronous_commit = off")
         _SHARED_CONNECTIONS[key] = conn
     return conn
 
@@ -766,7 +781,11 @@ class ReferenceMap(object):
         self.configs = config["all_configs"]
         self.table = config.get("tableName") or config["name"]
         self._conn_kw = _connect_kwargs(config, self.configs)
-        self.conn = _connect(self._conn_kw)
+        # Own connection pool, shared with the other reference map: its
+        # session settings must not leak onto the identity map. Set
+        # "asyncCommit": false in the map config to turn the setting off.
+        self.conn = _connect(self._conn_kw, tag="refs",
+                             async_commit=config.get("asyncCommit", True))
         with self.conn.cursor() as cur:
             cur.execute(REF_SCHEMA.format(table=self.table))
 
@@ -837,10 +856,20 @@ class ReferenceMap(object):
             else:
                 folded[key] = (min(prev[0], d), prev[1] or ctype or "")
         rows = sorted((k, d, c) for k, (d, c) in folded.items())
+        # The WHERE is what stops a no-op merge rewriting the row. Without it
+        # every re-sighting of an already-known reference writes a new tuple
+        # version and leaves a dead one, which on a converging reference graph
+        # is most of them -- and each rewrite holds a row lock that 23 other
+        # workers queue behind. Callers filter too (resolve_refs), but two
+        # workers can still decide to write the same unchanged row at once.
         sql = (f"INSERT INTO {self.table} (uri, dist, ctype) VALUES %s "
                f"ON CONFLICT (uri) DO UPDATE SET "
                f"dist = least({self.table}.dist, EXCLUDED.dist), "
-               f"ctype = coalesce({self.table}.ctype, EXCLUDED.ctype)")
+               f"ctype = coalesce({self.table}.ctype, EXCLUDED.ctype) "
+               f"WHERE {self.table}.dist IS DISTINCT FROM "
+               f"       least({self.table}.dist, EXCLUDED.dist) "
+               f"   OR {self.table}.ctype IS DISTINCT FROM "
+               f"       coalesce({self.table}.ctype, EXCLUDED.ctype)")
         for i in range(0, len(rows), chunk):
             page = rows[i:i + chunk]
             # Sorting removes the cycles this statement can cause on its own;

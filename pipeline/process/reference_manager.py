@@ -321,7 +321,24 @@ class ReferenceManager(object):
                 # with the new distance. Re-add BEFORE removing from done: a
                 # crash between the two duplicates work rather than losing
                 # the reference, so the merge batch is executed first below.
-                to_merge.append((ref, distance, ctype))
+                #
+                # Only if it would actually change the stored record, though.
+                # References converge -- everything cites the same few thousand
+                # concepts -- so this branch is the common one, and re-merging
+                # an unchanged reference was free on redis (one HSET, no MVCC)
+                # but on postgres takes a row lock, writes a new tuple version
+                # and blocks every other worker wanting that row. Measured
+                # mid-phase: 7,882 live rows against 173,981 dead, with 78.7%
+                # of all backend time waiting on transactionid locks.
+                #
+                # Safe to skip on a possibly-stale read because both fields
+                # move one way only: dist is minimised, so a stale value can
+                # only be higher than the truth, and ctype is set once. If the
+                # read says no change is needed, the fresher value says so too.
+                xdist = xr.get("dist")
+                xtype = xr.get("type")
+                if (xdist is None or distance < xdist) or (not xtype and ctype):
+                    to_merge.append((ref, distance, ctype))
                 if ddist is not None and ddist > distance:
                     to_undone.append(ref)
             elif dref is not None:
