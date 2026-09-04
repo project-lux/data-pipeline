@@ -1,20 +1,19 @@
-"""Identity map on postgres, with an optional read-only LMDB snapshot.
+"""Identity map on postgres.
 
 Same interface as storage.idmap.redis.IdMap, so it drops in via storeClass in
 map_idmap.json and nothing else has to change.
 
-Two differences of substance:
+The difference of substance: the reverse direction is not stored. A YUID's
+members are the rows that carry it -- `SELECT uri FROM idmap WHERE yuid = $1`
+-- so the forward pointer and the member set cannot disagree, and the union
+that redis needs a fifty-retry WATCH/MULTI loop for is one UPDATE.
 
-*   The reverse direction is not stored. A YUID's members are the rows that
-    carry it -- `SELECT uri FROM idmap WHERE yuid = $1` -- so the forward
-    pointer and the member set cannot disagree, and the union that redis needs
-    a fifty-retry WATCH/MULTI loop for is one UPDATE.
-
-*   Lookups can be served from a frozen LMDB snapshot of the whole map instead
-    of the database. That is only safe while nothing is writing, which is
-    exactly the phases that already call enable_memory_cache() -- so the
-    snapshot has an explicit on switch, and writing with it on is an error
-    rather than a stale read.
+An LMDB read tier used to sit in front of this. It was removed after measuring
+it: with shared_buffers sized for the machine, postgres serves the map's hot
+indexes from RAM, and routing lookups onto a memory-mapped file the OS had to
+fault in cost 7.5 minutes a slice on top of a 5.4 minute build. The tier and a
+correctly configured buffer pool solve the same problem, and the buffer pool
+wins. See docs/idmap-migration.md.
 
 The connection is this store's own, in autocommit. Identity is low-volume
 next to the record caches and has to be visible to the other workers
@@ -32,28 +31,56 @@ from contextlib import contextmanager
 import psycopg2
 import psycopg2.extras
 
-from pipeline.storage.uricache import URICache, _MISSING
+from pipeline.storage.uricache import URICache
 
 # Two workers merging overlapping classes can be picked as a deadlock victim.
 # Same treatment as the record caches: it is transient, so retry.
 DEADLOCK_RETRIES = 5
 DEADLOCK_BACKOFF = 0.05
 
-# LMDB refuses keys over 511 bytes; a handful of URIs are longer than that.
-# They simply aren't in the snapshot and fall through to postgres.
-MAX_SNAPSHOT_KEY = 500
-
-# A snapshot normally holds every type and says so with "*". These are the
-# fallback for a file that predates that marker, and what --types narrows to
-# if you want a smaller file.
+# One connection per process per target, shared by every map store in this
+# module. Each worker already opens two for the record caches (PoolManager);
+# a connection per map on top of that would be five a worker, or 240 at 48
+# workers against a max_connections of 200. Sharing is safe here because every
+# statement these stores issue runs in autocommit -- there is no transaction to
+# interleave -- and streaming iteration opens a connection of its own.
 #
-# Type is not a correctness question here. The snapshot is rebuilt from scratch
-# each run, after identity resolution, and read only by phases where writing
-# raises -- so nothing in it can go stale inside its own lifetime, however
-# volatile the entity. Narrowing it only lowers the hit rate: scoped to objects
-# and works it served 7.9% of the merge read path, because a record's
-# references are people and concepts whatever the record is.
-SNAPSHOT_TYPES = ("HumanMadeObject", "DigitalObject", "VisualItem", "LinguisticObject")
+# Not thread-safe, which matches the pipeline: one thread per process.
+_SHARED_CONNECTIONS = {}
+
+
+def _connect_kwargs(config, configs):
+    """Where to find postgres.
+
+    Deliberately not from the map's own config: instantiate_map() passes
+    map_*.json, whose host/port are redis's, so reading them here would point
+    at redis' port. The caches config is the postgres the pipeline already
+    talks to. pgHost/pgPort/pgUser/pgDbname override per map."""
+    db = dict(getattr(configs, "caches", {}) or {})
+    kw = {"user": config.get("pgUser") or db.get("user") or os.getenv("USER"),
+          "dbname": config.get("pgDbname") or db.get("dbname") or os.getenv("USER"),
+          "keepalives": 1, "keepalives_idle": 30}
+    host = config.get("pgHost", db.get("host", ""))
+    if host:
+        kw["host"] = host
+        kw["port"] = int(config.get("pgPort") or db.get("port", 5432))
+        if db.get("password"):
+            kw["password"] = db["password"]
+    return kw
+
+
+def _connect(kw):
+    key = tuple(sorted(kw.items()))
+    conn = _SHARED_CONNECTIONS.get(key)
+    if conn is None or conn.closed:
+        conn = psycopg2.connect(**kw)
+        # Every statement its own transaction: writes have to be visible to the
+        # other workers immediately, and a read must not leave a transaction or
+        # a lock behind.
+        conn.autocommit = True
+        _SHARED_CONNECTIONS[key] = conn
+    return conn
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS {idmap} (
@@ -92,45 +119,14 @@ class IdMap(object):
             raise ValueError("update token")
         self.update_token = token
 
-        # Connection details come from the caches config, because that is the
-        # postgres the pipeline already talks to and the identity map belongs
-        # in it. They deliberately do NOT come from this map's own config:
-        # instantiate_map() passes map_idmap.json, whose host/port/db are
-        # redis's (localhost:6379), so reading them here would point the
-        # backend at redis' port. Override with pgHost/pgPort/pgUser/pgDbname
-        # in the map config if the map really does live somewhere else.
-        db = dict(getattr(self.configs, "caches", {}) or {})
-        kw = {"user": config.get("pgUser") or db.get("user") or os.getenv("USER"),
-              "dbname": config.get("pgDbname") or db.get("dbname") or os.getenv("USER"),
-              "keepalives": 1, "keepalives_idle": 30}
-        host = config.get("pgHost", db.get("host", ""))
-        if host:
-            kw["host"] = host
-            kw["port"] = int(config.get("pgPort") or db.get("port", 5432))
-            if db.get("password"):
-                kw["password"] = db["password"]
-        self.conn = psycopg2.connect(**kw)
-        # Every statement its own transaction: identity has to be visible to
-        # the other workers the moment it is assigned, and a read must not
-        # leave a snapshot or a lock behind.
-        self.conn.autocommit = True
+        self._conn_kw = _connect_kwargs(config, self.configs)
+        self.conn = _connect(self._conn_kw)
         self._ensure_schema()
         # One cursor, reused: these calls run millions of times per build and
         # a fresh cursor per lookup is pure overhead in autocommit
         self._hot = self.conn.cursor()
         self._prepare()
 
-        self.snapshot = None
-        self.snapshot_txn = None
-        self.snapshot_enabled = False
-        self.snapshot_path = config.get("snapshotPath", "")
-        self.snapshot_types = set(SNAPSHOT_TYPES)
-        self.snapshot_slugs = set()
-        self._route_all = False
-        self._route_suffixes = ()
-        self._route_prefixes = ()
-        # hits / minted since the snapshot was taken / sent to postgres by type
-        self.snapshot_stats = {"hit": 0, "miss": 0, "routed": 0}
 
     # ------------------------------------------------------------------ setup
 
@@ -179,39 +175,36 @@ class IdMap(object):
 
     @contextmanager
     def _streaming(self, name):
-        """A server-side cursor, which needs a transaction to live in -- this
-        connection is otherwise in autocommit, where there isn't one."""
-        self.conn.autocommit = False
+        """A server-side cursor on a connection of its own.
+
+        Named cursors need a transaction to live in, and the shared connection
+        is in autocommit -- flipping it would pull the other map stores'
+        statements into this transaction. Iteration here is rare and
+        long-lived, so a dedicated connection is the right shape anyway."""
+        conn = psycopg2.connect(**self._conn_kw)
         try:
-            cur = self.conn.cursor(name=name)
+            cur = conn.cursor(name=name)
             cur.itersize = 10000
             try:
                 yield cur
             finally:
                 cur.close()
-            self.conn.commit()
-        except Exception:
-            self.conn.rollback()
-            raise
+            conn.commit()
         finally:
-            self.conn.autocommit = True
+            conn.close()
 
     def shutdown(self):
+        """Release this store's own resources.
+
+        The connection is shared with the other map stores in this process, so
+        it is deliberately left open -- process exit closes it."""
         if getattr(self, "_hot", None) is not None:
             try:
                 self._hot.close()
             except psycopg2.Error:
                 pass
             self._hot = None
-        if self.snapshot_txn is not None:
-            self.snapshot_txn.abort()
-            self.snapshot_txn = None
-        if self.snapshot is not None:
-            self.snapshot.close()
-            self.snapshot = None
-        if self.conn is not None:
-            self.conn.close()
-            self.conn = None
+        self.conn = None
 
     # --------------------------------------------------- prefix compression
     # Identical to the redis backend: callers pass and receive full URIs, and
@@ -245,160 +238,6 @@ class IdMap(object):
     def disable_memory_cache(self):
         self.memory_cache_enabled = False
 
-    def enable_snapshot(self):
-        """Serve lookups from the LMDB snapshot instead of the database.
-
-        Read-only mode: any write while this is on raises, rather than leaving
-        a stale entry to be read by the next worker. Turn it on for the phases
-        that only read the map -- merge, export -- and off before anything
-        assigns identity.
-
-        The snapshot carries the update token it was built from and is refused
-        if that doesn't match this build, so last build's file cannot quietly
-        answer this build's questions."""
-        if self.snapshot is not None:
-            self.snapshot_enabled = True
-            return True
-        if not self.snapshot_path:
-            print("idmap: no snapshotPath configured")
-            return False
-        if not os.path.exists(self.snapshot_path):
-            print(f"idmap: no snapshot at {self.snapshot_path}")
-            return False
-        try:
-            import lmdb
-        except ImportError:
-            print("idmap: lmdb not installed, staying on postgres")
-            return False
-        env = lmdb.open(self.snapshot_path, readonly=True, subdir=True,
-                        lock=False, max_readers=256)
-        with env.begin(buffers=False) as txn:
-            token = txn.get(b"__token__")
-            types = txn.get(b"__types__")
-            slugs = txn.get(b"__slugs__")
-        token = token.decode("utf-8") if token else None
-        if token != self.update_token:
-            env.close()
-            print(f"idmap: snapshot at {self.snapshot_path} was built for "
-                  f"{token}, this build is {self.update_token} -- refusing it; "
-                  f"rebuild with make-idmap-snapshot.py")
-            return False
-        # The file declares which types it holds, so changing the selection is
-        # a rebuild rather than a code change -- and the reader can never
-        # route a lookup to a file that was not built to answer it.
-        self._route_all = types == b"*"
-        if self._route_all:
-            self.snapshot_types = {"*"}
-            self.snapshot_slugs = {"*"}
-        else:
-            self.snapshot_types = set(types.decode("utf-8").split("\t")) if types else set(SNAPSHOT_TYPES)
-            self.snapshot_slugs = set(slugs.decode("utf-8").split("\t")) if slugs else set()
-        self._route_suffixes = tuple(f"##qua{t}" for t in sorted(self.snapshot_types))
-        self._route_prefixes = tuple(f"yuid:{s}/" for s in sorted(self.snapshot_slugs))
-        self.snapshot = env
-        # One long-lived read transaction rather than one per lookup. The file
-        # is immutable and has no writer, so there is nothing to miss by
-        # holding it, and env.begin() per call was ~50us -- more than the
-        # postgres query it was meant to avoid.
-        self.snapshot_txn = env.begin(buffers=False)
-        self.snapshot_enabled = True
-        print(f"idmap: reading from snapshot {self.snapshot_path} ({token}), "
-              f"types: {'all' if self._route_all else ', '.join(sorted(self.snapshot_types))}")
-        return True
-
-    def disable_snapshot(self):
-        self.snapshot_enabled = False
-        if self.snapshot_txn is not None:
-            self.snapshot_txn.abort()
-            self.snapshot_txn = None
-
-    def _no_writes_while_reading(self, op):
-        if self.snapshot_enabled:
-            raise RuntimeError(
-                f"idmap.{op}() called while the LMDB snapshot is enabled. The "
-                f"snapshot is a frozen copy, so a write now would be invisible "
-                f"to every reader using it. Call disable_snapshot() first.")
-
-    def _in_snapshot(self, ikey):
-        """Whether this key is one the snapshot was built to answer.
-
-        Decided from the key alone, both directions: an external identifier
-        carries its type (wd:Q42##quaPerson) and a YUID carries the slug that
-        mint() built it from (yuid:object/<uuid>). So a lookup for a type the
-        file does not hold goes straight to postgres instead of probing LMDB
-        and missing -- the routing costs nothing and there is no wrong guess
-        to pay for."""
-        # One endswith/startswith against a precomputed tuple, both C-level
-        # and allocation-free. Splitting the key per lookup instead cost more
-        # than the tier saved on a workload where most keys are out of scope:
-        # this check runs on every key, hit or miss.
-        if len(ikey) > MAX_SNAPSHOT_KEY:
-            return False
-        if self._route_all:
-            # A whole-map snapshot has nothing to route around, so the check
-            # that runs on every key costs one length comparison
-            return True
-        if ikey.startswith("yuid:"):
-            return ikey.startswith(self._route_prefixes)
-        return ikey.endswith(self._route_suffixes)
-
-    def _snapshot_get(self, ikey):
-        if not self.snapshot_enabled or self.snapshot is None:
-            return _MISSING
-        if not self._in_snapshot(ikey):
-            self.snapshot_stats["routed"] += 1
-            return _MISSING
-        val = self.snapshot_txn.get(ikey.encode("utf-8"))
-        if val is None:
-            # In scope but absent: minted after the snapshot was taken. Rare,
-            # and postgres still has the answer -- watch this number, because
-            # a large one means the snapshot is too old to be earning its keep.
-            self.snapshot_stats["miss"] += 1
-            return _MISSING
-        self.snapshot_stats["hit"] += 1
-        val = val.decode("utf-8")
-        if ikey.startswith("yuid:"):
-            return {self._manage_value_out(v) for v in val.split("\t") if v}
-        return self._manage_value_out(val)
-
-    def _snapshot_get_many(self, ikeys):
-        """Probe the snapshot for a whole batch in one read transaction.
-
-        get_multi used to call _snapshot_get per key, which opened an LMDB
-        transaction each time -- enough overhead to make the tier slower than
-        not having one (137 us/key against 73 us/key straight to postgres on a
-        merge-shaped workload). One transaction for the batch is the whole
-        point of a memory-mapped store."""
-        out = {}
-        if not self.snapshot_enabled or self.snapshot is None:
-            return out
-        in_scope = [k for k in ikeys if self._in_snapshot(k)]
-        self.snapshot_stats["routed"] += len(ikeys) - len(in_scope)
-        if not in_scope:
-            return out
-        get = self.snapshot_txn.get
-        for ikey in in_scope:
-            val = get(ikey.encode("utf-8"))
-            if val is None:
-                self.snapshot_stats["miss"] += 1
-                continue
-            self.snapshot_stats["hit"] += 1
-            val = val.decode("utf-8")
-            if ikey.startswith("yuid:"):
-                out[ikey] = {self._manage_value_out(v) for v in val.split("\t") if v}
-            else:
-                out[ikey] = self._manage_value_out(val)
-        return out
-
-    def snapshot_report(self):
-        s = self.snapshot_stats
-        total = sum(s.values())
-        if not total:
-            return "idmap snapshot: unused"
-        return (f"idmap snapshot: {s['hit']:,} served ({s['hit'] / total * 100:.1f}%), "
-                f"{s['routed']:,} routed to postgres by type, "
-                f"{s['miss']:,} in scope but absent (minted since the snapshot)")
-
     # ------------------------------------------------------------------ reads
 
     def _check_qua(self, key, typ):
@@ -419,9 +258,7 @@ class IdMap(object):
             if maybe is not self.memory_cache.missing:
                 return maybe
 
-        out = self._snapshot_get(ikey)
-        if out is _MISSING:
-            out = self._db_get(ikey)
+        out = self._db_get(ikey)
         if out is None:
             return None
         if self.memory_cache_enabled:
@@ -448,7 +285,6 @@ class IdMap(object):
         hot loops should prefer it."""
         out = {}
         need_str, need_set = [], []
-        candidates = []
         for key in keys:
             if not self.configs.is_qua(key) and self.prefix_map_out["yuid"] not in key:
                 raise ValueError(f"Need a type: {key}")
@@ -458,21 +294,6 @@ class IdMap(object):
                 if maybe is not self.memory_cache.missing:
                     out[key] = maybe
                     continue
-            candidates.append((key, ikey))
-
-        if self.snapshot_enabled and candidates:
-            found = self._snapshot_get_many([ik for _, ik in candidates])
-            rest = []
-            for key, ikey in candidates:
-                if ikey in found:
-                    out[key] = found[ikey]
-                    if self.memory_cache_enabled:
-                        self.memory_cache[ikey] = found[ikey]
-                else:
-                    rest.append((key, ikey))
-            candidates = rest
-
-        for key, ikey in candidates:
             (need_set if ikey.startswith("yuid:") else need_str).append((key, ikey))
 
         for i in range(0, len(need_str), chunk):
@@ -574,7 +395,6 @@ class IdMap(object):
         The INSERT decides the race: whoever gets the row wins, and the value
         that comes back is the YUID to use. In redis this was an SADD followed
         by a separate SET, with a window in between."""
-        self._no_writes_while_reading("mint")
         if typ in self.configs.ok_record_types:
             key = self.configs.make_qua(key, typ)
         elif typ:
@@ -614,7 +434,6 @@ class IdMap(object):
         The merge is the whole point: if key already belongs to another YUID,
         every member of that class moves too, so the two become one. That is a
         single UPDATE here."""
-        self._no_writes_while_reading("set")
         if typ in self.configs.ok_record_types:
             key = self.configs.make_qua(key, typ)
         elif typ:
@@ -694,7 +513,6 @@ class IdMap(object):
         derived from the yuid column, so re-pointing the row *is* the removal.
         On redis it takes an SREM against a second structure that can disagree
         with the first."""
-        self._no_writes_while_reading("assign_bulk")
         stats = {"set": 0, "moved": 0, "clusters": 0}
         # Dict rather than list: two rows for one uri in a single
         # execute_values would fail with "cannot affect row a second time",
@@ -737,7 +555,6 @@ class IdMap(object):
         The redis version has to read each set and check whether anything but
         an update token survives; here the members are rows, so "no members"
         is a NOT EXISTS and the whole sweep is one statement per batch."""
-        self._no_writes_while_reading("delete_empty_yuids")
         ikeys = [self._manage_value_in(y) for y in yuids]
         dead = 0
         for i in range(0, len(ikeys), 1000):
@@ -753,7 +570,6 @@ class IdMap(object):
     def _add(self, key, *values):
         """Put values into a YUID's class directly. Kept for the callers that
         use it; prefer set(), which handles the merge."""
-        self._no_writes_while_reading("_add")
         ikey = self._manage_key_in(key)
         ivalues = [self._manage_value_in(v) for v in values]
         with self._cursor() as cur:
@@ -772,7 +588,6 @@ class IdMap(object):
     def _remove(self, key, value):
         """Take one member out of a class. The update token is a column now,
         so a token is never a member and this only ever removes real ones."""
-        self._no_writes_while_reading("_remove")
         ikey = self._manage_key_in(key)
         ivalue = self._manage_value_in(value)
         if ivalue.startswith("__"):
@@ -794,7 +609,6 @@ class IdMap(object):
             del self.memory_cache[ikey]
 
     def delete(self, key, typ=""):
-        self._no_writes_while_reading("delete")
         if typ in self.configs.ok_record_types:
             key = self.configs.make_qua(key, typ)
         elif typ:
@@ -816,7 +630,6 @@ class IdMap(object):
 
     def delete_yuid(self, yuid):
         """Drop a YUID that has no members left. Refuses while any remain."""
-        self._no_writes_while_reading("delete_yuid")
         ikey = self._manage_key_in(yuid)
         with self._cursor() as cur:
             cur.execute(f"SELECT count(*) FROM {self.table} WHERE yuid = %s", (ikey,))
@@ -835,7 +648,6 @@ class IdMap(object):
     def add_update_token(self, key):
         """Mark a YUID as seen in this build. A column, so setting it replaces
         the previous build's token instead of having to find and remove it."""
-        self._no_writes_while_reading("add_update_token")
         ikey = self._manage_key_in(key)
         # The WHERE in the prepared statement matters more than it looks: this
         # is called for every identity a build touches, and after a full build
@@ -852,7 +664,6 @@ class IdMap(object):
         pass
 
     def clear(self):
-        self._no_writes_while_reading("clear")
         with self._cursor() as cur:
             cur.execute(f"TRUNCATE {self.table}, {self.yuid_table}")
         self.memory_cache.clear()
@@ -877,6 +688,293 @@ class IdMap(object):
                      f"ON CONFLICT (uri) DO UPDATE SET yuid = EXCLUDED.yuid", rows)
 
     # ------------------------------------------------------------ dict facade
+
+    def __getitem__(self, key):
+        return self.get(key)
+
+    def __setitem__(self, key, value):
+        return self.set(key, value)
+
+    def __delitem__(self, key):
+        return self.delete(key)
+
+    def __contains__(self, key):
+        return self.has_item(key)
+
+
+REF_SCHEMA = """
+CREATE TABLE IF NOT EXISTS {table} (
+    uri    TEXT PRIMARY KEY,
+    dist   INTEGER,
+    ctype  TEXT
+);
+"""
+
+
+class ReferenceMap(object):
+    """The reference queue and distance map, on postgres.
+
+    Same interface as storage.idmap.redis.ReferenceMap: a URI maps to a small
+    record of fields -- `dist` (how far this reference is from a record being
+    processed) and `type` -- and workers claim references off it to process.
+    Two instances are configured, all_refs and done_refs.
+
+    The two operations that made the redis version interesting both collapse
+    into single statements here:
+
+    *   MERGE_REF_LUA -- dist becomes min(existing, new), type is set only if
+        not already set -- is one INSERT ... ON CONFLICT with least() and
+        coalesce(). Atomic per row, and a whole record's references go in one
+        statement instead of one script call each.
+
+    *   POP_REF_LUA -- read-and-delete so exactly one worker gets a reference
+        -- is DELETE ... FOR UPDATE SKIP LOCKED RETURNING, the standard
+        postgres work queue. No SCAN cursor to carry between calls, no window
+        for a concurrent merge to slip a shorter distance into a row that is
+        about to vanish, and workers step over each other's claims rather than
+        queueing behind them.
+
+    Reconcile is the one phase where many workers write the *same* rows, which
+    is why every statement here commits on its own: locks live microseconds, so
+    contention degrades to a brief wait instead of a deadlock. Same reasoning
+    as the comment in run-reconcile.py about not deferring commits.
+    """
+
+    def __init__(self, config):
+        self.configs = config["all_configs"]
+        self.table = config.get("tableName") or config["name"]
+        self._conn_kw = _connect_kwargs(config, self.configs)
+        self.conn = _connect(self._conn_kw)
+        with self.conn.cursor() as cur:
+            cur.execute(REF_SCHEMA.format(table=self.table))
+
+    def shutdown(self):
+        # shared connection: left open deliberately, see _connect()
+        self.conn = None
+
+    # The redis backend leaves its prefix maps empty for this class, so these
+    # are identity functions there too. Kept so callers that reach for them
+    # keep working.
+    def _manage_key_in(self, key):
+        return key
+
+    _manage_key_out = _manage_key_in
+
+    def _manage_value_in(self, value):
+        return str(value) if isinstance(value, int) else value
+
+    def _manage_value_out(self, value):
+        if isinstance(value, str) and value.isnumeric():
+            return int(value)
+        return value
+
+    @staticmethod
+    def _fields(dist, ctype):
+        """What a caller sees: dist as an int, type as a string.
+
+        Matches the redis backend, where _manage_value_out turns a numeric
+        string back into an int and everything else stays a string."""
+        out = {}
+        if dist is not None:
+            out["dist"] = int(dist)
+        if ctype is not None:
+            out["type"] = ctype
+        return out
+
+    # ------------------------------------------------------------- the merge
+
+    def merge_refs(self, items, chunk=1000):
+        """Record many (key, dist, ctype) references at once.
+
+        least() is the Lua's `if existing > new`; coalesce() is its HSETNX.
+        An absent type is stored as the empty string rather than NULL on
+        purpose: redis HSETNXs `ctype or ""`, so a reference first seen without
+        a type keeps the empty one, and coalesce() only reproduces that if the
+        stored value is non-NULL.
+
+        Rows repeated within a batch are folded first -- ON CONFLICT DO UPDATE
+        cannot touch the same row twice in one statement, and one record can
+        reference the same URI at two distances."""
+        items = list(items)
+        if not items:
+            return
+        folded = {}
+        for (key, dist, ctype) in items:
+            d = int(dist)
+            prev = folded.get(key)
+            if prev is None:
+                folded[key] = (d, ctype or "")
+            else:
+                folded[key] = (min(prev[0], d), prev[1] or ctype or "")
+        rows = [(k, d, c) for k, (d, c) in folded.items()]
+        for i in range(0, len(rows), chunk):
+            with self.conn.cursor() as cur:
+                psycopg2.extras.execute_values(
+                    cur,
+                    f"INSERT INTO {self.table} (uri, dist, ctype) VALUES %s "
+                    f"ON CONFLICT (uri) DO UPDATE SET "
+                    f"dist = least({self.table}.dist, EXCLUDED.dist), "
+                    f"ctype = coalesce({self.table}.ctype, EXCLUDED.ctype)",
+                    rows[i:i + chunk], page_size=chunk)
+
+    def merge_ref(self, key, dist, ctype=""):
+        self.merge_refs([(key, dist, ctype)])
+
+    # ------------------------------------------------------------- the claim
+
+    def popitems(self, count=100):
+        """Claim up to `count` references. Exactly one worker gets each.
+
+        Returns [(key, {field: value}), ...]; an empty list means the map is
+        empty, which is what ends the caller's loop. Unlike the redis version
+        this is exact rather than approximate -- LIMIT is a limit, where SCAN's
+        COUNT was a hint that could overshoot."""
+        if count <= 0:
+            return []
+        with self.conn.cursor() as cur:
+            cur.execute(
+                f"DELETE FROM {self.table} WHERE uri IN ("
+                f"  SELECT uri FROM {self.table} LIMIT %s FOR UPDATE SKIP LOCKED"
+                f") RETURNING uri, dist, ctype", (count,))
+            return [(uri, self._fields(dist, ctype)) for (uri, dist, ctype) in cur.fetchall()]
+
+    def popitem(self):
+        got = self.popitems(1)
+        return got[0] if got else None
+
+    # -------------------------------------------------------------- the rest
+
+    def get_multi(self, keys, chunk=1000):
+        """{key: {field: value}} for the keys that exist."""
+        keys = list(keys)
+        out = {}
+        for i in range(0, len(keys), chunk):
+            batch = keys[i:i + chunk]
+            with self.conn.cursor() as cur:
+                cur.execute(f"SELECT uri, dist, ctype FROM {self.table} WHERE uri = ANY(%s)",
+                            (batch,))
+                for (uri, dist, ctype) in cur.fetchall():
+                    out[uri] = self._fields(dist, ctype)
+        return out
+
+    def get(self, key):
+        """A plain dict, where the redis backend returns a lazy reference into
+        redis whose every field read was another round trip."""
+        with self.conn.cursor() as cur:
+            cur.execute(f"SELECT dist, ctype FROM {self.table} WHERE uri = %s", (key,))
+            row = cur.fetchone()
+        return self._fields(row[0], row[1]) if row else None
+
+    def set(self, key, value):
+        """Write the fields given, leaving the others alone.
+
+        The redis version issues an HSET per field, so `refs[uri] = {"dist":
+        2}` updates the distance and leaves any existing type intact -- which
+        is exactly what write_done_refs() relies on. A whole-row upsert here
+        would blank the type instead, so the coalesce keeps whatever is
+        already stored for a field this call did not mention. Not a merge:
+        a provided dist replaces rather than being minimised, which is
+        merge_refs()' job."""
+        # accepts a dict or anything with .items(), as the redis version did
+        fields = value if isinstance(value, dict) else dict(value.items())
+        unknown = set(fields) - {"dist", "type"}
+        if unknown:
+            raise ValueError(f"{self.table} has columns for dist and type, not {sorted(unknown)}")
+        dist = fields.get("dist")
+        with self.conn.cursor() as cur:
+            cur.execute(
+                f"INSERT INTO {self.table} (uri, dist, ctype) VALUES (%s, %s, %s) "
+                f"ON CONFLICT (uri) DO UPDATE SET "
+                f"dist  = coalesce(EXCLUDED.dist, {self.table}.dist), "
+                f"ctype = coalesce(EXCLUDED.ctype, {self.table}.ctype)",
+                (key, None if dist is None else int(dist), fields.get("type")))
+
+    def update(self, values):
+        for (k, v) in values.items():
+            self.set(k, v)
+
+    def delete_multi(self, keys, chunk=1000):
+        keys = list(keys)
+        for i in range(0, len(keys), chunk):
+            with self.conn.cursor() as cur:
+                cur.execute(f"DELETE FROM {self.table} WHERE uri = ANY(%s)", (keys[i:i + chunk],))
+
+    def delete(self, key):
+        with self.conn.cursor() as cur:
+            cur.execute(f"DELETE FROM {self.table} WHERE uri = %s", (key,))
+
+    def has_item(self, key):
+        with self.conn.cursor() as cur:
+            cur.execute(f"SELECT 1 FROM {self.table} WHERE uri = %s", (key,))
+            return cur.fetchone() is not None
+
+    def iter_items(self, chunk=1000):
+        """Stream (key, {field: value}) without holding the table in memory."""
+        stamp = f"{time.time()}".replace(".", "_")
+        conn = psycopg2.connect(**self._conn_kw)
+        try:
+            cur = conn.cursor(name=f"refs_iter_{self.table}_{stamp}")
+            cur.itersize = chunk
+            cur.execute(f"SELECT uri, dist, ctype FROM {self.table}")
+            for (uri, dist, ctype) in cur:
+                yield (uri, self._fields(dist, ctype))
+            cur.close()
+            conn.commit()
+        finally:
+            conn.close()
+
+    def iter_keys(self, **kw):
+        for (uri, _fields) in self.iter_items():
+            yield uri
+
+    def keys(self, **kw):
+        return list(self.iter_keys())
+
+    def _getitem(self, db_key, key):
+        got = self.get(db_key)
+        return None if got is None else got.get(key)
+
+    def _setitem(self, db_key, key, value):
+        got = self.get(db_key) or {}
+        got[key] = value
+        self.set(db_key, got)
+
+    def _items(self, db_key):
+        return list((self.get(db_key) or {}).items())
+
+    def _export_state(self):
+        return {k: v for (k, v) in self.iter_items()}
+
+    def clear(self):
+        with self.conn.cursor() as cur:
+            cur.execute(f"TRUNCATE {self.table}")
+
+    def commit(self):
+        # autocommit: every write has already landed
+        pass
+
+    def queue_length(self, ceiling):
+        """How many references are waiting, counted no further than `ceiling`.
+
+        The claim loop only needs the exact number when it is small: it takes
+        min(ref_batch, remaining // ref_workers), so once remaining reaches
+        ref_batch * ref_workers the answer stops changing. Counting to a
+        ceiling is an index-only scan of at most that many rows, where an
+        exact count of a queue holding millions would be a full scan on every
+        claim -- and reltuples is no use here, because this table is created
+        and filled inside a single run, so autovacuum never analyses it and
+        the estimate reads 0 for the whole phase."""
+        with self.conn.cursor() as cur:
+            cur.execute(f"SELECT count(*) FROM (SELECT 1 FROM {self.table} LIMIT %s) t",
+                        (ceiling,))
+            return cur.fetchone()[0]
+
+    def __len__(self):
+        """Exact, matching redis DBSIZE. Reporting (manage-data --counts) wants
+        the real number; the claim loop uses queue_length() instead."""
+        with self.conn.cursor() as cur:
+            cur.execute(f"SELECT count(*) FROM {self.table}")
+            return cur.fetchone()[0]
 
     def __getitem__(self, key):
         return self.get(key)

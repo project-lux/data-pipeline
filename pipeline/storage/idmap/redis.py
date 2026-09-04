@@ -241,18 +241,6 @@ class IdMap(RedisCache):
     def disable_memory_cache(self):
         self.memory_cache_enabled = False
 
-    # No snapshot tier in this backend. These exist so the read-only phases can
-    # ask for one unconditionally -- the postgres backend serves them from LMDB,
-    # this one just carries on.
-    def enable_snapshot(self):
-        return False
-
-    def disable_snapshot(self):
-        pass
-
-    def snapshot_report(self):
-        return "idmap snapshot: not supported by this backend"
-
     def delete_yuid(self, yuid):
         """Remove a YUID set that no longer has any real members (only
         update tokens). Refuses if real members remain. Used by the
@@ -758,6 +746,14 @@ class ReferenceMap(NetworkOperationMap):
                     out[k] = {self._manage_key_out(f): self._manage_value_out(v)
                               for (f, v) in d.items()}
         return out
+
+    def queue_length(self, ceiling):
+        """How many references are waiting, counted no further than `ceiling`.
+
+        DBSIZE is exact and O(1) here, so the ceiling costs nothing; it exists
+        because a SQL-backed queue cannot count millions of rows on every
+        claim. See the postgres backend."""
+        return min(self.conn.dbsize(), ceiling)
 
     def merge_refs(self, items, chunk=1000):
         """merge_ref for many (key, dist, ctype) triples in one round trip."""

@@ -39,10 +39,8 @@ else:
     my_slice = 0
     max_slice = 1
 
-# Only reading from idmap, not writing, so can cache -- and for the same
-# reason the frozen LMDB copy is safe here. No-op on redis.
+# Only reading from idmap, not writing, so can cache
 idmap.enable_memory_cache()
-idmap.enable_snapshot()
 
 if profiling:
     pr = cProfile.Profile()

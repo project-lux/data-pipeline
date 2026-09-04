@@ -104,18 +104,6 @@ class IdMap(object):
         except:
             pass
 
-    # No snapshot tier in this backend. These exist so the read-only phases can
-    # ask for one unconditionally -- the postgres backend serves them from LMDB,
-    # this one just carries on.
-    def enable_snapshot(self):
-        return False
-
-    def disable_snapshot(self):
-        pass
-
-    def snapshot_report(self):
-        return "idmap snapshot: not supported by this backend"
-
     def assign_bulk(self, items):
         """In-memory equivalent of the backends' bulk cluster assignment."""
         stats = {"set": 0, "moved": 0, "clusters": 0}

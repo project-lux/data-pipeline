@@ -202,12 +202,22 @@ class ReferenceManager(object):
         nothing, and each of those 50 expands into more references that the
         one worker then owns alone. Scale the claim to what is left so the
         tail spreads across the workers instead of landing on whoever asked
-        first. all_refs has its own redis db, so DBSIZE is an exact O(1)
-        queue length."""
+        first.
+
+        Asked with a ceiling, because the exact queue length only matters
+        while it is small -- above ref_batch * ref_workers this returns
+        ref_batch whatever the true number is. On redis that ceiling is free
+        (DBSIZE is exact and O(1)); on postgres it is the difference between
+        an index-only scan of a few thousand rows and a full count of the
+        whole queue on every claim."""
         if self.ref_workers <= 1:
             return self.ref_batch
+        ceiling = self.ref_batch * self.ref_workers
         try:
-            remaining = len(self.all_refs)
+            if hasattr(self.all_refs, "queue_length"):
+                remaining = self.all_refs.queue_length(ceiling)
+            else:
+                remaining = len(self.all_refs)
         except Exception:
             # never let a bookkeeping query stop the phase
             return self.ref_batch
