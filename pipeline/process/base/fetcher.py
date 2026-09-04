@@ -59,7 +59,8 @@ class Fetcher(object):
         except:
             # Failed to open network, resolve DNS, or similar
             print(f"Failed to get response from {url}")
-            self.networkmap[url] = 0
+            if self.use_networkmap:
+                self.networkmap[url] = 0
             return None
         if resp.status_code == 200:
             # Got a response
@@ -78,7 +79,8 @@ class Fetcher(object):
         else:
             # URL returned fail status
             print(f"Got failure {resp.status_code} from {url}")
-            self.networkmap[url] = resp.status_code
+            if self.use_networkmap:
+                self.networkmap[url] = resp.status_code
             return None
 
         # return a real record structure
