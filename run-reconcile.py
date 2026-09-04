@@ -4,6 +4,7 @@ import json
 import time
 from dotenv import load_dotenv
 from pipeline.config import Config
+from pipeline.process.timing import PhaseTimer
 from pipeline.process.reconciler import Reconciler
 from pipeline.process.reference_manager import ReferenceManager
 from pipeline.process.identity_resolver import IdentityResolver
@@ -120,12 +121,19 @@ print(f"Update token is: {idmap.update_token}")
 
 sys.stdout.flush()
 
+# Where the time goes, and whether the phase is cpu bound or waiting. Writes
+# timing-reconcile-<slice>.json next to the logs so a 24-way run can be added
+# up rather than read across 24 files.
+timer = PhaseTimer("reconcile", slice_n=my_slice, max_slice=max_slice,
+                   out_dir=cfgs.log_dir if hasattr(cfgs, "log_dir") else cfgs.data_dir)
+
 if profiling:
     pr = cProfile.Profile()
     pr.enable()
 
 for name, cfg, recids in to_do:
     print(f" *** {name} ***")
+    timer.mark(name)
     sys.stdout.flush()
     in_db = cfg["datacache"]
     mapper = cfg["mapper"]
@@ -140,28 +148,35 @@ for name, cfg, recids in to_do:
     for recid in recids:
         # Acquire the record from cache or network
         # XXX acquire_all() to get multiple records from a single one?
-        if acquirer.returns_multiple():
-            recs = acquirer.acquire_all(recid)
-        else:
-            rec = acquirer.acquire(recid)
-            if rec is not None:
-                recs = [rec]
+        with timer.stage("acquire"):
+            if acquirer.returns_multiple():
+                recs = acquirer.acquire_all(recid)
             else:
-                recs = []
+                rec = acquirer.acquire(recid)
+                if rec is not None:
+                    recs = [rec]
+                else:
+                    recs = []
         if not recs:
             print(f" *** Failed to acquire any record for {name}/{recid} ***")
+            timer.skip()
         for rec in recs:
             # Reconcile it
-            rec2 = reconciler.reconcile(rec)
+            with timer.stage("reconcile"):
+                rec2 = reconciler.reconcile(rec)
             # Do any post-reconciliation clean up
-            mapper.post_reconcile(rec2)
+            with timer.stage("post_reconcile"):
+                mapper.post_reconcile(rec2)
             # XXX Shouldn't this be stored somewhere after reconciliation?
 
             # Find references from the record
-            ref_mgr.walk_top_for_refs(rec2["data"], 0)
+            with timer.stage("walk_refs"):
+                ref_mgr.walk_top_for_refs(rec2["data"], 0)
             # Log equivalence assertions; identity is resolved after all
             # slices complete (run-identify.py)
-            assertion_log.write_record(rec2)
+            with timer.stage("assertions"):
+                assertion_log.write_record(rec2)
+            timer.step()
     recids = []
 
 if profiling:
@@ -178,6 +193,11 @@ if profiling:
 
 if DO_REFERENCES:
     print("\nProcessing References...")
+    records = timer.finish()["records"]
+    # A second phase, not more of the first: it claims from a shared queue
+    # rather than walking a slice, so its rate means something different.
+    timer = PhaseTimer("reconcile-refs", slice_n=my_slice, max_slice=max_slice,
+                       out_dir=cfgs.log_dir if hasattr(cfgs, "log_dir") else cfgs.data_dir)
     item = 1
     while item:
         # Item is uri, {dist, type} or None. None means the shared queue has
@@ -185,7 +205,8 @@ if DO_REFERENCES:
         # processing a reference enqueues the references IT finds, so an
         # empty read while other workers are still going is transient. See
         # ReferenceManager._wait_for_refs.
-        item = ref_mgr.pop_ref()
+        with timer.stage("claim"):
+            item = ref_mgr.pop_ref()
         try:
             (uri, dct) = item
             distance = dct["dist"]
@@ -225,22 +246,32 @@ if DO_REFERENCES:
         acquirer = source["acquirer"]
 
         # Acquire the record from cache or network
-        rec = acquirer.acquire(recid, rectype=rectype)
+        with timer.stage("acquire"):
+            rec = acquirer.acquire(recid, rectype=rectype)
         if rec is not None:
-            ref_mgr.did_ref(quri, distance)
+            with timer.stage("did_ref"):
+                ref_mgr.did_ref(quri, distance)
             # Reconcile it
-            rec2 = reconciler.reconcile(rec)
+            with timer.stage("reconcile"):
+                rec2 = reconciler.reconcile(rec)
             # Do any post-reconciliation clean up
-            mapper.post_reconcile(rec2)
+            with timer.stage("post_reconcile"):
+                mapper.post_reconcile(rec2)
             # XXX Shouldn't this be stored somewhere after reconciliation?
 
             # Find references from this record
-            ref_mgr.walk_top_for_refs(rec2["data"], distance)
+            with timer.stage("walk_refs"):
+                ref_mgr.walk_top_for_refs(rec2["data"], distance)
             # Log equivalence assertions; identity is resolved after all
             # slices complete (run-identify.py)
-            assertion_log.write_record(rec2)
+            with timer.stage("assertions"):
+                assertion_log.write_record(rec2)
+            timer.step()
         else:
             print(f"Failed to acquire {rectype} reference: {source['name']}:{recid}")
+            timer.skip()
+
+timer.finish()
 
 # final tidy up
 assertion_log.close()

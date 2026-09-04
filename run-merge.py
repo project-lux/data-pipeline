@@ -13,6 +13,7 @@ from pipeline.config import Config
 from pipeline.process.merger import MergeHandler
 from pipeline.process.reference_manager import ReferenceManager
 from pipeline.process.reidentifier import Reidentifier
+from pipeline.process.timing import PhaseTimer
 from pipeline.storage.cache.postgres import PoolManager
 
 load_dotenv()
@@ -155,8 +156,14 @@ def claim_member(cluster, present=()):
 
 
 print(start_time)
+
+# Where the time goes, and whether this is cpu bound or waiting on postgres.
+# Writes timing-merge-<slice>.json next to the logs.
+timer = PhaseTimer("merge", slice_n=my_slice, max_slice=max_slice,
+                   out_dir=cfgs.log_dir if hasattr(cfgs, "log_dir") else cfgs.data_dir)
 t_done = 0
 for src_name, src in to_do:
+    timer.mark(src["name"])
     rcache = src["recordcache"]
 
     # Iterate whole records rather than keys-then-fetch-each-key: the rows
@@ -173,8 +180,7 @@ for src_name, src in to_do:
 
     for rec in records:
         t_done += 1
-        if not t_done % 100000:
-            print(f" ... {t_done}")
+        timer.step()
 
         distance = 0
         recid = rec["identifier"]
@@ -183,14 +189,18 @@ for src_name, src in to_do:
         rec["source"] = src["name"]
         recuri = f"{src['namespace']}{recid}"
         qrecid = cfgs.make_qua(recuri, rec["data"]["type"])
-        full_yuid = idmap[qrecid]
+        with timer.stage("idmap_forward"):
+            full_yuid = idmap[qrecid]
         if not full_yuid:
             print(f" !!! Couldn't find YUID for internal record: {qrecid}")
+            timer.skip()
             continue
         yuid = full_yuid.rsplit("/", 1)[1]
         if RESUME:
-            ins_time = merged_cache.metadata(yuid, "insert_time")
+            with timer.stage("resume_check"):
+                ins_time = merged_cache.metadata(yuid, "insert_time")
             if ins_time is not None: # and (RESUME or ins_time["insert_time"] > start_time):
+                timer.skip()
                 continue
 
         # Deterministic cross-slice claim: when several internal records
@@ -198,18 +208,22 @@ for src_name, src in to_do:
         # race between slices (whichever wrote first used to win). Instead,
         # only the lexicographically-smallest internal member that still
         # exists in its recordcache builds the merged record.
-        cluster = idmap[full_yuid] or set()
+        with timer.stage("idmap_cluster"):
+            cluster = idmap[full_yuid] or set()
         other_internals = [e for e in cluster
                            if e != qrecid and not e.startswith("__")
                            and e.startswith(internal_namespaces)]
         if other_internals:
             # our own record is in hand, so it doesn't need a cache lookup
-            (claimed, _) = claim_member(set(other_internals) | {qrecid}, present=(qrecid,))
+            with timer.stage("claim_member"):
+                (claimed, _) = claim_member(set(other_internals) | {qrecid}, present=(qrecid,))
             if claimed != qrecid:
                 # a smaller, still-present member owns this YUID
+                timer.skip()
                 continue
 
-        rec2 = reider.reidentify(rec)
+        with timer.stage("reidentify"):
+            rec2 = reider.reidentify(rec)
         if rec2 is None:
             # reidentify already reported why; indexing it would just turn
             # that into a TypeError mid-build
@@ -223,9 +237,11 @@ for src_name, src in to_do:
             print(f"CLUSTER-ESCAPE: {src['name']}/{recid} is in {yuid} but "
                   f"reidentifies to {rec2['yuid']}; skipping")
             continue
-        src["recordcache2"][rec2["yuid"]] = rec2["data"]
+        with timer.stage("write_rewritten"):
+            src["recordcache2"][rec2["yuid"]] = rec2["data"]
 
-        equivs = idmap[rec2["data"]["id"]]
+        with timer.stage("idmap_equivs"):
+            equivs = idmap[rec2["data"]["id"]]
         if equivs:
             if qrecid in equivs:
                 equivs.remove(qrecid)
@@ -236,10 +252,12 @@ for src_name, src in to_do:
         else:
             equivs = []
 
-        rec3 = merger.merge(rec2, equivs)
+        with timer.stage("merge"):
+            rec3 = merger.merge(rec2, equivs)
         # Final tidy up after merges
         try:
-            rec3 = final.transform(rec3, rec3["data"]["type"])
+            with timer.stage("final_transform"):
+                rec3 = final.transform(rec3, rec3["data"]["type"])
         except:
             print(f"*** Final transform raised exception for {rec2['identifier']}")
             raise
@@ -249,12 +267,14 @@ for src_name, src in to_do:
                 del rec3["identifier"]
             except:
                 pass
-            merged_cache[rec3["yuid"]] = rec3
+            with timer.stage("write_merged"):
+                merged_cache[rec3["yuid"]] = rec3
         else:
             print(f"*** Final transform returned None")
 
         # record complete: a safe point for the cache to commit its batch
-        merged_cache.checkpoint()
+        with timer.stage("checkpoint"):
+            merged_cache.checkpoint()
     merged_cache.flush()
     recids = []
 
@@ -269,6 +289,11 @@ if profiling:
     raise ValueError()
 
 if DO_REFERENCES:
+    timer.finish()
+    # A different shape of work: rebuilding merged records for references,
+    # driven by the done_refs file rather than a slice of the record cache.
+    timer = PhaseTimer("merge-refs", slice_n=my_slice, max_slice=max_slice,
+                       out_dir=cfgs.log_dir if hasattr(cfgs, "log_dir") else cfgs.data_dir)
     item = 1
     # the YUID comes from the file: write_done_refs resolved it once, which
     # is also what guarantees one line -- and so one worker -- per YUID
@@ -277,14 +302,19 @@ if DO_REFERENCES:
             print(f" *** No YUID for reference {ext_uri} from done_refs")
             continue
         yuid = uri.rsplit("/", 1)[-1]
+        timer.step()
         if RESUME:
-            ins_time = merged_cache.metadata(yuid, "insert_time")
+            with timer.stage("resume_check"):
+                ins_time = merged_cache.metadata(yuid, "insert_time")
             if ins_time is not None:
+                timer.skip()
                 continue
 
-        equivs = idmap[uri]
+        with timer.stage("idmap_equivs"):
+            equivs = idmap[uri]
         if not equivs:
             print(f"FAILED TO BUILD: {uri}")
+            timer.skip()
             continue
 
         # Don't rebuild what the loop above owns. This used to be an
@@ -295,8 +325,10 @@ if DO_REFERENCES:
         # the cross-worker `deadlock detected` once commits were deferred.
         # claim_member() gives the same answer in every worker without
         # looking at what has been written so far.
-        (_, claim_src) = claim_member(equivs)
+        with timer.stage("claim_member"):
+            (_, claim_src) = claim_member(equivs)
         if claim_src is not None and claim_src["name"] in todo_names:
+            timer.skip()
             continue
         # get a base record
         # equivs is a redis set; sort so the chosen base record (and thus
@@ -309,9 +341,11 @@ if DO_REFERENCES:
                     baseUri = eq
                     (src, recid) = cfgs.split_uri(baseUri)
                     if recid in src["recordcache"]:
-                        rec = src["recordcache"][recid]
+                        with timer.stage("fetch_base"):
+                            rec = src["recordcache"][recid]
                         if rec is not None:
-                            rec2 = reider.reidentify(rec)
+                            with timer.stage("reidentify"):
+                                rec2 = reider.reidentify(rec)
                             if rec2 and rec2["yuid"] != yuid:
                                 # The base record decides the YUID every row
                                 # below is keyed by, so one that reidentifies
@@ -339,10 +373,12 @@ if DO_REFERENCES:
             # raise ValueError()
         else:
             # print(f" ... Processing equivs for {recid}")
-            rec3 = merger.merge(rec2, equivs)
+            with timer.stage("merge"):
+                rec3 = merger.merge(rec2, equivs)
             # Final tidy up
             try:
-                rec3 = final.transform(rec3, rec3["data"]["type"])
+                with timer.stage("final_transform"):
+                    rec3 = final.transform(rec3, rec3["data"]["type"])
             except:
                 # NB: identifier was deleted above, so reporting it here
                 # raised KeyError from inside the handler and buried the
@@ -354,11 +390,15 @@ if DO_REFERENCES:
                     del rec3["identifier"]
                 except:
                     pass
-                merged_cache[rec3["yuid"]] = rec3
+                with timer.stage("write_merged"):
+                    merged_cache[rec3["yuid"]] = rec3
             else:
                 print(f"*** Final transform returned None")
 
-        merged_cache.checkpoint()
+        with timer.stage("checkpoint"):
+            merged_cache.checkpoint()
+
+timer.finish()
 
 # stop deferring and land everything still outstanding
 merged_cache.resume_commits()
