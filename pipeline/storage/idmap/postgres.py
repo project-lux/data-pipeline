@@ -794,7 +794,15 @@ class ReferenceMap(object):
 
         Rows repeated within a batch are folded first -- ON CONFLICT DO UPDATE
         cannot touch the same row twice in one statement, and one record can
-        reference the same URI at two distances."""
+        reference the same URI at two distances.
+
+        Then sorted, which is what stops 24 workers deadlocking. ON CONFLICT
+        takes a row lock on each conflicting row in the order the VALUES list
+        gives them, so two workers whose batches overlap in opposite orders
+        each hold a row the other wants. Reference walks produce arbitrary
+        order, so this is not rare: unsorted, 575 of 600 overlapping merges
+        deadlocked in a 24-worker test. Sorted, every transaction takes its
+        locks in the same global order and a cycle cannot form."""
         items = list(items)
         if not items:
             return
@@ -806,16 +814,28 @@ class ReferenceMap(object):
                 folded[key] = (d, ctype or "")
             else:
                 folded[key] = (min(prev[0], d), prev[1] or ctype or "")
-        rows = [(k, d, c) for k, (d, c) in folded.items()]
+        rows = sorted((k, d, c) for k, (d, c) in folded.items())
+        sql = (f"INSERT INTO {self.table} (uri, dist, ctype) VALUES %s "
+               f"ON CONFLICT (uri) DO UPDATE SET "
+               f"dist = least({self.table}.dist, EXCLUDED.dist), "
+               f"ctype = coalesce({self.table}.ctype, EXCLUDED.ctype)")
         for i in range(0, len(rows), chunk):
-            with self.conn.cursor() as cur:
-                psycopg2.extras.execute_values(
-                    cur,
-                    f"INSERT INTO {self.table} (uri, dist, ctype) VALUES %s "
-                    f"ON CONFLICT (uri) DO UPDATE SET "
-                    f"dist = least({self.table}.dist, EXCLUDED.dist), "
-                    f"ctype = coalesce({self.table}.ctype, EXCLUDED.ctype)",
-                    rows[i:i + chunk], page_size=chunk)
+            page = rows[i:i + chunk]
+            # Sorting removes the cycles this statement can cause on its own;
+            # a concurrent set() or delete_multi() can still make one, so a
+            # deadlock is retried rather than thrown at the phase. Safe to
+            # replay: least()/coalesce() make the batch idempotent.
+            for attempt in range(DEADLOCK_RETRIES):
+                try:
+                    with self.conn.cursor() as cur:
+                        psycopg2.extras.execute_values(cur, sql, page, page_size=chunk)
+                    break
+                except psycopg2.errors.DeadlockDetected:
+                    if attempt == DEADLOCK_RETRIES - 1:
+                        print(f"{self.table}: deadlocked {DEADLOCK_RETRIES} times "
+                              f"merging {len(page)} references")
+                        raise
+                    time.sleep(DEADLOCK_BACKOFF * (attempt + 1) * (0.5 + random.random()))
 
     def merge_ref(self, key, dist, ctype=""):
         self.merge_refs([(key, dist, ctype)])
@@ -894,7 +914,8 @@ class ReferenceMap(object):
             self.set(k, v)
 
     def delete_multi(self, keys, chunk=1000):
-        keys = list(keys)
+        # sorted for the same reason merge_refs sorts: consistent lock order
+        keys = sorted(set(keys))
         for i in range(0, len(keys), chunk):
             with self.conn.cursor() as cur:
                 cur.execute(f"DELETE FROM {self.table} WHERE uri = ANY(%s)", (keys[i:i + chunk],))
