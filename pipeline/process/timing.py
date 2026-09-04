@@ -19,6 +19,7 @@ about a microsecond per record -- a couple of seconds across a million-record
 phase, or ~0.1% of a forty minute run.
 """
 
+import atexit
 import json
 import os
 import sys
@@ -49,7 +50,9 @@ class _Stage:
 
 class PhaseTimer:
     def __init__(self, phase, slice_n=-1, max_slice=-1, total=None,
-                 report_every=60, out_dir=None, stream=None):
+                 report_every=None, out_dir=None, stream=None):
+        if report_every is None:
+            report_every = float(os.getenv("LUX_TIMING_INTERVAL", 60))
         self.phase = phase
         self.slice_n = slice_n
         self.max_slice = max_slice
@@ -66,6 +69,15 @@ class PhaseTimer:
         self._last_report = self.t0
         self._last_count = 0
         self.marks = []
+        self.complete = False
+        # A phase that is killed or crashes is exactly the one whose timing
+        # you wanted, so the snapshot is refreshed on every progress report
+        # and again on the way out. Only SIGKILL loses the last interval.
+        atexit.register(self._at_exit)
+
+    def _at_exit(self):
+        if not self.complete and self.count:
+            self.write()
 
     # ------------------------------------------------------------- measuring
 
@@ -135,6 +147,8 @@ class PhaseTimer:
         self.stream.flush()
         self._last_report = now
         self._last_count = self.count
+        # keep the on-disk snapshot current, not just the log
+        self.write()
 
     def summary(self):
         el = self.elapsed
@@ -157,6 +171,10 @@ class PhaseTimer:
                        for n, s in rows},
             "unaccounted_seconds": round(el - accounted, 1),
             "marks": self.marks,
+            # False means this is a snapshot of a phase still running (or one
+            # that died); the numbers are real but partial
+            "complete": self.complete,
+            "written_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         }
         try:
             import resource
@@ -168,6 +186,7 @@ class PhaseTimer:
         return out
 
     def finish(self):
+        self.complete = True
         s = self.summary()
         el = s["seconds"]
         print(f"\n=== {self._tag()} finished", file=self.stream)
@@ -198,15 +217,22 @@ class PhaseTimer:
         return s
 
     def write(self):
-        """Per-slice JSON, so a 24-way run can be added up instead of read."""
+        """Per-slice JSON, so a 24-way run can be added up instead of read.
+
+        Rewritten on every progress report, not only at the end: a phase you
+        kill because it is slow is the one whose numbers you most wanted.
+        Written to a temporary name and renamed, so a reader watching the file
+        during a build never sees half of one."""
         if not self.out_dir:
             return None
         try:
             os.makedirs(self.out_dir, exist_ok=True)
             tag = self.slice_n if self.slice_n is not None and self.slice_n > -1 else "all"
             fn = os.path.join(self.out_dir, f"timing-{self.phase}-{tag}.json")
-            with open(fn, "w") as fh:
+            tmp = f"{fn}.{os.getpid()}.tmp"
+            with open(tmp, "w") as fh:
                 json.dump(self.summary(), fh, indent=2)
+            os.replace(tmp, fn)
             return fn
         except Exception as e:
             # timing must never be the thing that kills a phase
