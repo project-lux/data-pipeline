@@ -702,12 +702,34 @@ class IdMap(object):
         return self.has_item(key)
 
 
+# A queue table, not a store: every reference is inserted, updated by later
+# merges, then deleted when claimed. Postgres leaves a dead tuple behind each
+# time, and the claim is a LIMIT scan -- so once the queue drains, that scan
+# walks the whole corpse pile to find nothing. Measured on a 400k-reference
+# queue drained with autovacuum off: a poll costs 1.1ms bloated against 0.1ms
+# after a VACUUM, and it scales with the bloat, not the backlog.
+#
+# So: tell autovacuum this table is not a normal one. Vacuum at 2% dead rather
+# than 20%, don't wait for a large absolute threshold, and don't throttle
+# (cost_delay 0). fillfactor leaves room on the page for merge_refs' updates
+# to stay HOT, which keeps them out of the index entirely.
+#
+# Applied in the CREATE, not as an ALTER on every instantiation: 24 workers
+# issuing DDL against the same table at startup is its own problem. Existing
+# tables need the ALTER once -- see docs/idmap-migration.md.
+REF_STORAGE = """fillfactor = 70,
+    autovacuum_enabled = true,
+    autovacuum_vacuum_scale_factor = 0.02,
+    autovacuum_vacuum_threshold = 5000,
+    autovacuum_vacuum_cost_delay = 0,
+    autovacuum_analyze_scale_factor = 0.05"""
+
 REF_SCHEMA = """
 CREATE TABLE IF NOT EXISTS {table} (
     uri    TEXT PRIMARY KEY,
     dist   INTEGER,
     ctype  TEXT
-);
+) WITH (""" + REF_STORAGE + """);
 """
 
 
