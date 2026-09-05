@@ -139,20 +139,39 @@ for name, cfg, recids in to_do:
     mapper = cfg["mapper"]
     acquirer = cfg["acquirer"]
 
-    if not recids:
-        if my_slice > -1:
-            recids = in_db.iter_keys_slice(my_slice, max_slice)
-        else:
-            recids = in_db.iter_keys()
+    # Iterate whole rows rather than keys-then-fetch-each-key: the datacache
+    # row comes back in the same server-side cursor that found it, so the
+    # acquirer no longer SELECTs the same row straight back. That is one round
+    # trip and one large jsonb parse per record removed, across the whole
+    # corpus -- the change run-merge already made (iter_records_slice there).
+    #
+    # The partition is unchanged: iter_records_slice hashes the same key
+    # column iter_keys_slice did, so a worker sees exactly the records it saw
+    # before.
+    #
+    # An explicit --recid list has no cursor to stream, so those still let
+    # acquire() do the fetch.
+    source_name = in_db.config["name"]
+    if recids:
+        todo = ((r, None) for r in recids)
+    elif my_slice > -1:
+        todo = ((r[in_db.key], r) for r in in_db.iter_records_slice(my_slice, max_slice))
+    else:
+        todo = ((r[in_db.key], r) for r in in_db.iter_records())
 
-    for recid in recids:
+    for (recid, row) in todo:
+        if row is not None:
+            # get() stamps this on every row it returns and the mappers and
+            # reconciler read it; the iterators don't, so set it here. Same
+            # reason run-merge sets it after switching to an iterator.
+            row["source"] = source_name
         # Acquire the record from cache or network
         # XXX acquire_all() to get multiple records from a single one?
         with timer.stage("acquire"):
             if acquirer.returns_multiple():
-                recs = acquirer.acquire_all(recid)
+                recs = acquirer.acquire_all(recid, data=row)
             else:
-                rec = acquirer.acquire(recid)
+                rec = acquirer.acquire(recid, data=row)
                 if rec is not None:
                     recs = [rec]
                 else:

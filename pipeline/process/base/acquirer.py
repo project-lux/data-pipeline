@@ -29,10 +29,15 @@ class Acquirer(object):
     def returns_multiple(self, record=None):
         return self.mapper.returns_multiple(record)
 
-    def do_fetch(self, identifier, store=True, refetch=False):
+    def do_fetch(self, identifier, store=True, refetch=False, data=None):
         rec = None
         if not refetch:
-            rec = self.datacache[identifier]
+            # A caller streaming the datacache already holds the row -- see
+            # run-reconcile, which iterates records rather than keys -- so
+            # take it instead of SELECTing the same row back a second time.
+            # Only the cached path can be supplied this way: refetch means
+            # "go to the network", which no caller can hand us.
+            rec = data if data is not None else self.datacache[identifier]
             if rec is not None:
                 return rec
 
@@ -91,17 +96,20 @@ class Acquirer(object):
                 print(f"Post Mapping killed {rectype} record {self.name}/{identifier}")
         return rec3
 
-    def acquire_all(self, identifier, store=True):
+    def acquire_all(self, identifier, store=True, data=None):
         if not self.mapper.returns_multiple():
             return None
-        data = self.acquire(identifier, None, True, False, False)
+        # dataonly, so what comes back is the datacache row -- the same thing
+        # `data` is when a caller supplies one
+        data = self.acquire(identifier, None, True, False, False, data=data)
         recs = self.mapper.transform_all(data)
         result = []
         for rec in recs:
             result.append(self.do_post_map(rec, rec["data"]["type"], store))
         return result
 
-    def acquire(self, identifier, rectype=None, dataonly=False, store=True, reference=False, refetch=False):
+    def acquire(self, identifier, rectype=None, dataonly=False, store=True, reference=False, refetch=False,
+                data=None):
         # Given an identifier, ensure that datacache and recordcache are populated
         # Return resulting record
 
@@ -134,7 +142,7 @@ class Acquirer(object):
                             return rec
 
         with timing.stage("acquire.fetch"):
-            rec = self.do_fetch(identifier, store, refetch)
+            rec = self.do_fetch(identifier, store, refetch, data=data)
         if dataonly or rec is None:
             return rec
 

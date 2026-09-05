@@ -785,9 +785,19 @@ class PooledCache(object):
         qpstr = ",".join(qps)
 
         if self.config["overwrite"]:
-            qry = f"""INSERT INTO {self.name} ({qpstr}) VALUES ({pholders})
-            ON CONFLICT ({self.key}) DO UPDATE SET ({qpstr}) = ({pholders})"""
-            self._upsert(qry, qvs * 2, identifier, yuid)
+            # `SET col = EXCLUDED.col`, not a second copy of the parameter
+            # list. The obvious spelling -- `SET (cols) = (%s,...)` with qvs
+            # passed twice -- makes every write cost two of everything:
+            # psycopg2's Json adapter re-runs dumps() on each adaptation
+            # (getquoted() does no caching), so the document was serialised
+            # twice here, sent twice over the socket, and parsed into jsonb
+            # twice by postgres -- for every record in every phase, and
+            # doubling the WAL those writes generate. EXCLUDED names the row
+            # the INSERT already proposed, so the payload crosses once.
+            setstr = ",".join(f"{qn} = EXCLUDED.{qn}" for qn in qps)
+            qry = (f"INSERT INTO {self.name} ({qpstr}) VALUES ({pholders}) "
+                   f"ON CONFLICT ({self.key}) DO UPDATE SET {setstr}")
+            self._upsert(qry, qvs, identifier, yuid)
             return
 
         # Not an overwrite cache: plain insert, duplicates expected.
