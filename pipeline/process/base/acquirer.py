@@ -1,6 +1,8 @@
 import os
 import traceback
 
+from pipeline.process import timing
+
 
 class Acquirer(object):
     def __init__(self, config):
@@ -119,18 +121,20 @@ class Acquirer(object):
                 qrecid = self.configs.make_qua(identifier, rectype)
                 if qrecid != identifier:
                     keys.append(qrecid)
-            if len(keys) == 1:
-                rec = self.recordcache[identifier]
-                if rec is not None:
-                    return rec
-            else:
-                found = self.recordcache.get_multi(keys)
-                for k in keys:
-                    rec = found.get(k)
+            with timing.stage("acquire.cache_hit"):
+                if len(keys) == 1:
+                    rec = self.recordcache[identifier]
                     if rec is not None:
                         return rec
+                else:
+                    found = self.recordcache.get_multi(keys)
+                    for k in keys:
+                        rec = found.get(k)
+                        if rec is not None:
+                            return rec
 
-        rec = self.do_fetch(identifier, store, refetch)
+        with timing.stage("acquire.fetch"):
+            rec = self.do_fetch(identifier, store, refetch)
         if dataonly or rec is None:
             return rec
 
@@ -148,7 +152,8 @@ class Acquirer(object):
                 rectype = rec["data"]["type"]
 
         try:
-            rec2 = self.mapper.transform(rec, rectype, reference=reference)
+            with timing.stage("acquire.map"):
+                rec2 = self.mapper.transform(rec, rectype, reference=reference)
         except Exception as e:
             # raise
             # The message alone doesn't say where it came from -- "'xml'" or
@@ -170,5 +175,7 @@ class Acquirer(object):
         if reference:
             return rec2
 
-        rec3 = self.do_post_map(rec2, rec2["data"]["type"], store=store)
+        # writes the mapped record back to the recordcache when store is set
+        with timing.stage("acquire.post_map"):
+            rec3 = self.do_post_map(rec2, rec2["data"]["type"], store=store)
         return rec3

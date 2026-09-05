@@ -26,6 +26,37 @@ import sys
 import time
 
 
+class _NullStage:
+    """What `timing.stage()` returns when no phase is being timed, so library
+    code can be instrumented without depending on a timer existing."""
+
+    __slots__ = ()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+_NULL = _NullStage()
+_active = None
+
+
+def stage(name):
+    """Time a stage on this process's current PhaseTimer, if there is one.
+
+    Lets code well below the scripts -- acquirers, mappers -- be instrumented
+    without threading a timer through every signature. Costs one global lookup
+    when timing is off."""
+    t = _active
+    return t.stage(name) if t is not None else _NULL
+
+
+def active():
+    return _active
+
+
 class _Stage:
     """Reused per name so the hot path allocates nothing."""
 
@@ -70,6 +101,9 @@ class PhaseTimer:
         self._last_count = 0
         self.marks = []
         self.complete = False
+        # so library code can find it -- see stage() above
+        global _active
+        _active = self
         # A phase that is killed or crashes is exactly the one whose timing
         # you wanted, so the snapshot is refreshed on every progress report
         # and again on the way out. Only SIGKILL loses the last interval.
