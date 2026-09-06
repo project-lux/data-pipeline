@@ -68,6 +68,18 @@ class PoolManager(object):
         self.deferring = False
         self.commit_every = 0
         self.pending_writes = 0
+        # Rows per multi-row upsert while deferring; 0 means one statement
+        # per record, as before. Set by defer_commits(batch=N).
+        self.batch_rows = 0
+        # The write connection commits per statement unless a caller has
+        # taken control with defer_commits(). Held here as well as on the
+        # connection so it survives a connection being made later.
+        self.write_autocommit = True
+        # Caches holding buffered rows. Every write in the process shares one
+        # connection and one commit, so the buffers have to be landed
+        # together -- a commit that took some caches' rows and left others
+        # buffered would break the guarantee defer_commits() exists for.
+        self._pending = []
         # Statements executed since the last commit while deferring. A
         # deadlock aborts the whole transaction, not just the statement that
         # lost, so without these the batch is simply gone; with them it can
@@ -96,6 +108,9 @@ class PoolManager(object):
                 # local socket
                 self.conn = psycopg2.connect(user=user, dbname=dbname)
                 self.iterating_conn = psycopg2.connect(user=user, dbname=dbname)
+            # Write connection only. The iterating connection carries
+            # server-side cursors, which need a transaction to live in.
+            self.conn.autocommit = self.write_autocommit
             self.pool = name
 
     def get_conn(self, name, itr=False):
@@ -113,17 +128,65 @@ class PoolManager(object):
                 self.conn.close()
                 self.conn = None
 
+    def set_autocommit(self, on):
+        """One transaction per statement, or one the caller controls.
+
+        psycopg2 with autocommit off issues BEGIN as its own command when the
+        connection is idle, and commit() sends COMMIT -- so a phase that
+        commits per write pays two round trips per record that do no work. In
+        reconcile a single-row indexed SELECT costs 227us, which puts those
+        two at ~450us of a ~1100us acquire, over 43.8M records.
+
+        It does not weaken the reasoning in run-reconcile.py about keeping row
+        locks brief -- the opposite. In autocommit a lock lives from the
+        statement to its implicit commit, which is shorter than holding it
+        until an explicitly-issued COMMIT arrives a round trip later.
+
+        Only ever the write connection; see make_pool().
+        """
+        self.write_autocommit = on
+        if self.conn is None or self.conn.closed:
+            return
+        if self.conn.autocommit == on:
+            return
+        if on:
+            # psycopg2 refuses to switch inside a transaction, and a read
+            # leaves one open -- see PooledCache.end_read()
+            self.conn.commit()
+        self.conn.autocommit = on
+
+    def register_pending(self, cache):
+        """Note that `cache` is holding rows that must land before a commit."""
+        if cache not in self._pending:
+            self._pending.append(cache)
+
+    def flush_pending(self):
+        """Emit every buffered row, across all caches in this process."""
+        while self._pending:
+            self._pending.pop()._emit_batch()
+
+    def pending_total(self):
+        """Writes since the last commit, buffered rows included -- so
+        commit_every keeps meaning records, not statements."""
+        return self.pending_writes + sum(len(c._batch) for c in self._pending)
+
     def commit_all(self):
-        # Commit everything outstanding on the shared write connection
-        if self.conn is not None:
+        # Buffered rows first: a commit has to cover whole records, not
+        # whichever writes happened to have been emitted already
+        self.flush_pending()
+        # Commit everything outstanding on the shared write connection. In
+        # autocommit each statement has already committed itself.
+        if self.conn is not None and not self.conn.autocommit:
             self.conn.commit()
         self.pending_writes = 0
         # committed, so there is nothing left to replay
         self.deferred_stmts.clear()
 
-    def record_deferred(self, qry, params):
+    def record_deferred(self, qry, params, rows=1):
         self.deferred_stmts.append((qry, params))
-        self.pending_writes += 1
+        # rows, not statements: one batched upsert carries many records and
+        # commit_every is expressed in records
+        self.pending_writes += rows
 
     def replay_deferred(self):
         """Re-execute the deferred batch after a rollback threw it away.
@@ -148,6 +211,15 @@ class PoolManager(object):
 
 
 class PooledCache(object):
+    # Rows buffered for the next multi-row upsert, {key: (column names,
+    # values)}. Keyed by primary key, so a record written twice before the
+    # batch lands folds to its last version rather than reaching postgres as
+    # two conflicting rows in one statement, which is an error rather than an
+    # upsert. Class-level default so partially-built instances (tests
+    # construct via object.__new__) work; rebound before first use, never
+    # mutated in place while empty.
+    _batch = {}
+
     # latest() is the only query that reads insert_time in an order, and it is
     # only ever asked of the data caches (update_manager.harvest,
     # checkDataUpdates, populate-timestamps). Everywhere else the index cost
@@ -161,6 +233,7 @@ class PooledCache(object):
         self.conn = None
         self.iterating_conn = None
         self._cols = None
+        self._batch = {}
         self.pools = PoolManager.get_instance()
 
         if config["host"]:
@@ -197,7 +270,7 @@ class PooledCache(object):
         self.conn = None
         self.iterating_conn = None
 
-    def defer_commits(self, every=100):
+    def defer_commits(self, every=100, batch=0):
         """Stop committing inside every set(). Committing per write cost an
         fsync per write -- for merge, ~5 per record per worker.
 
@@ -230,22 +303,40 @@ class PooledCache(object):
         bug in the partitioning rather than as normal contention.
 
         `every` also bounds memory: the records in the current batch are held
-        until it commits, so they can be replayed."""
+        until it commits, so they can be replayed.
+
+        `batch` is how many records go into one multi-row upsert; 0 keeps one
+        statement per record. Deferring already removed the fsync per write,
+        which leaves the round trip and the per-statement parse -- at
+        batch=25 that is 25 records per round trip instead of 25 round trips.
+        It costs nothing in memory: the deferred statements already hold every
+        record until the commit, so the buffer is the same records, earlier.
+
+        Batching only applies while deferring, and deferring already requires
+        workers to write disjoint keys, which is what makes it safe: rows are
+        emitted in key order (the same reason merge_refs sorts) so two workers
+        cannot take row locks in opposite orders, and a key written twice
+        before the batch lands folds to its last version."""
         self.pools.deferring = True
         self.pools.commit_every = int(every)
+        self.pools.batch_rows = int(batch)
+        # a batch has to live in a transaction the caller controls
+        self.pools.set_autocommit(False)
 
     def resume_commits(self):
         """Land anything outstanding and go back to committing per set()."""
         self.flush()
         self.pools.deferring = False
         self.pools.commit_every = 0
+        self.pools.batch_rows = 0
+        self.pools.set_autocommit(True)
 
     def checkpoint(self):
         """Mark the end of a unit of work: commit if enough writes have
         accumulated since the last one. No-op when not deferring."""
         if not self.pools.deferring:
             return
-        if self.pools.commit_every and self.pools.pending_writes >= self.pools.commit_every:
+        if self.pools.commit_every and self.pools.pending_total() >= self.pools.commit_every:
             self.flush()
 
     def flush(self):
@@ -306,6 +397,7 @@ class PooledCache(object):
                 self.conn.rollback()
 
     def len(self):
+        self._read_barrier()
         qry = f"SELECT COUNT(*) FROM {self.name}"
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry)
@@ -321,6 +413,7 @@ class PooledCache(object):
             return None
         if not field in ["insert_time", "record_time", "refresh_time", "valid", "change"]:
             raise ValueError(f"Unknown metadata field in cache: {field}")
+        self._read_barrier()
         qry = f"SELECT {field} FROM {self.name} WHERE {_key_type} = %s"
         params = (key,)
         with self._cursor(internal=False) as cursor:
@@ -336,6 +429,9 @@ class PooledCache(object):
             return None
         if not field in ["record_time", "refresh_time", "valid", "change"]:
             raise ValueError(f"Attempt to set unsettable metadata field in cache: {field}")
+        # ahead of the UPDATE: a row still in the buffer would not be seen by
+        # it, and would then land without the field this call set
+        self._read_barrier()
         qry = f"UPDATE {self.name} SET {field} = %s WHERE {_key_type} = %s"
         params = (value, key)
         with self._cursor(internal=False) as cursor:
@@ -367,8 +463,15 @@ class PooledCache(object):
         get()/metadata()/has_item() run millions of times per build.
 
         No-op while a deferred batch is outstanding: that transaction belongs
-        to the writes and rolling it back would discard them."""
+        to the writes and rolling it back would discard them.
+
+        Also a no-op in autocommit, which is now the default for the write
+        connection (see PoolManager.set_autocommit): a read there does not
+        leave a transaction behind, so there is nothing to end. The method
+        stays because deferring still turns autocommit off."""
         if self.conn is None:
+            return
+        if self.conn.autocommit:
             return
         if self.pools.pending_writes:
             return
@@ -444,6 +547,7 @@ class PooledCache(object):
             print(f"{self.name} has UUIDs as keys")
             return None
 
+        self._read_barrier()
         qry = f"SELECT {self._select_list(raw)} FROM {self.name} WHERE {_key_type} = %s"
         params = (key,)
         with self._cursor(internal=False) as cursor:
@@ -463,6 +567,7 @@ class PooledCache(object):
         keys = [k for k in keys if not (_key_type == "yuid" and len(k) != 36)]
         if not keys:
             return {}
+        self._read_barrier()
         qry = (f"SELECT {self._select_list(raw)} FROM {self.name} "
                f"WHERE {_key_type} = ANY(%s)")
         with self._cursor(internal=False) as cursor:
@@ -490,6 +595,7 @@ class PooledCache(object):
             print(f"{self.name} has UUIDs as keys")
             return None
 
+        self._read_barrier()
         cols = self._select_list(raw)
         if since is None:
             qry = f"SELECT {cols} FROM {self.name} WHERE {_key_type} = %s"
@@ -515,6 +621,7 @@ class PooledCache(object):
         # ORDER BY in case we have multiple copies from different times:
         # we want the most recent (the comment promised this but the query
         # had no ORDER BY, so postgres returned an arbitrary matching row)
+        self._read_barrier()
         qry = f"SELECT * FROM {self.name} WHERE {_key_type} LIKE %s ORDER BY insert_time DESC"
         params = (key + "%",)
         with self._cursor(internal=False) as cursor:
@@ -569,6 +676,7 @@ class PooledCache(object):
     # themselves; changing it here would add a key to every existing
     # iterator caller's rows.
     def iter_records_slice(self, mySlice=0, maxSlice=10, raw=False):
+        self._read_barrier()
         qry = (f"SELECT {self._select_list(raw)} FROM {self.name} "
                f"WHERE {self._slice_predicate(mySlice, maxSlice)}")
         with self._cursor(iter=True) as cursor:
@@ -577,6 +685,7 @@ class PooledCache(object):
                 yield res
 
     def iter_keys_slice(self, mySlice=0, maxSlice=10):
+        self._read_barrier()
         qry = f"SELECT {self.key} FROM {self.name} WHERE {self._slice_predicate(mySlice, maxSlice)}"
         with self._cursor(iter=True, size=50000) as cursor:
             cursor.execute(qry)
@@ -622,6 +731,7 @@ class PooledCache(object):
                 yield res
 
     def iter_records(self, raw=False):
+        self._read_barrier()
         qry = f"SELECT {self._select_list(raw)} FROM {self.name}"
         with self._cursor(iter=True) as cursor:
             cursor.execute(qry)
@@ -629,6 +739,7 @@ class PooledCache(object):
                 yield res
 
     def iter_keys(self):
+        self._read_barrier()
         qry = f"SELECT {self.key} FROM {self.name}"
         with self._cursor(iter=True) as cursor:
             cursor.execute(qry)
@@ -684,7 +795,67 @@ class PooledCache(object):
             for res in cursor:
                 yield res[self.key]
 
-    def _upsert(self, qry, params, identifier=None, yuid=None):
+    def _buffer(self, key, qps, qvs):
+        """Hold one row for the next multi-row upsert.
+
+        Folding by primary key is not an optimisation: two rows for one key in
+        a single ON CONFLICT statement fails with "cannot affect row a second
+        time", so the same key written twice in a batch has to collapse to its
+        last version -- which is also what the unbatched path did."""
+        batch = self._batch
+        if not batch:
+            # rebind rather than mutate: the class-level default must stay
+            # empty for instances that never buffer
+            batch = self._batch = {}
+        batch[key] = (qps, qvs)
+        self.pools.register_pending(self)
+        if len(batch) >= self.pools.batch_rows:
+            self._emit_batch()
+
+    def _emit_batch(self):
+        """Send the buffered rows as one upsert per column-set.
+
+        Sorted by key, for the reason merge_refs sorts: ON CONFLICT takes a
+        row lock per conflicting row in the order the VALUES list gives them,
+        so two transactions whose batches overlap in opposite orders deadlock.
+        A global order makes a cycle impossible. Deferring already expects
+        workers to write disjoint keys, so this is insurance rather than the
+        load-bearing part.
+
+        A plain execute() with repeated placeholder groups, not
+        execute_values(): it keeps the deferred statement a (query, params)
+        pair like every other one, so the deadlock replay in _upsert needs no
+        special case."""
+        if not self._batch:
+            return
+        batch, self._batch = self._batch, {}
+        groups = {}
+        for key in sorted(batch):
+            (qps, qvs) = batch[key]
+            groups.setdefault(qps, []).append(qvs)
+        for qps, rows in groups.items():
+            qpstr = ",".join(qps)
+            group = "(" + ",".join(["%s"] * len(qps)) + ")"
+            setstr = ",".join(f"{qn} = EXCLUDED.{qn}" for qn in qps)
+            qry = (f"INSERT INTO {self.name} ({qpstr}) VALUES "
+                   + ",".join([group] * len(rows))
+                   + f" ON CONFLICT ({self.key}) DO UPDATE SET {setstr}")
+            flat = tuple(v for row in rows for v in row)
+            self._upsert(qry, flat, rows=len(rows))
+
+    def _read_barrier(self):
+        """Land buffered rows before a read.
+
+        Without batching, a deferred write has still been executed, so it is
+        visible to a later read on the same connection even before the commit.
+        Buffering would silently change that, so a read lands whatever this
+        cache is holding first. No-op -- one empty-dict test -- for every
+        cache that is only read from, which is all of them in merge and
+        export."""
+        if self._batch:
+            self._emit_batch()
+
+    def _upsert(self, qry, params, identifier=None, yuid=None, rows=1):
         """Run one upsert, surviving the transient deadlocks that parallel
         workers touching the same row produce.
 
@@ -704,8 +875,11 @@ class PooledCache(object):
                 with self._cursor(internal=False) as cursor:
                     cursor.execute(qry, params)
                 if self.pools.deferring:
-                    self.pools.record_deferred(qry, params)
-                else:
+                    self.pools.record_deferred(qry, params, rows=rows)
+                elif not self.conn.autocommit:
+                    # in autocommit the statement above already landed, and
+                    # sending COMMIT would be a second round trip doing
+                    # nothing -- which is the point of set_autocommit()
                     self.conn.commit()
                 return
             except psycopg2.extensions.TransactionRollbackError as e:
@@ -785,6 +959,15 @@ class PooledCache(object):
         qpstr = ",".join(qps)
 
         if self.config["overwrite"]:
+            if self.pools.deferring and self.pools.batch_rows:
+                # One statement per record is the round trip this is here to
+                # remove -- see defer_commits(batch=N). Falls through to the
+                # single-row form for a row carrying no primary key, which
+                # cannot be folded and so cannot be batched.
+                bkey = qd[self.key]
+                if bkey is not None:
+                    self._buffer(bkey, tuple(qps), qvs)
+                    return
             # `SET col = EXCLUDED.col`, not a second copy of the parameter
             # list. The obvious spelling -- `SET (cols) = (%s,...)` with qvs
             # passed twice -- makes every write cost two of everything:
@@ -830,6 +1013,9 @@ class PooledCache(object):
     def delete(self, key, _key_type=None):
         if _key_type is None:
             _key_type = self.key
+        # ahead of the DELETE, or a buffered write of this key would land
+        # after it and resurrect the row
+        self._read_barrier()
         qry = f"DELETE FROM {self.name} WHERE {_key_type} = %s"
         params = (key,)
         with self._cursor(internal=False) as cursor:
@@ -838,12 +1024,16 @@ class PooledCache(object):
 
     def clear(self):
         # WARNING WARNING ... trash all the data in the cache
+        # ahead of the TRUNCATE, so buffered rows are cleared too rather than
+        # landing after it
+        self._read_barrier()
         qry = f"TRUNCATE TABLE {self.name} RESTART IDENTITY"
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry)
             self.pools.commit_all()
 
     def has_item(self, key, _key_type=None, timestamp=None):
+        self._read_barrier()
         if _key_type is None:
             _key_type = self.key
         if timestamp is None:
@@ -921,15 +1111,22 @@ class PooledCache(object):
         """Run one maintenance statement outside any transaction.
 
         VACUUM and CLUSTER need a transaction of their own, so the connection
-        goes to autocommit first. psycopg2's set_isolation_level ABORTS an open
-        transaction rather than committing it, so anything deferred has to land
-        before the switch or it is silently discarded -- and commit_all() would
-        then clear the replay buffer that could have put it back."""
+        goes to autocommit first -- usually it is already there. Switching
+        cannot happen inside a transaction, so anything deferred has to land
+        before it, which is what the flush() below is for; without it the
+        switch would take the open transaction with it and commit_all() would
+        have cleared the replay buffer that could have put it back.
+
+        Saves and restores `autocommit` directly rather than going through
+        set_isolation_level: whether the legacy isolation_level getter reports
+        autocommit as level 0 is a psycopg2 detail, and getting it wrong here
+        would silently leave the shared connection in the other mode for the
+        rest of the run."""
         self.flush()
         if self.conn is None:
             self.conn = self.pools.get_conn(self.pool_name)
-        old_iso = self.conn.isolation_level
-        self.conn.set_isolation_level(0)
+        old_auto = self.conn.autocommit
+        self.conn.autocommit = True
         try:
             with self._cursor(internal=False) as cursor:
                 # Only read by maintenance statements, so it can be left set
@@ -937,11 +1134,12 @@ class PooledCache(object):
                 cursor.execute("SET maintenance_work_mem = %s", (self.MAINTENANCE_WORK_MEM,))
                 yield cursor
         finally:
-            # However this ends, hand the connection back committing per
-            # write. It is shared with every other cache in the process, and
-            # left in autocommit it makes defer_commits() a silent no-op for
-            # the rest of the run.
-            self.conn.set_isolation_level(old_iso)
+            # However this ends, hand the connection back in the mode it came
+            # in. It is shared with every other cache in the process, so
+            # leaving it in the wrong one makes defer_commits() a silent
+            # no-op -- or silently reintroduces a COMMIT per write -- for the
+            # rest of the run.
+            self.conn.autocommit = old_auto
 
     def optimize(self, freeze=True, report=True):
         """VACUUM (ANALYZE, FREEZE) the table: what a load should end with.

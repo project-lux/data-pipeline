@@ -11,7 +11,7 @@ against.
 
 ---
 
-## 1. Baseline: the overnight run (postgres only, 24 workers)
+## 1. Baseline: run 1 (postgres only, 24 workers)
 
 | phase | records | wall | aggregate | worker-hrs | client cpu |
 |---|---|---|---|---|---|
@@ -35,9 +35,53 @@ reconcile-refs   claim 6.87 | reconcile 4.19 | walk_refs 1.74 | acquire 1.26
 merge-refs       claim_member 2.36 | idmap_equivs 0.34
 ```
 
+### Run 2 — after the two changes in §3
+
+**Total: 300.7 → 240.9 min wall, 120.1 → 96.1 worker-hours. Both -20%.**
+
+| phase | wall | worker-hrs | client cpu | vs run 1 |
+|---|---|---|---|---|
+| merge | 116.7 min | 46.6 | 42% | -14.6% |
+| merge-refs | 8.5 min | 3.4 | 10% | +2.4% |
+| reconcile | 77.9 min | 31.1 | 56% | **-34.4%** |
+| reconcile-refs | 37.8 min | 15.0 | 31% | **+2.0%** |
+
+Stage deltas in worker-hours, run 1 → run 2:
+
+```
+merge            reidentify      13.65 -> 10.23   -25.1%
+                 write_merged    11.33 ->  8.68   -23.4%   <- §3.1
+                 write_rewritten 10.80 ->  8.28   -23.3%   <- §3.1
+                 idmap_forward    4.54 ->  5.82   +28.2%   <- REGRESSED, see §5
+                 idmap_cluster    4.01 ->  3.53   -12.0%
+                 final_transform  1.50 ->  1.52    +1.3%   <- cpu control, flat
+                 checkpoint       0.41 ->  0.41    +0.0%   <- cpu control, flat
+reconcile        acquire         30.12 -> 13.32   -55.8%   <- §3.2
+                 reconcile        8.70 ->  7.53   -13.4%
+                 walk_refs        7.16 ->  7.44    +3.9%
+                 cpu-hours       17.50 -> 17.30    -1.1%   <- same work, less waiting
+reconcile-refs   claim            6.87 ->  7.11    +3.5%   <- see §3.2
+merge-refs       claim_member     2.36 ->  2.31    -2.1%
+```
+
+`final_transform` and `checkpoint` do no postgres work and moved by 1.3% and
+0%, which is what makes the rest of the column trustworthy: the box did not
+change, so the gains are real reductions in time spent waiting, not drift.
+Reconcile's cpu-hours held at 17.3 while its worker-hours fell by a third —
+the exact signature of removing a round trip rather than removing work.
+
 ---
 
-## 2. The measurement gap — close this on the re-run
+## 2. Reading the report
+
+### 2.0 Nested-stage accounting — FIXED
+
+See **§3.6**. `timing-report.py` derives nesting from the stage names rather
+than from a field in the JSON, so **the run-2 logs already on disk report
+correctly if you just run the tool again** — no rebuild needed to get the
+corrected numbers.
+
+### 2.1 The client/server gap — still open
 
 **`PhaseTimer` measures client CPU only.** 41% of 24 workers is roughly 10
 cores busy in python; the rest of a 32-vCPU box is postgres backends servicing
@@ -73,7 +117,10 @@ number; `acquire.cache_hit` / `.fetch` / `.map` / `.post_map`
 
 ---
 
-## 3. Landed — assess these two first
+## 3. Landed
+
+§3.1 and §3.2 were assessed by run 2 (see §1). §3.3, §3.4 and §3.5 are
+awaiting run 3. §3.6 is a reporting fix, not a build change.
 
 ### 3.1 The upsert sent every document twice
 
@@ -92,13 +139,25 @@ unchanged: every column the INSERT names is still assigned on conflict, which
 `tests/test_upsert_single_payload.py` asserts column-by-column so a later
 column addition cannot silently drop out of the update path.
 
-**Expected to move:** merge's `write_merged` (11.33 wh) + `write_rewritten`
-(10.80 wh) = 40% of the phase's worker time, and the `post_map` write inside
-reconcile's `acquire`.
+**Result (run 2): confirmed, -23% on both write stages.** `write_merged`
+11.33 → 8.68 wh and `write_rewritten` 10.80 → 8.28 wh, per-call 935.8 → 716.9
+and 891.5 → 684.0 µs. 5.2 worker-hours off merge.
 
-**Verify:** those two stages in the new report; WAL volume over a fixed record
-count (`pg_current_wal_lsn()` delta); and in `pg_stat_statements` the
-normalised text now carries one set of placeholders, not two.
+Less than a halving, which is the expected shape: the duplicated payload was
+only part of a write's cost — the round trip, the WAL record and the index
+maintenance were never doubled and are still there. That residue is what §4.2
+(batching) goes after.
+
+Two knock-on effects worth noting, because they are evidence about the server
+rather than about this change:
+
+* `reidentify` fell 25% (13.65 → 10.23 wh) and `idmap_cluster` 12%, neither of
+  which was touched. The likeliest explanation is that halving the write
+  bytes and jsonb parsing freed server CPU and cut WAL volume, so everything
+  else talking to postgres got faster. If so, the box was server-saturated —
+  which is §2.1's question, and this is the strongest evidence yet that the
+  answer is yes.
+* `idmap_forward` went the other way, +28%. See §5.
 
 ### 3.2 Reconcile fetched every row it had just listed
 
@@ -128,10 +187,31 @@ queue's whole performance story depends on aggressive vacuuming (measured, see
 the comment at `pipeline/storage/idmap/postgres.py:720`: a poll costs 1.1 ms
 bloated against 0.1 ms after a `VACUUM`).
 
-So on the re-run, watch whether **`reconcile-refs`' `claim` gets worse** even
-as `acquire` gets better, and watch `n_dead_tup` on `all_refs` during
-reconcile. If it bites, the fix is keyset pagination rather than one long
-cursor:
+**Result (run 2): confirmed, and the largest win in the build.** Reconcile
+went 118.7 → 77.9 min wall and 47.4 → 31.1 worker-hours, both -34%. `acquire`
+fell 30.12 → 13.32 wh, -56%, per-call 2473 → 1094 µs. Client cpu-hours held at
+17.3 (from 17.5) while worker-hours fell by a third: identical CPU work, far
+less blocking, which is precisely what removing a round trip looks like.
+
+**The caveat did not clearly bite, but it is not cleared either.**
+`reconcile-refs` got *slightly worse* — 37.0 → 37.8 min, `claim` 6.87 → 7.11
+wh, per-call 2437.7 → 2540.1 µs (+4.2%). That is the direction the snapshot
+concern predicts but far too small to attribute with confidence, and
+`merge-refs` drifted +2.4% in the same run with no plausible connection. It
+needs the measurement, not more inference:
+
+```sql
+-- during reconcile
+SELECT relname, n_dead_tup, last_autovacuum FROM pg_stat_all_tables
+WHERE relname IN ('all_refs','done_refs');
+SELECT pid, backend_xmin, now()-xact_start AS age FROM pg_stat_activity
+WHERE backend_xmin IS NOT NULL ORDER BY age DESC LIMIT 5;
+```
+
+If `n_dead_tup` climbs through reconcile without `last_autovacuum` moving, and
+the oldest `backend_xmin` belongs to a worker holding an
+`iter_records_slice` cursor, the caveat is real. The fix is keyset pagination
+rather than one long cursor:
 
 ```sql
 SELECT * FROM <datacache>
@@ -145,75 +225,235 @@ alive for seconds. `identifier` is the primary key on every `DataCache`
 (`pipeline/storage/cache/postgres.py:1140`), and the hash is computable from
 the index key, so it stays an index scan.
 
----
+### 3.3 The YUID and its class were two round trips (was §4.1)
 
-## 4. Backlog, in the order worth doing
+`IdMap.get_cluster()` in `pipeline/storage/idmap/postgres.py`, used at
+`run-merge.py:192`.
 
-### 4.1 Collapse `idmap_forward` + `idmap_cluster` into one query — merge, 8.55 wh (16%)
-
-**Where:** `run-merge.py:192` and `run-merge.py:211`.
-
-Two sequential single-row round trips per record for what is one answer: the
-record's YUID, then that YUID's member set. 372 µs + 329 µs each, on a
-prepared, indexed, unix-socket lookup — which is itself evidence that the
-server is saturated rather than that the query is slow.
-
-One query gives both, since membership is derived from the `yuid` column:
+`idmap[qrecid]` then `idmap[full_yuid]` was two sequential single-row lookups
+for one answer — 5.82 + 3.53 = 9.35 worker-hours in run 2, 20% of merge.
+Membership is derived from the `yuid` column rather than stored separately, so
+one prepared statement resolves the forward pointer and returns the class it
+points at:
 
 ```sql
-SELECT uri FROM idmap WHERE yuid = (SELECT yuid FROM idmap WHERE uri = $1)
+SELECT m.yuid, m.uri FROM idmap m
+WHERE m.yuid = (SELECT yuid FROM idmap WHERE uri = $1)
 ```
 
-The YUID comes back from any returned row (or use a CTE returning both
-columns). Add it to `IdMap.PREPARED` (`pipeline/storage/idmap/postgres.py:159`)
-as e.g. `cluster_of`, and give it a method — `get_cluster(key)` returning
-`(yuid, members)` — rather than open-coding SQL in `run-merge.py`.
+The `idmap_forward` stage is gone; `idmap_cluster` now covers both.
 
-Watch out for: the memory cache. `idmap_equivs` costs 13.5 µs against
-`idmap_cluster`'s 329 µs precisely because the cluster was already cached by
-the earlier lookup, so the new method must populate `memory_cache` under both
-keys exactly as `get()` does, or the reidentifier's prefetch hop stops being
-free.
+Three things it has to preserve, all pinned in
+`tests/test_idmap_get_cluster.py`:
 
-**Expected:** ~4 wh. **Verify:** `idmap_forward` and `idmap_cluster` collapse
-into one stage at roughly the cost of one of them, and `idmap_equivs` stays in
-the tens of microseconds.
+* **Both halves stay in the memory cache**, under the same two keys `get()`
+  used. Merge reads the class straight back (`idmap_equivs`, 12.7 µs) and so
+  does the reidentifier's prefetch hop; caching only the forward pointer would
+  move the cost rather than remove it.
+* **No rows means the key is unknown, not that the class is empty** — a key is
+  always a member of its own class.
+* **A failed statement falls back to the two lookups** rather than returning
+  no YUID, which merge would turn into a skipped record and a misleading
+  "Couldn't find YUID" line.
 
-### 4.2 Batch the record-cache writes — merge, re-size after §3.1
+Under `--resume` this is now unconditional where the cluster fetch used to be
+skipped for already-built records. That costs nothing: the resume path already
+paid one `metadata()` round trip per record, and this replaces one lookup with
+one lookup.
 
-**Where:** `PooledCache.set()` / `_upsert()`
-(`pipeline/storage/cache/postgres.py:751`, `:687`).
+**Verify:** `idmap_forward` absent, `idmap_cluster` at roughly what
+`idmap_forward` alone cost, `idmap_equivs` still in the tens of microseconds.
+If `idmap_equivs` jumps, the memory caching broke.
 
-One INSERT per record. Commits are already deferred every 500
-(`run-merge.py:108`), so the transaction boundary is not the constraint — the
-per-statement round trip and parse is. Buffer 25–100 rows and emit them with
-`psycopg2.extras.execute_values`.
+### 3.4 One statement per record while deferring (was §4.2, merge half)
 
-Do this **after** measuring §3.1, because halving the payload may already have
-taken most of what is available here, and batching is the more invasive change
-of the two.
+`defer_commits(every=500, batch=25)` at `run-merge.py:112`; the mechanism is
+`_buffer` / `_emit_batch` / `_read_barrier` in
+`pipeline/storage/cache/postgres.py`.
 
-Constraints to respect:
-* `_upsert()`'s deadlock replay (`pipeline/storage/cache/postgres.py:687`) and
-  `PoolManager.deferred_stmts` assume one statement per record. A batched
-  statement must be replayable the same way — it is, since these are all
-  idempotent upserts, but the bookkeeping needs updating together.
-* `checkpoint()` must still land on a record boundary, so the row buffer has to
-  be flushed at checkpoint time, not independently of it.
-* Ordering: `merge_refs` sorts its batches to keep a consistent lock order
-  across workers (`pipeline/storage/idmap/postgres.py:840`). Merge workers are
-  key-disjoint by `claim_member()`, so batched cache writes should not need it
-  — but if `deadlock detected` appears in a merge log after this change, that
-  assumption is what broke, and sorting each batch by key is the cheap
-  insurance.
-* `start_bulk`/`set_bulk`/`end_bulk` (`:871`) already exist for a
-  non-overwrite bulk path. Read them before writing a third write path.
+Deferring had already removed the fsync per write, which left one round trip
+and one parse per record. Rows now accumulate and go out 25 to a statement.
+Memory is unchanged — `deferred_stmts` already held every record until the
+commit for replay, so the buffer is the same records, earlier.
 
-### 4.3 `reidentify` — merge, 13.65 wh (25%), currently one opaque number
+Batching applies **only while deferring**, which is what makes it safe:
+deferral already requires workers to write disjoint keys. On top of that:
+
+* rows are emitted **in key order**, for the reason `merge_refs` sorts — ON
+  CONFLICT locks conflicting rows in the order the VALUES list gives them, so
+  two transactions overlapping in opposite orders deadlock;
+* a key written twice before the batch lands **folds to its last version**,
+  because two rows for one key in one ON CONFLICT statement is an error, not
+  an upsert;
+* every cache in the process lands its buffer **before the connection
+  commits**, so a commit still covers a merged record and its rewritten rows
+  together;
+* reads, and `delete`/`clear`/`set_metadata`, **land the buffer first**. An
+  executed-but-uncommitted statement was visible to a later read on the same
+  connection; buffering would have silently lost that.
+
+Pinned in `tests/test_batched_writes.py` (13 tests). `batch` defaults to 0, so
+`run-export.py:53`, `run-source-build.py:52` and the loaders are unchanged and
+can opt in one argument at a time once merge's numbers are in.
+
+**Verify:** `write_merged` and `write_rewritten` in run 3. Watch the merge logs
+for `deadlock detected` — key-disjointness plus sorting should make it
+impossible, and one occurrence means an assumption broke rather than that
+contention is normal.
+
+### 3.5 The write connection was not in autocommit (was §4.11)
+
+`PoolManager.set_autocommit()` in `pipeline/storage/cache/postgres.py`, applied
+in `make_pool()` and driven by `defer_commits()` / `resume_commits()`.
+
+Both connections were created with psycopg2's default `autocommit = False`.
+Outside `defer_commits()` every `set()` ended with `conn.commit()`, so
+psycopg2 wrapped the work in an explicit transaction: `BEGIN` as its own
+command when the connection was idle, `COMMIT` at the end. Two round trips per
+record that do no work. Reconcile pays them 43.8M times; a single-row indexed
+SELECT there costs 227 µs (`acquire.cache_hit`, 60.5M calls), which puts them
+at **~5.5 of the phase's 31.1 worker-hours**. A read plus a write went from
+four round trips to two.
+
+**It shortens row locks rather than lengthening them**, which is why this and
+not §4.2: in autocommit a lock lives from the statement to its implicit
+commit, where before it was held until an explicitly-issued COMMIT arrived a
+round trip later. `run-reconcile.py:106`'s reasoning is served, not
+contradicted. The precedent is `pipeline/storage/idmap/postgres.py:85`, which
+has run its own connection this way all along.
+
+Scope and the things that had to move with it, all pinned in
+`tests/test_write_autocommit.py`:
+
+* **Write connection only.** The iterating connection carries server-side
+  cursors, which need a transaction to live in. Checked: every
+  `_cursor(iter=True)` is on that connection, and the one named cursor on the
+  write connection is in `list()`, behind `raise NotImplementedError`.
+* **Deferring turns it off**, because a batch needs a transaction the caller
+  controls; `resume_commits()` turns it back on, committing first because
+  psycopg2 refuses to switch inside a transaction.
+* **`end_read()` is a no-op in autocommit** — a read leaves no transaction, so
+  there is nothing to end and a ROLLBACK would be another pointless round
+  trip. It stays for the deferring case.
+* **`_maintenance()` saves and restores `autocommit` directly** rather than
+  going through `set_isolation_level`. Whether the legacy getter reports
+  autocommit as level 0 is a psycopg2 detail, and getting it wrong would
+  silently leave the shared connection in the other mode for the rest of the
+  run — either making `defer_commits()` a no-op or reintroducing a COMMIT per
+  write.
+
+**One accepted behaviour change:** `_make_table()` issues CREATE TABLE and
+CREATE INDEX, which are now separate transactions rather than one. A failure
+between them would leave a table without its index instead of neither. It is a
+one-time setup path inside a try/except, and `TIME_INDEX` is False for every
+cache but `DataCache`, so in practice there is no second statement.
+
+**Verify:** `acquire.post_map` should fall from 685 µs towards ~230, and
+`acquire.cache_hit` from 227 µs (it carried the BEGIN). If neither moves, the
+premise was wrong — psycopg2 was not issuing BEGIN as its own round trip — and
+only the COMMIT saving is real. `pg_stat_statements` should show BEGIN and
+COMMIT call counts collapse.
+
+### 3.6 The report double-counted nested stages (was §2.0)
+
+`split_stages()` in `pipeline/process/timing.py`, used by `PhaseTimer.summary()`,
+`.report()`, `.finish()` and by `timing-report.py`.
+
+`timing.stage("acquire.map")` runs inside `timer.stage("acquire")`, so summing
+every stage and subtracting from the wall clock counted that time twice. Once
+the `acquire.*` sub-stages landed, reconcile reported **-16.51 worker-hours
+unattributed, -53.1%** — a figure that cannot exist, and one that made every
+percentage in the phase wrong.
+
+A dotted name is now a child of its prefix. Only top-level stages are
+subtracted; children are reported in a block of their own, and a child whose
+parent was never timed is promoted, since it is then the only attribution
+there is. Run 2's reconcile now reads **2.54 worker-hours, 8.2%**.
+
+The second half of the fix matters as much. The sub-stages are **not a
+breakdown of their parent**: `timing.stage()` attributes to whichever
+PhaseTimer is active, so the acquirer's stages accumulate whether it was
+called from the top of the loop or from inside `reconcile()` via
+`pipeline/process/collector.py:169`. In run 2 the four `acquire.*` stages
+totalled 19.03 worker-hours against `acquire`'s 13.32. Printing them indented
+under `acquire` would imply a partition that isn't one, so the report says it
+outright:
+
+```
+  inside acquire -- already counted above, not additional:
+    acquire.post_map          9.53               50,107,634      684.9
+    acquire.cache_hit         3.82               60,476,605      227.3
+    acquire.map               3.64               51,668,639      253.9
+    acquire.fetch             2.04               52,123,139      141.0
+    ...totalling 19.03 worker-hrs against acquire's 13.32, so 5.71 of it runs
+       inside other stages -- not a breakdown of acquire
+```
+
+That 5.71 worker-hours is the external-authority acquisition inside
+`reconcile`, which is also what makes the reconciler's own logic ~1.82 wh of
+its 7.53 — a fact the old report could not have told you.
+
+`summary()` also stamps `"nested": true|false` on each stage for anything
+reading the JSON directly, but `timing-report.py` derives nesting from the
+names instead, so logs written before this change roll up correctly too.
+
+Pinned in `tests/test_timing_nesting.py`, including the exact run-2 reconcile
+shape.
+
+---
+
+## 4. Backlog
+
+Item numbers are stable identifiers — they do not change when the order does.
+**Priority after run 2**, biggest first, with run-2 sizes:
+
+| | item | size now | why now |
+|---|---|---|---|
+| — | ~~§4.1 one idmap query~~ | | **landed, see §3.3** |
+| — | ~~§4.2 batch the writes (merge)~~ | | **landed, see §3.4** |
+| — | ~~§4.11 write connection in autocommit~~ | | **landed, see §3.5** |
+| 1 | §4.5 reconcile-refs claim | 7.11 wh (47%) | untouched and slightly worse; the least-improved phase |
+| 2 | §4.10 `walk_refs` | reconcile 7.44 wh (24%) | never investigated, now 4th largest |
+| 3 | §4.4 skip the guaranteed-miss probe | 2.77 wh recoverable | cheapest item on the list |
+| 4 | §4.3 `reidentify` | merge 10.23 wh | fell 25% for free in run 2; re-measure after run 3 before spending on it |
+| — | ~~§4.2 batch the writes (reconcile)~~ | | **downgraded**: `synchronous_commit` is `off`, so §4.11 gets the same round trips for less risk |
+
+**Re-measure before starting any of these.** Run 2 showed stages moving 25%
+without being touched, because relieving the server lifted everything. Run 3
+carries two more changes of the same kind.
+
+§4.6 (`recordcache2`) sits outside this order because it is a product question,
+not an engineering one — but it is still worth 8.28 wh.
+
+### 4.1 Collapse `idmap_forward` + `idmap_cluster` into one query — LANDED
+
+See **§3.3**. Awaiting run 3.
+
+### 4.2 Batch the record-cache writes — reconcile — DOWNGRADED, probably don't
+
+The merge half landed as **§3.4**. The reconcile half was held pending
+`SHOW synchronous_commit`, which came back **`off`** — so most of the case for
+it is gone.
+
+With the fsync per commit already eliminated server-side, batching reconcile's
+writes saves round trips and nothing else. It still carries the whole of the
+original risk: reconcile is the one phase where workers upsert the *same* rows
+(`collector.collect()` stores shared authority records), a multi-row upsert
+holds locks on all N rows until it commits, and sorting prevents a deadlock
+cycle without preventing 24 workers waiting on each other for N times as long
+— against a phase whose current design deliberately keeps each lock alive for
+microseconds (`run-reconcile.py:106`).
+
+**§3.5 got the same round trips for less risk, and has landed.** If run 3
+shows `acquire.post_map` still large after it, reconsider this with real
+numbers.
+
+### 4.3 `reidentify` — merge, 10.23 wh (21.9%), still one opaque number
 
 **Where:** `pipeline/process/reidentifier.py`.
 
-1127 µs/call covers three different things and no one knows the split:
+845 µs/call (run 2; 1127 in run 1) covers three different things and no one
+knows the split:
 
 * the `get_multi` round trip in `prefetch()` (`:115`),
 * `_collect_keys()`'s walk of the whole record tree (`:97`),
@@ -243,22 +483,37 @@ Also unprepared: `IdMap.get_multi` builds its `uri = ANY(%s)` SQL as an
 f-string and takes a fresh cursor each call, so postgres parses and plans it
 43.8M times. Preparing it is free and independent of the above.
 
-### 4.4 Reconcile's guaranteed-miss recordcache probe — 43.8M pointless probes
+**Re-measure before spending on this.** It fell 25% in run 2 without being
+touched — see §3.1 — so a share of what looked like reidentifier cost was
+really server contention caused by the writes. §4.2 may take more of it the
+same way. Step 1 (instrument) is still worth doing first and on its own.
+
+### 4.4 Reconcile's guaranteed-miss recordcache probe — 2.77 wh, 43.8M pointless probes
 
 **Where:** `pipeline/process/base/acquirer.py:120-134`.
 
-On a full rebuild (`manage-data.py --clear-all`) the recordcache is empty, so
-the pre-check at the top of `acquire()` misses for every single record. On an
-incremental build that same check is what makes the phase fast, so it cannot
-just be deleted — it needs a flag. `pipeline/process/base/acquirer.py:17` has
+Run 2 sizes this precisely. `acquire.cache_hit` is 3.82 wh over **60,476,605
+calls**, against 52,123,139 `acquire.fetch` calls — so 8.35M lookups (13.8%)
+were served from the recordcache and the probe is doing real work overall.
+
+But 43,843,926 of those 60.5M are the main loop's internal records, and on a
+full rebuild (`manage-data.py --clear-all`) the recordcache starts empty, so
+every one of them is a guaranteed miss: **72.5% of the calls, ~2.77 wh, 8.9% of
+the phase.** The other 16.6M are external-authority lookups inside
+`collector.collect()`, where the hit rate is what makes the phase work — so
+this must be scoped to the main loop on a full rebuild, not applied globally.
+On an incremental build the probe is what makes the phase fast and must stay.
+
+It needs a flag. `pipeline/process/base/acquirer.py:17` has
 `# self.force_rebuild = config.get("force_rebuild", False)` commented out,
 which is where this was heading already.
 
 Wire it to a `--rebuild` argument on `run-reconcile.py` and skip the probe when
-set. **Verify** via `acquire.cache_hit` (§2) — on a full rebuild it should
-drop to zero calls.
+set, for the main loop only. **Verify** via `acquire.cache_hit` — its call
+count should fall from ~60.5M to ~16.6M, and its hit rate should rise from
+13.8% to roughly 50%.
 
-### 4.5 `reconcile-refs` claim starvation — 6.87 wh (46.6% of the phase)
+### 4.5 `reconcile-refs` claim starvation — 7.11 wh (47.4%), unimproved in run 2
 
 **Where:** `pipeline/process/reference_manager.py:197` (`_claim_size`), `:255`
 (`pop_ref`), `:44` (`ref_batch = 50`).
@@ -267,8 +522,15 @@ drop to zero calls.
 returns `min(ref_batch, remaining // ref_workers)`. With 24 workers that
 floors to 1 whenever fewer than 24 references are visible — so through the
 whole long tail each record costs a count query *plus* a `DELETE ... FOR UPDATE
-SKIP LOCKED`, which is how a per-record average of 2437 µs arises from what
-should be one claim per 50 records.
+SKIP LOCKED`, which is how a per-record average of 2540 µs (run 2; 2437 µs in
+run 1) arises from what should be one claim per 50 records.
+
+Nothing in §3 touched this phase and it did not improve — it is now the least
+improved part of the build, and the only stage that got materially worse in
+relative terms. Note it also carries `acquire.cache_hit` at 3.08 wh over
+40,046,718 calls, which is **4.0 probes per record**; if §4.4 is being done
+anyway, look at whether the collector is probing sources it could rule out
+first.
 
 * Keep a floor of ~8–16 rather than 1.
 * Only re-measure the queue when the previous claim came back short, or every
@@ -295,7 +557,7 @@ the vacuuming those settings ask for.
 `did_ref` (`:267`) is one `INSERT ... ON CONFLICT` per reference and could be
 buffered, but at 0.48 wh it is not worth touching until the claim is fixed.
 
-### 4.6 Is `recordcache2` needed for every source? — merge, 10.8 wh (20%)
+### 4.6 Is `recordcache2` needed for every source? — merge, 8.28 wh (17.8%)
 
 **Where:** `run-merge.py:241`, `:363`; `pipeline/process/merger.py:95`.
 
@@ -309,14 +571,16 @@ This is a **product question, not a performance question**: ask before
 changing it. Note `pipeline/process/merger.py:95` also writes external `recordcache2` rows from
 inside the `merge` stage, which is a separate decision from the internal ones.
 
-### 4.7 Instrument merge's unattributed 8.2% — 4.48 wh
+### 4.7 Instrument merge's unattributed 9.5% — 4.44 wh
 
-`(unattributed)` is merge's fourth-largest bucket and is mostly the
+Unmoved by anything in §3 (4.48 → 4.44 wh), and merge is the one phase where
+the figure is trustworthy because it has no nested sub-stages — see §2.0.
+`(unattributed)` is one of merge's largest buckets and is mostly the
 `iter_records_slice` cursor fetches at `run-merge.py:176`, which no
 `timer.stage()` wraps. Wrap it. A phase whose fourth-biggest cost has no name
 is one nobody can reason about.
 
-### 4.8 `merge-refs` `claim_member` — 2.36 wh (71% of an 8-minute phase)
+### 4.8 `merge-refs` `claim_member` — 2.31 wh (69% of an 8-minute phase)
 
 **Where:** `run-merge.py:328`, `claim_member()` at `run-merge.py:133`.
 
@@ -342,25 +606,57 @@ is 0%. Run one source at 16, 24 and 32 workers and compare wall time. Cheap
 experiment, and if §2 shows the server saturated it may be the largest single
 number in this document.
 
+### 4.10 `walk_refs` — reconcile, 7.44 wh (24%), never looked at
+
+**Where:** `run-reconcile.py:173`, `ReferenceManager.walk_top_for_refs()` and
+`resolve_refs()` in `pipeline/process/reference_manager.py`.
+
+Now the second-largest top-level stage in reconcile and the only one of the
+big three that has never been investigated. It was 7.16 wh in run 1 and 7.44
+in run 2 — flat, because nothing touched it.
+
+611 µs per record to walk a mapped record's tree and batch its references into
+`all_refs`. Unknown, and worth an hour before anything is proposed: how much
+is the python tree walk, how much is `merge_refs()`' round trip, and how
+large are the batches. `merge_refs` already folds duplicates, sorts for lock
+order, and skips no-op updates (`pipeline/storage/idmap/postgres.py:827`), so
+the obvious wins may already be taken — measure before designing.
+
+Start by splitting the stage: `walk_refs.collect` around the tree walk,
+`walk_refs.merge` around the postgres call.
+
 ---
 
 ## 5. Open questions
 
-* **`synchronous_commit` for the record caches.** The reasoning in
-  `run-reconcile.py:106` for refusing to defer commits is about *lock
-  duration*, and it is correct. But async commit would remove the per-write
-  fsync **without** extending lock duration, which is a different trade from
-  the one that comment rejects. If §2 finds `synchronous_commit = on`, decide
-  deliberately: server-wide (as `idmap-migration.md:150` suggests), or per-pool
-  in `PoolManager.make_pool` the way the reference maps do it. The record
-  caches are reconstructible from the datacaches, so the durability being
-  traded away is worth little — but `run-identify.py` does write identity and
-  should keep it.
-* **Why are single-row prepared idmap lookups 330–370 µs?** Over a unix socket
-  with a prepared statement against a hot index, that should be well under
-  100 µs. Either the server is queueing (§2 answers this) or something in the
-  connection path is not what the code thinks it is. Worth understanding
-  before optimising around it, because the answer changes §4.1's expected win.
+* ~~**`synchronous_commit` for the record caches.**~~ **ANSWERED: it is
+  `off`** (checked on the server, 2026-09-06). So the per-write fsync that
+  several comments in this codebase reason from does not exist. Two
+  consequences, both recorded where they matter: §4.2 loses most of its
+  expected value, and §4.11 replaces it. Note that
+  `defer_commits()`'s docstring still justifies itself with "Committing per
+  write cost an fsync per write" — that is now wrong about *why* deferral
+  helps (it saves round trips, not fsyncs) and should be corrected before it
+  misleads someone. The comment at `run-reconcile.py:106` is unaffected: it
+  reasons about lock duration and deadlocks, which is still exactly right.
+* **Why did `idmap_forward` get 28% slower in run 2?** 372 → 478 µs, while
+  `idmap_cluster` on the *same connection and cursor* went 329 → 289 µs and the
+  phase as a whole got 15% faster. The two differ in three ways worth testing:
+  `forward` probes `idmap_pkey` (5.9 GB) and `cluster` probes
+  `idmap_yuid_idx` (3.2 GB); `forward`'s keys are ~44M distinct source URIs
+  that never repeat, so they never hit the memory cache, while `cluster`'s
+  results are cached and reused by `idmap_equivs` (12.7 µs); and run 2 pushed
+  17% more queries per second at the server, so a marginal working set would
+  show a *lower* buffer hit ratio at the higher arrival rate. Check
+  `pg_statio_user_indexes` for `idmap_pkey` (`idx_blks_hit` vs `idx_blks_read`)
+  across both runs before theorising further. §4.1 removes the round trip
+  either way, but the answer decides whether the underlying problem follows it.
+* **Why are single-row prepared idmap lookups 290–480 µs at all?** Over a unix
+  socket with a prepared statement against a hot index, that should be well
+  under 100 µs. Either the server is queueing (§2.1) or something in the
+  connection path is not what the code thinks it is. The run-2 evidence — that
+  cutting write bytes made *unrelated* read stages 12–25% faster — points hard
+  at queueing.
 * **`TIME_INDEX`** is `False` on every cache except `DataCache`
   (`pipeline/storage/cache/postgres.py:156`, `:1144`). Confirmed correct as
   written — `latest()` is only asked of the data caches — but if a new caller

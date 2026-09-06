@@ -45,6 +45,12 @@ class Cursor:
 
 
 class Conn:
+    # the real write connection is in autocommit unless a caller has
+    # taken control with defer_commits(); these tests are about the
+    # paths where it has
+    autocommit = False
+    closed = False
+
     def __init__(self):
         self.attempts = []   # every execute, including ones that blew up
         self.applied = []    # the ones that got through

@@ -18,6 +18,12 @@ from collections import defaultdict
 
 from dotenv import load_dotenv
 
+# One definition of "a dotted name is nested inside its prefix", shared with
+# the timer that writes the JSON -- see split_stages' docstring for what
+# counting them twice did to the unattributed figure.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pipeline.process.timing import split_stages
+
 
 def load(directory, phase=None):
     out = defaultdict(list)
@@ -49,7 +55,10 @@ def summarise(runs):
         for name, st in r.get("stages", {}).items():
             stages[name][0] += st["calls"]
             stages[name][1] += st["seconds"]
-    accounted = sum(s[1] for s in stages.values())
+    # Only top-level stages are subtracted: a nested one ran inside its
+    # parent, and counting both drove this negative (-53.1% on reconcile).
+    top, kids = split_stages(stages)
+    accounted = sum(s[1] for s in top.values())
     return {
         "slices": n,
         "complete": sum(1 for r in runs if r.get("complete")),
@@ -61,6 +70,8 @@ def summarise(runs):
         "cpu_percent": cpu / worker_seconds * 100 if worker_seconds else 0,
         "rate": records / wall if wall else 0,
         "stages": stages,
+        "top_stages": top,
+        "nested_stages": kids,
         "unattributed": worker_seconds - accounted,
         "runs": runs,
     }
@@ -82,13 +93,30 @@ def report(phase, s, stragglers=True):
     if s["stages"]:
         print(f"\n  {'stage':<20} {'worker-hrs':>11} {'% worker':>9} "
               f"{'calls':>14} {'us/call':>10}")
-        rows = sorted(s["stages"].items(), key=lambda kv: -kv[1][1])
+        ws = s["worker_seconds"]
+        rows = sorted(s["top_stages"].items(), key=lambda kv: -kv[1][1])
         for name, (calls, secs) in rows:
             print(f"  {name:<20} {secs / 3600:>11.2f} "
-                  f"{secs / s['worker_seconds'] * 100 if s['worker_seconds'] else 0:>8.1f}% "
+                  f"{secs / ws * 100 if ws else 0:>8.1f}% "
                   f"{calls:>14,} {secs / calls * 1e6 if calls else 0:>10,.1f}")
         print(f"  {'(unattributed)':<20} {s['unattributed'] / 3600:>11.2f} "
-              f"{s['unattributed'] / s['worker_seconds'] * 100 if s['worker_seconds'] else 0:>8.1f}%")
+              f"{s['unattributed'] / ws * 100 if ws else 0:>8.1f}%")
+
+        # Nested stages, reported but never subtracted. Deliberately not
+        # indented under their parent in the same table: timing.stage()
+        # attributes to whichever timer is active, so a helper called from
+        # two stages puts time here that its nominal parent never contained.
+        for parent, group in s["nested_stages"].items():
+            ptotal = s["stages"][parent][1]
+            ctotal = sum(v[1] for v in group.values())
+            print(f"\n  inside {parent} -- already counted above, not additional:")
+            for name, (calls, secs) in sorted(group.items(), key=lambda kv: -kv[1][1]):
+                print(f"    {name:<18} {secs / 3600:>11.2f} {'':>9} "
+                      f"{calls:>14,} {secs / calls * 1e6 if calls else 0:>10,.1f}")
+            if ctotal > ptotal * 1.001:
+                print(f"    ...totalling {ctotal / 3600:.2f} worker-hrs against "
+                      f"{parent}'s {ptotal / 3600:.2f}, so {(ctotal - ptotal) / 3600:.2f} "
+                      f"of it runs inside other stages -- not a breakdown of {parent}")
 
     if stragglers and s["slices"] > 2:
         rates = sorted((r["records_per_second"], r["slice"]) for r in s["runs"])

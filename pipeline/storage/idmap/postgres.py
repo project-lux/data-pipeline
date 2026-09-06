@@ -162,6 +162,10 @@ class IdMap(object):
         "has_uri": "SELECT 1 FROM {t} WHERE uri = $1",
         "has_yuid": "SELECT 1 FROM {y} WHERE yuid = $1",
         "member_count": "SELECT count(*) FROM {t} WHERE yuid = $1",
+        # forward pointer and the class it points at, in one statement. The
+        # subselect is the "fwd" lookup; the outer scan is "rev".
+        "cluster": "SELECT m.yuid, m.uri FROM {t} m "
+                   "WHERE m.yuid = (SELECT yuid FROM {t} WHERE uri = $1)",
         "token_is": "SELECT 1 FROM {y} WHERE yuid = $1 AND token = $2",
         "token_set": "INSERT INTO {y} (yuid, token) VALUES ($1, $2) "
                      "ON CONFLICT (yuid) DO UPDATE SET token = EXCLUDED.token "
@@ -293,6 +297,58 @@ class IdMap(object):
             print(f"idmap lookup failed for {ikey}: {e}")
             self.conn.rollback()
             return None
+
+    def get_cluster(self, key, typ=""):
+        """A key's YUID and that YUID's whole member set, in one round trip.
+
+        `idmap[uri]` followed by `idmap[yuid]` is two sequential single-row
+        lookups for what is one answer, and merge does it for every record --
+        43.8M pairs, 9.35 worker-hours in the last build. Membership is
+        derived from the yuid column here rather than stored separately, so a
+        single statement can resolve the forward pointer and return the class
+        it points at.
+
+        Returns (yuid, members), or (None, None) when the key is unknown. The
+        key is always a member of its own class, so no rows back means the
+        forward lookup missed -- never that the class is empty.
+
+        Caches exactly what the two calls it replaces cached, under the same
+        two keys: callers downstream (the reidentifier's prefetch, merge's
+        idmap_equivs) depend on the member set being resident afterwards.
+        """
+        key = self._check_qua(key, typ)
+        ikey = self._manage_key_in(key)
+
+        if self.memory_cache_enabled:
+            # misses are never cached (see get/get_multi), so a hit here is a
+            # real YUID
+            yuid = self.memory_cache[ikey]
+            if yuid is not self.memory_cache.missing:
+                members = self.memory_cache[self._manage_value_in(yuid)]
+                if members is not self.memory_cache.missing:
+                    return (yuid, members)
+                return (yuid, self.get(yuid))
+
+        try:
+            rows = self._run("cluster", (ikey,)).fetchall()
+        except Exception as e:
+            # Correctness over speed: fall back to the two lookups this
+            # method exists to replace rather than reporting a missing YUID,
+            # which merge would turn into a skipped record.
+            print(f"idmap cluster lookup failed for {ikey}: {e}")
+            self.conn.rollback()
+            yuid = self.get(key)
+            return (yuid, self.get(yuid)) if yuid else (None, None)
+
+        if not rows:
+            return (None, None)
+        iyuid = rows[0][0]
+        yuid = self._manage_value_out(iyuid)
+        members = {self._manage_value_out(r[1]) for r in rows}
+        if self.memory_cache_enabled:
+            self.memory_cache[ikey] = yuid
+            self.memory_cache[iyuid] = members
+        return (yuid, members)
 
     def get_multi(self, keys, chunk=1000):
         """Resolve many keys in one round trip each way. Same semantics as

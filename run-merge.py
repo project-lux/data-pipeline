@@ -105,7 +105,11 @@ idmap.enable_memory_cache()
 # allowed to land on; the cache does the counting. Anything not yet committed
 # when a worker dies is simply redone (--resume skips on
 # merged_cache.metadata, which only sees committed rows).
-merged_cache.defer_commits(every=500)
+# batch=25: deferring already removed the fsync per write, which leaves one
+# round trip and one parse per record. 25 records per statement instead, in
+# key order. Costs nothing in memory -- the deferred statements already held
+# every record until the commit.
+merged_cache.defer_commits(every=500, batch=25)
 
 
 def fetch_records(rcache, ids, name):
@@ -189,8 +193,15 @@ for src_name, src in to_do:
         rec["source"] = src["name"]
         recuri = f"{src['namespace']}{recid}"
         qrecid = cfgs.make_qua(recuri, rec["data"]["type"])
-        with timer.stage("idmap_forward"):
-            full_yuid = idmap[qrecid]
+        # The YUID and its whole class in one round trip. These were two
+        # sequential single-row lookups (idmap_forward then idmap_cluster),
+        # 9.35 worker-hours of the last build between them, for what postgres
+        # can answer in one statement -- membership is derived from the yuid
+        # column, so the forward pointer and the class it points at come back
+        # together. get_cluster caches both halves exactly as the two lookups
+        # did, which is what keeps idmap_equivs below a memory hit.
+        with timer.stage("idmap_cluster"):
+            (full_yuid, cluster) = idmap.get_cluster(qrecid)
         if not full_yuid:
             print(f" !!! Couldn't find YUID for internal record: {qrecid}")
             timer.skip()
@@ -208,9 +219,7 @@ for src_name, src in to_do:
         # race between slices (whichever wrote first used to win). Instead,
         # only the lexicographically-smallest internal member that still
         # exists in its recordcache builds the merged record.
-        with timer.stage("idmap_cluster"):
-            cluster = idmap[full_yuid] or set()
-        other_internals = [e for e in cluster
+        other_internals = [e for e in (cluster or ())
                            if e != qrecid and not e.startswith("__")
                            and e.startswith(internal_namespaces)]
         if other_internals:

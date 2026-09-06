@@ -43,6 +43,37 @@ _NULL = _NullStage()
 _active = None
 
 
+def split_stages(stages):
+    """Top-level stages, and the nested ones underneath them.
+
+    A dotted name is a child of its prefix -- `acquire.map` is timed *inside*
+    `acquire` -- so adding every stage up double-counts. That is what made a
+    phase report **-53.1% unattributed**: the four `acquire.*` stages were
+    subtracted from the wall clock a second time, and the remainder went
+    negative.
+
+    Children are worth reporting but must not be subtracted, and they are not
+    a breakdown of their parent either: `timing.stage()` attributes to
+    whichever PhaseTimer is active, so a helper called from two different
+    stages -- the acquirer, called both directly and from inside
+    reconcile() -- lands its children under a parent that did not contain all
+    of them. Callers should say so rather than imply a partition.
+
+    A child whose parent was never timed is promoted to top level, since it is
+    then the only attribution there is.
+
+    `stages` maps name -> anything; values come back untouched.
+    """
+    kids = {}
+    for name in stages:
+        parent = name.split(".", 1)[0]
+        if "." in name and parent in stages:
+            kids.setdefault(parent, {})[name] = stages[name]
+    nested = {n for group in kids.values() for n in group}
+    top = {n: v for n, v in stages.items() if n not in nested}
+    return top, kids
+
+
 def stage(name):
     """Time a stage on this process's current PhaseTimer, if there is one.
 
@@ -174,7 +205,8 @@ class PhaseTimer:
         if self.skipped:
             line += f"  ({self.skipped:,} skipped)"
         print(line, file=self.stream)
-        top = sorted(self.stages.items(), key=lambda kv: -kv[1][1])[:4]
+        parents, _kids = split_stages(self.stages)
+        top = sorted(parents.items(), key=lambda kv: -kv[1][1])[:4]
         if top and el:
             bits = "  ".join(f"{n} {s[1] / el * 100:.0f}%" for n, s in top)
             print(f"[{self._tag()}]   {bits}", file=self.stream)
@@ -188,7 +220,10 @@ class PhaseTimer:
         el = self.elapsed
         cpu = self.cpu
         rows = sorted(self.stages.items(), key=lambda kv: -kv[1][1])
-        accounted = sum(s[1] for _, s in rows)
+        # nested stages run inside their parent, so counting them here would
+        # subtract the same time twice -- see split_stages()
+        top, _kids = split_stages(self.stages)
+        accounted = sum(s[1] for s in top.values())
         out = {
             "phase": self.phase,
             "slice": self.slice_n,
@@ -199,9 +234,12 @@ class PhaseTimer:
             "records_per_second": round(self.count / el, 1) if el else 0,
             "cpu_seconds": round(cpu, 1),
             "cpu_percent": round(cpu / el * 100, 1) if el else 0,
+            # `nested` marks a stage that is already inside another, so a
+            # reader adding the column up knows to skip it
             "stages": {n: {"calls": s[0], "seconds": round(s[1], 1),
                            "percent": round(s[1] / el * 100, 1) if el else 0,
-                           "us_per_call": round(s[1] / s[0] * 1e6, 1) if s[0] else 0}
+                           "us_per_call": round(s[1] / s[0] * 1e6, 1) if s[0] else 0,
+                           "nested": n not in top}
                        for n, s in rows},
             "unaccounted_seconds": round(el - accounted, 1),
             "marks": self.marks,
@@ -235,13 +273,30 @@ class PhaseTimer:
         if s.get("max_rss_mb"):
             print(f"  peak rss {s['max_rss_mb']:,} MB", file=self.stream)
         if s["stages"]:
+            top, kids = split_stages(self.stages)
             print(f"  {'stage':<20} {'seconds':>9} {'% wall':>7} {'calls':>12} {'us/call':>10}",
                   file=self.stream)
             for name, st in s["stages"].items():
+                if name not in top:
+                    continue
                 print(f"  {name:<20} {st['seconds']:>9,.1f} {st['percent']:>6.1f}% "
                       f"{st['calls']:>12,} {st['us_per_call']:>10,.1f}", file=self.stream)
             print(f"  {'(unattributed)':<20} {s['unaccounted_seconds']:>9,.1f} "
                   f"{s['unaccounted_seconds'] / el * 100 if el else 0:>6.1f}%", file=self.stream)
+            for parent, group in kids.items():
+                ptotal = self.stages[parent][1]
+                ctotal = sum(v[1] for v in group.values())
+                print(f"\n  inside {parent} -- already counted above, not additional:",
+                      file=self.stream)
+                for name in sorted(group, key=lambda n: -self.stages[n][1]):
+                    st = s["stages"][name]
+                    print(f"    {name:<18} {st['seconds']:>9,.1f} {'':>7} "
+                          f"{st['calls']:>12,} {st['us_per_call']:>10,.1f}", file=self.stream)
+                if ctotal > ptotal * 1.001:
+                    print(f"    ...totalling {ctotal:,.1f}s against {parent}'s "
+                          f"{ptotal:,.1f}s, so {ctotal - ptotal:,.1f}s of it runs "
+                          f"inside other stages -- these are not a breakdown of "
+                          f"{parent}", file=self.stream)
         # one greppable line per slice, for eyeballing 24 logs at once
         print(f"TIMING {self.phase} slice={self.slice_n} records={s['records']} "
               f"seconds={el} rps={s['records_per_second']} cpu_pct={s['cpu_percent']}",
