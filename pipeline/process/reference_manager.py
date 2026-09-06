@@ -305,8 +305,17 @@ class ReferenceManager(object):
             return refs
 
         keys = list(pending)
-        xrs = self.all_refs.get_multi(keys)
-        drefs = self.done_refs.get_multi(keys)
+        # One statement against both maps where the backend can do it. These
+        # two lookups were 26.6% of all postgres activity in a sampled
+        # reconcile -- and done_refs is empty for the whole of the main loop,
+        # so half of that was a round trip to a table that cannot answer.
+        # Backends without the paired form (redis) fall back to two calls.
+        pair = getattr(self.all_refs, "get_multi_pair", None)
+        if pair is not None:
+            xrs, drefs = pair(self.done_refs, keys)
+        else:
+            xrs = self.all_refs.get_multi(keys)
+            drefs = self.done_refs.get_multi(keys)
 
         to_merge = []
         to_undone = []

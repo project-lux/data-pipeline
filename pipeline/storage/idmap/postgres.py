@@ -15,7 +15,9 @@ fault in cost 7.5 minutes a slice on top of a 5.4 minute build. The tier and a
 correctly configured buffer pool solve the same problem, and the buffer pool
 wins. See docs/idmap-migration.md.
 
-The connection is this store's own, in autocommit. Identity is low-volume
+The connection is shared with the reference queues when the server already
+defaults to synchronous_commit off -- see _refs_connection(). It is in
+autocommit. Identity is low-volume
 next to the record caches and has to be visible to the other workers
 immediately, so it deliberately does not join their deferred batches; it also
 means a lookup here never leaves a transaction open holding an ACCESS SHARE
@@ -48,6 +50,12 @@ DEADLOCK_BACKOFF = 0.05
 # Not thread-safe, which matches the pipeline: one thread per process.
 _SHARED_CONNECTIONS = {}
 
+# What the server's own synchronous_commit is, per target. Asked once per
+# process: it is a server setting, not something that moves under us
+# mid-build.
+_SERVER_SYNC_COMMIT = {}
+_SHARE_NOTED = set()
+
 
 def _connect_kwargs(config, configs):
     """Where to find postgres.
@@ -73,8 +81,10 @@ def _connect(kw, tag="", async_commit=False):
     """A shared connection, one per (target, tag) per process.
 
     `tag` separates pools that need different session settings -- the
-    reference queues run with synchronous_commit off, which must not apply to
-    the identity map sharing the same database."""
+    reference queues want synchronous_commit off, which must not apply to the
+    identity map sharing the same database. A tag is therefore only worth a
+    connection when the setting would actually differ from the server's own;
+    see _refs_connection()."""
     key = (tuple(sorted(kw.items())), tag)
     conn = _SHARED_CONNECTIONS.get(key)
     if conn is None or conn.closed:
@@ -95,6 +105,60 @@ def _connect(kw, tag="", async_commit=False):
                 cur.execute("SET synchronous_commit = off")
         _SHARED_CONNECTIONS[key] = conn
     return conn
+
+
+def _server_sync_commit(kw):
+    """The server's own synchronous_commit, read from a fresh session.
+
+    Asked on the untagged connection, which never SETs it, so what comes back
+    is the effective default -- postgresql.conf, ALTER SYSTEM, ALTER DATABASE
+    or ALTER ROLE, whichever applies to these credentials. That is exactly
+    what a second connection would inherit."""
+    target = tuple(sorted(kw.items()))
+    if target not in _SERVER_SYNC_COMMIT:
+        try:
+            conn = _connect(kw)
+            with conn.cursor() as cur:
+                cur.execute("SHOW synchronous_commit")
+                _SERVER_SYNC_COMMIT[target] = cur.fetchone()[0]
+        except Exception as e:
+            # Unknown: assume the server wants durability, which keeps the
+            # separate connection -- the conservative answer either way.
+            print(f"could not read synchronous_commit ({e}); assuming 'on'")
+            _SERVER_SYNC_COMMIT[target] = "on"
+    return _SERVER_SYNC_COMMIT[target]
+
+
+def _refs_connection(kw, config):
+    """The connection the reference queues should use.
+
+    The queues have always taken a connection of their own, for one reason:
+    they run with `synchronous_commit = off` and that must not leak onto the
+    identity map. When the server already defaults to off the SET is a no-op,
+    the separation protects nothing, and the connection is pure overhead --
+    one of four per worker, 96 of them across a 24-way build.
+
+    So the tag is claimed only when the session setting would actually differ
+    from the server's. Set `"asyncCommit": false` in the map config to never
+    want it; point the map at a server with synchronous_commit on and the
+    separate connection comes back on its own.
+
+    Sharing is safe because both stores run every statement in autocommit:
+    there is no transaction to interleave, each psycopg2 cursor buffers its
+    own result at execute time, and the pipeline is one thread per process.
+    The one place that briefly is not true is IdMap._set_once, which turns
+    autocommit off for a multi-statement merge -- do not add a reference-queue
+    call inside it.
+    """
+    want_async = config.get("asyncCommit", True)
+    if want_async and _server_sync_commit(kw) == "off":
+        want_async = False
+        key = tuple(sorted(kw.items()))
+        if key not in _SHARE_NOTED:
+            _SHARE_NOTED.add(key)
+            print("refs: sharing the idmap connection "
+                  "(server synchronous_commit is already off)")
+    return _connect(kw, tag="refs" if want_async else "", async_commit=want_async)
 
 
 SCHEMA = """
@@ -710,6 +774,68 @@ class IdMap(object):
             cur.execute(f"DELETE FROM {self.yuid_table} WHERE yuid = %s", (ikey,))
             return cur.rowcount > 0
 
+    # ------------------------------------------------------------ maintenance
+
+    def dead_tuples(self):
+        """(live, dead) for the map's two tables, from the stats collector."""
+        out = {}
+        try:
+            with self._cursor() as cur:
+                cur.execute(
+                    "SELECT relname, n_live_tup, n_dead_tup, last_autovacuum "
+                    "FROM pg_stat_user_tables WHERE relname = ANY(%s)",
+                    ([self.table, self.yuid_table],))
+                for relname, live, dead, last in cur.fetchall():
+                    out[relname] = (live or 0, dead or 0, last)
+        except Exception as e:
+            print(f"could not read table stats: {e}")
+        return out
+
+    def optimize(self, analyze=True, report=True):
+        """VACUUM the map. Nothing else will.
+
+        The table carries no storage parameters, and autovacuum's default 20%
+        scale factor means a 50M-row map needs ~10M dead tuples before it
+        fires. Sampled mid-build: **5.1M dead, 9.1%, autovacuums = 0** -- it
+        had never run, and on the defaults it never would.
+
+        Every build adds a fresh crop, because assign_bulk() is
+        INSERT ... ON CONFLICT DO UPDATE and leaves a dead tuple for every
+        member whose row it moves. Identify does not notice; it is the phase
+        doing the writing. Merge notices, because it probes idmap_pkey
+        (5.9GB) and idmap_yuid_idx (3.2GB) tens of millions of times, and a
+        9% bloated index is 9% more pages to walk and 9% less of the working
+        set fitting in shared_buffers.
+
+        So this runs at the end of run-identify.py -- the one writer -- and
+        the map reaches merge clean.
+
+        What it cannot do is give space back: VACUUM marks dead tuples
+        reusable and leaves the files the size they grew to, and it does not
+        shrink an index at all. A map that has been accumulating across many
+        builds wants one `REINDEX TABLE CONCURRENTLY idmap;` before this
+        starts holding the line.
+        """
+        before = self.dead_tuples() if report else {}
+        if report:
+            for name, (live, dead, last) in sorted(before.items()):
+                pct = dead / (live + dead) * 100 if (live + dead) else 0
+                print(f"  {name}: {live:,} live, {dead:,} dead ({pct:.1f}%)"
+                      + ("" if last else ", never autovacuumed"))
+        opts = "(ANALYZE)" if analyze else ""
+        for name in (self.table, self.yuid_table):
+            start = time.time()
+            try:
+                # the shared connection is in autocommit, which VACUUM needs
+                with self._cursor() as cur:
+                    cur.execute(f"VACUUM {opts} {name}".replace("  ", " "))
+            except Exception as e:
+                print(f"  could not vacuum {name}: {e}")
+                continue
+            if report:
+                print(f"  vacuumed {name} in {time.time() - start:.0f}s")
+        return before
+
     # ---------------------------------------------------------- update tokens
 
     def has_update_token(self, key):
@@ -840,8 +966,7 @@ class ReferenceMap(object):
         # Own connection pool, shared with the other reference map: its
         # session settings must not leak onto the identity map. Set
         # "asyncCommit": false in the map config to turn the setting off.
-        self.conn = _connect(self._conn_kw, tag="refs",
-                             async_commit=config.get("asyncCommit", True))
+        self.conn = _refs_connection(self._conn_kw, config)
         with self.conn.cursor() as cur:
             cur.execute(REF_SCHEMA.format(table=self.table))
 
@@ -983,6 +1108,46 @@ class ReferenceMap(object):
                 for (uri, dist, ctype) in cur.fetchall():
                     out[uri] = self._fields(dist, ctype)
         return out
+
+    def get_multi_pair(self, other, keys, chunk=1000):
+        """Look this map and `other` up in one round trip instead of two.
+
+        resolve_refs asks the same question of all_refs and done_refs for
+        every record. Sampled during a run-3 reconcile, those two SELECTs were
+        **16.3% and 10.3% of everything postgres was doing** -- second only to
+        the record-cache INSERT. The ratio is the tell: done_refs is empty for
+        the whole of the main loop (did_ref only runs in the references loop),
+        so its 10.3% is almost entirely the round trip rather than the lookup,
+        and merging the two statements is what removes it.
+
+        Returns (mine, theirs), each in get_multi()'s shape.
+
+        The key array crosses twice, once per branch. That is deliberate and
+        not the mistake PooledCache.set() used to make: there it was a ~50KB
+        jsonb document parsed into jsonb twice, 43.6M times; here it is one
+        record's references -- tens of short URIs, a couple of KB -- against a
+        round trip worth ~227us in this phase. A CTE would send it once at the
+        cost of giving the planner a semi-join instead of two index scans it
+        already handles well.
+        """
+        if other.conn is not self.conn:
+            # different servers, or session settings that made _refs_connection
+            # keep them apart: no single statement can span them
+            return self.get_multi(keys, chunk), other.get_multi(keys, chunk)
+        keys = list(keys)
+        mine, theirs = {}, {}
+        sql = (f"SELECT 0 AS src, uri, dist, ctype FROM {self.table} "
+               f"WHERE uri = ANY(%s) "
+               f"UNION ALL "
+               f"SELECT 1, uri, dist, ctype FROM {other.table} "
+               f"WHERE uri = ANY(%s)")
+        for i in range(0, len(keys), chunk):
+            batch = keys[i:i + chunk]
+            with self.conn.cursor() as cur:
+                cur.execute(sql, (batch, batch))
+                for (src, uri, dist, ctype) in cur.fetchall():
+                    (mine if src == 0 else theirs)[uri] = self._fields(dist, ctype)
+        return mine, theirs
 
     def get(self, key):
         """A plain dict, where the redis backend returns a lazy reference into

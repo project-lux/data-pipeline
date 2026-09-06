@@ -11,7 +11,15 @@ against.
 
 ---
 
-## 1. Baseline: run 1 (postgres only, 24 workers)
+## 1. Baseline
+
+**The machine: 36 vCPU, 72 GiB** (70,214 MiB visible), Postgres on an AWS io2
+volume, 24 worker processes. Measured from a `top` during run 3 — see §2.1.
+`docs/idmap-migration.md` used to say 32 vCPU / 80 GB, which was wrong in both
+halves; it has been corrected, but prefer `pg-tune.py`, which reads the
+machine rather than trusting a document.
+
+### Run 1 (postgres only, no redis)
 
 | phase | records | wall | aggregate | worker-hrs | client cpu |
 |---|---|---|---|---|---|
@@ -35,7 +43,7 @@ reconcile-refs   claim 6.87 | reconcile 4.19 | walk_refs 1.74 | acquire 1.26
 merge-refs       claim_member 2.36 | idmap_equivs 0.34
 ```
 
-### Run 2 — after the two changes in §3
+### Run 2 — after §3.1 and §3.2
 
 **Total: 300.7 → 240.9 min wall, 120.1 → 96.1 worker-hours. Both -20%.**
 
@@ -81,14 +89,66 @@ than from a field in the JSON, so **the run-2 logs already on disk report
 correctly if you just run the tool again** — no rebuild needed to get the
 corrected numbers.
 
-### 2.1 The client/server gap — still open
+### 2.1 The client/server gap — ANSWERED: neither CPU nor IO bound
 
-**`PhaseTimer` measures client CPU only.** 41% of 24 workers is roughly 10
-cores busy in python; the rest of a 32-vCPU box is postgres backends servicing
-300M+ statements per phase. "Workers are off-cpu 59% of the time" therefore
-does **not** establish that the box is waiting on disk — the likelier reading
-is that the workers are waiting on a server competing for the same cores.
-Nothing below can be prioritised properly until that is settled.
+`PhaseTimer` measures client CPU only, so for two runs it could not say
+whether "workers are off-cpu 44% of the time" meant waiting on disk, waiting
+on a saturated server, or waiting on nothing in particular. A `top` snapshot
+during run 3's reconcile settles it.
+
+**The machine is 36 vCPU / 72 GiB** (70,214 MiB visible), not the 32 vCPU /
+80 GB that `docs/idmap-migration.md` used to claim.
+
+```
+%Cpu(s): 60.1 us,  5.9 sy,  0.0 ni, 32.5 id,  1.5 wa
+load average: 24.93
+```
+
+| | cores | share |
+|---|---|---|
+| 23 python workers | 12.7 | 53% |
+| ~65 postgres backends | 10.9 | 46% |
+| **total** | **23.6 of 36** | **66% — a third of the box idle** |
+
+which is exactly top's `us + sy`. `TIME+` is the more reliable cross-check —
+a `top -b -n 1` sample quantises %CPU in 6.25% steps — and agrees: 22:45
+python against 10:00 + 5:35 postgres per worker, a **59:41 split**.
+
+**So: not IO-bound (1.5% iowait), not CPU-bound (32.5% idle), and no lock
+contention (zero ungranted locks). The workers are round-trip bound.**
+
+The right model is not "the server is saturated". It is that each worker's
+requests are strictly serialised — compute, send, wait, compute — so
+*anything* that shortens postgres' service time or removes a round trip shows
+up in worker wall time at close to 1:1, with no saturation required. That is
+why the four changes that removed round trips (§3.2, §3.3, §3.5, §3.9) paid so
+much better than §3.1, which halved bytes without removing a trip, and why
+§4.9 is now the largest single number in this document.
+
+**The backend groups map exactly onto the connection accounting**, which is
+useful independent confirmation of both §3.7 and §3.9:
+
+| group | count | TIME+ | what it is |
+|---|---|---|---|
+| A | 24 | ~10:00 | the read/write connection |
+| B | 24 | ~5:35 | the **reference queues** |
+| — | 24 | ~0% | the iterating cursors |
+| — | 24 | ~0% | the idmap — reconcile makes no identity calls |
+| autovac | 3 | 1:05–1:23 | all three workers busy |
+
+24 x 4 + a few = the 98 backends the `pg_stat_activity` sample counted. The
+reference queues being **36% of all postgres CPU** (5:35 against 10:00)
+corroborates their 26.6% share of sampled activity, and is what §3.9 goes
+after.
+
+**Act on this:** `autovacuum_max_workers` is at the default 3 on a 36-core
+box and all three are busy, while `idmap` has never been vacuumed at all
+(§3.8). `pg-tune.py` recommends 8 here.
+
+`pg-tune.py` prints the server settings this workload wants, sized to the
+machine, including everything in this list that is a setting rather than a
+measurement (`pg_stat_statements`, `track_io_timing`, `log_lock_waits`,
+`log_autovacuum_min_duration`). It changes nothing -- it prints SQL to review.
 
 Collect during the next run:
 
@@ -119,8 +179,19 @@ number; `acquire.cache_hit` / `.fetch` / `.map` / `.post_map`
 
 ## 3. Landed
 
-§3.1 and §3.2 were assessed by run 2 (see §1). §3.3, §3.4 and §3.5 are
-awaiting run 3. §3.6 is a reporting fix, not a build change.
+Which run carried what, because the assessments below depend on it:
+
+| run | carried | assessed |
+|---|---|---|
+| 1 | — | the baseline in §1 |
+| 2 | §3.1, §3.2 | yes — see §1's delta table |
+| 3 | §3.3, §3.4, §3.5, §3.6 | **stage timings not yet reviewed.** Its `pg_stat_activity` and `top` samples are what resolved §2.1 and §3.2, and what found §3.8 and §3.9 |
+| 4 | §3.7, §3.8, §3.9 | pending |
+
+§3.6 is a reporting fix rather than a build change, so it alters how run 3's
+numbers read, not what they are. Run 3's own stage table has not been through
+this document yet — do that before acting on anything in §4 that is sized from
+run-2 figures.
 
 ### 3.1 The upsert sent every document twice
 
@@ -193,7 +264,16 @@ fell 30.12 → 13.32 wh, -56%, per-call 2473 → 1094 µs. Client cpu-hours held
 17.3 (from 17.5) while worker-hours fell by a third: identical CPU work, far
 less blocking, which is precisely what removing a round trip looks like.
 
-**The caveat did not clearly bite, but it is not cleared either.**
+**RESOLVED by the pg_stat sample taken during run 3's reconcile: the caveat
+does not bite.** `all_refs` sits at **0.2% dead with 181 autovacuums** while 24
+backends are idle-in-transaction holding cursor snapshots — autovacuum is
+keeping up regardless. The reason is timing: `iter_records_slice`'s cursor
+closes when the main loop's generator is exhausted, which is *before* the refs
+loop starts, so the long-lived snapshots and the delete-heavy draining of the
+queue never overlap. The keyset-pagination fallback below is therefore not
+needed for this reason (it would still remove a connection — see §3.7).
+
+The original observation, kept for the record:
 `reconcile-refs` got *slightly worse* — 37.0 → 37.8 min, `claim` 6.87 → 7.11
 wh, per-call 2437.7 → 2540.1 µs (+4.2%). That is the direction the snapshot
 concern predicts but far too small to attribute with confidence, and
@@ -400,6 +480,127 @@ names instead, so logs written before this change roll up correctly too.
 Pinned in `tests/test_timing_nesting.py`, including the exact run-2 reconcile
 shape.
 
+### 3.7 The reference queues took a connection they no longer needed
+
+`_refs_connection()` in `pipeline/storage/idmap/postgres.py`.
+
+`all_refs` and `done_refs` shared a connection of their own, separate from the
+identity map's, for exactly one reason: they issue `SET synchronous_commit =
+off` and that must not leak onto the idmap. Since the server itself defaults
+to `off`, the SET restated the default, the separation protected nothing, and
+the connection was one of four per worker — 96 across a 24-way build.
+
+The tag is now claimed only when the session setting would actually differ
+from the server's, read once per process with `SHOW synchronous_commit` on the
+untagged connection (which never SETs it, so what comes back is the effective
+default, including any `ALTER ROLE` or `ALTER DATABASE`). Set `"asyncCommit":
+false` in the map config to never want it; point the map at a server with
+synchronous commit on and the separate connection returns on its own. An
+unreadable setting assumes `on` and keeps the connection — over-provisioning
+is safe, under-provisioning is a build that dies partway through.
+
+Sharing is safe because both stores run every statement in autocommit: no
+transaction to interleave, each psycopg2 cursor buffers its own result at
+execute time, and the pipeline is one thread per process. The one moment that
+is briefly untrue is `IdMap._set_once`, which turns autocommit off for a
+multi-statement class merge — its docstring now says not to add a
+reference-queue call inside it.
+
+Per worker, **4 connections becomes 3**. At 48 workers that is 144 rather than
+192, the difference between needing `max_connections` above 100 and not.
+`pg-tune.py` reads the server's setting and sizes `max_connections` to match.
+Pinned in `tests/test_refs_connection.py`.
+
+**Verify:** each worker log prints `refs: sharing the idmap connection` once at
+startup, and `SELECT count(*) FROM pg_stat_activity WHERE datname =
+current_database()` mid-phase should be about 3x the worker count plus a few,
+not 4x.
+
+**Still open, found while counting:** `NetworkOperationMap` and
+`TransitiveMultiMap` — the classes behind the `networkmap` and `redirects`
+maps — exist only in `pipeline/storage/idmap/redis.py`; `postgres.py`
+implements `IdMap` and `ReferenceMap` and nothing else. `run-reconcile.py:22`
+instantiates `networkmap` on every run. Check what `storeClass` those two maps
+are set to on the build box: if they are still redis, the postgres-only
+migration has a gap the timing runs would not have shown, and if they have
+been pointed at `storage.idmap.postgres.IdMap` that is a semantic mismatch.
+
+### 3.8 The identity map was never vacuumed (was §4.12)
+
+`IdMap.optimize()` in `pipeline/storage/idmap/postgres.py`, called at the end
+of `run-identify.py` (skip with `--no-vacuum`).
+
+Sampled mid-build: **5.1M dead tuples, 9.1%, autovacuums = 0.** Not "hasn't
+run lately" — never, and on the defaults it never would: `autovacuum_vacuum
+_scale_factor` is 0.2, so a 50.7M-row table needs ~10.1M dead before it fires.
+
+The litter comes from `assign_bulk()`, which is `INSERT ... ON CONFLICT DO
+UPDATE` and leaves a dead tuple per member it moves. Identify does not notice —
+it is the writer. Merge does, probing `idmap_pkey` (5.9 GB) and
+`idmap_yuid_idx` (3.2 GB) tens of millions of times against a 9% bloated
+index, which is the **leading candidate for §5's `idmap_forward` regression**
+(372 → 478 µs in run 2 while everything around it got faster).
+
+Both `idmap` and `idmap_yuid` are vacuumed, stats are read before the VACUUM
+because it zeroes `n_dead_tup`, a failure on one table does not skip the other,
+and a failure reading the stats view does not skip the vacuum. Pinned in
+`tests/test_idmap_vacuum.py`.
+
+**Two things this does not do.** It gives no space back — VACUUM marks dead
+tuples reusable and leaves the files as large as they grew — and it does not
+shrink an index at all. If the map has been accumulating across many builds,
+run `REINDEX TABLE CONCURRENTLY idmap;` once before measuring the effect, or
+the baseline is still carrying every previous build's bloat. The complementary
+storage parameters (§4.12's second half) are still worth adding:
+
+```sql
+ALTER TABLE idmap SET (autovacuum_vacuum_scale_factor = 0.02,
+                       autovacuum_vacuum_threshold = 10000,
+                       autovacuum_vacuum_cost_delay = 0);
+```
+
+**Verify:** `idmap_cluster` in merge, and `n_dead_tup` for `idmap` before and
+after identify.
+
+### 3.9 Two reference lookups became one (was §4.10)
+
+`ReferenceMap.get_multi_pair()` in `pipeline/storage/idmap/postgres.py`, used
+by `ReferenceManager.resolve_refs()`.
+
+`resolve_refs` asked the same question of `all_refs` and `done_refs` for every
+record. In the run-3 sample those two SELECTs were **16.3% and 10.3% of
+everything postgres was doing**, second only to the record-cache INSERT — and
+`done_refs` holds **no rows at all** during the main loop, because `did_ref()`
+runs only in the references loop afterwards. Trace `resolve_refs` with
+`drefs == {}` and every branch reading it is dead. Ten percent of the server's
+work was a round trip to a table that could not answer.
+
+One `UNION ALL` now covers both, which is possible because §3.7 put them on
+the same connection. The ratio in the sample is the argument: 16.3% for a
+896k-row table against 10.3% for an empty one says most of that cost was the
+round trip, not the lookup.
+
+The key array crosses twice, once per branch, which is deliberate and not the
+mistake §3.1 fixed: there it was a ~50KB jsonb document parsed twice, 43.6M
+times; here it is one record's references — tens of short URIs — against a
+round trip worth ~227 µs in this phase. A CTE would send it once at the cost
+of giving the planner a semi-join instead of two index scans it already
+handles well.
+
+Backends without the paired form fall back to two calls, so redis is
+unaffected, and so is any future configuration where `_refs_connection` keeps
+the two maps on separate connections — `get_multi_pair` checks and falls back.
+Pinned in `tests/test_ref_pair_lookup.py`.
+
+**Not done, because it is not safe:** skipping the `done_refs` read entirely.
+Workers do not cross from the main loop to the references loop in lockstep, so
+one can be calling `did_ref()` while another is still finishing its main loop,
+and that one would then miss a reference needing un-doing at a shorter
+distance.
+
+**Verify:** `walk_refs` in reconcile, and the `done_refs` SELECT should vanish
+from `pg_stat_activity` as a statement of its own.
+
 ---
 
 ## 4. Backlog
@@ -412,15 +613,19 @@ Item numbers are stable identifiers — they do not change when the order does.
 | — | ~~§4.1 one idmap query~~ | | **landed, see §3.3** |
 | — | ~~§4.2 batch the writes (merge)~~ | | **landed, see §3.4** |
 | — | ~~§4.11 write connection in autocommit~~ | | **landed, see §3.5** |
-| 1 | §4.5 reconcile-refs claim | 7.11 wh (47%) | untouched and slightly worse; the least-improved phase |
-| 2 | §4.10 `walk_refs` | reconcile 7.44 wh (24%) | never investigated, now 4th largest |
-| 3 | §4.4 skip the guaranteed-miss probe | 2.77 wh recoverable | cheapest item on the list |
-| 4 | §4.3 `reidentify` | merge 10.23 wh | fell 25% for free in run 2; re-measure after run 3 before spending on it |
+| — | ~~§4.10 `walk_refs`~~ | | **landed, see §3.9** |
+| — | ~~§4.12 idmap never vacuumed~~ | | **landed, see §3.8** |
+| 1 | **§4.9 run 32 workers** | ~25% of wall time | 12 of 36 cores idle, 1.5% iowait, zero lock waits — measured, not inferred |
+| 2 | §4.5 reconcile-refs claim | 7.11 wh (47%) | untouched and unimproved; the least-improved phase |
+| 3 | §4.4 skip the guaranteed-miss probe | 2.77 wh recoverable | cheapest code change on the list |
+| 4 | §4.3 `reidentify` | merge 10.23 wh | fell 25% for free in run 2; re-measure after run 4 before spending on it |
 | — | ~~§4.2 batch the writes (reconcile)~~ | | **downgraded**: `synchronous_commit` is `off`, so §4.11 gets the same round trips for less risk |
 
 **Re-measure before starting any of these.** Run 2 showed stages moving 25%
-without being touched, because relieving the server lifted everything. Run 3
-carries two more changes of the same kind.
+without being touched, because relieving the server lifted everything, and
+run 4 carries six more changes of the same kind. The exception is §4.9, which
+is sized from a direct measurement of the machine rather than from stage
+timings, so it does not need to wait.
 
 §4.6 (`recordcache2`) sits outside this order because it is a product question,
 not an engineering one — but it is still worth 8.28 wh.
@@ -598,32 +803,51 @@ in increasing order of goodness:
 
 Small in absolute terms — the whole phase is 8 minutes — so do it last.
 
-### 4.9 Find the actual worker-count peak
+### 4.9 Run more workers — 12 idle cores, ~25% of wall time
 
-24 was never validated. Nothing in these phases is CPU-bound in python,
-postgres is on the same box competing for the same cores, and per-slice spread
-is 0%. Run one source at 16, 24 and 32 workers and compare wall time. Cheap
-experiment, and if §2 shows the server saturated it may be the largest single
-number in this document.
+**The largest single number left, and it is a shell-script edit.** §2.1
+measured 23.6 of 36 cores busy at 24 workers, with 1.5% iowait and zero lock
+waits. Per worker that is **0.98 cores** — 0.53 python, 0.45 postgres — so:
 
-### 4.10 `walk_refs` — reconcile, 7.44 wh (24%), never looked at
+```
+24 workers (now):  23.6 cores   66%
+32 workers:        31.4 cores   87%
+36 workers:        35.3 cores   98%   <- saturated
+```
 
-**Where:** `run-reconcile.py:173`, `ReferenceManager.walk_top_for_refs()` and
-`resolve_refs()` in `pipeline/process/reference_manager.py`.
+**Try 32.** Roughly 25% off wall time if it scales, and it should: nothing is
+saturated, per-slice spread is 0–1%, and the phases are latency-bound rather
+than contending for anything.
 
-Now the second-largest top-level stage in reconcile and the only one of the
-big three that has never been investigated. It was 7.16 wh in run 1 and 7.44
-in run 2 — flat, because nothing touched it.
+Do not go straight past 32. The projection assumes per-worker postgres CPU
+stays flat, and it will not — more backends means more proc-array and
+lock-manager work — so measure 32 before assuming 36 is better than 34.
 
-611 µs per record to walk a mapped record's tree and batch its references into
-`all_refs`. Unknown, and worth an hour before anything is proposed: how much
-is the python tree walk, how much is `merge_refs()`' round trip, and how
-large are the batches. `merge_refs` already folds duplicates, sorts for lock
-order, and skips no-op updates (`pipeline/storage/idmap/postgres.py:827`), so
-the obvious wins may already be taken — measure before designing.
+What to watch, in the order it would break:
 
-Start by splitting the stage: `walk_refs.collect` around the tree walk,
-`walk_refs.merge` around the postgres call.
+* **Lock waits.** Reconcile's workers upsert the same external authority rows
+  (`collector.collect()`), and that is the one thing more concurrency makes
+  worse. It is at *zero* ungranted locks today, so there is real room, but
+  `log_lock_waits` (which `pg-tune.py` turns on) is what will say when it runs
+  out.
+* **Connections.** 32 x 3 = 96 after §3.7, or 128 without it. Check
+  `max_connections` before the run, not during.
+* **`shared_buffers` pressure.** More workers means a bigger concurrent
+  working set against the same 19.5 GB. `IO/DataFileRead` was 11.8% of active
+  backends at 24; if it climbs steeply the box has found its limit.
+
+The change itself is `seq 0 23` in the build scripts. Which of `full-build.sh`,
+`reconcile_parallel.sh` and `merge_parallel.sh` is actually driving a given
+run is a local question -- change the one you use, and pass the same number as
+the second argument to the workers so `max_slice` matches.
+
+### 4.10 `walk_refs` — LANDED
+
+Diagnosed and fixed; see **§3.9**.
+
+### 4.12 The identity map is never vacuumed — LANDED
+
+See **§3.8**.
 
 ---
 
@@ -639,7 +863,10 @@ Start by splitting the stage: `walk_refs.collect` around the tree walk,
   helps (it saves round trips, not fsyncs) and should be corrected before it
   misleads someone. The comment at `run-reconcile.py:106` is unaffected: it
   reasons about lock duration and deadlocks, which is still exactly right.
-* **Why did `idmap_forward` get 28% slower in run 2?** 372 → 478 µs, while
+* **Why did `idmap_forward` get 28% slower in run 2?** *(Leading candidate
+  found: see §4.12 -- the idmap carries 9.1% dead tuples and has never been
+  autovacuumed. The rest of this entry is the reasoning that was open before
+  that.)* 372 → 478 µs, while
   `idmap_cluster` on the *same connection and cursor* went 329 → 289 µs and the
   phase as a whole got 15% faster. The two differ in three ways worth testing:
   `forward` probes `idmap_pkey` (5.9 GB) and `cluster` probes

@@ -124,18 +124,30 @@ ALTER SYSTEM SET max_connections = 200;          -- was 100
 ```
 
 Those figures are for a 128 GB development box. **Size to the machine**: the
-production server is 80 GB / 32 vCPU with Postgres on an AWS io2 volume, where
-the right numbers are `shared_buffers = '20GB'` (25% of RAM) and
-`effective_cache_size = '56GB'`.
+build server is **72 GiB / 36 vCPU** (70,214 MiB visible to the OS) with
+Postgres on an AWS io2 volume, where the right numbers are
+`shared_buffers = '18GB'` (25% of RAM) and `effective_cache_size = '54GB'`.
+
+That spec is measured, from a `top` during a run; this paragraph previously
+said 80 GB / 32 vCPU, which was wrong in both halves and would have you size
+`max_connections` and the parallelism settings for a smaller machine. Rather
+than trusting either figure, run `pg-tune.py`, which reads the machine.
 
 `shared_buffers` and `max_connections` need a full restart, not a reload.
 
 `max_connections` is not an optimisation, it is a correctness requirement:
-each worker opens **four** connections — two from `PoolManager`, one shared by
-the idmap, one shared by the two reference maps — so 48 workers need 192. With
+each worker opens **three or four** connections — two from `PoolManager` (one
+read/write, one for server-side cursors), one shared by the idmap, and a
+fourth for the reference queues *only when they need `synchronous_commit =
+off` as a session setting*. When the server already defaults to off, that
+setting is a no-op and the queues share the idmap's connection (see
+`_refs_connection()`), so 48 workers need 144 rather than 192. With
 Redis it was 96, just under the old limit of 100, which is why this never bit
 before. The map stores deliberately share connections rather than taking one
 each; a connection per map would be six a worker, or 288.
+
+`pg-tune.py` works this out for you: it reads the server's
+`synchronous_commit` and sizes `max_connections` to match.
 
 ### WAL, for a write-heavy phase on provisioned-IOPS storage
 
