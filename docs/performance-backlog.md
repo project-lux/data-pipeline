@@ -186,7 +186,7 @@ Which run carried what, because the assessments below depend on it:
 | 1 | — | the baseline in §1 |
 | 2 | §3.1, §3.2 | yes — see §1's delta table |
 | 3 | §3.3, §3.4, §3.5, §3.6 | **stage timings not yet reviewed.** Its `pg_stat_activity` and `top` samples are what resolved §2.1 and §3.2, and what found §3.8 and §3.9 |
-| 4 | §3.7, §3.8, §3.9 | pending |
+| 4 | §3.7, §3.8, §3.9, §3.10, §3.11 | pending |
 
 §3.6 is a reporting fix rather than a build change, so it alters how run 3's
 numbers read, not what they are. Run 3's own stage table has not been through
@@ -530,6 +530,11 @@ been pointed at `storage.idmap.postgres.IdMap` that is a semantic mismatch.
 `IdMap.optimize()` in `pipeline/storage/idmap/postgres.py`, called at the end
 of `run-identify.py` (skip with `--no-vacuum`).
 
+**§3.10 found the cause of the dead tuples this section cleans up.** The
+vacuum is still right to keep — incremental builds do move members — but it
+should now have almost nothing to do. Read that section before spending more
+effort here.
+
 Sampled mid-build: **5.1M dead tuples, 9.1%, autovacuums = 0.** Not "hasn't
 run lately" — never, and on the defaults it never would: `autovacuum_vacuum
 _scale_factor` is 0.2, so a 50.7M-row table needs ~10.1M dead before it fires.
@@ -600,6 +605,95 @@ distance.
 
 **Verify:** `walk_refs` in reconcile, and the `done_refs` SELECT should vanish
 from `pg_stat_activity` as a statement of its own.
+
+### 3.10 identify rewrote 45M rows to the values they already held
+
+`assign_bulk()` in `pipeline/storage/idmap/postgres.py`.
+
+The member upsert was:
+
+```sql
+INSERT INTO idmap (uri, yuid) VALUES %s
+ON CONFLICT (uri) DO UPDATE SET yuid = EXCLUDED.yuid
+```
+
+No `WHERE`. Re-running identify over unchanged data computes the same
+clusters, so every member already points at the YUID being written — and this
+is not a guess. `touched.tsv` gets a line per member that actually *moved*,
+and on a production run it held **exactly one entry against ~45M members**.
+Every other row was rewritten to the value it already had: a new tuple
+version, a WAL record and a dead tuple each, to change nothing.
+
+**The codebase had already found this failure mode three times and guarded all
+three**, including the statement immediately above this one in the same
+function:
+
+| statement | guarded before? |
+|---|---|
+| the `idmap_yuid` token upsert, in `assign_bulk` | yes |
+| `token_set` (prepared) | yes — its comment measures 45,513,255 of 45,513,275 rows already correct |
+| `merge_refs` | yes — its comment measures 7,882 live against 173,981 dead |
+| **the `idmap` member upsert, in `assign_bulk`** | **no** |
+
+It now carries `WHERE idmap.yuid IS DISTINCT FROM EXCLUDED.yuid`, as does
+`_add()`, which had the identical statement. No staleness argument is needed
+(unlike `merge_refs`, which required a paragraph): this is one atomic
+statement, and if the stored value already equals the new one there is nothing
+to do.
+
+**What it explains.** `_apply_stream` is the only step of identify that writes
+the database, and on the run that prompted this it sat there for over an
+hour and three quarters. It also explains §3.8's 5.1M dead tuples — **that
+section treated the symptom.** The vacuum is still right to keep, because
+incremental builds genuinely do move members, but it should now have almost
+nothing to do, and §4.12's storage-parameter recommendation is much less
+urgent than it looked.
+
+**Two statements are deliberately left unguarded**, and there are tests
+pinning that so nobody "fixes" them:
+
+* `mint()` assigns the column to itself precisely so `RETURNING` fires on
+  conflict and the caller learns who won the race. A `WHERE` would return no
+  row, making "I minted this" indistinguishable from "someone else did".
+* `_import_state()` truncates first, so nothing can conflict. `_set_once()`
+  returns early when the value is unchanged, so it never reaches a no-op
+  either — both now say so in a comment.
+
+Pinned in `tests/test_idmap_noop_writes.py`.
+
+**Verify:** `n_tup_upd` on `idmap` across an identify run should fall from
+~45M to near zero, `n_dead_tup` should stop growing, and `_apply_stream`
+should report in minutes rather than hours now that §3.11 makes it report at
+all.
+
+### 3.11 identify now says what it is doing
+
+`PhaseTimer` and per-step reporting in `IdentityResolver.resolve_identity()`.
+
+`resolve_identity` printed nothing until it was completely finished, so a run
+that had been going for two hours was indistinguishable from a hung one —
+which is exactly the situation that turned up §3.10. The step boundaries were
+already in the file as commented-out `print()`s.
+
+Every step now announces itself **before** it starts, because the useful line
+is the one naming what you are waiting for, not the one confirming what
+finished; the nine external sorts announce their input size and `-S` setting
+too. Steps report even when they raise, since a step that died is the one you
+most want an elapsed time for. It writes `timing-identify-all.json` like every
+other phase, so `timing-report.py` rolls identify in and **the phase finally
+gets a baseline** — its absence is why "is 2h20m normal?" could not be
+answered.
+
+One trap avoided: the sorts are recorded as `<step>.sort:<file>` rather than
+`sort.<file>`, so §3.6's nesting rule sees them as children of their step. The
+obvious name would have had them summed alongside it and driven identify's
+unattributed figure negative in exactly the way reconcile's was.
+
+Pinned in `tests/test_identify_progress.py`.
+
+**Worth knowing:** `LUX_SORT_BUFFER` defaults to `1G`. On a 72 GiB box with
+nothing else running, the new per-sort lines will say whether raising it is
+worth anything.
 
 ---
 

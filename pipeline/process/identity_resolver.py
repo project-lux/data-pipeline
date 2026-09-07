@@ -38,13 +38,17 @@ in-memory union-find at all.
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
+import time
 import uuid
 import glob
 from collections import defaultdict
+from contextlib import contextmanager
 
 import ujson as json
 
+from pipeline.process.timing import PhaseTimer
 from pipeline.storage.idmap.lmdb import TabLmdb
 
 # ---------------------------------------------------------------------------
@@ -83,6 +87,17 @@ class DSU:
 
 
 class IdentityResolver(object):
+
+    # Only resolve_identity() builds one. run-reconcile constructs this class
+    # purely as an assertion writer, and the timing helpers below have to be
+    # harmless there.
+    _timer = None
+    # The step currently running, so _sort can record itself as nested inside
+    # it. The name matters: split_stages() treats a dotted name as a child of
+    # its prefix, and a sort recorded under a name that does not start with
+    # its enclosing step's would be summed alongside it -- which is the
+    # double-count that made a phase report -53% unattributed.
+    _step_label = None
 
     """Per-slice append-only log of sameAs assertions.
 
@@ -453,14 +468,78 @@ class IdentityResolver(object):
     # Streaming resolution (the production path)
     # ---------------------------------------------------------------------------
     
+    # ---------------------------------------------------------- progress
+    # resolve_identity used to print nothing until it was completely done, so
+    # a two-hour run was indistinguishable from a hung one -- you could not
+    # tell whether it was still on the first sort or most of the way through.
+    # The step boundaries were already marked in commented-out print()s; these
+    # make them observable, and add them up into the same timing JSON every
+    # other phase writes so timing-report.py can roll it in.
+
+    @contextmanager
+    def _step(self, label):
+        """One stage of resolve_identity: announced, timed, and reported."""
+        self._say(f"  {label} ...")
+        t0 = time.time()
+        stage = self._timer.stage(label) if self._timer else None
+        if self._timer:
+            self._timer.mark(label)
+        if stage is not None:
+            stage.__enter__()
+        outer, self._step_label = self._step_label, label
+        try:
+            yield
+        finally:
+            self._step_label = outer
+            if stage is not None:
+                stage.__exit__(None, None, None)
+            self._say(f"  {label} done in {self._hms(time.time() - t0)}")
+
+    def _say(self, line):
+        """Unbuffered, because the whole point is watching it from outside."""
+        print(line)
+        sys.stdout.flush()
+
+    @staticmethod
+    def _hms(seconds):
+        m, s = divmod(int(seconds), 60)
+        h, m = divmod(m, 60)
+        return f"{h}h{m:02d}m{s:02d}s" if h else (f"{m}m{s:02d}s" if m else f"{s}s")
+
+    @staticmethod
+    def _bytes(n):
+        return f"{n / 1e9:.1f}GB" if n >= 1e9 else f"{n / 1e6:.0f}MB"
+
     def _sort(self, inputs, output, keys, tmpdir):
         """Run ``LC_ALL=C sort`` (byte order == Python str order for UTF-8, so
-        the on-disk order matches every in-memory min/max the code does)."""
+        the on-disk order matches every in-memory min/max the code does).
+
+        Announces itself before starting rather than after finishing: nine of
+        these run per phase and one of them is usually where the time goes, so
+        the useful line is the one that tells you what you are waiting for.
+        """
+        size = 0
+        for i in inputs:
+            try:
+                size += os.path.getsize(i)
+            except OSError:
+                pass
+        name = os.path.basename(str(output))
+        self._say(f"    sort -> {name} ({self._bytes(size)}, -S {self.sort_buffer_size}) ...")
+        t0 = time.time()
         cmd = ["sort", *keys, "-t", "\t", "-T", tmpdir, "-S", self.sort_buffer_size,
             "-o", output, *[str(i) for i in inputs]]
         env = dict(os.environ)
         env["LC_ALL"] = "C"
         subprocess.run(cmd, env=env, check=True)
+        el = time.time() - t0
+        rate = f", {self._bytes(size / el)}/s" if el > 0.5 and size else ""
+        self._say(f"    sort -> {name} done in {self._hms(el)}{rate}")
+        if self._timer:
+            # nested under the step that contains it, so the stage table adds
+            # up -- see the note on _step_label
+            prefix = self._step_label or "sort"
+            self._timer.add(f"{prefix}.sort:{name}", el)
     
     
     def _iter_tsv(self, path):
@@ -724,10 +803,17 @@ class IdentityResolver(object):
         6. bulk-load into redis, then sweep now-empty old YUID sets
         """
 
+        # Not built in __init__: run-reconcile constructs this class purely as
+        # an assertion writer, and a PhaseTimer there would steal the global
+        # that timing.stage() reads out from under reconcile's own timer.
+        self._timer = PhaseTimer("identify", out_dir=getattr(self.configs, "log_dir", None))
+
         flist = os.path.join(self.configs.temp_dir, "assertions-*.tsv")
         files = sorted(glob.glob(flist))
         if not files:
             raise ValueError("No assertions-*.tsv files found; did reconcile run?")
+        total = sum(os.path.getsize(f) for f in files)
+        self._say(f"identify: {len(files)} assertion files, {self._bytes(total)}")
                     
         if work_dir is None:
             work_dir = self.configs.temp_dir
@@ -753,46 +839,54 @@ class IdentityResolver(object):
             self.touched_path = p("touched.tsv")
             self.touched_sorted_path = p("touched.sorted")
     
-            # print("sorting assertions...")
-            self._sort(files, self.sorted_path,
-                ["-k1,1", "-k2,2", "-k3,3"], td)
-    
-            # print("aggregating voted edges...")
-            dsu_nodes, n_edges = self._aggregate_edges()
-    
-            # print("loading diff pairs...")
-            diffs = self.load_diff_pairs(dsu_nodes)
-    
-            # print("clustering...")
-            self._sort([self.edges_path], self.edges_by_vote_path, 
-                ["-k3,3nr", "-k1,1", "-k2,2"], td)
-            conflicts = self._build_clusters(dsu_nodes, diffs)
-            self._attach_asserters(conflicts)
-            if conflicts_file:
-                with open(conflicts_file, "w") as fh:
-                    for c in conflicts:
-                        fh.write(json.dumps(c) + "\n")
-    
-            # print("adding singletons...")
-            self._sort([self.selfs_path], self.selfs_sorted_path, ["-u", "-k1,1"], td)
-            n_singletons = self._append_singletons(dsu_nodes)
-            self._sort([self.clusters_path], self.clusters_sorted_path, ["-k1,1"], td)
-    
-            # print("fetching prior...")
-            self._fetch_prior_stream() # clus clup
-    
-            #print("assigning...")
-            n_clusters = self._emit_claims()
-            self._sort([self.claims_path], self.claims_sorted_path, ["-k1,1", "-k2,2nr", "-k3,3"], td)
-            self._resolve_claims()
-    
-            # print("applying assignments...")
-            self._sort([self.detail_path], self.detail_sorted_path, ["-k1,1"], td)
-            self._sort([self.won_path], self.won_sorted_path, ["-k1,1"], td)
-            stats = self._apply_stream()
-    
-            self._sort([self.touched_path], self.touched_sorted_path, ["-u", "-k1,1"], td)
-            stats["deleted_yuids"] = self._delete_dead_yuids(self._distinct(self.touched_sorted_path))
+            with self._step("sort_assertions"):
+                self._sort(files, self.sorted_path,
+                    ["-k1,1", "-k2,2", "-k3,3"], td)
+
+            with self._step("aggregate_edges"):
+                dsu_nodes, n_edges = self._aggregate_edges()
+            self._say(f"      {n_edges:,} voted edges, "
+                      f"{len(dsu_nodes):,} non-singleton nodes")
+
+            with self._step("load_diff_pairs"):
+                diffs = self.load_diff_pairs(dsu_nodes)
+            self._say(f"      {len(diffs):,} differentFrom pairs")
+
+            with self._step("cluster"):
+                self._sort([self.edges_path], self.edges_by_vote_path,
+                    ["-k3,3nr", "-k1,1", "-k2,2"], td)
+                conflicts = self._build_clusters(dsu_nodes, diffs)
+                self._attach_asserters(conflicts)
+                if conflicts_file:
+                    with open(conflicts_file, "w") as fh:
+                        for c in conflicts:
+                            fh.write(json.dumps(c) + "\n")
+            self._say(f"      {len(conflicts):,} conflicts")
+
+            with self._step("add_singletons"):
+                self._sort([self.selfs_path], self.selfs_sorted_path, ["-u", "-k1,1"], td)
+                n_singletons = self._append_singletons(dsu_nodes)
+                self._sort([self.clusters_path], self.clusters_sorted_path, ["-k1,1"], td)
+            self._say(f"      {n_singletons:,} singletons")
+
+            with self._step("fetch_prior"):
+                self._fetch_prior_stream() # clus clup
+
+            with self._step("assign"):
+                n_clusters = self._emit_claims()
+                self._sort([self.claims_path], self.claims_sorted_path,
+                           ["-k1,1", "-k2,2nr", "-k3,3"], td)
+                self._resolve_claims()
+            self._say(f"      {n_clusters:,} clusters")
+
+            with self._step("apply"):
+                self._sort([self.detail_path], self.detail_sorted_path, ["-k1,1"], td)
+                self._sort([self.won_path], self.won_sorted_path, ["-k1,1"], td)
+                stats = self._apply_stream()
+
+            with self._step("sweep_dead_yuids"):
+                self._sort([self.touched_path], self.touched_sorted_path, ["-u", "-k1,1"], td)
+                stats["deleted_yuids"] = self._delete_dead_yuids(self._distinct(self.touched_sorted_path))
     
             stats.update({
                 "pairs": n_edges,
@@ -804,5 +898,9 @@ class IdentityResolver(object):
             })
             return stats
         finally:
+            if self._timer:
+                # writes timing-identify-all.json next to every other phase's,
+                # so timing-report.py rolls it in
+                self._timer.finish()
             if not keep_temp:
                 shutil.rmtree(td, ignore_errors=True)

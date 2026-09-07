@@ -546,6 +546,13 @@ class IdMap(object):
         with self._cursor() as cur:
             cur.execute(f"INSERT INTO {self.yuid_table} (yuid, token) VALUES (%s, %s) "
                         f"ON CONFLICT (yuid) DO NOTHING", (ivalue, self.update_token))
+            # DO NOT add `WHERE ... IS DISTINCT FROM` here, however much this
+            # looks like the no-op rewrite that assign_bulk had. The update is
+            # deliberately a no-op -- it assigns the column to itself -- and
+            # exists only so RETURNING fires on conflict and hands back
+            # whoever won the race. A WHERE that filtered it out would return
+            # no row, and the caller could not tell "I minted this" from
+            # "someone else did".
             cur.execute(
                 f"INSERT INTO {self.table} (uri, yuid) VALUES (%s, %s) "
                 f"ON CONFLICT (uri) DO UPDATE SET yuid = {self.table}.yuid "
@@ -617,6 +624,9 @@ class IdMap(object):
                 else:
                     moved = []
 
+                # Needs no IS DISTINCT FROM guard: the SELECT ... FOR UPDATE
+                # above already returned early when old == ivalue, so reaching
+                # here means the value really is changing.
                 cur.execute(f"INSERT INTO {self.table} (uri, yuid) VALUES (%s, %s) "
                             f"ON CONFLICT (uri) DO UPDATE SET yuid = EXCLUDED.yuid",
                             (ikey, ivalue))
@@ -674,10 +684,25 @@ class IdMap(object):
                 f"ON CONFLICT (yuid) DO UPDATE SET token = EXCLUDED.token "
                 f"WHERE {self.yuid_table}.token IS DISTINCT FROM EXCLUDED.token",
                 list(yuids.items()), page_size=1000)
+            # The WHERE is the whole cost of this statement. Re-running
+            # identify over unchanged data computes the same clusters, so
+            # every member already points at the YUID being written --
+            # measured on a production run, `touched.tsv` (a line per member
+            # that actually moved) held exactly ONE entry against ~45M
+            # members. Without the guard all 45M rows are rewritten to the
+            # value they already hold: a new tuple version, a WAL record and
+            # a dead tuple each, for nothing. That is where _apply_stream's
+            # hours went, and where the 9.1% dead tuples in idmap came from.
+            #
+            # No staleness argument needed, unlike merge_refs: this is one
+            # atomic statement, and if the stored yuid already equals the new
+            # one there is nothing to do. Same guard as the yuid/token upsert
+            # directly above, and as token_set and merge_refs.
             psycopg2.extras.execute_values(
                 cur,
                 f"INSERT INTO {self.table} (uri, yuid) VALUES %s "
-                f"ON CONFLICT (uri) DO UPDATE SET yuid = EXCLUDED.yuid",
+                f"ON CONFLICT (uri) DO UPDATE SET yuid = EXCLUDED.yuid "
+                f"WHERE {self.table}.yuid IS DISTINCT FROM EXCLUDED.yuid",
                 list(rows.items()), page_size=1000)
         if self.memory_cache_enabled:
             for uri in rows:
@@ -711,10 +736,12 @@ class IdMap(object):
             if ikey.startswith("yuid:"):
                 cur.execute(f"INSERT INTO {self.yuid_table} (yuid) VALUES (%s) "
                             f"ON CONFLICT (yuid) DO NOTHING", (ikey,))
+                # guarded for the same reason as assign_bulk
                 psycopg2.extras.execute_values(
                     cur,
                     f"INSERT INTO {self.table} (uri, yuid) VALUES %s "
-                    f"ON CONFLICT (uri) DO UPDATE SET yuid = EXCLUDED.yuid",
+                    f"ON CONFLICT (uri) DO UPDATE SET yuid = EXCLUDED.yuid "
+                    f"WHERE {self.table}.yuid IS DISTINCT FROM EXCLUDED.yuid",
                     [(v, ikey) for v in ivalues])
             else:
                 raise ValueError(f"_add expects a YUID, got {key}")
@@ -880,6 +907,8 @@ class IdMap(object):
             psycopg2.extras.execute_values(
                 cur, f"INSERT INTO {self.yuid_table} (yuid) VALUES %s ON CONFLICT DO NOTHING",
                 [(v,) for v in {r[1] for r in rows}])
+            # Needs no guard either: clear() above truncated the table, so
+            # nothing can conflict.
             psycopg2.extras.execute_values(
                 cur, f"INSERT INTO {self.table} (uri, yuid) VALUES %s "
                      f"ON CONFLICT (uri) DO UPDATE SET yuid = EXCLUDED.yuid", rows)
