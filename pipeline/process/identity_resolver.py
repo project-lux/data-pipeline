@@ -238,8 +238,9 @@ class IdentityResolver(object):
         def key_of(uri):
             return self.shorten(uri).split("##qua")[0]
     
-        for k in diff_index.keys():
-            vals = diff_index[k]
+        # items() is one cursor scan; keys() plus a lookup per key was a
+        # scan and then a fresh transaction and B-tree descent per entry.
+        for k, vals in diff_index.items():
             if isinstance(vals, str):
                 vals = [vals]
             ks = key_of(k)

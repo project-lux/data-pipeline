@@ -177,6 +177,63 @@ number; `acquire.cache_hit` / `.fetch` / `.map` / `.post_map`
 
 ---
 
+### 2.2 merge is read-bound, and §2.1 does not describe it
+
+§2.1's conclusion — round-trip bound, neither CPU nor IO — was measured
+during **reconcile**. A `top` and `pg_stat_activity` sample during **merge**,
+the longer phase, says something different:
+
+| | reconcile | merge |
+|---|---|---|
+| python | 12.7 cores | 10.0 |
+| postgres | 10.9 cores | 9.1 |
+| total | 23.6 / 36 (66%) | **19.1 / 36 (53%)** |
+| **iowait** | **1.5%** | **12.2%** |
+| `IO/DataFileRead` (of active) | 11.8% | **58.9%** |
+
+**Merge uses less of the machine than reconcile while taking 50% longer**, and
+the 8x jump in iowait says the `DataFileRead` waits are real disk reads rather
+than page-cache hits. What it is reading is the identity map: `get_cluster`
+plus the reidentifier's prefetch are **57.6% of active statements**.
+
+The backend groups make it plain. Two clean sets of 24:
+
+| group | TIME+ | RES | CPU | what |
+|---|---|---|---|---|
+| A | ~6:40 | 19.5g | 5.75 cores | write connections — jsonb encode, CPU-heavy |
+| B | ~2:40 | **20.4g** | 2.6 cores | **idmap connections** |
+
+Group B holds most of the statements, the *most* resident memory on the box,
+and less than half of group A's CPU. That is a backend touching an enormous
+number of buffer pages and then waiting on the disk for them.
+
+The idmap is ~18 GB against `shared_buffers` of 19.5 GB — which ought to fit,
+except merge simultaneously streams the whole of `ils_record_cache` through a
+cursor and writes `merged_merged_record_cache` and
+`ils_rewritten_record_cache`, evicting the idmap's random-access pages from
+the OS page cache and competing for `shared_buffers` from the other side.
+Meanwhile **35 GB of the machine is available and postgres is using 19.5**.
+
+So the two phases want different things, and the hardware answer splits:
+
+* **reconcile wants cores** — 12 idle, latency-bound (§4.9).
+* **merge wants its working set in memory.** In order of cost: `REINDEX` the
+  idmap (free, and §3.10 explains why those indexes are bloated), then
+  `pg_prewarm` its indexes at the *start of merge* rather than only after a
+  restart, then raise `shared_buffers` toward 32 GB. PostgreSQL uses a small
+  ring buffer for sequential scans of large tables, so a bigger pool is
+  claimed preferentially by the random-access workload — exactly the probes
+  that are stalling.
+
+Merge is the longer phase, so if only one thing gets bought, buy RAM.
+
+**Note what a VACUUM cannot do here.** `idmap` is at 6.2% dead, so there is
+little to free, and VACUUM never shrinks an index — the files will be exactly
+as large afterwards. If merge is still read-bound after §3.8's vacuum, that is
+expected rather than a failed experiment.
+
+---
+
 ## 3. Landed
 
 Which run carried what, because the assessments below depend on it:
@@ -710,6 +767,8 @@ Item numbers are stable identifiers — they do not change when the order does.
 | — | ~~§4.10 `walk_refs`~~ | | **landed, see §3.9** |
 | — | ~~§4.12 idmap never vacuumed~~ | | **landed, see §3.8** |
 | 1 | **§4.9 run 32 workers** | ~25% of wall time | 12 of 36 cores idle, 1.5% iowait, zero lock waits — measured, not inferred |
+| 1= | **§2.2's merge fixes** | merge's 12.2% iowait | REINDEX, prewarm, `shared_buffers` — merge is read-bound, unlike reconcile |
+| 1= | §4.13 parameterise workers | correctness | the 32-worker script is untracked; a deploy silently reverts to 24 |
 | 2 | §4.5 reconcile-refs claim | 7.11 wh (47%) | untouched and unimproved; the least-improved phase |
 | 3 | §4.4 skip the guaranteed-miss probe | 2.77 wh recoverable | cheapest code change on the list |
 | 4 | §4.3 `reidentify` | merge 10.23 wh | fell 25% for free in run 2; re-measure after run 4 before spending on it |
@@ -942,6 +1001,36 @@ Diagnosed and fixed; see **§3.9**.
 ### 4.12 The identity map is never vacuumed — LANDED
 
 See **§3.8**.
+
+### 4.13 Parameterise the worker count — 21 sites, two silent failure modes
+
+**Where:** `full-build.sh` (five phase blocks x three sites), plus two each in
+`reconcile_parallel.sh`, `merge_parallel.sh` and `export_parallel.sh`, plus
+nine in `run-all.sh`.
+
+Each phase block writes the worker count three times — the `seq 0 N-1` bound,
+the `max_slice` argument, and the `-lt N` flag-count in the wait loop. All
+three must move together, and the half-changes fail asymmetrically:
+
+| changed | result |
+|---|---|
+| `seq` only | slices >= max_slice hit `_slice_predicate`'s ValueError; those workers crash and `grep Traceback` aborts the build — **loud** |
+| `max_slice` only | the buckets above the `seq` bound are **never processed**. At 24-of-32 that is 25% of the corpus missing, with no error and a wait loop that is satisfied — **silent** |
+| wait loop only | the next phase starts while workers are still writing |
+
+The silent one is the danger: a build that completes and looks fine while
+missing a quarter of the records.
+
+The fix is `WORKERS="${WORKERS:-24}"` at the top of each script and `$WORKERS`
+/ `$((WORKERS - 1))` at every site, so the count is stated once and can be
+overridden by the environment.
+
+**There is a live reason to do this.** The tracked `run-all.sh` is uniformly
+24 at all nine sites; the 32-worker version used for the run-3 experiment
+exists only on the build box. A deploy or `git checkout` silently reverts it,
+and the divergence is invisible until someone compares wall times and
+wonders. One variable removes both the half-change class of error and the need
+for a divergent local copy.
 
 ---
 

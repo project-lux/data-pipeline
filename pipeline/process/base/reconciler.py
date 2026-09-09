@@ -213,18 +213,26 @@ class LmdbReconciler(Reconciler):
         matches = {}
         my_type = rec["type"]
 
-        if reconcileType in ["all", "name"]:
+        # should_reconcile() only rejects "all" when BOTH indexes are absent,
+        # so a source configured with one of the two reached the other branch
+        # with a None index and died on it. Skip the half that has no index.
+        if reconcileType in ["all", "name"] and self.name_index is not None:
             # Get name from Record
             vals = self.extract_names(rec)
             vals = dict(sorted(vals.items(), key=lambda item: (item[1], -len(item[0]))))
             for nm, num in vals.items():
                 if self.debug:
                     print(f" names: {vals}")
-                if nm in self.name_index:
+                # One lookup. This was `in` then `[nm]`, and a third
+                # `[nm]` whenever the value did not unpack -- three
+                # transactions against the index for one answer, per name, per
+                # record, in every worker.
+                hit = self.name_index.get(nm)
+                if hit is not None:
                     try:
-                        (k, typ) = self.name_index[nm]
+                        (k, typ) = hit
                     except Exception:
-                        k = self.name_index[nm]
+                        k = hit
                         typ = None
                     if typ is not None and my_type == typ:
                         if self.debug:
@@ -248,10 +256,11 @@ class LmdbReconciler(Reconciler):
                             matches[k] = [nm]
                         break
 
-        if reconcileType in ["all", "uri"]:
+        if reconcileType in ["all", "uri"] and self.id_index is not None:
             for e in self.extract_uris(rec):
-                if e in self.id_index:
-                    (uri, typ) = self.id_index[e]
+                hit = self.id_index.get(e)
+                if hit is not None:
+                    (uri, typ) = hit
                     if my_type != typ and self.debug:
                         print(
                             f"cross-type match: record has {my_type} and external has {typ}"
