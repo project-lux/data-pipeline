@@ -143,7 +143,8 @@ class IdentityResolver(object):
             fn = "assertions-single.tsv"
         fn = os.path.join(configs.temp_dir, fn)
         self.filename = fn
-        self.fh = open(fn, "w", buffering=1024 * 1024)
+        # opened on the first write, not here -- see _writer()
+        self.fh = None
         
 
     def shorten(self, uri):
@@ -171,6 +172,28 @@ class IdentityResolver(object):
     #     return prefix_in, prefix_out
 
 
+    def _writer(self):
+        """Open the assertion log on the first write, never in __init__.
+
+        run-identify.py constructs this class purely to *resolve*, with no
+        slice, so __init__ took the `my_slice == -1` branch and opened
+        "assertions-single.tsv" in "w" mode as a side effect. In an unsliced
+        build that is exactly the file run-reconcile.py had just written, so
+        identify truncated its own input before reading it, then resolved an
+        empty assertion set: nodes=0, pairs=0, clusters=0, nothing written to
+        the idmap, exit 0. Silent, because the zero-byte file it had just
+        created was enough to satisfy resolve_identity's "did reconcile run?"
+        glob guard, which counts files rather than bytes.
+
+        A resolver that never writes now never creates a file. That also
+        sharpens the guard: a build where every slice emitted nothing leaves
+        no files at all and raises, instead of succeeding with an empty map.
+        """
+        if self.fh is None:
+            self.fh = open(self.filename, "w", buffering=1024 * 1024)
+        return self.fh
+
+
     def write_record(self, rec):
         """Log the record's equivalence assertions (mirrors the qua handling
         of manage_identifiers). A record with no equivalents logs a
@@ -180,6 +203,7 @@ class IdentityResolver(object):
         recid = rec["data"]["id"]
         typ = rec["data"]["type"]
         qrecid = self.shorten(self.configs.make_qua(recid, typ))
+        fh = self._writer()
         wrote = False
         for eq in rec["data"].get("equivalent", []):
             eqid = eq.get("id")
@@ -187,17 +211,21 @@ class IdentityResolver(object):
                 continue
             qeq = self.shorten(self.configs.make_qua(eqid, typ))
             lo, hi = (qrecid, qeq) if qrecid <= qeq else (qeq, qrecid)
-            self.fh.write(f"{lo}\t{hi}\t{qrecid}\n")
+            fh.write(f"{lo}\t{hi}\t{qrecid}\n")
             wrote = True
         if not wrote:
-            self.fh.write(f"{qrecid}\t{qrecid}\t{qrecid}\n")
+            fh.write(f"{qrecid}\t{qrecid}\t{qrecid}\n")
         # No flush per record: that was a write syscall for every one of tens
         # of millions of records. close() flushes, and a worker that dies
         # mid-slice has to be re-run anyway -- its assertions are only
         # consumed once every slice has finished.
 
     def close(self):
-        self.fh.close()
+        # None when nothing was ever written -- there is no handle to close
+        # and, deliberately, no file on disk either
+        if self.fh is not None:
+            self.fh.close()
+            self.fh = None
 
 
     # --- merge assertion files and load clusters ---
