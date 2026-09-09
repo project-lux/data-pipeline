@@ -410,9 +410,16 @@ def wanted_value(rec):
 # ------------------------------------------------------- recommendations
 
 class Rec:
-    def __init__(self, name, value, why, kind="int", restart=False, quote=False):
+    def __init__(self, name, value, why, kind="int", restart=False, quote=False,
+                 defer=False):
         self.name, self.value, self.why = name, value, why
         self.kind, self.restart, self.quote = kind, restart, quote
+        # ALTER SYSTEM validates against parameters the server knows about, and
+        # an extension's `foo.bar` GUCs do not exist until its library is
+        # loaded. Setting one before the restart that loads it does not warn --
+        # it fails with `unrecognized configuration parameter`. Deferred
+        # statements are printed after the restart notice instead of inline.
+        self.defer = defer
 
     def statement(self):
         v = f"'{self.value}'" if self.quote or self.kind in ("bytes", "ms", "str") else self.value
@@ -609,11 +616,20 @@ def recommend(m, srv, workers):
     ]))
 
     # --- observability: the open questions in the backlog need these ------
+    # if the library is loaded its GUCs are in pg_settings; if it is not, they
+    # do not exist and ALTER SYSTEM rejects them. With no server to ask, assume
+    # the worse case -- deferring a statement that would have worked costs a
+    # line of output, running one that cannot work costs an error.
+    pgss_live = bool(srv) and "pg_stat_statements.track" in srv["settings"]
     obs = [
         Rec("pg_stat_statements.track", "all",
-            "so the roll-up sees statements inside functions too", quote=True),
+            "so the roll-up sees statements inside functions too", quote=True,
+            defer=not pgss_live),
         Rec("pg_stat_statements.max", "10000",
-            "this build issues a lot of distinct statement shapes"),
+            "this build issues a lot of distinct statement shapes; note this "
+            "one is set at server start, so it needs its own restart to take "
+            "effect -- the default 5000 is survivable if you would rather not",
+            restart=True, defer=not pgss_live),
         Rec("track_io_timing", "on",
             "turns pg_stat_statements into something that can answer 'is this "
             "waiting on IO or on CPU' -- the open question in "
@@ -743,7 +759,7 @@ def main():
 
     # ---- the recommendations
     groups = recommend(m, srv, args.workers)
-    restart_needed, printed = [], 0
+    restart_needed, printed, deferred = [], 0, []
 
     for title, recs in groups:
         lines = []
@@ -754,6 +770,11 @@ def main():
                 str(cur_norm) == str(want)
                 or (rec.kind in ("bytes", "ms") and cur_norm == want))
             if same and not args.all:
+                continue
+            if rec.defer:
+                # printing this here would put a statement that cannot succeed
+                # in the middle of a block meant to be run top to bottom
+                deferred.append(rec)
                 continue
             lines.append((rec, cur_txt, same))
         if not lines:
@@ -771,9 +792,9 @@ def main():
                 restart_needed.append(rec.name)
         print()
 
-    if printed == 0:
+    if printed == 0 and not deferred:
         print("\nNothing to change -- every setting already matches.\n")
-    else:
+    elif printed:
         print(f"{'-' * 78}")
         print("SELECT pg_reload_conf();")
         if restart_needed:
@@ -781,6 +802,22 @@ def main():
             for n in restart_needed:
                 print(f"--   {n}")
             print("-- pg_ctl restart, or systemctl restart postgresql")
+
+    if deferred:
+        print(f"\n{'-' * 78}")
+        print("-- AFTER that restart, not before")
+        print(f"{'-' * 78}")
+        print("-- These belong to pg_stat_statements, and its parameters do not")
+        print("-- exist until shared_preload_libraries has loaded the library.")
+        print("-- Run before the restart, ALTER SYSTEM rejects them outright:")
+        print("--   ERROR: unrecognized configuration parameter")
+        print("--     \"pg_stat_statements.track\"")
+        for rec in deferred:
+            print()
+            for chunk in _wrap(rec.why, 74):
+                print(f"-- {chunk}")
+            print(rec.statement())
+        print("\nSELECT pg_reload_conf();")
 
     _tail(srv, m, args)
     return 0
