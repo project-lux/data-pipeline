@@ -13,20 +13,29 @@ class YpmMapper(Mapper):
         if "_last_mod_local" in data:
             del data["_last_mod_local"]
 
-        if data["type"] == "Type" and "classified_as" in data:
+        # A record with no top-level type can't be mapped, classified or
+        # given a YUID -- every branch below keys off it. Bailing here says
+        # which record was wrong; the bare data["type"] reached the acquirer
+        # as an unattributed KeyError printed as just `'type'`.
+        rectype_in_data = data.get("type")
+        if not rectype_in_data:
+            print(f"ypm {rec.get('identifier', '?')}: record has no type; skipping")
+            return None
+
+        if rectype_in_data == "Type" and "classified_as" in data:
             for cxn in data["classified_as"]:
                 if "id" in cxn and not cxn["id"]:
                     if cxn["_label"] == "Species":
                         cxn["id"] = "https://www.wikidata.org/entity/Q7432"
                         break
 
-        if data["type"] == "Place" and "identified_by" in data:
+        if rectype_in_data == "Place" and "identified_by" in data:
             # check for 'no locality data' as primary name and something else as alternate
             # then make alternate into primary and delete NLD
             p = None
             alt = None
             for n in data["identified_by"]:
-                if n["type"] == "Name" and "classified_as" in n:
+                if n.get("type") == "Name" and "classified_as" in n:
                     if n["content"].lower() == "[no locality data]":
                         for c in n["classified_as"]:
                             if c["id"] == "http://vocab.getty.edu/aat/300404670":
@@ -72,7 +81,7 @@ class YpmMapper(Mapper):
 
         if "equivalent" in data:
             for eq in data["equivalent"]:
-                eq["type"] = data["type"]
+                eq["type"] = rectype_in_data
 
         if "identified_by" in data:
             to_kill = []
@@ -94,8 +103,8 @@ class YpmMapper(Mapper):
         # 2022-01-14: Add item classified_as to make finding items easier
         # Rely on things in collection having accession numbers
         item = False
-        if "identified_by" in data and data["type"] == "HumanMadeObject":
-            ids = [x for x in data["identified_by"] if x["type"] == "Identifier"]
+        if "identified_by" in data and rectype_in_data == "HumanMadeObject":
+            ids = [x for x in data["identified_by"] if x.get("type") == "Identifier"]
             for i in ids:
                 if "classified_as" in i:
                     for c in i["classified_as"]:

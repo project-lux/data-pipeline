@@ -31,9 +31,12 @@ class FsMap(object):
             self._persist()
 
     def _persist(self):
-        # write to disk
-        with open(self.filename,"w") as fh:
+        # write to disk atomically (temp + rename): a crash mid-write used
+        # to truncate and corrupt the whole map
+        tmp = self.filename + ".tmp"
+        with open(tmp, "w") as fh:
             fh.write(json.dumps(self.data))
+        os.replace(tmp, self.filename)
 
     def clear(self):
         self.data = {}
@@ -98,15 +101,16 @@ class IdMap(FsMap):
 
     def __init__(self, config):
         FsMap.__init__(self, config)
-        with open(os.path.join(cfgs.data_dir, 'idmap_update_token.txt')) as fh:
+        # (was `cfgs.data_dir`: an undefined global, so this class raised
+        # NameError on construction)
+        with open(os.path.join(self.configs.data_dir, 'idmap_update_token.txt')) as fh:
             token = fh.read()
         token = token.strip()
         if not token.startswith('__') or not token.endswith('__'):
             print("Idmap Update Token is badly formed, should be 8 character date with leading/trailing __")
             raise ValueError("update token")
-            sys.exit(0)
         else:
-            self.update_token = token        
+            self.update_token = token
 
         self.prefix_map_out = {
             "yuid": self.configs.internal_uri

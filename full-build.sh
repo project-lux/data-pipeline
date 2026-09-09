@@ -21,6 +21,7 @@ echo "Starting Reconciliation Phase for YPM"
 
 rm ../data/logs/flags/reconcile_is_done*txt
 rm metatypes-*.json
+rm -f assertions-*.tsv
 
 for count in `seq 0 23`;
 do
@@ -49,6 +50,17 @@ done
 rm ../data/logs/flags/reconcile_is_done*txt
 
 sleep 30
+
+### Resolve identity map deterministically from the logged assertions
+echo "Resolving identity map"
+python ./run-identify.py > ../data/logs/identify.txt 2>&1
+if [[ $? -ne 0 ]]
+then
+    echo "Error in Identify!"
+    echo `date` [Error] Error in identify >> /data/logs/pipeline_process_status.txt
+    exit
+fi
+rm assertions-*.tsv
 
 ### Merge metatypes
 echo "Merging Metatypes"
@@ -101,6 +113,7 @@ echo "Starting Reconciliation Phase for all"
 
 rm ../data/logs/flags/reconcile_is_done*txt
 rm metatypes-*.json
+rm -f assertions-*.tsv
 
 for count in `seq 0 23`;
 do
@@ -129,6 +142,17 @@ done
 rm ../data/logs/flags/reconcile_is_done*txt
 
 sleep 30
+
+### Resolve identity map deterministically from the logged assertions
+echo "Resolving identity map"
+python ./run-identify.py > ../data/logs/identify.txt 2>&1
+if [[ $? -ne 0 ]]
+then
+    echo "Error in Identify!"
+    echo `date` [Error] Error in identify >> /data/logs/pipeline_process_status.txt
+    exit
+fi
+rm assertions-*.tsv
 
 ### Merge metatypes
 echo "Merging Metatypes"

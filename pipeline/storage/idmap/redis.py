@@ -5,6 +5,12 @@ import uuid
 import sys
 import random
 
+
+# URICache moved to storage/uricache.py so config.py can use it without
+# importing a storage backend; re-exported here for existing callers.
+from pipeline.storage.uricache import URICache, _MISSING
+
+
 class RedisCache(object):
 
     def __init__(self, config):
@@ -82,11 +88,37 @@ class RedisCache(object):
             yield self._manage_key_out(key)
 
     def popitem(self):
-        k = self.conn.scan(count=1)
-        k = k[1][0]
-        val = self.conn.get(k)        
-        self.conn.delete(k)
-        return (self._manage_key_out(k), self._manage_key_out(val))
+        # Atomic claim: the old scan+get+delete let two workers pop the same
+        # key (both process it) or return (key, None) when racing a delete.
+        fruitless = 0
+        while fruitless < 100:
+            cursor, keys = self.conn.scan(cursor=0, count=10)
+            if not keys:
+                return None
+            fruitless += 1
+            for k in keys:
+                with self.conn.pipeline() as pipe:
+                    try:
+                        pipe.watch(k)
+                        val = pipe.get(k)
+                        if val is None:
+                            # claimed by another worker (or not a string key)
+                            pipe.unwatch()
+                            continue
+                        pipe.multi()
+                        pipe.delete(k)
+                        pipe.execute()
+                        return (self._manage_key_out(k), self._manage_key_out(val))
+                    except redis.WatchError:
+                        continue
+                    except redis.ResponseError:
+                        # non-string key (e.g. a set); skip it
+                        continue
+        # 100 rounds without claiming anything: either everything is being
+        # drained by other workers (fine to report empty) or the db holds
+        # only non-string keys. Don't crash the slice either way.
+        print("popitem: no claimable string keys after 100 rounds; treating as empty")
+        return None
 
     # WARNING: this doesn't scale for long, but is useful for debugging and testing
     def keys(self, **kw):
@@ -132,7 +164,7 @@ class IdMap(RedisCache):
         for (k,v) in self.prefix_map_out.items():
             self.prefix_map_in[v] = k
         self.memory_cache_enabled = False
-        self.memory_cache = {}
+        self.memory_cache = URICache(capacity=200000)
         self.clean_on_remove = False
 
         with open(os.path.join(self.configs.data_dir, 'idmap_update_token.txt')) as fh:
@@ -209,6 +241,88 @@ class IdMap(RedisCache):
     def disable_memory_cache(self):
         self.memory_cache_enabled = False
 
+    def delete_yuid(self, yuid):
+        """Remove a YUID set that no longer has any real members (only
+        update tokens). Refuses if real members remain. Used by the
+        pending-deletes consumer; regular delete() intentionally rejects
+        set keys."""
+        ikey = self._manage_key_in(yuid)
+        if self.conn.type(ikey) != "set":
+            return False
+        members = self.conn.smembers(ikey)
+        out = [self._manage_value_out(x) for x in members]
+        real = [m for m in out if not (m.startswith("__") and m.endswith("__"))]
+        if real:
+            raise ValueError(
+                f"delete_yuid({yuid}): {len(real)} real members remain")
+        self.conn.delete(ikey)
+        return True
+
+    def assign_bulk(self, items, batch_ops=10000):
+        """Assign whole clusters at once: the identity phase's write path.
+
+        `items` is an iterable of (yuid, members, prior) where members are full
+        member URIs and prior maps a member to the YUID it is leaving, if any.
+
+        This is the pipeline IdentityResolver used to run against .conn
+        directly, moved behind the interface so the resolver works on any
+        backend. The order of operations is unchanged: per member, SREM from
+        the old set if it moved, then SET the forward pointer; then one SADD of
+        every member plus the update token."""
+        stats = {"set": 0, "moved": 0, "clusters": 0}
+        pipe = self.conn.pipeline(transaction=False)
+        ops = 0
+        for yuid, members, prior in items:
+            iyuid = self._manage_value_in(yuid)
+            imembers = []
+            for m in members:
+                im = self._manage_key_in(m)
+                imembers.append(im)
+                old = (prior or {}).get(m)
+                if old and old != yuid:
+                    pipe.srem(self._manage_value_in(old), im)
+                    stats["moved"] += 1
+                    ops += 1
+                pipe.set(im, iyuid)
+                stats["set"] += 1
+                ops += 1
+            if imembers:
+                pipe.sadd(iyuid, *imembers, self.update_token)
+                ops += 1
+            stats["clusters"] += 1
+            if ops >= batch_ops:
+                pipe.execute(raise_on_error=False)
+                pipe = self.conn.pipeline(transaction=False)
+                ops = 0
+        if ops:
+            pipe.execute(raise_on_error=False)
+        if self.memory_cache_enabled:
+            self.memory_cache.clear()
+        return stats
+
+    def delete_empty_yuids(self, yuids, batch_size=10000):
+        """Drop the YUIDs among `yuids` whose sets hold nothing but update
+        tokens. Also lifted out of IdentityResolver."""
+        ikeys = [self._manage_value_in(y) for y in yuids]
+        dead = 0
+        for i in range(0, len(ikeys), batch_size):
+            chunk = ikeys[i:i + batch_size]
+            pipe = self.conn.pipeline(transaction=False)
+            for ikey in chunk:
+                pipe.smembers(ikey)
+            left = pipe.execute(raise_on_error=False)
+            pipe = self.conn.pipeline(transaction=False)
+            for ikey, vals in zip(chunk, left):
+                # An empty result counts too: redis drops a set when its last
+                # member leaves, so the yuid is already gone and the DELETE is
+                # a no-op -- but it is dead either way, and postgres reports it
+                # the same (its registry row does survive and is removed here)
+                if isinstance(vals, set) and all(v.startswith("__") for v in vals):
+                    pipe.delete(ikey)
+                    dead += 1
+            pipe.execute(raise_on_error=False)
+        return dead
+
     def mint(self, key, slug, typ=""):
         if typ in self.configs.ok_record_types:
             key = self.configs.make_qua(key, typ)
@@ -241,30 +355,82 @@ class IdMap(RedisCache):
 
         # memory cache for frequent lookups (aat terms) to avoid the network
         # Causes errors with multiple processes for writing
-        if self.memory_cache_enabled and key.startswith("aat:") and key in self.memory_cache:
-            return self.memory_cache[key]
+        if self.memory_cache_enabled:
+            maybe = self.memory_cache[key]
+            if maybe is not self.memory_cache.missing:
+                return maybe
 
-        t = self.conn.type(key)
-        if t == 'string':
-            val = self.conn.get(key)
-            if not val:
-                print(f"idmap was asked for {key} but got {val}")
-                return None
-            out = self._manage_value_out(val)
-        elif t == 'set':
-            val = self.conn.smembers(key)
-            if not val:
-                print(f"idmap was asked for {key} but got {val}")
-                return None
-            out = {self._manage_value_out(x) for x in val}
-        elif t == 'none':
-            # Asked for a non-existent key
+        is_set = key.startswith("yuid:")
+        try:
+            val = self.conn.smembers(key) if is_set else self.conn.get(key)
+        except Exception as e:
+            print(f"idmap lookup failed for {key}: {e}")
             return None
+        if not val:
+            return None
+            
+        if is_set:
+            out = {self._manage_value_out(x) for x in val}
         else:
-            raise ValueError(f"Unknown key type {t}")
+            out = self._manage_value_out(val)   
 
-        if self.memory_cache_enabled and key.startswith("aat:"): 
+        if self.memory_cache_enabled:
             self.memory_cache[key] = out
+        return out
+
+
+    def get_multi(self, keys, chunk=1000):
+        """Resolve many keys in one round trip. Returns {key: value_or_None}
+        for every key given. Same semantics as get(), just batched."""
+        out = {}
+        need_str, need_set = [], []
+        for key in keys:
+            if not self.configs.is_qua(key) and not self.prefix_map_out['yuid'] in key:
+                raise ValueError(f"Need a type: {key}")
+            ikey = self._manage_key_in(key)
+            if self.memory_cache_enabled:
+                maybe = self.memory_cache[ikey]
+                if maybe is not self.memory_cache.missing:
+                    out[key] = maybe
+                    continue
+            if ikey.startswith("yuid:"):
+                need_set.append((key, ikey))
+            else:
+                need_str.append((key, ikey))
+
+        for i in range(0, len(need_str), chunk):
+            batch = need_str[i:i + chunk]
+            try:
+                vals = self.conn.mget([ik for _, ik in batch])
+            except Exception as e:
+                print(f"idmap mget failed ({len(batch)} keys): {e}")
+                vals = [None] * len(batch)
+            for (key, ikey), val in zip(batch, vals):
+                v = self._manage_value_out(val) if val else None
+                out[key] = v
+                # Don't cache misses: they cost nothing to re-fetch once
+                # batched (they ride along in the MGET) but would evict
+                # positives, and merge records are full of external
+                # equivalents that aren't in the idmap. get() likewise only
+                # caches hits.
+                if self.memory_cache_enabled and v is not None:
+                    self.memory_cache[ikey] = v
+
+        for i in range(0, len(need_set), chunk):
+            batch = need_set[i:i + chunk]
+            try:
+                with self.conn.pipeline(transaction=False) as pipe:
+                    for _, ik in batch:
+                        pipe.smembers(ik)
+                    res = pipe.execute()
+            except Exception as e:
+                print(f"idmap pipelined smembers failed ({len(batch)} keys): {e}")
+                res = [None] * len(batch)
+            for (key, ikey), val in zip(batch, res):
+                v = {self._manage_value_out(x) for x in val} if val else None
+                out[key] = v
+                if self.memory_cache_enabled and v is not None:
+                    self.memory_cache[ikey] = v
         return out
 
     def set(self, key, value, typ=""):
@@ -283,32 +449,51 @@ class IdMap(RedisCache):
         ikey = self._manage_key_in(key)
         ivalue = self._manage_value_in(value)
 
-        if self.memory_cache_enabled and ikey.startswith('aat:'):
-            self.memory_cache[ikey] = value
-
-        if self.conn.exists(ikey):
-            # Could be just setting to the same value
-            old = self.conn.get(ikey)
-            if old is None or old == ivalue:
-                return
-            print(f"key: {key} old: {old} new value: {value}")
-            # Nope, we're changing to a different yuid!
-            # keep all keys assigned to old_yuid assigned to new_yuid
-            all_vals = self.conn.smembers(old)
-            print(f"all vals: {all_vals}")
-            for av in all_vals:
-                # print(f"Resetting {av} from {old} -> {ivalue} due to {key}")
-                self.conn.set(av, ivalue)
-            if all_vals:
-                # Sometimes a ghost yuid survives somewhere else
-                self.conn.sadd(ivalue, *all_vals)
-                # delete old yuid
-                self.conn.delete(old)
-            else:
-                print(f"Requested members for {old} and got [] ???")
-
-        self._add(value, key)
-        return self.conn.set(ikey, ivalue)
+        # The rekey/merge below is a multi-step read-modify-write; done as
+        # separate commands two concurrent workers could interleave, losing
+        # set members and leaving dangling forward-pointers. WATCH/MULTI
+        # makes each attempt atomic; a concurrent modification retries.
+        for _attempt in range(50):
+            with self.conn.pipeline() as pipe:
+                try:
+                    pipe.watch(ikey)
+                    old = pipe.get(ikey)
+                    if old is not None and old == ivalue:
+                        pipe.unwatch()
+                        return
+                    if old is not None:
+                        print(f"key: {key} old: {old} new value: {value}")
+                        # Changing to a different yuid: keep all keys assigned
+                        # to old_yuid assigned to new_yuid
+                        pipe.watch(old)
+                        all_vals = pipe.smembers(old)
+                        pipe.multi()
+                        for av in all_vals:
+                            pipe.set(av, ivalue)
+                        if all_vals:
+                            pipe.sadd(ivalue, *all_vals)
+                            pipe.delete(old)
+                        else:
+                            print(f"Requested members for {old} and got [] ???")
+                        pipe.sadd(ivalue, ikey)
+                        pipe.set(ikey, ivalue)
+                        pipe.execute()
+                        if self.memory_cache_enabled:
+                            for av in all_vals:
+                                del self.memory_cache[av]
+                            del self.memory_cache[old]
+                            del self.memory_cache[ivalue]
+                    else:
+                        pipe.multi()
+                        pipe.sadd(ivalue, ikey)
+                        pipe.set(ikey, ivalue)
+                        pipe.execute()
+                    if self.memory_cache_enabled:
+                        self.memory_cache[ikey] = value
+                    return True
+                except redis.WatchError:
+                    continue
+        raise RuntimeError(f"idmap.set({key}) kept losing WATCH races")
 
     def _force_delete(self, key, typ=""):
         if typ in self.configs.ok_record_types:
@@ -333,7 +518,7 @@ class IdMap(RedisCache):
             value = self.get(key)
             self.conn.delete(ikey)
             self._remove(value, key)
-            if self.memory_cache_enabled and ikey.startswith('aat:') and ikey in self.memory_cache:
+            if self.memory_cache_enabled and ikey in self.memory_cache:
                 del self.memory_cache[ikey]
         elif t == 'none':
             # Key doesn't exist, already deleted / never existed
@@ -343,6 +528,13 @@ class IdMap(RedisCache):
         else:
             print(f"Got {t} as type of key in idmap?")
         return None
+
+
+# Cached fetch errors expire after a week; successes/redirects persist.
+# Without a TTL a transient network failure was cached forever, so the
+# record stayed missing from every subsequent build until someone
+# manually cleared the networkmap.
+NETWORK_ERROR_TTL = 7 * 24 * 3600
 
 
 class NetworkOperationMap(RedisCache):
@@ -371,7 +563,12 @@ class NetworkOperationMap(RedisCache):
 
         ikey = self._manage_key_in(key)
         ival = self._manage_key_in(value)
-        self.conn.set(ikey, ival)
+        is_error = ival in ("0", "000") or (
+            len(ival) == 3 and ival.isnumeric() and int(ival) > 399)
+        if is_error:
+            self.conn.set(ikey, ival, ex=NETWORK_ERROR_TTL)
+        else:
+            self.conn.set(ikey, ival)
 
     def delete(self, key):
         ikey = self._manage_key_in(key)        
@@ -482,12 +679,239 @@ class RedisDictValue(object):
         return self.persistence._items(self.pkey)
 
 
+# dist becomes min(existing, dist); type is set only if not already set.
+# Lua runs atomically in redis, so this is the WATCH/MULTI retry loop's
+# semantics in a single round trip -- and unlike WATCH it can be pipelined,
+# which is what lets a whole record's references be written at once.
+MERGE_REF_LUA = """
+local d = redis.call('HGET', KEYS[1], 'dist')
+if (not d) or (tonumber(d) > tonumber(ARGV[1])) then
+    redis.call('HSET', KEYS[1], 'dist', ARGV[1])
+end
+redis.call('HSETNX', KEYS[1], 'type', ARGV[2])
+return 1
+"""
+
+# Read-and-claim a reference in one atomic step. Returns the hash and deletes
+# it, or returns empty if another worker got there first -- so exactly one
+# worker ever processes a given reference. Doing this as HGETALL + DEL in a
+# plain pipeline would leave a window in which a concurrent merge_ref could
+# re-add the reference at a shorter distance and have it deleted unprocessed;
+# inside Lua there is no window.
+POP_REF_LUA = """
+local d = redis.call('HGETALL', KEYS[1])
+if #d > 0 then
+    redis.call('DEL', KEYS[1])
+end
+return d
+"""
+
+
 class ReferenceMap(NetworkOperationMap):
 
     def __init__(self, config):
         if not 'db' in config:
             config['db'] = 3
         RedisCache.__init__(self, config)
+        self._merge_script = None
+        self._pop_script = None
+        self._scripting = True
+        self._scan_cursor = 0
+
+    # NOTE: reads here use the raw key (as get()/_items() always have) while
+    # writes go through _manage_key_in() (as merge_ref()/delete() always
+    # have). Both are no-ops for this class -- RedisCache leaves the prefix
+    # maps empty and only IdMap fills them in -- but don't populate them for
+    # a ReferenceMap without reconciling the two.
+
+    def get_multi(self, keys, chunk=1000):
+        """One pipelined HGETALL per key: {key: {field: value}}, with keys
+        that don't exist left out. Replaces the EXISTS + HGET + HGET per key
+        that RedisDictValue's lazy field access cost -- it holds a reference
+        into redis, so every field read was another round trip."""
+        out = {}
+        keys = list(keys)
+        for i in range(0, len(keys), chunk):
+            batch = keys[i:i + chunk]
+            try:
+                with self.conn.pipeline(transaction=False) as pipe:
+                    for k in batch:
+                        pipe.hgetall(k)
+                    res = pipe.execute()
+            except Exception as e:
+                print(f"refmap pipelined hgetall failed ({len(batch)} keys): {e}")
+                res = [None] * len(batch)
+            for k, d in zip(batch, res):
+                if d:
+                    out[k] = {self._manage_key_out(f): self._manage_value_out(v)
+                              for (f, v) in d.items()}
+        return out
+
+    def queue_length(self, ceiling):
+        """How many references are waiting, counted no further than `ceiling`.
+
+        DBSIZE is exact and O(1) here, so the ceiling costs nothing; it exists
+        because a SQL-backed queue cannot count millions of rows on every
+        claim. See the postgres backend."""
+        return min(self.conn.dbsize(), ceiling)
+
+    def merge_refs(self, items, chunk=1000):
+        """merge_ref for many (key, dist, ctype) triples in one round trip."""
+        items = list(items)
+        if not items:
+            return
+        if self._scripting:
+            if self._merge_script is None:
+                self._merge_script = self.conn.register_script(MERGE_REF_LUA)
+            for i in range(0, len(items), chunk):
+                batch = items[i:i + chunk]
+                try:
+                    with self.conn.pipeline(transaction=False) as pipe:
+                        for (key, dist, ctype) in batch:
+                            self._merge_script(
+                                keys=[self._manage_key_in(key)],
+                                args=[self._manage_value_in(dist),
+                                      self._manage_value_in(ctype or "")],
+                                client=pipe)
+                        pipe.execute()
+                except redis.ResponseError as e:
+                    # scripting unavailable/disabled: fall back for good
+                    print(f"refmap merge script unusable ({e}); "
+                          f"falling back to per-ref WATCH transactions")
+                    self._scripting = False
+                    for it in items[i:]:
+                        self._merge_ref_watch(*it)
+                    return
+        else:
+            for it in items:
+                self._merge_ref_watch(*it)
+
+    def merge_ref(self, key, dist, ctype=""):
+        """Atomically record a single reference. The record walk uses
+        merge_refs() so a record's references cost one round trip."""
+        self.merge_refs([(key, dist, ctype)])
+
+    def _out(self, flat):
+        """Lua returns a hash as a flat [field, value, ...] array."""
+        return {self._manage_key_out(flat[i]): self._manage_value_out(flat[i + 1])
+                for i in range(0, len(flat), 2)}
+
+    def popitems(self, count=100):
+        """Claim up to `count` references in two round trips -- one SCAN, one
+        pipelined batch of atomic read-and-delete scripts -- rather than the
+        RANDOMKEY + WATCH + HGETALL + MULTI/EXEC that popitem() spends on
+        every single reference.
+
+        Returns [(key, {field: value}), ...] of approximately `count` items
+        -- SCAN's COUNT is a hint and everything a scan returns is claimed,
+        so the batch can run slightly over. An empty list means the map is
+        empty. Claiming is exclusive: a reference goes to exactly one
+        caller."""
+        if not self._scripting:
+            out = []
+            for _ in range(count):
+                it = self.popitem()
+                if it is None:
+                    break
+                out.append(it)
+            return out
+
+        if self._pop_script is None:
+            self._pop_script = self.conn.register_script(POP_REF_LUA)
+
+        out = []
+        # Returning [] means "empty", which ends the caller's loop -- so only
+        # say it after a COMPLETE pass of the keyspace claimed nothing. The
+        # cursor is carried between calls so a drained prefix isn't rewalked
+        # every time, and a wrap to 0 starts the next pass.
+        claimed_this_pass = False
+        wraps = 0
+        while len(out) < count and wraps < 2:
+            # ask only for what's still wanted: everything a scan returns
+            # gets claimed, and claimed-but-unprocessed work is what a dying
+            # worker loses. SCAN's COUNT is a hint, so this bounds the
+            # overshoot rather than eliminating it.
+            cursor, keys = self.conn.scan(cursor=self._scan_cursor,
+                                          count=max(count - len(out), 10))
+            self._scan_cursor = cursor
+            if keys:
+                try:
+                    with self.conn.pipeline(transaction=False) as pipe:
+                        for k in keys:
+                            self._pop_script(keys=[k], args=[], client=pipe)
+                        res = pipe.execute()
+                except redis.ResponseError as e:
+                    print(f"refmap pop script unusable ({e}); falling back to popitem()")
+                    self._scripting = False
+                    return out + self.popitems(count - len(out))
+                for k, flat in zip(keys, res):
+                    # empty => another worker claimed it first
+                    if flat:
+                        out.append((self._manage_key_out(k), self._out(flat)))
+                        claimed_this_pass = True
+            if cursor == 0:
+                # wrapped: a whole pass with nothing claimed means empty
+                if not claimed_this_pass:
+                    break
+                claimed_this_pass = False
+                wraps += 1
+        return out
+
+    def iter_items(self, chunk=1000):
+        """Stream (key, {field: value}) with one round trip per chunk.
+
+        iter_keys() yields RedisDictValue, which is a reference into redis
+        rather than a copy -- a caller that reads two fields off it pays two
+        round trips per key."""
+        batch = []
+        for key in self.conn.scan_iter(count=chunk):
+            batch.append(key)
+            if len(batch) >= chunk:
+                yield from self._items_multi(batch)
+                batch = []
+        if batch:
+            yield from self._items_multi(batch)
+
+    def _items_multi(self, keys):
+        with self.conn.pipeline(transaction=False) as pipe:
+            for k in keys:
+                pipe.hgetall(k)
+            res = pipe.execute()
+        for k, d in zip(keys, res):
+            if d:
+                yield (self._manage_key_out(k),
+                       {self._manage_key_out(f): self._manage_value_out(v)
+                        for (f, v) in d.items()})
+
+    def delete_multi(self, keys, chunk=1000):
+        """Pipelined delete of many keys."""
+        keys = list(keys)
+        for i in range(0, len(keys), chunk):
+            with self.conn.pipeline(transaction=False) as pipe:
+                for k in keys[i:i + chunk]:
+                    pipe.delete(self._manage_key_in(k))
+                pipe.execute()
+
+    def _merge_ref_watch(self, key, dist, ctype=""):
+        """Pre-Lua implementation, kept as the fallback when scripting is
+        unavailable. Correct but 4 round trips plus retries."""
+        ikey = self._manage_key_in(key)
+        fdist = self._manage_key_in("dist")
+        ftype = self._manage_key_in("type")
+        for _attempt in range(50):
+            with self.conn.pipeline() as pipe:
+                try:
+                    pipe.watch(ikey)
+                    cur = pipe.hget(ikey, fdist)
+                    pipe.multi()
+                    if cur is None or int(cur) > dist:
+                        pipe.hset(ikey, fdist, self._manage_value_in(dist))
+                    pipe.hsetnx(ikey, ftype, self._manage_value_in(ctype or ""))
+                    pipe.execute()
+                    return
+                except redis.WatchError:
+                    continue
+        raise RuntimeError(f"merge_ref({key}) kept losing WATCH races")
 
     def _export_state(self):
         # return a json dict of the external:yuid values
@@ -542,18 +966,39 @@ class ReferenceMap(NetworkOperationMap):
             yield RedisDictValue(key, self)
 
     def popitem(self):
-        if len(self) ==  0:
-            return None
-        rk = self.conn.randomkey()
-        try:
-            d = self.conn.hgetall(rk)
-            self.conn.delete(rk)
-        except:
-            return None
-        n = {}
-        for (k,v) in d.items():
-            n[self._manage_key_out(k)] = self._manage_value_out(v)
-        return (self._manage_key_out(rk), n)
+        # Atomic claim: the old randomkey+hgetall+delete let two workers pop
+        # the same key, and its bare except hid real redis errors as an
+        # empty queue. randomkey is still random order, which is harmless
+        # now that identity assignment is order-independent.
+        fruitless = 0
+        while fruitless < 100:
+            rk = self.conn.randomkey()
+            if rk is None:
+                return None
+            with self.conn.pipeline() as pipe:
+                try:
+                    pipe.watch(rk)
+                    d = pipe.hgetall(rk)
+                    if not d:
+                        # claimed by another worker, or not a hash key
+                        pipe.unwatch()
+                        fruitless += 1
+                        continue
+                    pipe.multi()
+                    pipe.delete(rk)
+                    pipe.execute()
+                except redis.WatchError:
+                    fruitless += 1
+                    continue
+                except redis.ResponseError:
+                    fruitless += 1
+                    continue
+            n = {}
+            for (k, v) in d.items():
+                n[self._manage_key_out(k)] = self._manage_value_out(v)
+            return (self._manage_key_out(rk), n)
+        print("popitem: no claimable hash keys after 100 rounds; treating as empty")
+        return None
 
     def update(self, values):
         # Iter through all of the pairs in the dict and set

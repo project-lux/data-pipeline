@@ -40,6 +40,23 @@ class WdLoader(WdFetcher, WdConfigManager, Loader):
         # ensure we have the dump file
         # self.fetch_dump()
 
+        # Committing inside every set() costs an fsync per record. Batch them
+        # instead: checkpoint() below marks the boundary a commit is allowed to
+        # land on -- one dump record, fully processed -- and the cache does the
+        # counting. Deferral expects parallel workers to write disjoint keys,
+        # which holds here: slices take disjoint lines of the dump, and each
+        # line is a distinct Q id.
+        self.out_cache.defer_commits(every=1000)
+        try:
+            self._load_dump(slicen, maxSlice)
+        finally:
+            # Deferral is process-wide -- every cache in the process shares one
+            # write connection -- so hand it back however we leave. This lands
+            # the last partial batch, so it replaces the old end_bulk()/commit()
+            # and runs on the way out of an exception too.
+            self.out_cache.resume_commits()
+
+    def _load_dump(self, slicen, maxSlice):
         with gzip.open(self.in_path, "rt") as fh, \
             open(os.path.join(self.configs.temp_dir, f'wd_equivs_{slicen}.csv'), 'w') as efh, \
             open(os.path.join(self.configs.temp_dir, f'wd_diffs_{slicen}.csv'), 'w') as dfh:
@@ -50,7 +67,6 @@ class WdLoader(WdFetcher, WdConfigManager, Loader):
             l = 1
             done_x = 0
 
-            self.out_cache.start_bulk()
             start = time.time()
             while l:
                 l = fh.readline()
@@ -80,7 +96,7 @@ class WdLoader(WdFetcher, WdConfigManager, Loader):
                     print(f"Failed to process {l}")
                     raise
                     continue
-                self.out_cache.set_bulk(new, identifier=what)
+                self.out_cache.set(new, identifier=what)
 
                 # Create intermediate files for indexing
                 sames, diffs = self.process_equivs({'data':new})
@@ -89,13 +105,11 @@ class WdLoader(WdFetcher, WdConfigManager, Loader):
                 for dx,dy in diffs:
                     dfh.write(f'{dx},{dy}\n')
 
+                # Record is done: the cache may commit here, and only here
+                self.out_cache.checkpoint()
+
                 if not done_x % 10000:
                     t = time.time() - start
                     xps = x/t
                     ttls = self.total / xps
                     print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-                    self.out_cache.end_bulk()
-                    self.out_cache.start_bulk()
-
-        self.out_cache.end_bulk()
-        self.out_cache.commit()

@@ -52,21 +52,16 @@ class Cleaner(Mapper):
             )
         else:
             print("Couldn't find LLM yuid->name lmdb")
-        fn2 = os.path.join(self.configs.indexes_dir, "yuid_personname.lmdb")
-        if os.path.exists(fn2):
-            self.llm_label_person_names = JsonLmdb.open(
-                fn2, "r", readahead=False, writemap=True
-            )
-        else:
-            print("Couldn't find LLM label->name lmdb")
+            self.llm_person_names = None
 
     def get_commons_license(self, img):
         # Can't store reidentified version as it would need a YUID
         # And YUIDs must be UUIDs - no way to look up fn->yuid
         # without stuffing them in the idmap, and that would be a waste
-        print(f"\nWMFETCH: {img}\n")
+
         if not img in self.wikimedia["recordcache"]:
             if not img in self.wikimedia["datacache"]:
+                # print(f"\nWMFETCH: {img}\n")
                 data = self.wikimedia["fetcher"].fetch(img)
                 if data and type(data) is dict:
                     self.wikimedia["datacache"][img] = data

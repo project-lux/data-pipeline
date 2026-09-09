@@ -506,6 +506,26 @@ class LcshMapper(LcMapper):
 
 
 class LcnafMapper(LcMapper):
+    @staticmethod
+    def _activity_date(rwo, prop):
+        """Parsed (begin, end) for one madsrdf activity date, or None.
+
+        Returns None for absent, unrecognised-shape and unparsable dates
+        alike: a date we can't read should cost us the date, not the whole
+        record. Every caller must therefore check for None before indexing.
+        """
+        if prop not in rwo:
+            return None
+        raw = rwo[prop]
+        if type(raw) is dict and "@value" in raw:
+            raw = raw["@value"]
+        elif type(raw) is int:
+            raw = str(raw)
+        elif type(raw) is not str:
+            # a list, most often -- no single date to take
+            return None
+        return make_datetime(raw)
+
     def __init__(self, config):
         LcMapper.__init__(self, config)
         self.lc_male_uris = [
@@ -829,29 +849,31 @@ class LcnafMapper(LcMapper):
                     act.classified_as = model.Type(ident=fid, label=al)
                     top.carried_out = act
 
+        # Three separate bugs lived in these two blocks, all of which cost
+        # the entire record rather than just the date:
+        #  * asdd was assigned only inside the type checks, so any other
+        #    shape (a list, most often) left it unbound -- "local variable
+        #    'asdd' referenced before assignment"
+        #  * make_datetime returns None for anything it can't parse, and
+        #    asdd[0] on that is "'NoneType' object is not subscriptable"
+        #  * silently, the end block reused the same variable, so an end date
+        #    that failed its type checks after a start date had succeeded
+        #    gave the record its START date as the end of the end.
+        # NB indexing the RAW value (asd[0]) is not the fix for the first
+        # two: make_datetime's output is the (begin, end) pair, so asd[0] on
+        # the usual string date yields its first CHARACTER -- "1923-05-01"
+        # becomes a begin_of_the_begin of "1".
         ts = None
-        if "madsrdf:activityStartDate" in rwo:
-            asd = rwo["madsrdf:activityStartDate"]
-            if type(asd) is dict and "@value" in dict:
-                asdd = make_datetime(asd["@value"])
-            elif type(asd) is str:
-                asdd = make_datetime(asd)
-            elif type(asd) is int:
-                asdd = make_datetime(str(asd))
+        asdd = self._activity_date(rwo, "madsrdf:activityStartDate")
+        if asdd is not None:
             ts = model.TimeSpan()
             ts.begin_of_the_begin = asdd[0]
 
-        if "madsrdf:activityEndDate" in rwo:
-            asd = rwo["madsrdf:activityEndDate"]
-            if type(asd) is dict and "@value" in dict:
-                asdd = make_datetime(asd["@value"])
-            elif type(asd) is str:
-                asdd = make_datetime(asd)
-            elif type(asd) is int:
-                asdd = make_datetime(str(asd))
+        aedd = self._activity_date(rwo, "madsrdf:activityEndDate")
+        if aedd is not None:
             if ts is None:
                 ts = model.TimeSpan()
-            ts.end_of_the_end = asdd[1]
+            ts.end_of_the_end = aedd[1]
 
         if ts is not None:
             if act is None:

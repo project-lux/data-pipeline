@@ -54,9 +54,8 @@ class Reconciler(object):
                         self.debug_graph[record["data"]["id"]].append((eq["id"], "eq"))
                     except Exception:
                         self.debug_graph[record["data"]["id"]] = [(eq["id"], "eq")]
-
-        if self.debug:
             print(f"\n--- {record['data']['id']} ---")
+
         leq = len(record["data"].get("equivalent", []))
         try:
             if self.debug:
@@ -94,29 +93,18 @@ class Reconciler(object):
         cr_equivs = 2
         # Check distinct / sameAs now
         try:
-            while r_equivs == 1 or (not cr_equivs.issubset(r_equivs)):
+            all_seen = set([x["id"] for x in record["data"].get("equivalent", [])])
+            # This should exit when after reconciling and collecting there are no new equivalent IDs to process
+            while r_equivs == 1 or (not cr_equivs.issubset(all_seen)):
+                if r_equivs != 1:
+                    all_seen.update(cr_equivs)
                 self.call_reconcilers(record, reconcileType="uri")
                 r_equivs = set([x["id"] for x in record["data"].get("equivalent", [])])
-                if self.debug:
-                    print(f"r_equivs: {r_equivs}")
-                if cr_equivs == 2 or (not cr_equivs.issubset(r_equivs)):
-                    if self.debug:
-                        print("      (collecting)")
+                if cr_equivs == 2 or (not r_equivs.issubset(all_seen)):
                     self.collector.collect(record)
                     cr_equivs = set(
                         [x["id"] for x in record["data"].get("equivalent", [])]
                     )
-                    if self.debug:
-                        print(f"cr_equivs: {cr_equivs}")
-                    if self.debug:
-                        lg = self.collector.debug_graph
-                        for k, v in lg.items():
-                            try:
-                                self.debug_graph[k].extend(v)
-                            except Exception:
-                                self.debug_graph[k] = v
-                        self.collector.debug_graph = {}
-
         except Exception as e:
             print(
                 f"\nERROR: Reconciling broke for {record['source']}/{record['identifier']}: {e}"
@@ -125,21 +113,37 @@ class Reconciler(object):
         return record
 
     def call_reconcilers(self, record, reconcileType="all"):
+        if not "equivalent" in record["data"]:
+            record["data"]["equivalent"] = []
         ids = [x["id"] for x in record["data"].get("equivalent", [])]
         new_equivs = True
 
         # sameAs is just a reconciler
-        for eq in ids:
+        # Iterate over a snapshot: removing from the live list skipped the
+        # element after each removal, so some ids were never diff-checked.
+        # When two known-distinct entities are both present, keep the
+        # lexicographically smaller one so the outcome is deterministic.
+        dropped = []
+        for eq in list(ids):
+            if eq not in ids:
+                continue
             diffs = self.global_reconciler.reconcile(eq, "diffs")
             if diffs:
-                for d in diffs:
-                    if d in ids:
+                for d in sorted(diffs):
+                    if d in ids and eq in ids and d != eq:
                         print(
                             f"UHOH... Found two distinct entities already in equivalents: {d} and {eq} in {record['data']['id']}"
                         )
-                        # FIXME: Just trash d and hope it's the right one?
-                        # Can we do any better?
-                        ids.remove(d)
+                        loser = max(d, eq)
+                        ids.remove(loser)
+                        dropped.append(loser)
+        if dropped:
+            # The old code only removed from the local list, so the distinct
+            # entity stayed in the record's own equivalents (the actual
+            # output) -- the filter never took effect downstream.
+            record["data"]["equivalent"] = [
+                x for x in record["data"]["equivalent"] if x["id"] not in dropped
+            ]
 
         # [<pipeline.sources.authorities.getty.reconciler.AatReconciler object at 0x7fc89991dbe0>,
         # <pipeline.sources.authorities.lc.reconciler.LcnafReconciler object at 0x7fc8985b7a00>,
@@ -198,8 +202,6 @@ class Reconciler(object):
             if ids:
                 t = record["data"]["type"]
                 lbl = record["data"].get("_label", "")
-                if not "equivalent" in record["data"]:
-                    record["data"]["equivalent"] = []
                 curr = [x["id"] for x in record["data"]["equivalent"]]
                 for i in ids:
                     if not i in curr:

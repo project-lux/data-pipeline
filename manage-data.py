@@ -13,13 +13,13 @@ load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")
 cfgs = Config(basepath=basepath)
 idmap = cfgs.get_idmap()
-all_refs = cfgs.instantiate_map("all_refs")["store"]
-done_refs = cfgs.instantiate_map("done_refs")["store"]
+#all_refs = cfgs.instantiate_map("all_refs")["store"]
+#done_refs = cfgs.instantiate_map("done_refs")["store"]
 cfgs.cache_globals()
 cfgs.instantiate_all()
 
-update_mgr = UpdateManager(cfgs, idmap)
-ref_mgr = ReferenceManager(cfgs, idmap)
+#update_mgr = UpdateManager(cfgs, idmap)
+#ref_mgr = ReferenceManager(cfgs, idmap)
 
 
 ### LOAD DATABASES
@@ -58,6 +58,15 @@ if "--load" in sys.argv:
         my_slice = int(sys.argv[1])
         max_slice = int(sys.argv[2])
         cfgs.external["wikidata"]["loader"].load(my_slice, max_slice)
+    if "--orcid" in sys.argv:
+        # Slices are optional here: the summaries archive is one gzip stream,
+        # so a worker still walks all of it and only the per-record work is
+        # divided. Worth it via import_parallel.sh on a big machine, but a
+        # single process (no slice arguments) loads the whole thing too.
+        if len(sys.argv) > 2 and sys.argv[1].isnumeric() and sys.argv[2].isnumeric():
+            cfgs.external["orcid"]["loader"].load(int(sys.argv[1]), int(sys.argv[2]))
+        else:
+            cfgs.external["orcid"]["loader"].load()
 
 ### LOAD INDEXES
 if "--load-index" in sys.argv:
@@ -232,18 +241,35 @@ if "--nt" in sys.argv:
     rc = cfgs.results["merged"]["recordcache"]
     # FIXME: this path should go to config
     with gzip.open(f"/data-export/output/lux/nt/lux_{my_slice}.nt.gz", "wt", 1) as fh:
+        # Iterate whole records rather than keys-then-fetch-each-key: the rows
+        # arrive in the server-side cursor that found them, so this drops a
+        # round trip per record -- tens of millions of them. Nothing here
+        # writes back, so there is no reason to go and re-read each row.
+        #
+        # The jsonb -> dict parse already runs through ujson: postgres.py
+        # registers it as the global jsonb loads, so raw=True plus an explicit
+        # ujson.loads would be the same work in a different place. It only
+        # pays where the JSON is passed straight through unparsed, as in
+        # run-export.py, and the mapper needs the dict.
         if my_slice == -1:
-            itr = rc.iter_keys()
+            itr = rc.iter_records()
         else:
-            itr = rc.iter_keys_slice(my_slice, max_slice)
+            itr = rc.iter_records_slice(my_slice, max_slice)
 
         x = 0
         start = time.time()
-        for recid in itr:
-            rec = rc[recid]
-            res = mpr.transform(rec)
-            for r in res:
-                fh.write(f"{r}\n")
+        for rec in itr:
+            try:
+                res = mpr.transform(rec)
+            except Exception as e:
+                # One unmappable record used to end the whole slice's export
+                print(f"*** {rec.get('yuid', '?')} failed in the qlever mapper: {e}")
+                continue
+            # One write per record rather than one per triple: there are tens
+            # of triples each, and every write goes through gzip
+            if res:
+                fh.write("\n".join(res))
+                fh.write("\n")
             x += 1
             if not x % 100000:
                 print(f"{x} {time.time() - start}")
@@ -265,7 +291,8 @@ if "--clean-idmap" in sys.argv:
         kill = False
         for v in val:
             if v.startswith("__"):
-                if v.startswith("__2024"):
+                d = int(v[2:10])
+                if d < 20260600:
                     kill = True
                 done = True
                 break
@@ -363,22 +390,63 @@ if "--clear" in sys.argv:
         c = cfgs.results[src][ctype]
         c.clear()
 
+### MAINTAIN DATABASES
+
+
+def _maintenance_caches():
+    """Every cache the vacuum, bloat and rewrite commands walk."""
+    for cfgset, types in (
+        (cfgs.internal, ["datacache", "recordcache", "recordcache2"]),
+        (cfgs.external, ["datacache", "recordcache", "recordcache2"]),
+        (cfgs.results, ["recordcache", "recordcache2"]),
+    ):
+        for c in cfgset.values():
+            for t in types:
+                if t in c and c[t] is not None:
+                    yield c["name"], t, c[t]
+
+
+def _named_cache(name):
+    """Resolve a `<source>_<cachetype>` argument, as --clear takes."""
+    (src, ctype) = name.split("_", 1)
+    for cfgset in (cfgs.internal, cfgs.external, cfgs.results):
+        if src in cfgset and ctype in cfgset[src] and cfgset[src][ctype] is not None:
+            return cfgset[src][ctype]
+    return None
+
+
 if "--vacuum" in sys.argv or "--optimize" in sys.argv:
-    for c in cfgs.internal.values():
-        for t in ["datacache", "recordcache", "recordcache2"]:
-            if t in c and c[t] is not None:
-                print(f"{c['name']}/{t}...")
-                c[t].optimize()
-    for c in cfgs.external.values():
-        for t in ["datacache", "recordcache", "recordcache2"]:
-            if t in c and c[t] is not None:
-                print(f"{c['name']}/{t}...")
-                c[t].optimize()
-    for c in cfgs.results.values():
-        for t in ["recordcache", "recordcache2"]:
-            if t in c and c[t] is not None:
-                print(f"{c['name']}/{t}...")
-                c[t].optimize()
+    # VACUUM (ANALYZE, FREEZE) per table. Reports what each one is carrying
+    # first: vacuuming zeroes the dead tuple count, and it is the number that
+    # says whether the table wants a --rewrite as well.
+    for name, t, cache in _maintenance_caches():
+        print(f"{name}/{t}...")
+        cache.optimize()
+
+if "--bloat" in sys.argv:
+    # Report only: which tables are holding space VACUUM cannot give back
+    for name, t, cache in _maintenance_caches():
+        print(cache.bloat_line())
+
+if "--drop-time-indexes" in sys.argv:
+    # One-off DDL: remove the insert_time index from every cache that has no
+    # query for it. The data caches keep theirs -- latest() reads it.
+    for name, t, cache in _maintenance_caches():
+        cache.drop_time_index()
+
+if "--rewrite" in sys.argv:
+    # CLUSTER one named table, eg --rewrite orcid_datacache. Takes an
+    # exclusive lock on it for the duration and needs as much free disk as the
+    # table occupies, so it names its target rather than walking the config.
+    ridx = sys.argv.index("--rewrite")
+    if len(sys.argv) <= ridx + 1:
+        print("--rewrite needs a cache, eg --rewrite orcid_datacache")
+    else:
+        cache = _named_cache(sys.argv[ridx + 1])
+        if cache is None:
+            print(f"No such cache: {sys.argv[ridx + 1]}")
+        else:
+            cache.rewrite()
 
 
 if "--counts" in sys.argv:
@@ -414,7 +482,10 @@ if "--counts" in sys.argv:
                 print(f"{c['name']} {t}: {pref}{est}")
                 ttl += est
     print(f"Total in Postgres: {ttl}")
-    print(f"idmap: {len(idmap)}")
+    # ~ because the postgres backend answers len() from the catalog estimate:
+    # an exact count is a full scan of ~100M rows, and every other caller of
+    # len() only wants to know whether the map has anything in it
+    print(f"idmap: ~{len(idmap):,}")
     print(f"references found: {len(all_refs)}")
     print(f"references done: {len(done_refs)}")
 

@@ -1,5 +1,6 @@
 import os
 from .storage.cache.filesystem import FsCache
+from .storage.uricache import URICache, _MISSING
 
 
 # c.f. https://github.com/cheshire3/cheshire3/blob/develop/cheshire3/dynamic.py#L43
@@ -53,6 +54,14 @@ class Config(object):
         self.globals_cfg = {}
         self.validator = None
         self.configcache = None
+        # Flattened (match, source) pairs; built lazily on first split_uri()
+        self._match_pairs = None
+        # canonicalize() is a pure function of the URI (the fix_identifier
+        # implementations it reaches are all plain string manipulation) and
+        # gets called tens of times per record on a small set of repeating
+        # URIs. Bounded so memory stays predictable across parallel workers;
+        # invalidated wherever _match_pairs is.
+        self._canon_cache = URICache(capacity=100000)
 
         # This (thus) needs a directory called 'config_cache'
         if configcache:
@@ -194,12 +203,44 @@ class Config(object):
         else:
             return uri
 
-    def split_uri(self, uri, sources=[]):
-        source = None
-        uri = self.pre_split_fix_uri(uri)
-        if not sources:
-            sources = [*self.internal.values(), *self.external.values()]
+    def build_match_index(self):
+        # Flatten every source's `matches` into one ordered tuple, in exactly
+        # the order split_uri() used to walk them: internal sources first,
+        # then external, each source's own matches in config order. First
+        # match still wins, so selection is unchanged -- this only avoids
+        # rebuilding the source list and re-checking `matches` on every call.
+        # Call this again (or set _match_pairs = None) if sources or their
+        # `matches` are ever changed after config load.
+        pairs = []
+        for s in [*self.internal.values(), *self.external.values()]:
+            ms = s.get("matches", [])
+            if type(ms) != list:
+                ms = [ms]
+            for m in ms:
+                pairs.append((m, s))
+        self._match_pairs = tuple(pairs)
+        # canonicalize()'s answers depend on these pairs, so they go too
+        self._canon_cache.clear()
+        return self._match_pairs
 
+    def _finish_split(self, uri, m, source):
+        try:
+            identifier = uri.rsplit(m, 1)[1]
+        except:
+            print(f"Failed in split_uri() m: {m} source: {source['name']}")
+            return None
+        if identifier.startswith("http://") or identifier.startswith("https://"):
+            # Urgh, fix double wrapping
+            return self.split_uri(identifier)
+        identifier = self.fix_identifier(source, identifier)
+        if not identifier:
+            return None
+        else:
+            return source, identifier
+
+    def _split_uri_scan(self, uri, sources):
+        # Explicit-sources path: the index doesn't apply, walk what we're given
+        source = None
         for s in sources:
             ms = s.get("matches", [])
             if type(ms) != list:
@@ -210,24 +251,34 @@ class Config(object):
                     break
             if source:
                 break
-        if source:
-            try:
-                identifier = uri.rsplit(m, 1)[1]
-            except:
-                print(f"Failed in split_uri() m: {m} source: {s['name']}")
-                return None
-            if identifier.startswith("http://") or identifier.startswith("https://"):
-                # Urgh, fix double wrapping
-                return self.split_uri(identifier)
-            identifier = self.fix_identifier(source, identifier)
-            if not identifier:
-                return None
-            else:
-                return source, identifier
-        else:
+        if not source:
             return None
+        return self._finish_split(uri, m, source)
+
+    def split_uri(self, uri, sources=[]):
+        uri = self.pre_split_fix_uri(uri)
+        if sources:
+            return self._split_uri_scan(uri, sources)
+        pairs = self._match_pairs
+        if pairs is None:
+            pairs = self.build_match_index()
+        for m, source in pairs:
+            if m in uri:
+                return self._finish_split(uri, m, source)
+        return None
 
     def canonicalize(self, uri):
+        # ~7us of string work, called tens of times per record on a heavily
+        # repeating set of URIs. The sentinel matters: None is a real result
+        # here (an unmatched URI) and is worth caching.
+        hit = self._canon_cache.get(uri)
+        if hit is not _MISSING:
+            return hit
+        result = self._canonicalize(uri)
+        self._canon_cache.put(uri, result)
+        return result
+
+    def _canonicalize(self, uri):
         for bad, good in self.external_uri_rewrites.items():
             if bad in uri:
                 uri = uri.replace(bad, good)

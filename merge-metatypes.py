@@ -3,7 +3,8 @@ import os
 import sys
 import json
 
-files = glob.glob("metatypes-*.json")
+# sorted so per-key metatype list order doesn't depend on filesystem order
+files = sorted(glob.glob("metatypes-*.json"))
 
 mt = {}
 

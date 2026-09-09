@@ -1,3 +1,9 @@
+import os
+import traceback
+
+from pipeline.process import timing
+
+
 class Acquirer(object):
     def __init__(self, config):
         self.config = config
@@ -23,10 +29,15 @@ class Acquirer(object):
     def returns_multiple(self, record=None):
         return self.mapper.returns_multiple(record)
 
-    def do_fetch(self, identifier, store=True, refetch=False):
+    def do_fetch(self, identifier, store=True, refetch=False, data=None):
         rec = None
         if not refetch:
-            rec = self.datacache[identifier]
+            # A caller streaming the datacache already holds the row -- see
+            # run-reconcile, which iterates records rather than keys -- so
+            # take it instead of SELECTing the same row back a second time.
+            # Only the cached path can be supplied this way: refetch means
+            # "go to the network", which no caller can hand us.
+            rec = data if data is not None else self.datacache[identifier]
             if rec is not None:
                 return rec
 
@@ -85,17 +96,20 @@ class Acquirer(object):
                 print(f"Post Mapping killed {rectype} record {self.name}/{identifier}")
         return rec3
 
-    def acquire_all(self, identifier, store=True):
+    def acquire_all(self, identifier, store=True, data=None):
         if not self.mapper.returns_multiple():
             return None
-        data = self.acquire(identifier, None, True, False, False)
+        # dataonly, so what comes back is the datacache row -- the same thing
+        # `data` is when a caller supplies one
+        data = self.acquire(identifier, None, True, False, False, data=data)
         recs = self.mapper.transform_all(data)
         result = []
         for rec in recs:
             result.append(self.do_post_map(rec, rec["data"]["type"], store))
         return result
 
-    def acquire(self, identifier, rectype=None, dataonly=False, store=True, reference=False, refetch=False):
+    def acquire(self, identifier, rectype=None, dataonly=False, store=True, reference=False, refetch=False,
+                data=None):
         # Given an identifier, ensure that datacache and recordcache are populated
         # Return resulting record
 
@@ -107,16 +121,28 @@ class Acquirer(object):
 
         # Return already built record
         if not dataonly and not reference and not refetch:
-            rec = self.recordcache[identifier]
-            if rec is not None:
-                return rec
-            elif rectype is not None and self.config["type"] == "external":
+            # Both forms of the identifier in one query: this was two SELECTs,
+            # and on the cold path both of them miss. The bare identifier
+            # still wins when both are present.
+            keys = [identifier]
+            if rectype is not None and self.config["type"] == "external":
                 qrecid = self.configs.make_qua(identifier, rectype)
-                rec = self.recordcache[qrecid]
-                if rec is not None:
-                    return rec
+                if qrecid != identifier:
+                    keys.append(qrecid)
+            with timing.stage("acquire.cache_hit"):
+                if len(keys) == 1:
+                    rec = self.recordcache[identifier]
+                    if rec is not None:
+                        return rec
+                else:
+                    found = self.recordcache.get_multi(keys)
+                    for k in keys:
+                        rec = found.get(k)
+                        if rec is not None:
+                            return rec
 
-        rec = self.do_fetch(identifier, store, refetch)
+        with timing.stage("acquire.fetch"):
+            rec = self.do_fetch(identifier, store, refetch, data=data)
         if dataonly or rec is None:
             return rec
 
@@ -134,10 +160,18 @@ class Acquirer(object):
                 rectype = rec["data"]["type"]
 
         try:
-            rec2 = self.mapper.transform(rec, rectype, reference=reference)
+            with timing.stage("acquire.map"):
+                rec2 = self.mapper.transform(rec, rectype, reference=reference)
         except Exception as e:
             # raise
-            print(f"Failed to map record {identifier} for {self.name}: {e}")
+            # The message alone doesn't say where it came from -- "'xml'" or
+            # "not enough values to unpack" could be anywhere in a mapper and
+            # its whole dependency tree, so working one out meant reading the
+            # mapper looking for candidates. The innermost frame is one short
+            # field and answers it outright.
+            tb = traceback.extract_tb(e.__traceback__)
+            where = f" [{os.path.basename(tb[-1].filename)}:{tb[-1].lineno}]" if tb else ""
+            print(f"Failed to map record {identifier} for {self.name}: {e}{where}")
             return None
 
         if rec2 is None:
@@ -149,5 +183,7 @@ class Acquirer(object):
         if reference:
             return rec2
 
-        rec3 = self.do_post_map(rec2, rec2["data"]["type"], store=store)
+        # writes the mapped record back to the recordcache when store is set
+        with timing.stage("acquire.post_map"):
+            rec3 = self.do_post_map(rec2, rec2["data"]["type"], store=store)
         return rec3

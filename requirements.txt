@@ -11,9 +11,10 @@ dateparser
 shapely
 lxml
 jsonschema
-lmdbm>=0.0.6
+lmdb>=1.4.1
 sqlitedict
 numpy
 bs4
 python-dotenv
 pyluach
+py-yaml

@@ -26,15 +26,23 @@ class AatReconciler(LmdbReconciler):
             cxns = nm.get("classified_as", [])
             langs = nm.get("language", [])
             if aat_primaryName in [cx["id"] for cx in cxns] and "content" in nm:
-                # primary name with value
-                val = nm["content"]
+                # primary name with value. Keys must always be lowercased --
+                # the name index is built lowercased, so the previous
+                # original-case fallback silently never matched. And the old
+                # loop overwrote the matched language priority with 3 on
+                # every later non-matching language.
+                val = self.clean_names(nm["content"])
                 langids = [lng["id"] for lng in langs]
-                for lang_id, num in check_langs.items():
+                num = None
+                for lang_id, n in check_langs.items():
                     if lang_id in langids:
-                        val = nm["content"].lower().strip()
-                        vals[val] = num
-                    else:
-                        vals[val] = 3
+                        num = n
+                        break
+                if num is None:
+                    num = len(check_langs) + 1
+                # keep the best (lowest) priority seen for this name
+                if val not in vals or num < vals[val]:
+                    vals[val] = num
         return vals
 
     def should_reconcile(self, rec, reconcileType="all"):

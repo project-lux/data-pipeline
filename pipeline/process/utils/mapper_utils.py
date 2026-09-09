@@ -1,3 +1,4 @@
+import functools
 import re
 import time
 from datetime import datetime, timedelta
@@ -22,7 +23,14 @@ except Exception:
 
 default_dt = datetime.strptime("0001-01-01T00:00:00", "%Y-%m-%dT%H:%M:%S")
 dp_settings = {"PREFER_DAY_OF_MONTH": "first", "PREFER_DATES_FROM": "past"}
-dp_parser = DateDataParser(settings=dp_settings)
+# Without an explicit list, DateDataParser re-derives which of dateparser's
+# 205 locales apply to each string and rebuilds their split regexes -- 14ms
+# per call, and the bulk of the reconcile profile. Naming the languages we
+# actually expect makes it 0.37ms. Every code here must be one dateparser
+# knows: an unsupported one (e.g. "la") raises at construction, not at parse.
+dp_languages = ["en", "fr", "de", "nl", "es", "it", "pt", "ru",
+                "ja", "zh", "ar", "he", "sv", "da", "pl", "cs", "tr"]
+dp_parser = DateDataParser(languages=dp_languages, settings=dp_settings)
 bcdate_re = re.compile(r"(.+?)\s+(B\.?C\.?(?:E\.?)?|BCE)", re.IGNORECASE)
 np_precisions = ["", "Y", "M", "D", "h", "m", "s"]  # number of -s in the string
 max_life_delta = np.datetime64("2122-01-01") - np.datetime64("2000-01-01")
@@ -238,7 +246,13 @@ def process_np_datetime(dt, value):
     return (start, end)
 
 
+@functools.lru_cache(maxsize=200000)
 def make_datetime(value, precision=""):
+    # Memoised: date strings repeat heavily across records, and the fallback
+    # path through dateparser/edtf costs milliseconds per call. Safe to cache
+    # -- every return is None or a tuple of strings, so nothing shared here
+    # can be mutated by a caller.
+
     # given a date / datetime string
     # and maybe a precision from wikidata
     # return (begin, end) range
@@ -295,9 +309,12 @@ def make_datetime(value, precision=""):
 
     # 197208 --> 1972-08
     if len(value) == 6 and value.isnumeric():
-        value = f"{value[:4]}-{value:4:}"
+        value = f"{value[:4]}-{value[4:]}"
 
-    if value[0] == "-" and value[1].isnumeric():
+    # len check: the rewrites above can leave a one-character value, and
+    # value[1] on it is an IndexError out of make_datetime -- the caller
+    # loses the whole record over a date of "-"
+    if len(value) > 1 and value[0] == "-" and value[1].isnumeric():
         # -1
         try:
             dt = np.datetime64(value)
@@ -403,6 +420,14 @@ def make_datetime(value, precision=""):
                 except Exception as e:
                     print(f"EDTF couldn't process {ed_value}; ignoring")
                     return None
+            # EDTF hands back +/-inf, a float, for an open-ended interval
+            # ("1980/..", "../1980", an unknown section) rather than a
+            # struct_time. There is no concrete instant to return for one, and
+            # reading .tm_year off a float raised straight out of
+            # make_datetime -- which cost the caller its ENTIRE record, not
+            # just this date. Treat it like the garbage check below.
+            if not hasattr(begin, "tm_year") or not hasattr(end, "tm_year"):
+                return None
             if end.tm_year == 9999 or begin.tm_year == 0:
                 # garbage
                 return None
@@ -436,7 +461,13 @@ def make_datetime(value, precision=""):
                 dt3 = dp_parser.get_date_data(value)
                 if not dt3 or not dt3.date_obj:
                     dt3 = dp_parser.get_date_data(initialValue)
-                if dt3.period == "day" and dt3.locale != "en":
+                # date_obj is checked here as well as above: the retry on
+                # initialValue can also come back without one, and
+                # `None + timedelta` was ~150 log lines per worker per phase
+                # ("unsupported operand type(s) for +: 'NoneType' and
+                # 'datetime.timedelta'"). Same outcome as the else below --
+                # unparsable -- just without the exception.
+                if dt3 and dt3.date_obj and dt3.period == "day" and dt3.locale != "en":
                     begin = dt3.date_obj
                     end = begin + timedelta(days=1)
                 elif dt3:
@@ -451,9 +482,20 @@ def make_datetime(value, precision=""):
                 return None
 
     if not precision:
-        # Now we will have begin
-        prec_dt = dp_parser.get_date_data(value)
-        if prec_dt.date_obj:
+        # Now we will have begin.
+        # dateparser raises on some malformed input -- a timezone offset
+        # outside +/-24h is the one seen in the wild ("offset must be a
+        # timedelta strictly between..."). Only the PRECISION is at stake
+        # here; `begin` is already parsed, and the branch below derives the
+        # precision from it. Losing the whole record over this was a bad
+        # trade, and the sibling call in the EDTF fallback above is already
+        # wrapped.
+        try:
+            prec_dt = dp_parser.get_date_data(value)
+        except Exception as e:
+            print(f"dateparser couldn't judge precision of {initialValue}: {e}")
+            prec_dt = None
+        if prec_dt is not None and prec_dt.date_obj:
             prec = prec_dt.period[0].upper()
             if prec == "D":
                 # check for HH:MM:SS
@@ -481,6 +523,15 @@ def make_datetime(value, precision=""):
         prec = precision
 
     l = {"D": 10, "M": 7, "Y": 4, "h": 13, "m": 16, "s": 19}[prec]
+
+    # dateutil will build a datetime from an offset it cannot then format --
+    # "+25:00" parses, and isoformat() raises "offset must be a timedelta
+    # strictly between -timedelta(hours=24) and timedelta(hours=24)", which
+    # cost the caller its whole record. Nothing is lost by dropping it: l is
+    # at most 19 ("YYYY-MM-DDTHH:MM:SS"), so the offset is truncated off the
+    # output either way.
+    if getattr(begin, "tzinfo", None) is not None:
+        begin = begin.replace(tzinfo=None)
 
     if is_bce_date:
         dt = np.datetime64("-" + begin.isoformat()[:l])

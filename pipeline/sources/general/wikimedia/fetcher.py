@@ -5,7 +5,7 @@ class WmFetcher(Fetcher):
     def __init__(self, config):
         Fetcher.__init__(self, config)
         # Just allow it always as otherwise new images won't show
-        self.enabled = True
+        self.enabled = False
         self.session.headers["User-Agent"] = (
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
         )

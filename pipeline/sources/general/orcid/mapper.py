@@ -42,16 +42,23 @@ class OrcidMapper(Mapper):
         return model.Person
 
     def get_dom(self, record):
+        ident = record.get("identifier", "?")
+        xml = record.get("data", {}).get("xml")
+        if not xml:
+            # The cached record has no xml payload. This used to be a bare
+            # KeyError('xml') printed by the caller as just `'xml'` -- around
+            # 2000 lines per worker with no indication of which record, which
+            # source, or what was wrong. Nothing to map either way.
+            # print(f"orcid {ident}: no xml in the cached record; skipping")
+            return None
         try:
-            dom = etree.XML(record["data"]["xml"].encode("utf-8"))
+            # str from the cache, bytes if it came straight off the wire
+            dom = etree.XML(xml.encode("utf-8") if isinstance(xml, str) else xml)
         except Exception as e:
-            print(e)
-            try:
-                dom = etree.XML(record["data"]["xml"])
-            except:
-                # Some records are garbage HTML?
-                # Need to refresh from dump?
-                return None
+            # Some records are garbage HTML?
+            # Need to refresh from dump?
+            print(f"orcid {ident}: could not parse xml: {e}")
+            return None
         return dom
 
     def get_text(self, node, path):
@@ -108,7 +115,14 @@ class OrcidMapper(Mapper):
         dom = self.get_dom(record)
         if dom is None:
             return None
-        rec = dom.xpath("/record:record", namespaces=self.nss)[0]
+        # [0] on an empty xpath is "list index out of range", which killed the
+        # record with no clue that the document simply wasn't a record:record
+        # (an error/summary document, or a different namespace)
+        recs = dom.xpath("/record:record", namespaces=self.nss)
+        if not recs:
+            print(f"orcid {record.get('identifier', '?')}: xml has no record:record root; skipping")
+            return None
+        rec = recs[0]
 
         orcid = self.get_text(rec, "./common:orcid-identifier/common:uri")
         firstname = self.get_text(rec, "./person:person/person:name/personal-details:given-names")
@@ -206,16 +220,23 @@ class OrcidMapper(Mapper):
                     top.subject_of = lo
 
             ### Activities
-            acts = rec.xpath("./activities:activities-summary", namespaces=self.nss)[0]
+            # A record with no activities-summary at all is perfectly normal
+            # (a private or freshly-created profile). [0] made it "list index
+            # out of range" and threw away the name and biography we had
+            # already built.
+            acts = rec.xpath("./activities:activities-summary", namespaces=self.nss)
+            acts = acts[0] if acts else None
+
+            def act_xpath(path):
+                return acts.xpath(path, namespaces=self.nss) if acts is not None else []
 
             # We don't care about works, peer-reviews, invited position, education, qualification
             # service, research-resources
 
             # Distinctions: To a statement
             # role-title (organization ; start-date - end-date)
-            for dist in acts.xpath(
-                "./activities:distinctions/activities:affiliation-group/distinction:distinction-summary",
-                namespaces=self.nss,
+            for dist in act_xpath(
+                "./activities:distinctions/activities:affiliation-group/distinction:distinction-summary"
             ):
                 role = self.get_text(dist, "./common:role-title")
                 if not role:
@@ -249,8 +270,8 @@ class OrcidMapper(Mapper):
                 top.referred_to_by = vocab.Note(content=f"{role}{parend}")
 
             # Employment: member_of for latest
-            for empl in acts.xpath(
-                "./activities:employments/activities:affiliation-group/employment:employment-summary", namespaces=self.nss
+            for empl in act_xpath(
+                "./activities:employments/activities:affiliation-group/employment:employment-summary"
             ):
                 # selm = empl.xpath('./common:start-date', namespaces=self.nss)
                 # eelm = empl.xpath('./common:end-date', namespaces=self.nss)
@@ -265,8 +286,8 @@ class OrcidMapper(Mapper):
                     top.member_of = model.Group(ident=orgId, label=orgName)
 
             # Membership: member_of
-            for memb in acts.xpath(
-                "./activities:memberships/activities:affiliation-group/membership:membership-summary", namespaces=self.nss
+            for memb in act_xpath(
+                "./activities:memberships/activities:affiliation-group/membership:membership-summary"
             ):
                 orgName = self.get_text(memb, "./common:organization/common:name")
                 orgId = self.get_text(

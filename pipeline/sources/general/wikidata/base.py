@@ -53,6 +53,7 @@ class WdConfigManager(object):
             "P5587": "snl",  # Sweden
             "P8714": "gadm",
             "P6108": "iiif",
+            "P10283": "openalex"
         }
         self.different_prop = "P1889"
         self.instance_of_prop = "P31"

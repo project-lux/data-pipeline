@@ -8,7 +8,7 @@ if [ ! -n "$1" ]
 then
   echo "Usage: `basename $0` --all|--[source]"
   exit 0
-fi 
+fi
 
 echo "Did you clear and update the token?"
 echo "    python ./manage-data --clear-all --new-token"
@@ -57,6 +57,16 @@ done
 rm ../data/logs/flags/reconcile_is_done*txt
 
 sleep 30
+
+### Resolve identity map deterministically from the logged assertions
+echo "Resolving identity map"
+python ./run-identify.py > ../data/logs/identify.txt 2>&1
+if [[ $? -ne 0 ]]
+then
+    echo "Error in Identify!"
+    echo `date` [Error] Error in identify >> /data/logs/pipeline_process_status.txt
+    exit
+fi
 
 ### Merge metatypes
 echo "Merging Metatypes"

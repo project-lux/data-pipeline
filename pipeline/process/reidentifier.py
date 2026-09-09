@@ -1,4 +1,14 @@
 class Reidentifier(object):
+    # Prefetched {qua_key: yuid_or_None} for the record currently being
+    # processed, populated by prefetch() at the top of each record tree.
+    # Class-level defaults so partially-built instances (tests construct via
+    # object.__new__) still work; batch is always rebound, never mutated.
+    batch = {}
+    # Count of lookups that missed the batch and had to go to the idmap. A
+    # non-zero value means _node_keys has drifted out of step with
+    # process_entity: still correct, but a round trip per miss.
+    batch_misses = 0
+
     def __init__(self, configs, idmap):
         self.configs = configs
         self.ignore_ns = []
@@ -39,6 +49,109 @@ class Reidentifier(object):
             t = record.get("type", "")
             slug = self.configs.ok_record_types.get(t, "unknown")
         return slug
+
+    ### Batched idmap lookups ###
+    # process_entity used to issue one blocking idmap lookup per node, so a
+    # record with ~100 references cost ~100 sequential round trips. Instead
+    # walk the record first to collect every key it will need, resolve them
+    # in one pipelined request, and have process_entity read the answers
+    # from that batch. Two round trips per record instead of ~100.
+    #
+    # This is only sound because the idmap is read-only outside
+    # run-identify.py -- see the note in process_entity. Do not reuse the
+    # batch in a phase that mints.
+
+    def _node_keys(self, node, qcls, top=False):
+        """The idmap keys process_entity will look up for THIS node alone.
+
+        Returns (keys, recurse). keys is empty wherever process_entity
+        short-circuits before any lookup; recurse is False only in the one
+        case where it returns None, which stops _reidentify descending.
+        MUST stay in step with process_entity."""
+        recid = node.get("id", "")
+        if not recid:
+            # bnode-with-equivalents (early return) or nothing to do: no
+            # lookups either way, but _reidentify still descends
+            return (), True
+        for dnri in self.do_not_reidentify:
+            if dnri in recid:
+                return (), True
+        redir = self.redirects.get(recid)
+        if redir:
+            recid = redir
+        if not top or not qcls:
+            qcls = node.get("type", None)
+            if not qcls:
+                # process_entity returns None
+                return (), False
+        try:
+            keys = [self.configs.make_qua(recid, qcls)]
+            for eq in node.get("equivalent", []):
+                if type(eq) == dict and "id" in eq:
+                    keys.append(self.configs.make_qua(eq["id"], qcls))
+        except ValueError:
+            # unknown type: let the real pass raise where it does today
+            return (), True
+        return keys, True
+
+    def _collect_keys(self, node, qcls, keys, top=False):
+        node_keys, recurse = self._node_keys(node, qcls, top)
+        keys.update(node_keys)
+        if not recurse:
+            return keys
+        # recurse exactly as _reidentify does
+        for k, v in node.items():
+            if k in ("id", "equivalent") or k in self.ignore_props:
+                continue
+            if type(v) == dict:
+                v = [v]
+            elif type(v) != list:
+                continue
+            for i in v:
+                if type(i) == dict:
+                    self._collect_keys(i, i.get("type", None), keys)
+        return keys
+
+    def prefetch(self, record, rectype=None):
+        """Every idmap key this record needs, in two round trips. Returns
+        {key: value_or_None}; {} means batching is off for this record and
+        every lookup falls back to the live idmap."""
+        mget = getattr(self.idmap, "get_multi", None)
+        if mget is None:
+            # memory IdMap, test stubs
+            return {}
+        try:
+            keys = self._collect_keys(record, rectype, set(), top=True)
+            if not keys:
+                return {}
+            batch = mget(keys)
+            # The top-level branch of process_entity also reads the member
+            # set of the resolved YUID. That key isn't known until the
+            # strings above resolve, so it needs a second hop; mirror the
+            # same choice the real pass makes -- the record's own key first
+            # (_node_keys puts it at index 0), equivalents only as fallback.
+            # A mismatch here is only a wasted round trip, but keeping the
+            # two rules written the same way is what stops it drifting.
+            top_keys, _ = self._node_keys(record, rectype, top=True)
+            uu = batch.get(top_keys[0]) if top_keys else None
+            if uu is None:
+                uus = {batch[k] for k in top_keys if batch.get(k)}
+                uu = min(uus) if uus else None
+            if uu is not None:
+                batch.update(mget([uu]))
+            return batch
+        except Exception as e:
+            print(f"reidentifier prefetch failed ({e}); using per-node lookups")
+            return {}
+
+    def _lookup(self, key):
+        """Prefetched value if this record's batch has it, else a live
+        lookup. A miss is correct but costs a round trip, so count it."""
+        try:
+            return self.batch[key]
+        except KeyError:
+            self.batch_misses += 1
+            return self.idmap[key]
 
     def process_entity(self, record, qcls=None, top=False):
         result = {}
@@ -86,7 +199,7 @@ class Reidentifier(object):
                 uu = None
                 for eq in equivs:
                     qeq = self.configs.make_qua(eq, qcls)
-                    myqeq = self.idmap[qeq]
+                    myqeq = self._lookup(qeq)
                     if myqeq is not None:
                         equiv_map[eq] = myqeq
                     else:
@@ -95,10 +208,11 @@ class Reidentifier(object):
                         pass
 
             if recid:
-                uu = self.idmap[qrecid]
+                uu = self._lookup(qrecid)
                 if uu is not None:
                     # We know about this entity/record already
-                    uu = self.idmap[qrecid]
+                    # 2026-07-30 -- RS: WHY was this called twice??
+                    # uu = self.idmap[qrecid]
                     equiv_map[recid] = uu
 
             if not equiv_map:
@@ -107,25 +221,47 @@ class Reidentifier(object):
                 print(f"\n!!! reidentifier couldn't find YUID for {recid} --> {equivs}")
                 return result
             else:
-                # We have something from the data
-                uus = set(list(equiv_map.values()))
-                uu = uus.pop()
-                if len(uus):
+                # The record's OWN assignment wins. min() over the whole
+                # equiv_map -- the record's YUID plus one per equivalent --
+                # let an equivalent outvote the record itself whenever the
+                # two disagreed, which handed back a YUID this record is not
+                # a member of. That is not just a wrong id: merge writes the
+                # rewritten row under it, so a worker building cluster X
+                # would write a row keyed Y, in a table another worker owns.
+                # Two workers then upsert the same primary key and postgres
+                # kills one with `deadlock detected` -- and no amount of
+                # partitioning by YUID upstream can prevent it, because the
+                # write has left the cluster it belongs to.
+                #
+                # The disagreement is not exotic: run-identify refuses
+                # assertions that violate a differentFrom (it logs them to
+                # identity_conflicts.jsonl), so a record's equivalents
+                # spanning two clusters is a designed-for outcome.
+                uus = set(equiv_map.values())
+                uu = equiv_map.get(recid)
+                if uu is None:
+                    # not in the idmap under its own id: fall back to the
+                    # equivalents, deterministically
+                    uu = min(uus)
+                if len(uus) > 1:
                     # This also shouldn't happen
                     if self.debug:
                         print(f"Found more than one YUID for {recid} / {equivs}")
                 elif not recid in equiv_map:
-                    # If recid not in equiv map, then this is a new main id for the same entity
-                    # Seems unlikely, but possible
-                    if self.debug:
-                        print(f"Found YUID only via equivs, not recid {recid} / {equivs}")
-                    self.idmap[qrecid] = uu
+                    # recid not in idmap but its equivalents are: a gap in
+                    # the identify phase. The idmap is read-only outside
+                    # run-identify.py -- writing here from 24 racing merge
+                    # workers would reintroduce nondeterministic identity
+                    # mutations. Use the resolved YUID for output and log
+                    # the gap durably so identify can be fixed instead.
+                    print(f"IDMAP-GAP: {qrecid} resolved to {uu} only via "
+                          f"equivalents; identify phase did not register it")
 
             # And set up the URI on the way out
             result["id"] = uu
 
             if top:
-                all_equivs = self.idmap[uu]
+                all_equivs = self._lookup(uu)
                 if not all_equivs:
                     print(f"\n!!! Found missing yuid: {uu} from: {recid} / {equivs}")
                     all_equivs = []
@@ -156,6 +292,10 @@ class Reidentifier(object):
         return result
 
     def _reidentify(self, record, rectype=None, top=False):
+        if top:
+            # single entry point for a whole record tree: batch every idmap
+            # lookup the walk below will need
+            self.batch = self.prefetch(record, rectype)
         result = self.process_entity(record, rectype, top)
         if result is None:
             return result

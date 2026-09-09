@@ -24,7 +24,29 @@ class FsCache(object):
         l.sort()
         return l
 
+    # Write batching API, matching postgres.PooledCache. There is no
+    # transaction here -- set() writes the file and that's that -- so these
+    # are no-ops, present so callers can batch against any cache backend
+    # without checking which one they have.
+    def defer_commits(self, every=100):
+        pass
+
+    def resume_commits(self):
+        pass
+
+    def checkpoint(self):
+        pass
+
+    def end_read(self):
+        pass
+
+    def flush(self):
+        pass
+
     def has_item(self, key):
+        # apply the same slash replacement as set()/get(); without it any
+        # identifier containing '/' was reported absent
+        key = key.replace('/', self.slash_replacement)
         if not key.endswith(self.suffix):
             key = key + self.suffix
         fn = os.path.join(self.directory, key)
@@ -43,14 +65,19 @@ class FsCache(object):
         else:
             return None
 
-    def get(self, key):
+    def get(self, key, raw=False):
         key2 = key.replace('/', self.slash_replacement)
         if not key2.endswith(self.suffix):
             key2 = key2 + self.suffix
 
         js = self._read_file(key2)
         if js is not None:
-            return {self.key: key, 'data': js, 'source': self.source, 'insert_time':'', 'record_time':''}
+            # raw means "data is JSON text, not parsed objects"; postgres
+            # gets that for free from the column, here it costs a dumps()
+            # -- but the contract is what lets callers not care which
+            # backend they have
+            return {self.key: key, 'data': json.dumps(js) if raw else js,
+                    'source': self.source, 'insert_time':'', 'record_time':''}
         else:
             print(f"File does not exist: {self.directory}/{key2}")
             return None
@@ -74,8 +101,20 @@ class FsCache(object):
         if 'data' in value and 'identifier' in value:
             value = value['data']
 
-        with open(fn, "w") as fh:
+        # atomic write: a crash mid-write must not leave a truncated record
+        tmp = fn + ".tmp"
+        with open(tmp, "w") as fh:
             fh.write(json.dumps(value))
+        os.replace(tmp, fn)
+
+    def delete(self, key):
+        # was missing entirely: __delitem__ raised AttributeError
+        key = key.replace('/', self.slash_replacement)
+        if not key.endswith(self.suffix):
+            key = key + self.suffix
+        fn = os.path.join(self.directory, key)
+        if os.path.exists(fn):
+            os.remove(fn)
 
     def iter_keys(self):
         for file in self._list():
@@ -88,13 +127,19 @@ class FsCache(object):
         for file in self._list():
             yield file.replace(self.suffix, '').replace(self.slash_replacement, '/')
 
-    def iter_records(self):
-        for file in self._list():
-            yield self.get(file)
+    def _file_to_key(self, file):
+        # same transform iter_keys() yields; passing the raw filename to
+        # get() worked but returned rows whose identifier still carried the
+        # suffix and the escaped slashes
+        return file.replace(self.suffix, '').replace(self.slash_replacement, '/')
 
-    def iter_records_slice(self, mySlice, maxSlice):
+    def iter_records(self, raw=False):
+        for file in self._list():
+            yield self.get(self._file_to_key(file), raw=raw)
+
+    def iter_records_slice(self, mySlice, maxSlice, raw=False):
         for file in self._list()[mySlice::maxSlice]:
-            yield self.get(file)
+            yield self.get(self._file_to_key(file), raw=raw)
 
     def len(self):
         return len(self._list())
@@ -138,19 +183,21 @@ class InternalRecordCache(FsCache):
 class ExternalRecordCache(FsCache):
     def __init__(self, config):
         if not 'tabletype' in config:
-            config['tabletype'] = "record_cache"
+            # was "record_cache", colliding with InternalRecordCache
+            config['tabletype'] = "ext_record_cache"
         super().__init__(config)
 
 class ReconciledRecordCache(FsCache):
     def __init__(self, config):
         if not 'tabletype' in config:
-            config['tabletype'] = "reconciled_record_cache"
+            config['tabletype'] = "ext_reconciled_record_cache"
         super().__init__(config)
 
 class RecordCache(FsCache):
     def __init__(self, config):
         if not 'tabletype' in config:
-            config['tabletype'] = "record_cache"
+            # was "record_cache", colliding with InternalRecordCache
+            config['tabletype'] = "rewritten_record_cache"
         super().__init__(config)
         self.key = "yuid"
 

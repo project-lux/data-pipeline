@@ -15,7 +15,7 @@ class LCHarvester(ASHarvester):
             print(f"Failed to get first page from collection {uri}: {e}")
 
     def fetch_page(self):
-    """Transforms LC's ActivityStream into the format expected by process_items."""
+        """Transforms LC's ActivityStream into the format expected by process_items."""
         print(f"Fetching page: {self.page}")
 
         if self.cache_okay and self.page_cache is not None and self.page in self.page_cache:

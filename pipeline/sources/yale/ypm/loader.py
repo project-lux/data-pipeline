@@ -15,6 +15,7 @@ class YpmLoader(Loader):
         self.out_cache = config['datacache']
         self.total = config.get('totalRecords', -1)
         self.force_reload = config.get('forceReload', False)
+        self.config = config
 
     def get_identifier_raw(self, line):
         # Find identifier from raw line
