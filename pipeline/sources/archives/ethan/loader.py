@@ -12,7 +12,7 @@ class EthanLoader(Loader):
 
     def get_identifier_json(self, js):
         # Should never actually get called, but for completeness...
-        return js['id']
+        return js['id'].replace('https://search.lib.virginia.edu/sources/images/', '')
 
     def load(self, slicen=None, maxSlice=None):
 
