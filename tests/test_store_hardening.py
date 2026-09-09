@@ -46,8 +46,12 @@ def make_idmap(tmp_path):
     m.configs = StubConfigs()
     m.conn = fakeredis.FakeStrictRedis(decode_responses=True)
     m._restoring_data_state = False
-    m.prefix_map_in = {}
     m.prefix_map_out = {"yuid": StubConfigs.internal_uri}
+    # get() decides "this key is a member set" by the shortened key starting
+    # with "yuid:", so the inbound map has to actually shorten them -- an
+    # empty prefix_map_in left yuid URIs full, get() did a string GET against
+    # a set, and every member lookup came back None
+    m.prefix_map_in = {v: k for k, v in m.prefix_map_out.items()}
     m.memory_cache_enabled = False
     m.memory_cache = {}
     m.clean_on_remove = False
@@ -61,6 +65,13 @@ def make_refmap():
     r._restoring_data_state = False
     r.prefix_map_in = {}
     r.prefix_map_out = {}
+    # object.__new__ skips ReferenceMap.__init__, so mirror the state it
+    # sets: merge_refs/popitem look at these to decide whether to try the Lua
+    # path and to cache the registered scripts
+    r._merge_script = None
+    r._pop_script = None
+    r._scripting = True
+    r._scan_cursor = 0
     return r
 
 
