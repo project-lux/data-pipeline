@@ -19,17 +19,24 @@ this pipeline does, which is unusual in three ways that matter:
     deterministic from the assertion logs. Durability is worth very little
     here, so the WAL settings trade it away. `run-identify.py` is the one
     phase where that is not true; see the notes at the end.
-*   **N processes, not N threads, and each opens four connections** -- two
-    from PoolManager, one shared by the idmap, one shared by the two
-    reference maps. max_connections is a correctness requirement, not a
-    tuning knob.
-*   **Point lookups plus one big filtered scan per worker.** With 24 workers
-    already saturating the box, per-query parallelism makes things worse, not
-    better.
+*   **N processes, not N threads, and each opens three connections** -- two
+    from PoolManager, plus one shared by the idmap and the two reference
+    maps. It is four on a server whose `synchronous_commit` is `on`, because
+    the reference queues then need a session of their own to turn it off
+    (performance-backlog.md §3.7). This script reads the server to tell which
+    applies. max_connections is a correctness requirement, not a tuning knob.
+*   **Point lookups plus one big filtered scan per worker.** The workers
+    already saturate the box, so per-query parallelism on top makes things
+    worse, not better.
+*   **The identity map is the working set.** Merge is read-bound on it --
+    12.2% iowait and 58.9% of active statements in `IO/DataFileRead` when
+    `shared_buffers` was 25% of RAM and the idmap was slightly larger than
+    that (performance-backlog.md §2.2). So shared_buffers here is sized from
+    the measured idmap, not from the usual fraction.
 
-Sizes are anchored so that a 128 GB / 32 vCPU box reproduces the figures in
-docs/idmap-migration.md, which were arrived at by measurement rather than
-formula.
+Sizes are anchored on measurement rather than formula: the 128 GB development
+box in docs/idmap-migration.md, and the 72 GiB / 36 vCPU build server whose
+`top` and `pg_stat_activity` samples are in docs/performance-backlog.md.
 """
 
 import argparse
@@ -76,6 +83,17 @@ def clamp(n, lo, hi):
 
 def round_to(n, step):
     return int(math.ceil(n / step) * step)
+
+
+def floor_gb(n):
+    """Down to a round size, so the printed literal is readable.
+
+    A whole GB above 1 GB, a whole 128MB below it -- flooring a 548MB figure
+    to the GB would give zero. These are all "about this much" numbers; a
+    literal like '53924352kB' is exact and unreadable, and nobody sanity-
+    checks what they cannot read."""
+    step = GB if n >= GB else 128 * MB
+    return max(step, (n // step) * step)
 
 
 # ------------------------------------------------------------ the machine
@@ -305,7 +323,7 @@ def connect(args):
         return None, f"could not connect ({str(e).strip().splitlines()[0]})"
 
 
-def read_server(conn):
+def read_server(conn, idmap_table="idmap"):
     srv = {"settings": {}}
     with conn.cursor() as cur:
         cur.execute("SELECT current_setting('server_version_num')::int")
@@ -331,6 +349,35 @@ def read_server(conn):
             srv["total_bytes"] = cur.fetchone()[0] or 0
         except Exception:
             srv["total_bytes"] = None
+
+        # The identity map is the random-access working set that merge is
+        # read-bound on, so shared_buffers is sized from its measured size
+        # rather than from a fraction of RAM -- see size_shared_buffers() and
+        # docs/performance-backlog.md §2.2. pg_total_relation_size covers the
+        # heap, every index on it and any toast, which is the whole of what
+        # has to stay resident.
+        srv["idmap_rels"], srv["idmap_bytes"] = {}, None
+        srv["idmap_indexes"] = []
+        srv["idmap_table"] = idmap_table
+        try:
+            cur.execute("""SELECT c.relname, pg_total_relation_size(c.oid)
+                             FROM pg_class c
+                            WHERE c.oid IN (to_regclass(%s), to_regclass(%s))""",
+                        (idmap_table, f"{idmap_table}_yuid"))
+            rels = {r[0]: r[1] for r in cur.fetchall()}
+            if rels:
+                srv["idmap_rels"] = rels
+                srv["idmap_bytes"] = sum(rels.values())
+            # read the index names rather than assuming them, so REINDEX and
+            # pg_prewarm below name what actually exists
+            cur.execute("""SELECT i.indexrelid::regclass::text
+                             FROM pg_index i
+                            WHERE i.indrelid IN (to_regclass(%s), to_regclass(%s))
+                            ORDER BY 1""",
+                        (idmap_table, f"{idmap_table}_yuid"))
+            srv["idmap_indexes"] = [r[0] for r in cur.fetchall()]
+        except Exception:
+            pass
     return srv
 
 
@@ -372,6 +419,69 @@ class Rec:
         return f"ALTER SYSTEM SET {self.name} = {v};"
 
 
+def size_shared_buffers(ram, srv):
+    """shared_buffers, sized from the measured idmap rather than a fraction.
+
+    The usual advice is 25% of RAM, and for this pipeline that was measured
+    wrong. Merge -- the longest phase -- is read-bound on the identity map:
+    with shared_buffers at 25% the idmap was marginally *larger* than the
+    pool, and merge ran at 12.2% iowait with 58.9% of its active statements
+    in `IO/DataFileRead` while 35 GB of the machine sat unused. Reconcile,
+    which the earlier round of tuning measured, does not look like this at
+    all -- it is latency-bound at 1.5% iowait, which is why 25% survived as
+    long as it did (docs/performance-backlog.md §2.1 vs §2.2).
+
+    So: 1.75x the idmap's total size. The headroom is not slack. Merge
+    streams the whole of `ils_record_cache` through a cursor while writing
+    two more caches, and that eviction pressure is what pushes the idmap's
+    random-access pages out. Postgres uses a small ring buffer for
+    sequential scans of large tables, so the extra pool is not consumed by
+    that streaming -- it is claimed preferentially by exactly the random
+    probes that were stalling.
+
+    Bounded below by the old 25% (never recommend *less* than the generic
+    answer) and above by half of RAM. Half is higher than the 40% usually
+    given, deliberately: the standard warning is about double-buffering
+    against the OS page cache, and §2.2's measurement is that the page cache
+    is being thrashed by the record-cache streaming anyway, so the memory
+    does more good held where the ring buffer cannot evict it. It is a bound
+    rather than a target -- it binds only when the idmap is large relative to
+    the machine. Returns (bytes, why).
+    """
+    ceiling = floor_gb(min(ram // 2, 64 * GB))
+    floor_ = min(max(128 * MB, floor_gb(ram // 4)), ceiling)
+    idmap_bytes = (srv or {}).get("idmap_bytes")
+
+    if not idmap_bytes:
+        return floor_, (
+            "25% of RAM -- a FLOOR, not the sized answer. This workload is "
+            "read-bound on the identity map and 25% was measured too small on "
+            "the build box (performance-backlog.md §2.2), but the idmap could "
+            "not be measured here, so there is nothing to size against. Re-run "
+            "against the built database before trusting this number. An LMDB "
+            "read tier in front of postgres was measured slower than simply "
+            "sizing this (docs/idmap-migration.md)")
+
+    target = round_to(idmap_bytes * 7 // 4, GB)
+    value = clamp(target, floor_, ceiling)
+    rels = ", ".join(sorted((srv or {}).get("idmap_rels", {})))
+    why = (f"1.75x the measured idmap ({idmap_bytes / GB:.1f} GB of heap and "
+           f"indexes across {rels}), NOT the usual 25% of RAM "
+           f"({pg_bytes(floor_gb(ram // 4))}). Merge is read-bound on the "
+           f"idmap: at 25% it ran at 12.2% iowait with 58.9% of active "
+           f"statements in IO/DataFileRead, while a third of the machine sat "
+           f"free (performance-backlog.md §2.2). The headroom absorbs merge "
+           f"streaming the record caches past it; postgres rings-buffers those "
+           f"sequential scans, so the extra pool goes to the random probes that "
+           f"were stalling. An LMDB read tier in front of postgres was measured "
+           f"slower than simply sizing this (docs/idmap-migration.md)")
+    if value == ceiling and target > ceiling:
+        why += (f". CAPPED at half of RAM -- the idmap wants "
+                f"{pg_bytes(target)}, which this machine cannot give it "
+                f"without starving the page cache; merge will stay read-bound")
+    return value, why
+
+
 def recommend(m, srv, workers):
     cpus = m["cpus"]["logical"]
     ram = m["ram"]["total"]
@@ -398,28 +508,29 @@ def recommend(m, srv, workers):
             f"{workers} workers x {per_worker} connections each: 2 from "
             f"PoolManager (read/write, and one for server-side cursors), 1 for "
             f"the identity map, and {shared}. Plus headroom for psql, "
-            f"monitoring and autovacuum", restart=True),
+            f"monitoring and autovacuum. Sized for --workers {workers}: a "
+            f"build started with more workers than this was sized for dies "
+            f"partway through, so re-run this before changing the worker "
+            f"count, not after", restart=True),
     ]))
 
     # --- memory -----------------------------------------------------------
-    shared_buffers = clamp(ram // 4, 128 * MB, 64 * GB)
+    shared_buffers, sb_why = size_shared_buffers(ram, srv)
     max_conn = max(100, round_to(conns, 25))
     mem = [
-        Rec("shared_buffers", pg_bytes(shared_buffers),
-            "25% of RAM. The idmap's hot indexes have to live here -- an LMDB "
-            "read tier in front of postgres was measured slower than simply "
-            "sizing this (docs/idmap-migration.md)", kind="bytes", restart=True),
-        Rec("effective_cache_size", pg_bytes(ram * 3 // 4),
+        Rec("shared_buffers", pg_bytes(shared_buffers), sb_why,
+            kind="bytes", restart=True),
+        Rec("effective_cache_size", pg_bytes(floor_gb(ram * 3 // 4)),
             "planner hint, not an allocation: what the OS page cache plus "
             "shared_buffers can hold", kind="bytes"),
         Rec("work_mem", pg_bytes(clamp(ram // 32 // max_conn, 8 * MB, 128 * MB)),
             "per sort/hash node per connection, so it multiplies by "
             f"max_connections ({max_conn}); this workload is point lookups and "
             "filtered scans, which need little", kind="bytes"),
-        Rec("maintenance_work_mem", pg_bytes(clamp(ram // 64, 256 * MB, 4 * GB)),
+        Rec("maintenance_work_mem", pg_bytes(floor_gb(clamp(ram // 64, 256 * MB, 4 * GB))),
             "VACUUM and CREATE INDEX on tables of this size take repeated "
             "passes at the 64MB default", kind="bytes"),
-        Rec("autovacuum_work_mem", pg_bytes(clamp(ram // 128, 256 * MB, GB)),
+        Rec("autovacuum_work_mem", pg_bytes(floor_gb(clamp(ram // 128, 256 * MB, GB))),
             "separate from maintenance_work_mem so N autovacuum workers cannot "
             "each take the larger figure", kind="bytes"),
     ]
@@ -445,7 +556,7 @@ def recommend(m, srv, workers):
             "spread the checkpoint's writes over the interval instead of "
             "spiking"),
         Rec("wal_buffers", "64MB",
-            "the -1 default caps at 16MB, which is small for 24 writers",
+            f"the -1 default caps at 16MB, which is small for {workers} writers",
             kind="bytes"),
         Rec("wal_compression", "zstd" if vnum >= 150000 else "on",
             "trades CPU for WAL volume; these documents compress well"
@@ -468,7 +579,7 @@ def recommend(m, srv, workers):
                            "same, for VACUUM and friends"))
     out.append(("Planner and storage", planner))
 
-    # --- parallelism: less is more with 24 processes ----------------------
+    # --- parallelism: less is more with N worker processes ----------------
     out.append(("Parallelism", [
         Rec("max_parallel_workers_per_gather", "0",
             f"DURING A BUILD: {workers} worker processes already saturate "
@@ -536,7 +647,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--workers", type=int, default=24,
-                    help="parallel worker processes a build uses (default 24)")
+                    help="parallel worker processes a build uses (default 24, "
+                         "which is what the tracked build scripts run; "
+                         "performance-backlog.md §4.9 recommends trying 32, so "
+                         "pass --workers 32 BEFORE that run, not during it)")
     ap.add_argument("--measure-io", action="store_true",
                     help="probe fsync latency and sequential write throughput")
     ap.add_argument("--io-path", default=None,
@@ -545,6 +659,10 @@ def main():
                     help="print settings that are already correct too")
     ap.add_argument("--no-db", action="store_true",
                     help="skip the server; recommend from the machine alone")
+    ap.add_argument("--idmap-table", default="idmap",
+                    help="the identity map's table, whose measured size sizes "
+                         "shared_buffers. Matches the map config's tableName "
+                         "(default idmap); the yuid table is <name>_yuid")
     args = ap.parse_args()
 
     m = {"cpus": detect_cpus(), "ram": detect_ram()}
@@ -554,7 +672,7 @@ def main():
     srv = None
     if conn is not None:
         try:
-            srv = read_server(conn)
+            srv = read_server(conn, args.idmap_table)
         except Exception as e:
             why = f"connected, but could not read pg_settings ({e})"
         finally:
@@ -597,8 +715,8 @@ def main():
                   f"{f['p95_ms']:.3f} ms p95")
             if f["median_ms"] > 0.5:
                 print(f"               ...slow enough that a COMMIT per write "
-                      f"would serialise 24 workers behind WALWriteLock. "
-                      f"synchronous_commit = off matters here.")
+                      f"would serialise {args.workers} workers behind "
+                      f"WALWriteLock. synchronous_commit = off matters here.")
         if "error" not in w:
             print(f"  seq write    {w['mb_per_s']:,.0f} MB/s")
         if sys.platform == "darwin":
@@ -664,7 +782,7 @@ def main():
                 print(f"--   {n}")
             print("-- pg_ctl restart, or systemctl restart postgresql")
 
-    _tail(srv, m)
+    _tail(srv, m, args)
     return 0
 
 
@@ -681,7 +799,7 @@ def _wrap(text, width):
     return out
 
 
-def _tail(srv, m):
+def _tail(srv, m, args):
     print(f"\n{'=' * 78}")
     print("not ALTER SYSTEM -- run these too")
     print("=" * 78)
@@ -707,15 +825,52 @@ def _tail(srv, m):
     else:
         print("\n-- all_refs / done_refs already carry their storage parameters.")
 
-    print("\n-- After a restart the buffer pool is empty. Prewarm the identity map")
-    print("-- rather than paying for it during the first phase:")
+    tbl = args.idmap_table
+    live_idx = (srv or {}).get("idmap_indexes") or []
+    # connected and pg_class had nothing for it -- as opposed to --no-db, where
+    # we simply could not look
+    missing = bool(srv) and not (srv or {}).get("idmap_rels")
+    idx = live_idx or [f"{tbl}_pkey", f"{tbl}_yuid_idx", f"{tbl}_yuid_pkey",
+                       f"{tbl}_yuid_token_idx"]
+    print("\n-- Merge is read-bound on the identity map, and these are cheaper")
+    print("-- than the shared_buffers increase above (performance-backlog.md")
+    print("-- §2.2 gives them in this order because that is the order of cost).")
+
+    print("\n-- 1. REINDEX. Free, and the indexes are bloated: identify used to")
+    print("--    rewrite ~45M rows to the values they already held, one dead")
+    print("--    tuple each (§3.10 -- fixed, but the bloat it left is still")
+    print("--    on disk, and VACUUM never shrinks an index).")
+    if missing:
+        print(f"--    {tbl} does not exist yet; nothing to reindex.")
+    else:
+        print(f"REINDEX (VERBOSE) TABLE CONCURRENTLY {tbl};")
+        print(f"REINDEX (VERBOSE) TABLE CONCURRENTLY {tbl}_yuid;")
+        print("--    CONCURRENTLY needs PG12+ and is slower; drop it if the")
+        print("--    build is stopped, which is the usual case for this.")
+
+    print("\n-- 2. Prewarm. Do this at the START OF MERGE, not only after a")
+    print("--    restart: merge streams ils_record_cache through a cursor while")
+    print("--    writing two more caches, and that evicts the idmap's")
+    print("--    random-access pages as the phase runs (§2.2).")
     print("CREATE EXTENSION IF NOT EXISTS pg_prewarm;")
     print("CREATE EXTENSION IF NOT EXISTS pg_stat_statements;")
-    print("SELECT pg_prewarm('idmap_pkey'), pg_prewarm('idmap_yuid_idx'), "
-          "pg_prewarm('idmap');")
+    if missing:
+        print(f"--    {tbl} does not exist yet; nothing to prewarm.")
+    else:
+        targets = [f"pg_prewarm('{n}')" for n in idx] + [f"pg_prewarm('{tbl}')"]
+        print("SELECT " + ",\n       ".join(targets) + ";")
+        if not live_idx:
+            print(f"--    (index names assumed -- {tbl} was not read from")
+            print("--     pg_index; check pg_indexes if any of these error)")
+    print("--    Verify it took: shared_buffers is only worth raising if")
+    print("--    IO/DataFileRead falls. Sample pg_stat_activity mid-merge.")
 
     if sys.platform == "linux" and m["ram"]["total"]:
-        pages = int(m["ram"]["total"] // 4 * 1.1) // (2 * MB)
+        # sized from the shared_buffers actually recommended above, which is
+        # no longer 25% of RAM -- getting this wrong leaves postgres unable to
+        # take the huge pages and silently falling back
+        sb, _ = size_shared_buffers(m["ram"]["total"], srv)
+        pages = int(sb * 1.1) // (2 * MB)
         print(f"\n-- Huge pages cut the page-table overhead of a large "
               f"shared_buffers across")
         print(f"-- {os.cpu_count()}+ backends. As root, then restart postgres:")

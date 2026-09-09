@@ -126,12 +126,22 @@ ALTER SYSTEM SET max_connections = 200;          -- was 100
 Those figures are for a 128 GB development box. **Size to the machine**: the
 build server is **72 GiB / 36 vCPU** (70,214 MiB visible to the OS) with
 Postgres on an AWS io2 volume, where the right numbers are
-`shared_buffers = '18GB'` (25% of RAM) and `effective_cache_size = '54GB'`.
+`shared_buffers = '32GB'` and `effective_cache_size = '54GB'`.
 
-That spec is measured, from a `top` during a run; this paragraph previously
-said 80 GB / 32 vCPU, which was wrong in both halves and would have you size
-`max_connections` and the parallelism settings for a smaller machine. Rather
-than trusting either figure, run `pg-tune.py`, which reads the machine.
+**This paragraph used to say `shared_buffers = '18GB'` (25% of RAM), and that
+was measured wrong.** 25% put the pool marginally *below* the size of the
+idmap, and merge — the longest phase — ran at 12.2% iowait with 58.9% of its
+active statements in `IO/DataFileRead` while a third of the machine sat
+unused. See `docs/performance-backlog.md` §2.2. The rule is not a fraction of
+RAM: size the pool to hold the identity map with room for merge's own writes
+to stream past it, which is what `pg-tune.py` now does by measuring the table
+rather than applying a percentage.
+
+That machine spec is measured, from a `top` during a run; this paragraph
+previously said 80 GB / 32 vCPU, which was wrong in both halves and would have
+you size `max_connections` and the parallelism settings for a smaller machine.
+Rather than trusting any figure here, run `pg-tune.py`, which reads both the
+machine and the database.
 
 `shared_buffers` and `max_connections` need a full restart, not a reload.
 

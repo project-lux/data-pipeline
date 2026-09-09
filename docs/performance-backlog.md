@@ -227,6 +227,16 @@ So the two phases want different things, and the hardware answer splits:
 
 Merge is the longer phase, so if only one thing gets bought, buy RAM.
 
+**`pg-tune.py` now emits all three.** It measures `idmap` and `idmap_yuid`
+with `pg_total_relation_size` and sizes `shared_buffers` to 1.75x that —
+32 GB on this box — instead of the 25% of RAM that produced the 19.5 GB
+above; it prints the `REINDEX` and reads the real index names out of
+`pg_index` for the `pg_prewarm` call; and it says to prewarm at the start of
+merge rather than only after a restart. Pass `--idmap-table` if the map
+config sets a non-default `tableName`. With `--no-db` it cannot measure
+anything and falls back to 25%, which it labels a floor rather than an
+answer.
+
 **Note what a VACUUM cannot do here.** `idmap` is at 6.2% dead, so there is
 little to free, and VACUUM never shrinks an index — the files will be exactly
 as large afterwards. If merge is still read-bound after §3.8's vacuum, that is
