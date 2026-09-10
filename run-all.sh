@@ -1,7 +1,5 @@
 #!/bin/bash
 
-export TQDM_DISABLE=1
-
 ### Clear records
 
 if [ ! -n "$1" ]
@@ -29,6 +27,8 @@ echo "Starting Reconciliation Phase"
 
 rm ../data/logs/flags/reconcile_is_done*txt
 rm metatypes-*.json
+
+# Remove any old assertion temp files from previous reconcile?
 
 for count in `seq 0 23`;
 do
@@ -67,6 +67,7 @@ then
     echo `date` [Error] Error in identify >> /data/logs/pipeline_process_status.txt
     exit
 fi
+
 
 ### Merge metatypes
 echo "Merging Metatypes"

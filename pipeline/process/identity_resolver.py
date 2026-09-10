@@ -162,15 +162,6 @@ class IdentityResolver(object):
                     return uri.replace(f"{k}:", v)
         return uri
 
-    # def build_prefix_maps(self):
-    #     prefix_out = {"yuid": self.configs.internal_uri}
-    #     for cf in self.configs.external.values():
-    #         prefix_out[cf["name"]] = cf["namespace"]
-    #     prefix_in = {}
-    #     for k, v in prefix_out.items():
-    #         prefix_in[v] = k
-    #     return prefix_in, prefix_out
-
 
     def _writer(self):
         """Open the assertion log on the first write, never in __init__.
@@ -434,7 +425,7 @@ class IdentityResolver(object):
     
     
     # ---------------------------------------------------------------------------
-    # idmap interaction (redis)
+    # idmap interaction
     # ---------------------------------------------------------------------------
     
 
@@ -494,7 +485,7 @@ class IdentityResolver(object):
     
     
     # ---------------------------------------------------------------------------
-    # Streaming resolution (the production path)
+    # Streaming resolution 
     # ---------------------------------------------------------------------------
     
     # ---------------------------------------------------------- progress
@@ -816,7 +807,7 @@ class IdentityResolver(object):
     
     
     def resolve_identity(self, conflicts_file="identity_conflicts.jsonl",
-                        work_dir=None, keep_temp=True):
+                        work_dir=None, keep_temp=False):
         """Resolve the identity map from the assertion logs, streaming through
         unix ``sort`` so peak memory scales with the non-singleton subgraph
         rather than the total record count. Returns stats.
@@ -829,7 +820,7 @@ class IdentityResolver(object):
             clusters
         5. per cluster: tally prior YUIDs, resolve split contention by sort,
             mint where there is no prior
-        6. bulk-load into redis, then sweep now-empty old YUID sets
+        6. bulk-load into idmap, then sweep now-empty old YUID sets
         """
 
         # Not built in __init__: run-reconcile constructs this class purely as
@@ -933,3 +924,6 @@ class IdentityResolver(object):
                 self._timer.finish()
             if not keep_temp:
                 shutil.rmtree(td, ignore_errors=True)
+                # also remove assertion files
+                for f in files:
+                    os.remove(f)

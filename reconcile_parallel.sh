@@ -1,17 +1,13 @@
 #!/bin/bash
 
 #source ~/ENV/bin/activate
-
-
 # $1 should be --all or --source
 
 if [ ! -n "$1" ]
 then
   echo "Usage: `basename $0` --all|--[source]"
   exit 0
-fi  
-
-rm -f assertions-*.tsv
+fi
 
 for count in `seq 0 23`;
 do
