@@ -35,9 +35,10 @@ if '--debug-record' in sys.argv:
         found = False
         for eq in equivs:
             # retrieve eq record and look in its equivs for bad
-            (src, ident) = cfgs.split_uri(cfgs.split_qua(eq)[0])
+            compared = cfgs.split_qua(eq)[0]
+            (src, ident) = cfgs.split_uri(eq)
             rec = src['recordcache'][ident]
-            if rec is not None and bad in rec['data'].get('equivalent', []):
+            if rec is not None and compared in rec['data'].get('equivalent', []):
                 print(f"*** Found bad record in equivalents: {eq}")
                 found = True
                 break
