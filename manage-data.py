@@ -43,7 +43,7 @@ if '--debug-record' in sys.argv:
                 found = True
                 break
         if not found:
-            print(f"Bad record not found in equivalents: {bad}")
+            print(f"Bad record not found in equivalents: {compared}")
 
 
 ### LOAD DATABASES
