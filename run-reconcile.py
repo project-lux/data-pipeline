@@ -51,6 +51,9 @@ if "--baseline" in sys.argv:
     if recids:
         to_do.append(["wikidata", cfgs.external['wikidata'], recids])
 
+    # TODO And now bring in world, continents, countries and states
+    # TODO bring in major world eras?
+
 
 else:
     recids = []

@@ -22,6 +22,28 @@ cfgs.instantiate_all()
 #ref_mgr = ReferenceManager(cfgs, idmap)
 
 
+if '--debug-record' in sys.argv:
+    debug_record = sys.argv[sys.argv.index('--debug-record') + 1]
+    bad = sys.argv[sys.argv.index('--debug-record') + 2]
+    print(f"Debug record (must be full LUX URI): {debug_record}")
+    print(f"Bad record: {bad}")
+    equivs = idmap[debug_record]
+    print(f"Equivalents: {equivs}")
+    if not bad in equivs:
+        print(f"Bad record not found in equivalents: {bad}")
+    else:
+        found = False
+        for eq in equivs:
+            # retrieve eq record and look in its equivs for bad
+            (src, ident) = cfgs.split_uri(cfgs.split_qua(eq)[0])
+            rec = src['recordcache'][ident]
+            if bad in rec['equivalent']:
+                print(f"*** Found bad record in equivalents: {eq}")
+                break
+        if not found:
+            print(f"Bad record not found in equivalents: {bad}")
+
+
 ### LOAD DATABASES
 if "--load" in sys.argv:
     if "--ycba" in sys.argv or "--all" in sys.argv:
