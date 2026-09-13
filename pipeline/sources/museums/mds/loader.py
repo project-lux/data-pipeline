@@ -31,80 +31,64 @@ class MdsLoader(Loader):
         return False
 
     def load(self, slicen=None, maxSlice=None):
-        # in is a directory of tgz files
+        # in is a directory of jsonl files
         try:
             files = os.listdir(self.in_path)
             files.sort()
         except:
             files = [self.in_path]
-
+        # slice down to only the files for this task
+        # maxSlice is EXCLUSIVE e.g. slices should be 0-19 for maxSlice=20
+        if slicen is not None:
+            files = files[slicen::maxSlice]
+        else:
+            maxSlice = 1
         x = 0 
         done_x = 0
         start = time.time()
         for f in files:
-            if not f.endswith('gz') and not f.endswith('zip'):
+            if not 'jsonl' in f:
+                continue
+            if f.endswith(('jsonl','gz')):
+                open_func = gzip.open if f.endswith('gz') else open
+            else:
                 continue
 
-            if '/' in f:
-                pfx = f.split('/')[-1]
-                pfx = pfx.split('.')[0]
-            else:
-                pfx = f.split('.')[0]
-                f = os.path.join(self.in_path, f)
-
-            if f.endswith('gz'):
-                tf = tarfile.open(f, "r:gz")
-                members = tf.getmembers()
-            else:
-                tf = zipfile.ZipFile(f)
-                members = tf.namelist()
-
-            for ti in members:
-                if type(ti) == str:
-                    if ti.endswith('json') and "/" in ti:
-                        bio = tf.open(ti)
-                        ident = ti
-                    else:
+            with open_func(os.path.join(self.in_path, f), "rt") as fh:
+                l = 1
+                while l:
+                    l = fh.readline()
+                    if not l:
+                        break
+                    # Find id and check if already exists before processing JSON
+                    what = self.get_identifier_raw(l)
+                    if what and what in self.out_cache:
+                        done_x += 1
+                        if not done_x % 10000:
+                            print(f"Skipping past {done_x} {time.time() - start}")
                         continue
-                else:
-                    if ti.name.endswith('json') and "/" in ti.name:
-                        bio = tf.extractfile(ti)
-                        ident = ti.name
-                    else:
-                        continue
-
-                l = bio.read()
-                try:
-                    bio.close()
-                except:
-                    pass
-                if len(l) < 30:
-                    # Empty record means was previously deleted
-                    continue
-
-                # uri = base_uri + ti.name
-                what = f"{pfx}/{ident}"
-                if not self.force_reload and what and what in self.out_cache:
-                    done_x += 1
-                    if not done_x % 10000:
-                        print(f"Skipping past {done_x} {time.time() - start}")
-                    continue
-                # Cache assumes JSON as input, so need to parse it
-                try:
-                    js = json.loads(l) 
-                except Exception as e:
-                    l = l.replace(b'"value": .', b'"value": 0.')
+                    # Cache assumes JSON as input, so need to parse it
+                    x += 1
                     try:
                         js = json.loads(l)
-                    except Exception as e:
-                        print(f"REALLY Broken record {ident} in {f}: {e}")
-                        continue   
-                x += 1
-                self.out_cache[what] = js
-                if not x % 10000:
-                    t = time.time() - start
-                    xps = x/t
-                    ttls = 4000000 / xps
-                    print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-            tf.close()
+                    except:
+                        print(f"Failed to parse JSON in {what}")                        
+                        continue
+                    try:
+                        new = self.post_process_json(js)
+                    except:
+                        print(f"Failed to process {l}")
+                        continue
+                    if not what:
+                        what = self.get_identifier_json(new)
+                        if not what:
+                            print(l)
+                            raise NotImplementedError(f"is get_identifier_raw or _json implemented for {self.__class__.__name__}?")
+                    self.out_cache[what] = new
+                    if not x % 10000:
+                        t = time.time() - start
+                        xps = x/t
+                        ttls = (self.total / (maxSlice+1)) / xps
+                        print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
+                        sys.stdout.flush()
         self.out_cache.commit()
