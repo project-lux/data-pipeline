@@ -21,7 +21,7 @@ class MdsLoader(Loader):
         return None
 
     def get_identifier_json(self, js):
-        return js['id'].replace(self.config['namespace'], '')[:256]
+        return js['id'].replace(self.config['namespace'], '')
 
     def post_process_json(self, js):
         return js
