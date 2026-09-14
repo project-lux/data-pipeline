@@ -59,13 +59,6 @@ class MdsLoader(Loader):
                     l = fh.readline()
                     if not l:
                         break
-                    # Find id and check if already exists before processing JSON
-                    what = self.get_identifier_raw(l)
-                    if what and what in self.out_cache:
-                        done_x += 1
-                        if not done_x % 10000:
-                            print(f"Skipping past {done_x} {time.time() - start}")
-                        continue
                     # Cache assumes JSON as input, so need to parse it
                     x += 1
                     try:
@@ -78,13 +71,15 @@ class MdsLoader(Loader):
                     except:
                         print(f"Failed to process {l}")
                         continue
+                    what = self.get_identifier_json(new)
                     if not what:
-                        what = self.get_identifier_json(new)
-                        if not what:
-                            print(l)
-                            raise NotImplementedError(f"is get_identifier_raw or _json implemented for {self.__class__.__name__}?")
+                        print(l)
+                        raise NotImplementedError(f"is get_identifier_raw or _json implemented for {self.__class__.__name__}?")
+                    elif what in self.out_cache:
+                        print(f"{what} already in cache??")
+                        raise ValueError(what)
                     self.out_cache[what] = new
-                    if not x % 10000:
+                    if not x % 50000:
                         t = time.time() - start
                         xps = x/t
                         ttls = (self.total / (maxSlice+1)) / xps
