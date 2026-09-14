@@ -76,8 +76,8 @@ class MdsLoader(Loader):
                         print(l)
                         raise NotImplementedError(f"is get_identifier_raw or _json implemented for {self.__class__.__name__}?")
                     elif what in self.out_cache:
-                        print(f"{what} already in cache??")
-                        raise ValueError(what)
+                        print(f"{what} from {f} already in cache??")
+                        # raise ValueError(what)
                     self.out_cache[what] = new
                     if not x % 50000:
                         t = time.time() - start
