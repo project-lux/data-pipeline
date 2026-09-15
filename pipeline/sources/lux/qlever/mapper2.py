@@ -497,7 +497,11 @@ class QleverMapper(Mapper):
             lt["datatype"] = self.number_type
             for d in dims:
                 if "value" in d:
-                    lt["value"] = d["value"]
+                    try:
+                        # if it doesn't convert, then it'll break in qlever regardless
+                        lt["value"] = float(d["value"])
+                    except ValueError:
+                        continue
                     cxns = [x["id"] for x in d.get("classified_as", []) if "id" in x]
                     if self.height in cxns:
                         lt["predicate"] = f"{luxns}height"
