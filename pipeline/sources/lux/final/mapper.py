@@ -834,17 +834,17 @@ class Cleaner(Mapper):
                     continue
                 okay = True
 
-                for meq in my_equivs:
-                    if meq["id"] in self.place_cycle_fixes:
-                        bad_parents = [
-                            f"{x}##quaPlace" for x in self.place_cycle_fixes[meq["id"]]
-                        ]
-                        for peq in equivs:
-                            if peq in bad_parents:
-                                okay = False
-                                break
-                        if not okay:
-                            break
+                # for meq in my_equivs:
+                #     if meq["id"] in self.place_cycle_fixes:
+                #         bad_parents = [
+                #             f"{x}##quaPlace" for x in self.place_cycle_fixes[meq["id"]]
+                #         ]
+                #         for peq in equivs:
+                #             if peq in bad_parents:
+                #                 okay = False
+                #                 break
+                #         if not okay:
+                #             break
 
                 if okay and len(data["part_of"]) == 1:
                     okay = False
@@ -862,28 +862,31 @@ class Cleaner(Mapper):
                 if not okay:
                     data["part_of"].remove(parent)
         elif data['type'] in ['Type', 'Language', 'Currency', 'MeasurementUnit', 'Material'] and "broader" in data:
-            for parent in data["broader"].copy():
-                try:
-                    # Note that equivs have ##qua suffix
-                    equivs = self.idmap[parent["id"]]
-                except Exception:
-                    # Parent not found in idmap, could be off the edge of the graph
-                    continue
-                okay = True
 
-                for meq in my_equivs:
-                    if meq["id"] in self.concept_cycle_fixes:
-                        bad_parents = [
-                            f"{x}##quaPlace" for x in self.concept_cycle_fixes[meq["id"]]
-                        ]
-                        for peq in equivs:
-                            if peq in bad_parents:
-                                okay = False
-                                break
-                        if not okay:
-                            break
-                if not okay:
-                    data["broader"].remove(parent)
+            # my_equivs = data["equivalent"] if "equivalent" in data else []
+            # for parent in data["broader"].copy():
+            #     try:
+            #         # Note that equivs have ##qua suffix
+            #         equivs = self.idmap[parent["id"]]
+            #     except Exception:
+            #         # Parent not found in idmap, could be off the edge of the graph
+            #         continue
+            #     okay = True
+
+            #     for meq in my_equivs:
+            #         if meq["id"] in self.concept_cycle_fixes:
+            #             bad_parents = [
+            #                 f"{x}##quaPlace" for x in self.concept_cycle_fixes[meq["id"]]
+            #             ]
+            #             for peq in equivs:
+            #                 if peq in bad_parents:
+            #                     okay = False
+            #                     break
+            #             if not okay:
+            #                 break
+            #     if not okay:
+            #         data["broader"].remove(parent)
+            pass
 
         rec = self.process_xpath_fixes(rec)
 
