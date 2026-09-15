@@ -17,6 +17,8 @@ class Cleaner(Mapper):
         self.globals = self.configs.globals
         self.wikimedia = self.configs.external["wikimedia"]
 
+        self.trash_non_yale_images = config.get("trash_non_yale_images", True)
+
         idmap = self.configs.get_idmap()
 
         self.reidentifier = Reidentifier(self.configs, idmap)
@@ -29,20 +31,6 @@ class Cleaner(Mapper):
             with open(fn) as fh:
                 data = fh.read()
             self.metatypes = json.loads(data)
-
-        fn = os.path.join(self.configs.data_dir, "place-cycle-fixes.json")
-        if os.path.exists(fn):
-            with open(fn) as fh:
-                self.place_cycle_fixes = json.load(fh)
-        else:
-            self.place_cycle_fixes = {}
-
-        fn = os.path.join(self.configs.data_dir, "concept-cycle-fixes.json")
-        if os.path.exists(fn):
-            with open(fn) as fh:
-                self.concept_cycle_fixes = json.load(fh)
-        else:
-            self.concept_cycle_fixes = {}
 
         # Look for LLM Parsed Person names
         fn = os.path.join(self.configs.indexes_dir, "yuid_personname.lmdb")
@@ -129,7 +117,7 @@ class Cleaner(Mapper):
                             rep["digitally_shown_by"] = [do["data"]]
                         else:
                             continue
-                elif not "yale.edu" in apid.lower():
+                elif self.trash_non_yale_images and not "yale.edu" in apid.lower():
                     # Trash them as we can't validate licenses
                     continue
 
