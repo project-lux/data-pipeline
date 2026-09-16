@@ -256,8 +256,8 @@ class QleverMapper(Mapper):
                         lt["predicate"] = f"{luxns}{pfx}HasDigitalImage"
                         lt["value"] = 1
                         hasDigitalImage = 1
-                        lt["datatype"] = self.number_type
-                        triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
+        lt["datatype"] = self.number_type
+        triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
 
         # all classifications
         # agentClassification, workClassification (etc)
