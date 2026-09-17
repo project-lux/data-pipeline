@@ -767,9 +767,10 @@ class Cleaner(Mapper):
         ### Deduplicate properties
         propList = ["classified_as", "represents", "part_of", "made_of", "member_of"]
         for p in propList:
-            if type(data[p]) != list:
-                data[p] = [data[p]]
-            self.dedupe_properties(data, p)
+            if p in data:
+                if type(data[p]) != list:
+                    data[p] = [data[p]]
+                self.dedupe_properties(data, p)
 
         if data["type"] in ["Person", "Group", "Place"]:
             if "subject_of" in data:
@@ -819,9 +820,9 @@ class Cleaner(Mapper):
 
         # prevent self-referential partitioning
         for p in ["broader", "part_of", "member_of"]:
-            if type(data[p]) != list:
-                data[p] = [data[p]]
             if p in data:
+                if type(data[p]) != list:
+                    data[p] = [data[p]]
                 kill = []
                 for what in data[p]:
                     if "id" in what and what["id"] == data["id"]:
