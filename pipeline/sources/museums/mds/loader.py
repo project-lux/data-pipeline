@@ -54,7 +54,7 @@ class IdTabJsonLoader(Loader):
                     what = uri.replace(self.config['namespace'], '')
 
                     try:
-                        js = json.loads(jstr)
+                        new = json.loads(jstr)
                     except:
                         print(f"Failed to parse JSON in {what}")                        
                         raise
