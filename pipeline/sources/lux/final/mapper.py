@@ -633,6 +633,9 @@ class Cleaner(Mapper):
         counter = {}
         replacement = []
         for c in data.get(prop, []):
+            if type(c) != dict:
+                print(f"Bad data shape {c} in {prop}")
+                continue
             c_id = c.get("id", "")
             if c_id:
                 if c_id not in counter:
