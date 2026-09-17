@@ -50,14 +50,14 @@ class IdTabJsonLoader(Loader):
                     x += 1
                     # URI\t{json}
                     l = l.strip()
-                    (uri,json) = l.split('\t', 1)
+                    (uri,jstr) = l.split('\t', 1)
                     what = uri.replace(self.config['namespace'], '')
 
                     try:
-                        js = json.loads(json)
+                        js = json.loads(jstr)
                     except:
                         print(f"Failed to parse JSON in {what}")                        
-                        continue
+                        raise
 
                     self.out_cache[what] = new
                     if not x % 50000:
