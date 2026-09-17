@@ -767,10 +767,14 @@ class Cleaner(Mapper):
         ### Deduplicate properties
         propList = ["classified_as", "represents", "part_of", "made_of", "member_of"]
         for p in propList:
+            if type(data[p]) != list:
+                data[p] = [data[p]]
             self.dedupe_properties(data, p)
 
         if data["type"] in ["Person", "Group", "Place"]:
             if "subject_of" in data:
+                if type(data["subject_of"]) != list:
+                    data["subject_of"] = [data["subject_of"]]
                 self.dedupe_webpages(data)
 
         eventTypes = [
