@@ -819,6 +819,8 @@ class Cleaner(Mapper):
 
         # prevent self-referential partitioning
         for p in ["broader", "part_of", "member_of"]:
+            if type(data[p]) != list:
+                data[p] = [data[p]]
             if p in data:
                 kill = []
                 for what in data[p]:
