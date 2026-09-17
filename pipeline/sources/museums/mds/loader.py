@@ -7,6 +7,67 @@ import ujson as json
 
 from pipeline.process.base.loader import Loader
 
+class IdTabJsonLoader(Loader):
+
+    def __init__(self, config):
+        self.in_path = config['dumpFilePath']
+        self.out_cache = config['datacache']
+        self.total = config.get('totalRecords', -1)
+        self.force_reload = config.get('forceReload', False)
+        self.config = config
+
+    def load(self, slicen=None, maxSlice=None):
+        # in is a directory of jsonl files
+        try:
+            files = os.listdir(self.in_path)
+            files.sort()
+        except:
+            files = [self.in_path]
+        # slice down to only the files for this task
+        # maxSlice is EXCLUSIVE e.g. slices should be 0-19 for maxSlice=20
+        if slicen is not None:
+            files = files[slicen::maxSlice]
+        else:
+            maxSlice = 1
+        x = 0 
+        done_x = 0
+        start = time.time()
+        for f in files:
+            if not 'jsonl' in f:
+                continue
+            if f.endswith(('jsonl','gz')):
+                open_func = gzip.open if f.endswith('gz') else open
+            else:
+                continue
+
+            with open_func(os.path.join(self.in_path, f), "rt") as fh:
+                l = 1
+                while l:
+                    l = fh.readline()
+                    if not l:
+                        break
+                    # Cache assumes JSON as input, so need to parse it
+                    x += 1
+                    # URI\t{json}
+                    l = l.strip()
+                    (uri,json) = l.split('\t', 1)
+                    what = uri.replace(self.config['namespace'], '')
+
+                    try:
+                        js = json.loads(json)
+                    except:
+                        print(f"Failed to parse JSON in {what}")                        
+                        continue
+
+                    self.out_cache[what] = new
+                    if not x % 50000:
+                        t = time.time() - start
+                        xps = x/t
+                        ttls = (self.total / (maxSlice+1)) / xps
+                        print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
+                        sys.stdout.flush()
+        self.out_cache.commit()
+
 class MdsLoader(Loader):
 
     def __init__(self, config):
