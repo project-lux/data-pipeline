@@ -89,6 +89,10 @@ class QleverMapper(Mapper):
         self.lans = "https://linked.art/ns/terms/"
         self.crmns = "http://www.cidoc-crm.org/cidoc-crm/"
 
+        self.temp_collection_aat = "http://vocab.getty.edu/aat/300025976"
+        self.temp_collection_uri = self.idmap[f"{self.temp_collection_aat}##quaType"]
+
+
     def sanitize_uri(self, uri):
         if not uri.startswith(self.datans):
             # sanitize external links
@@ -157,6 +161,13 @@ class QleverMapper(Mapper):
         pfx = self.get_prefix(rectype)
         triples = []
         recordText = []
+
+        # TEMPORARY FIX 2026-09-18
+        if data['type'] == 'Set' and "classified_as" not in data:
+            data['classified_as'] = [{"id": self.temp_collection_uri, "type": "Type", "_label": "Final: Collection",\
+                "equivalent": [{"id": self.temp_collection_aat, "type": "Type", "_label": "Final: Collection"}]
+            }]
+
 
         # Bind the namespaces and the title-cased prefix to locals. Every
         # predicate below interpolates luxns, and there are tens of them per
