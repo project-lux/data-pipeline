@@ -264,11 +264,13 @@ class QleverMapper(Mapper):
                 if rep:
                     rep = rep[0].get("id", None)
                     if rep:
-                        lt["predicate"] = f"{luxns}{pfx}HasDigitalImage"
-                        lt["value"] = 1
                         hasDigitalImage = 1
+
+        lt["predicate"] = f"{luxns}{pfx}HasDigitalImage"
+        lt["value"] = hasDigitalImage
         lt["datatype"] = self.number_type
         triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
+        lt['datatype'] = ""
 
         # all classifications
         # agentClassification, workClassification (etc)
