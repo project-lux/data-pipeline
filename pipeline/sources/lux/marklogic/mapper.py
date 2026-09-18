@@ -72,6 +72,10 @@ class MlMapper(Mapper):
         non_global_excludes = [idmap[x][-36:] for x in non_global_externals if x in idmap]
         self.ref_ctr_excludes.update(set(non_global_excludes))
 
+        self.temp_collection_aat = "http://vocab.getty.edu/aat/300025976"
+        self.temp_collection_uri = idmap[f"{self.temp_collection_aat}##quaType"]
+
+
     def _walk_node_ref(self, node, refs, all_refs, top=False, ignore=False, seen=None, seen_all=None):
         # refs/all_refs stay ordered lists -- the order they are built in is
         # the order the triples come out in -- but testing membership against
@@ -230,6 +234,14 @@ class MlMapper(Mapper):
 
         data = record["data"]
         me = data["id"]
+
+        ### TEMPORARY FIX 2026-09-18
+
+        if data['type'] == 'Set' and "classified_as" not in data:
+            data['classified_as'] = [{"id": self.temp_collection_uri, "type": "Type", "_label": "Final: Collection",\
+                "equivalent": [{"id": self.temp_collection_aat, "type": "Type", "_label": "Final: Collection"}]
+            }]
+
 
         cxns = [x["id"] for x in data.get("classified_as", []) if "id" in x]
         pfx = self.get_pfx(data["type"], archive=self.globals["archives"] in cxns)

@@ -19,10 +19,7 @@ class Cleaner(Mapper):
 
         self.trash_non_yale_images = config.get("trash_non_yale_images", True)
 
-
         idmap = self.configs.get_idmap()
-        self.temp_collection_aat = "http://vocab.getty.edu/aat/300025976"
-        self.temp_collection_uri = idmap[f"{self.temp_collection_aat}##quaType"]
 
         self.reidentifier = Reidentifier(self.configs, idmap)
         self.idmap = idmap
@@ -766,13 +763,6 @@ class Cleaner(Mapper):
 
     def transform(self, rec, rectype=None, reference=False):
         data = rec["data"]
-
-        ### TEMPORARY FIX 2026-09-18
-
-        if data['type'] == 'Set' and "classified_as" not in data:
-            data['classified_as'] = [{"id": self.temp_collection_uri, "type": "Type", "_label": "Final: Collection",\
-                "equivalent": [{"id": self.temp_collection_aat, "type": "Type", "_label": "Final: Collection"}]
-            }]
 
         ### Deduplicate properties
         propList = ["classified_as", "represents", "part_of", "made_of", "member_of"]
