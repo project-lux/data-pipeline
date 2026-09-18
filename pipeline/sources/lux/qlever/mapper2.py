@@ -64,7 +64,7 @@ class QleverMapper(Mapper):
         self.gender = self.globals["gender"]
         self.nationality = self.globals["nationality"]
         self.occupation = self.globals["occupation"]
-        self.sortIdentifier = self.idmap["https://vocab.getty.edu/aat/300456575##quaType"]
+        self.sortIdentifier = self.idmap["http://vocab.getty.edu/aat/300456575##quaType"]
         self.height = self.idmap["http://vocab.getty.edu/aat/300055644##quaType"]
         self.width = self.idmap["http://vocab.getty.edu/aat/300055647##quaType"]
         self.depth = self.idmap["http://vocab.getty.edu/aat/300072633##quaType"]
@@ -269,7 +269,7 @@ class QleverMapper(Mapper):
                 anyt["object"] = cls["id"]
                 triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
-        # beginning/ending
+        # beginning/endingis 
         drels = {}
         if pfx in ["work", "concept", "set"] or rectype in ["DigitalObject"]:
             drels["created_by"] = "Beginning"
