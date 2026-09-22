@@ -266,10 +266,23 @@ class Reidentifier(object):
                     print(f"\n!!! Found missing yuid: {uu} from: {recid} / {equivs}")
                     all_equivs = []
                     return result
-                all_equivs = [self.configs.split_qua(x)[0] for x in all_equivs]
-                all_equivs = [x for x in all_equivs if not x.startswith("__")]
-                my_equivs = [x["id"] for x in record.get("equivalent", [])]
-                if set(all_equivs) != set(my_equivs):
+                # all_equivs is the whole cluster, which for the largest
+                # of them is 122,058 members -- so everything here is once
+                # per member per record, and none of it can afford a scan.
+                #
+                # One pass, not two: filtering before the split is the same
+                # answer, because splitting at ##qua cannot change whether a
+                # string starts with __. And the split is inlined -- with
+                # split_qua() a method call per member, py-spy had that
+                # one-line helper at 17% of the whole process.
+                all_equivs = [x.split("##qua", 1)[0] for x in all_equivs
+                              if not x.startswith("__")]
+                # A set, because the membership test below runs once per
+                # member against it: as a list that is the same quadratic
+                # scan merge_common had, and on the big clusters it was 33%
+                # of cpu billed to this frame.
+                my_equivs = {x["id"] for x in record.get("equivalent", [])}
+                if set(all_equivs) != my_equivs:
                     lbl = record.get("_label", "")
                     for eq in all_equivs:
                         if not eq in my_equivs:
