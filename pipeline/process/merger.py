@@ -189,13 +189,13 @@ class RecordMerger(object):
         if "broader" in merge and not "broader" in skip:
             # Allow multiple broaders, from different hierarchies
             # will have re-identified the URIs by now
-            ids = [x.get("id", None) for x in rec["broader"] if x]
-            ids.append(rec["id"])
+            ids = {x.get("id", None) for x in rec["broader"] if x}
+            ids.add(rec["id"])
             for i in merge["broader"]:
                 iid = i.get("id", None)
                 if iid and not iid in ids:
                     rec["broader"].append(i)
-                    ids.append(i["id"])
+                    ids.add(i["id"])
 
     def merge_place(self, rec, merge, msource, skip):
         if "defined_by" in merge and not "defined_by" in skip:
@@ -269,12 +269,12 @@ class RecordMerger(object):
         for rp in ["part_of", "approximated_by"]:
             if rp in merge and not rp in skip:
                 # Assume that reconciliation has worked, so same related entities have same id.
-                ids = [x.get("id", None) for x in rec[rp] if x]
-                ids.append(rec["id"])
+                ids = {x.get("id", None) for x in rec[rp] if x}
+                ids.add(rec["id"])
                 for i in merge[rp]:
                     if "id" in i and i["id"] and not i["id"] in ids:
                         rec[rp].append(i)
-                        ids.append(i["id"])
+                        ids.add(i["id"])
 
     def merge_actor(self, rec, merge, msource, skip):
         if "carried_out" in merge and not "carried_out" in skip:
@@ -298,23 +298,23 @@ class RecordMerger(object):
 
         if "residence" in merge and not "residence" in skip:
             # Can live in two places. Trust reconciliation to have already merged identical
-            ids = [x.get("id", None) for x in rec["residence"] if x]
+            ids = {x.get("id", None) for x in rec["residence"] if x}
             for i in merge["residence"]:
                 iid = i.get("id", None)
                 if iid and not iid in ids:
                     rec["residence"].append(i)
-                    ids.append(iid)
+                    ids.add(iid)
 
         if "contact_point" in merge and not "contact_point" in skip:
             # Can have diff contacts of same type (two email addresses)
             # contacts are Identifiers, so merge on content
             # unlikely to have two contact points with same content and meaningfully different types
-            conts = [x["content"].strip() for x in rec["contact_point"]]
+            conts = {x["content"].strip() for x in rec["contact_point"]}
             for i in merge["contact_point"]:
                 cont = i["content"].strip()
                 if not cont in conts:
                     rec["contact_point"].append(i)
-                    conts.append(cont)
+                    conts.add(cont)
 
     def merge_person(self, rec, merge, msource, skip):
         # born, died, carried_out, contact_point, residence
@@ -358,13 +358,13 @@ class RecordMerger(object):
             if rp in merge and not rp in skip:
                 # Assume that reconciliation has worked, so same related entities have same id.
                 try:
-                    ids = [x["id"] for x in rec[rp] if "id" in x]
+                    ids = {x["id"] for x in rec[rp] if "id" in x}
                 except:
                     continue
                 for i in merge[rp]:
                     if "id" in i and not i["id"] in ids:
                         rec[rp].append(i)
-                        ids.append(i["id"])
+                        ids.add(i["id"])
         # Events
         evts = ["produced_by", "destroyed_by"]
         part_skips = ["carried_out_by", "took_place_at", "influenced_by", "caused_by"]
@@ -416,11 +416,11 @@ class RecordMerger(object):
         for rp in refs:
             if rp in merge and not rp in skip:
                 # Assume that reconciliation has worked, so same related entities have same id.
-                ids = [x["id"] for x in rec[rp] if "id" in x]
+                ids = {x["id"] for x in rec[rp] if "id" in x}
                 for i in merge[rp]:
                     if "id" in i and not i["id"] in ids:
                         rec[rp].append(i)
-                        ids.append(i["id"])
+                        ids.add(i["id"])
 
         # FIXME: what to do with these if different
         values = ["content", "format"]
@@ -466,11 +466,11 @@ class RecordMerger(object):
         for rp in refs:
             if rp in merge and not rp in skip:
                 # Assume that reconciliation has worked, so same related entities have same id.
-                ids = [x["id"] for x in rec[rp]]
+                ids = {x["id"] for x in rec[rp]}
                 for i in merge[rp]:
                     if not i["id"] in ids:
                         rec[rp].append(i)
-                        ids.append(i["id"])
+                        ids.add(i["id"])
 
         # FIXME: members_exemplified_by
 
@@ -516,11 +516,11 @@ class RecordMerger(object):
         for rp in refs:
             if rp in merge and not rp in skip:
                 # Assume that reconciliation has worked, so same related entities have same id.
-                ids = [x.get("id", None) for x in rec[rp] if x]
+                ids = {x.get("id", None) for x in rec[rp] if x}
                 for i in merge[rp]:
                     if "id" in i and i["id"] and not i["id"] in ids:
                         rec[rp].append(i)
-                        ids.append(i["id"])
+                        ids.add(i["id"])
 
         # Single Event - created_by
         if "created_by" in merge and not "created_by" in skip:
@@ -670,22 +670,22 @@ class RecordMerger(object):
             if rp in merge and not rp in skip:
                 # Assume that reconciliation has worked, so same related entities have same id.
                 if rp in rec:
-                    ids = [x["id"] for x in rec[rp] if "id" in x]
+                    ids = {x["id"] for x in rec[rp] if "id" in x}
                 else:
-                    ids = []
+                    ids = set()
                 if "part" in rec:
                     for p in rec["part"]:
                         if rp in p:
                             for x in p[rp]:
                                 if "id" in x:
-                                    ids.append(x["id"])
+                                    ids.add(x["id"])
                 for i in merge[rp]:
                     # FIXME: if haven't reconciled string places, they won't have ids :(
                     if "id" in i and not i["id"] in ids:
                         if not rp in rec:
                             rec[rp] = []
                         rec[rp].append(i)
-                        ids.append(i["id"])
+                        ids.add(i["id"])
 
         # further process Provenance and Exhibition top level for embedded parts
         if "@context" in rec and "classified_as" in rec and "part" in merge and not "part" in skip:
@@ -838,7 +838,7 @@ class RecordMerger(object):
                     # test if it's primary in b and set in a
                     main = nm_conts[cont.lower()]
                     if "classified_as" in i:
-                        mcxns = [x.get("id", None) for x in main.get("classified_as", [])]
+                        mcxns = {x.get("id", None) for x in main.get("classified_as", [])}
                         for icxn in i["classified_as"]:
                             if "id" in icxn:
                                 ic = icxn["id"]
@@ -874,22 +874,32 @@ class RecordMerger(object):
                         if "language" not in main:
                             main["language"] = i["language"]
                         else:
-                            mlangs = [x.get("id", None) for x in main["language"]]
-                            mlangs.append(None)  # so no language in i won't match
+                            mlangs = {x.get("id", None) for x in main["language"]}
+                            mlangs.add(None)  # so no language in i won't match
                             for lang in i["language"]:
                                 if lang.get("id", None) not in mlangs:
                                     main["language"].append(lang)
 
+        # Sets, not lists, here and at every `ids = [...]` above.
+        # merge_common() runs once per cluster member and these hold
+        # everything accumulated so far, so `cont in conts` scans the
+        # whole merged record -- quadratic in the size of the cluster.
+        # On a europeana cluster that is where the hours went: py-spy
+        # put 92% of a worker's OwnTime in this function, in the scans
+        # rather than in anything it calls, with the process pegged at
+        # 100% cpu for five hours. Membership moves to the set; the
+        # appends still write the same list in the same order, so the
+        # merged record is unchanged.
         if "referred_to_by" in merge and not "referred_to_by" in skip:
             try:
-                conts = [x.get("content", "").strip() for x in rec["referred_to_by"]]
+                conts = {x.get("content", "").strip() for x in rec["referred_to_by"]}
             except:
                 # if this breaks, everything else will too
                 print(f"Broken ref_to_by in {rec}")
-                conts = []
+                conts = set()
             if conts:
-                has_ai = any(["AI generated" in x for x in conts])
-                ids = [x.get("id", "") for x in rec["referred_to_by"]]
+                has_ai = any("AI generated" in x for x in conts)
+                ids = {x.get("id", "") for x in rec["referred_to_by"]}
                 for i in merge["referred_to_by"]:
                     if "content" in i:
                         if type(i["content"]) == list:
@@ -904,20 +914,20 @@ class RecordMerger(object):
                                 pass
                             else:
                                 rec["referred_to_by"].append(i)
-                                conts.append(cont)
+                                conts.add(cont)
                     elif "id" in i:
                         if not i["id"] in ids:
                             rec["referred_to_by"].append(i)
-                            ids.append(i["id"])
+                            ids.add(i["id"])
 
         if "subject_of" in merge and not "subject_of" in skip:
             # filter by access_point
-            rec_aps = []
+            rec_aps = set()
             for s in rec["subject_of"]:
                 if "digitally_carried_by" in s:
                     for do in s["digitally_carried_by"]:
                         if "access_point" in do and "id" in do["access_point"][0]:
-                            rec_aps.append(do["access_point"][0]["id"])
+                            rec_aps.add(do["access_point"][0]["id"])
             for s2 in merge["subject_of"]:
                 if "digitally_carried_by" in s2:
                     for do in s2["digitally_carried_by"]:
@@ -930,19 +940,19 @@ class RecordMerger(object):
 
         for rp in ["classified_as", "equivalent", "member_of"]:
             if rp in merge and not rp in skip:
-                ids = [x["id"] for x in rec[rp] if "id" in x]
+                ids = {x["id"] for x in rec[rp] if "id" in x}
                 for i in merge[rp]:
                     if "id" in i and not i["id"] in ids:
                         rec[rp].append(i)
-                        ids.append(i["id"])
+                        ids.add(i["id"])
 
         if "representation" in merge and not "representation" in skip:
             # Simple apid equality merge
             # and let final mapper deal with filtering
-            curr = []
+            curr = set()
             for ap in rec["representation"]:
                 try:
-                    curr.append(ap["digitally_shown_by"][0]["access_point"][0]["id"])
+                    curr.add(ap["digitally_shown_by"][0]["access_point"][0]["id"])
                 except:
                     pass
             for rep in merge["representation"]:
