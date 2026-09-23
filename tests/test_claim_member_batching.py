@@ -253,3 +253,108 @@ def test_present_still_short_circuits_before_any_query():
     (claimed, _) = claim(cluster, present=(mine,), chunk_size=100)
     assert claimed == mine
     assert srcs["ycba"]["recordcache"].calls == []
+
+
+# --- memoising by YUID ------------------------------------------------------
+#
+# A cluster with N internal members produces N calls, and every one of them
+# sorts all N. With the query chunked that sort was what was left: 101ms per
+# call and 52% of the merge phase on the 88,447-member cluster.
+#
+# The answer is a pure function of the cluster's membership -- which is what
+# the YUID names -- so it can be cached on that. The premise is that
+# `present` cannot change the answer, which the first test here pins.
+
+import collections
+
+
+def memoised(claim, size=20000):
+    """run-merge.py's wrapper, with its own cache."""
+    cache = collections.OrderedDict()
+
+    def wrapper(cluster, present=(), key=None):
+        if key is None:
+            return claim(cluster, present)
+        hit = cache.get(key)
+        if hit is not None:
+            cache.move_to_end(key)
+            return hit
+        ans = claim(cluster, present)
+        cache[key] = ans
+        if len(cache) > size:
+            cache.popitem(last=False)
+        return ans
+
+    wrapper.cache = cache
+    return wrapper
+
+
+@pytest.mark.parametrize("existing", [
+    ["a"], ["b"], ["a", "b"], ["b", "c"], ["a", "b", "c"],
+])
+def test_present_cannot_change_the_answer(existing):
+    """The premise of caching on the YUID alone. `present` names a record
+    the caller is holding, so its existence check would have returned True;
+    skipping it is an optimisation, not a different question."""
+    cluster = {uri("ycba", c) for c in "abc"}
+    for held in existing:
+        without = make_claim_member(sources(ycba=existing))(cluster)
+        with_p = make_claim_member(sources(ycba=existing))(
+            cluster, present=(uri("ycba", held),))
+        assert without[0] == with_p[0]
+
+
+def test_a_repeat_key_is_answered_from_the_cache():
+    srcs = sources(ycba=["a"])
+    claim = memoised(make_claim_member(srcs))
+    cluster = {uri("ycba", c) for c in "abcdef"}
+    first = claim(cluster, key="YU")
+    for _ in range(50):
+        assert claim(cluster, key="YU") == first
+    assert len(srcs["ycba"]["recordcache"].calls) == 1
+
+
+def test_different_clusters_are_not_confused():
+    srcs = sources(ycba=["a", "z"])
+    claim = memoised(make_claim_member(srcs))
+    assert claim({uri("ycba", "a")}, key="Y1")[0] == uri("ycba", "a")
+    assert claim({uri("ycba", "z")}, key="Y2")[0] == uri("ycba", "z")
+
+
+def test_without_a_key_nothing_is_cached():
+    srcs = sources(ycba=["a"])
+    claim = memoised(make_claim_member(srcs))
+    cluster = {uri("ycba", "a"), uri("ycba", "b")}
+    claim(cluster)
+    claim(cluster)
+    assert len(srcs["ycba"]["recordcache"].calls) == 2
+    assert not claim.cache
+
+
+def test_the_cache_is_bounded_and_evicts_the_least_recent():
+    srcs = sources(ycba=["a"])
+    claim = memoised(make_claim_member(srcs), size=3)
+    for i in range(10):
+        claim({uri("ycba", "a")}, key=f"Y{i}")
+    assert len(claim.cache) == 3
+    assert list(claim.cache) == ["Y7", "Y8", "Y9"]
+
+
+def test_a_none_answer_is_cached_too():
+    """A cluster with no surviving internal member belongs to the reference
+    pass. Re-deciding that for every member is the same waste."""
+    srcs = sources(ycba=[])
+    claim = memoised(make_claim_member(srcs))
+    cluster = {uri("ycba", c) for c in "abc"}
+    assert claim(cluster, key="YU") == (None, None)
+    assert claim(cluster, key="YU") == (None, None)
+    assert len(srcs["ycba"]["recordcache"].calls) == 1
+
+
+def test_the_cached_answer_matches_the_uncached_one():
+    srcs_a, srcs_b = sources(ycba=["m"], ypm=["b"]), sources(ycba=["m"], ypm=["b"])
+    cluster = {uri("ycba", "m"), uri("ypm", "b"), uri("ycba", "z")}
+    plain = make_claim_member(srcs_a)(cluster)
+    cached = memoised(make_claim_member(srcs_b))(cluster, key="YU")
+    assert plain[0] == cached[0]
+    assert plain[1]["name"] == cached[1]["name"]

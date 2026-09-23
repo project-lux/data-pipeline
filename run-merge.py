@@ -1,4 +1,5 @@
 import cProfile
+import collections
 import datetime
 import io
 import json
@@ -141,9 +142,42 @@ todo_names = {s["name"] for (n, s) in to_do}
 # cluster is one round trip.
 CLAIM_CHUNK = 100
 
+# Answers, by YUID. A cluster with N internal members produces N calls, and
+# every one of them sorts all N -- 101ms per call and 52% of the phase on
+# the 88,447-member cluster, once the query was chunked and the sort was
+# what was left. Bounded, and small: the clusters worth remembering are the
+# ones that repeat, and a cluster of three sorts in microseconds anyway.
+CLAIM_CACHE = collections.OrderedDict()
+CLAIM_CACHE_SIZE = 20000
 
-def claim_member(cluster, present=()):
+
+def claim_member(cluster, present=(), key=None):
+    """Memoised wrapper on _claim_member. `key` is the cluster's YUID.
+
+    Safe to memoise on that alone: the answer is a pure function of the
+    cluster's membership, which is what the YUID names. `present` does not
+    enter into it -- it only skips a lookup that would have returned True,
+    because the caller is holding the record it names. Both call sites pass
+    the same internal candidate set for a given YUID: the merge loop builds
+    it from the cluster it just read, and the reference loop from
+    idmap[uri], which is the same member set.
+    """
+    if key is None:
+        return _claim_member(cluster, present)
+    hit = CLAIM_CACHE.get(key)
+    if hit is not None:
+        CLAIM_CACHE.move_to_end(key)
+        return hit
+    ans = _claim_member(cluster, present)
+    CLAIM_CACHE[key] = ans
+    if len(CLAIM_CACHE) > CLAIM_CACHE_SIZE:
+        CLAIM_CACHE.popitem(last=False)
+    return ans
+
+
+def _claim_member(cluster, present=()):
     """Which internal record builds this cluster's merged record, if any.
+    Uncached; call claim_member().
 
     Every write a merged record makes -- the merged row and the rewritten
     row in each contributing source's cache -- is keyed by the cluster's
@@ -260,7 +294,8 @@ for src_name, src in to_do:
         if other_internals:
             # our own record is in hand, so it doesn't need a cache lookup
             with timer.stage("claim_member"):
-                (claimed, _) = claim_member(set(other_internals) | {qrecid}, present=(qrecid,))
+                (claimed, _) = claim_member(set(other_internals) | {qrecid},
+                                            present=(qrecid,), key=yuid)
             if claimed != qrecid:
                 # a smaller, still-present member owns this YUID
                 timer.skip()
@@ -370,7 +405,7 @@ if DO_REFERENCES:
         # claim_member() gives the same answer in every worker without
         # looking at what has been written so far.
         with timer.stage("claim_member"):
-            (_, claim_src) = claim_member(equivs)
+            (_, claim_src) = claim_member(equivs, key=yuid)
         if claim_src is not None and claim_src["name"] in todo_names:
             timer.skip()
             continue
