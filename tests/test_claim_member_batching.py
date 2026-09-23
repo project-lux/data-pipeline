@@ -40,6 +40,8 @@ class Cache:
 
 NS = {"ycba": "https://ycba.example/", "ypm": "https://ypm.example/"}
 
+CLAIM_CHUNK = 100
+
 
 def make_claim_member(sources):
     """run-merge.py's claim_member, with its two module-level dependencies
@@ -55,27 +57,29 @@ def make_claim_member(sources):
                 return (sources[name], uri[len(ns):])
         raise ValueError(uri)
 
-    def claim_member(cluster, present=()):
-        cands = []
-        for cand in sorted(m for m in cluster
-                           if not m.startswith("__")
-                           and m.startswith(internal_namespaces)):
-            try:
-                (csrc, crecid) = split_uri(split_qua(cand)[0])
-            except Exception:
-                continue
-            cands.append((cand, csrc, crecid))
+    def claim_member(cluster, present=(), chunk_size=CLAIM_CHUNK):
+        cands = sorted(m for m in cluster
+                       if not m.startswith("__")
+                       and m.startswith(internal_namespaces))
+        for i in range(0, len(cands), chunk_size):
+            chunk = []
+            for cand in cands[i:i + chunk_size]:
+                try:
+                    (csrc, crecid) = split_uri(split_qua(cand)[0])
+                except Exception:
+                    continue
+                chunk.append((cand, csrc, crecid))
 
-        asked = {}
-        for cand, csrc, crecid in cands:
-            if cand in present:
-                return (cand, csrc)
-            name = csrc["name"]
-            if name not in asked:
-                mine = [c for (_u, s, c) in cands if s["name"] == name]
-                asked[name] = csrc["recordcache"].has_multi(mine)
-            if crecid in asked[name]:
-                return (cand, csrc)
+            asked = {}
+            for cand, csrc, crecid in chunk:
+                if cand in present:
+                    return (cand, csrc)
+                name = csrc["name"]
+                if name not in asked:
+                    mine = [c for (_u, s, c) in chunk if s["name"] == name]
+                    asked[name] = csrc["recordcache"].has_multi(mine)
+                if crecid in asked[name]:
+                    return (cand, csrc)
         return (None, None)
 
     return claim_member
@@ -178,3 +182,74 @@ def test_an_unsplittable_member_is_skipped_not_fatal():
     claim = make_claim_member(srcs)
     bad = f"{NS['ycba']}##qua"      # no identifier
     assert claim({bad, uri("ycba", "a")})[0] == uri("ycba", "a")
+
+
+# --- the query must be bounded ----------------------------------------------
+#
+# Asking about every candidate at once looked like a strict improvement over
+# one round trip each. It is not: the walk almost always stops in the first
+# handful, so on the 88,447-member "anonymous" cluster it became one ANY()
+# over 88,447 keys, per member, for an answer three candidates in. Measured
+# at 2.12 SECONDS per call and 94.6% of the merge phase.
+
+def test_the_query_never_exceeds_one_chunk():
+    srcs = sources(ycba=["a00000"])
+    claim = make_claim_member(srcs)
+    cluster = {uri("ycba", f"{i:06d}") for i in range(5000)}
+    cluster.add(uri("ycba", "a00000"))
+    claim(cluster, chunk_size=100)
+    assert max(len(c) for c in srcs["ycba"]["recordcache"].calls) <= 100
+
+
+def test_a_hit_in_the_first_chunk_stops_there():
+    """5000 members, the smallest exists: one query, not fifty."""
+    srcs = sources(ycba=["000000"])
+    claim = make_claim_member(srcs)
+    cluster = {uri("ycba", f"{i:06d}") for i in range(5000)}
+    (claimed, _) = claim(cluster, chunk_size=100)
+    assert claimed == uri("ycba", "000000")
+    assert len(srcs["ycba"]["recordcache"].calls) == 1
+
+
+def test_later_chunks_are_walked_when_earlier_ones_are_all_gone():
+    """Correctness must not depend on the answer being near the front."""
+    srcs = sources(ycba=["000250"])
+    claim = make_claim_member(srcs)
+    cluster = {uri("ycba", f"{i:06d}") for i in range(500)}
+    (claimed, _) = claim(cluster, chunk_size=100)
+    assert claimed == uri("ycba", "000250")
+    assert len(srcs["ycba"]["recordcache"].calls) == 3      # chunks 0,1,2
+
+
+def test_chunking_does_not_change_the_winner():
+    """Every candidate in an earlier chunk sorts before every candidate in a
+    later one, so the chunk size must not be able to change the answer."""
+    srcs = sources(ycba=["000137", "000298"])
+    cluster = {uri("ycba", f"{i:06d}") for i in range(500)}
+    winners = {make_claim_member(sources(ycba=["000137", "000298"]))(
+        cluster, chunk_size=n)[0] for n in (1, 7, 100, 499, 500, 1000)}
+    assert winners == {uri("ycba", "000137")}
+
+
+def test_candidates_past_the_stopping_point_are_never_parsed():
+    """A cluster of 88,447 would otherwise cost 88,447 split_uri calls per
+    member, whatever the query size."""
+    parsed = []
+    srcs = sources(ycba=["000000"])
+    claim = make_claim_member(srcs)
+    cluster = {uri("ycba", f"{i:06d}") for i in range(5000)}
+    (claimed, _) = claim(cluster, chunk_size=100)
+    # the chunk that answered held 100 candidates; the other 4,900 were not
+    # split, which the single query above already implies
+    assert claimed == uri("ycba", "000000")
+    assert sum(len(c) for c in srcs["ycba"]["recordcache"].calls) <= 100
+
+
+def test_present_still_short_circuits_before_any_query():
+    srcs = sources(ycba=[])
+    claim = make_claim_member(srcs)
+    mine = uri("ycba", "000000")
+    cluster = {uri("ycba", f"{i:06d}") for i in range(5000)}
+    (claimed, _) = claim(cluster, present=(mine,), chunk_size=100)
+    assert claimed == mine
+    assert srcs["ycba"]["recordcache"].calls == []

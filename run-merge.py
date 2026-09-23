@@ -136,6 +136,12 @@ internal_namespaces = tuple(c["namespace"] for c in cfgs.internal.values())
 todo_names = {s["name"] for (n, s) in to_do}
 
 
+# Candidates per existence query in claim_member(). Small because the walk
+# almost always stops in the first few; large enough that an ordinary
+# cluster is one round trip.
+CLAIM_CHUNK = 100
+
+
 def claim_member(cluster, present=()):
     """Which internal record builds this cluster's merged record, if any.
 
@@ -150,33 +156,45 @@ def claim_member(cluster, present=()):
     Returns (member_uri, source_config), or (None, None) when the cluster
     has no internal member -- those clusters belong to the reference pass.
     """
-    cands = []
-    for cand in sorted(m for m in cluster
-                       if not m.startswith("__") and m.startswith(internal_namespaces)):
-        try:
-            (csrc, crecid) = cfgs.split_uri(cfgs.split_qua(cand)[0])
-        except Exception:
-            continue
-        cands.append((cand, csrc, crecid))
+    # The answer has to be the *smallest* surviving member, so the sorted
+    # walk is the rule and cannot be reordered. What can change is how many
+    # candidates are asked about at a time.
+    #
+    # `crecid in csrc["recordcache"]` inside the loop was a round trip per
+    # candidate -- 1.2M calls at 28ms, the worst per-call cost in the phase.
+    # Asking about *every* candidate at once is worse: the walk almost
+    # always stops in the first handful, so on the 88,447-member cluster
+    # that is one ANY() over 88,447 keys, per member, for an answer that was
+    # three candidates in. Measured at 2.12 SECONDS per call, 94.6% of the
+    # phase.
+    #
+    # So: a chunk at a time. One query per source per chunk, and the walk
+    # still stops at the first member that exists. Every candidate in an
+    # earlier chunk sorts before every candidate in a later one, so stopping
+    # inside a chunk gives the same answer as walking them all.
+    cands = sorted(m for m in cluster
+                   if not m.startswith("__") and m.startswith(internal_namespaces))
+    for i in range(0, len(cands), CLAIM_CHUNK):
+        # parsed per chunk, not up front: on a huge cluster the candidates
+        # past the first chunk are never looked at
+        chunk = []
+        for cand in cands[i:i + CLAIM_CHUNK]:
+            try:
+                (csrc, crecid) = cfgs.split_uri(cfgs.split_qua(cand)[0])
+            except Exception:
+                continue
+            chunk.append((cand, csrc, crecid))
 
-    # One existence query per source rather than one per candidate. This used
-    # to be `crecid in csrc["recordcache"]` inside the loop, which is a round
-    # trip each: 1.2M calls at 28ms, the worst per-call cost in the phase by
-    # a factor of seven. Still walks the candidates in order and returns on
-    # the first that exists -- the answer has to be the *smallest* surviving
-    # member, so the walk is the rule -- but the first time a source is
-    # needed it is asked about every candidate it holds at once. A cluster
-    # whose smallest member is in `present` still costs nothing.
-    asked = {}
-    for cand, csrc, crecid in cands:
-        if cand in present:
-            return (cand, csrc)
-        name = csrc["name"]
-        if name not in asked:
-            mine = [c for (_u, s, c) in cands if s["name"] == name]
-            asked[name] = csrc["recordcache"].has_multi(mine)
-        if crecid in asked[name]:
-            return (cand, csrc)
+        asked = {}
+        for cand, csrc, crecid in chunk:
+            if cand in present:
+                return (cand, csrc)
+            name = csrc["name"]
+            if name not in asked:
+                mine = [c for (_u, s, c) in chunk if s["name"] == name]
+                asked[name] = csrc["recordcache"].has_multi(mine)
+            if crecid in asked[name]:
+                return (cand, csrc)
     return (None, None)
 
 
