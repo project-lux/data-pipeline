@@ -10,6 +10,7 @@ from pstats import SortKey
 from dotenv import load_dotenv
 
 from pipeline.config import Config
+from pipeline.process.merge_batch import MERGE_BATCH, prefetched
 from pipeline.process.merger import MergeHandler
 from pipeline.process.reference_manager import ReferenceManager
 from pipeline.process.reidentifier import Reidentifier
@@ -122,6 +123,7 @@ def fetch_records(rcache, ids, name):
         yield rec
 
 
+
 # -------------------------------------------------
 if profiling:
     pr = cProfile.Profile()
@@ -184,7 +186,6 @@ print(start_time)
 # Writes timing-merge-<slice>.json next to the logs.
 timer = PhaseTimer("merge", slice_n=my_slice, max_slice=max_slice,
                    out_dir=cfgs.log_dir if hasattr(cfgs, "log_dir") else cfgs.data_dir)
-t_done = 0
 for src_name, src in to_do:
     timer.mark(src["name"])
     rcache = src["recordcache"]
@@ -201,64 +202,34 @@ for src_name, src in to_do:
         print(f"*** {src['name']} ***")
         records = rcache.iter_records()
 
-    for rec in records:
-        t_done += 1
-        timer.step()
-
+    for (rec, recid, recuri, qrecid, full_yuid, already_built) in prefetched(
+            records, src, cfgs, idmap, merged_cache, timer, RESUME, MERGE_BATCH):
         distance = 0
-        recid = rec["identifier"]
-        # get() stamps this on every row it returns and merger.merge() needs
-        # it; the iterators don't, so set it here for all three paths
-        rec["source"] = src["name"]
-        recuri = f"{src['namespace']}{recid}"
-        qrecid = cfgs.make_qua(recuri, rec["data"]["type"])
-        # The YUID and its whole class in one round trip. These were two
-        # sequential single-row lookups (idmap_forward then idmap_cluster),
-        # 9.35 worker-hours of the last build between them, for what postgres
-        # can answer in one statement -- membership is derived from the yuid
-        # column, so the forward pointer and the class it points at come back
-        # together. get_cluster caches both halves exactly as the two lookups
-        # did, which is what keeps idmap_equivs below a memory hit.
-        #
-        # Except on the resume path, which only needs the YUID to key the
-        # check below and throws the class away. Measured on a resumed run:
-        # 97.4% of records were skipped, and get_cluster on them was 72.6%
-        # of all worker time -- 22.6 hours of scanning idmap_yuid_idx and
-        # fetching a heap row per member, for an answer discarded a
-        # microsecond later. A resumed record that survives the check pays
-        # two round trips instead of one, which on that mix is 2.6% of them
-        # paying double so the other 97.4% pay a fraction.
-        cluster = None
-        if RESUME:
-            with timer.stage("resume_lookup"):
-                full_yuid = idmap[qrecid]
-        else:
-            with timer.stage("idmap_cluster"):
-                (full_yuid, cluster) = idmap.get_cluster(qrecid)
         if not full_yuid:
             print(f" !!! Couldn't find YUID for internal record: {qrecid}")
             timer.skip()
             continue
+        if already_built:
+            timer.skip()
+            continue
+        # The YUID and its whole class. These were two sequential single-row
+        # lookups (idmap_forward then idmap_cluster), 9.35 worker-hours of an
+        # earlier build between them, for what postgres can answer in one
+        # statement -- membership is derived from the yuid column, so the
+        # forward pointer and the class it points at come back together.
+        # prefetched() has already put both in the memory cache for this
+        # batch, so this is a lookup and not a statement; it stays a call so
+        # that a cache miss, or a backend without one, still works.
+        with timer.stage("idmap_cluster"):
+            (full_yuid, cluster) = idmap.get_cluster(qrecid)
+        if not full_yuid:
+            print(f" !!! Couldn't find YUID for internal record: {qrecid}")
+            timer.skip()
+            continue
+        # Derived from what is actually in hand rather than trusting the
+        # prefetch and this call to agree; nothing writes the map during
+        # merge, so they do.
         yuid = full_yuid.rsplit("/", 1)[1]
-        if RESUME:
-            with timer.stage("resume_check"):
-                ins_time = merged_cache.metadata(yuid, "insert_time")
-            if ins_time is not None: # and (RESUME or ins_time["insert_time"] > start_time):
-                timer.skip()
-                continue
-            # survived the check, so now the class is actually needed. The
-            # forward half is already in the memory cache from the lookup
-            # above, so this is one statement, not two.
-            with timer.stage("idmap_cluster"):
-                (full_yuid, cluster) = idmap.get_cluster(qrecid)
-            if not full_yuid:
-                print(f" !!! Couldn't find YUID for internal record: {qrecid}")
-                timer.skip()
-                continue
-            # Same value the forward lookup gave -- nothing writes the map
-            # during merge -- but derived from what is actually in hand
-            # rather than trusting the two calls to agree.
-            yuid = full_yuid.rsplit("/", 1)[1]
 
         # Deterministic cross-slice claim: when several internal records
         # share this YUID, the insert_time guard above is a check-then-act
