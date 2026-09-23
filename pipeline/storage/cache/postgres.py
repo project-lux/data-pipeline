@@ -211,6 +211,10 @@ class PoolManager(object):
 
 
 class PooledCache(object):
+    # per-instance once _array_cast fills it; None here so an instance made
+    # without __init__ still works, and so it is never shared between tables
+    _col_types = None
+
     # Rows buffered for the next multi-row upsert, {key: (column names,
     # values)}. Keyed by primary key, so a record written twice before the
     # batch lands folds to its last version rather than reaching postgres as
@@ -539,6 +543,39 @@ class PooledCache(object):
             raise ValueError(f"Could not read columns of {self.name} for a raw select")
         return ", ".join("data::text AS data" if c == "data" else c for c in self._cols)
 
+    def _array_cast(self, column):
+        """`::uuid[]` when `column` is a uuid, `''` when it is text.
+
+        `col = %s` works on a uuid column because postgres resolves a single
+        unknown literal to the column's type. `col = ANY(%s)` does not:
+        psycopg2 sends a text[], and there is no `uuid = text` operator --
+        `operator does not exist: uuid = text`. Casting the *parameter*
+        rather than the column is what keeps the index usable; `col::text =
+        ANY(...)` would answer correctly and scan the table to do it.
+
+        Read once per column per cache and remembered, like _cols."""
+        # lazily, not in __init__: instances are also built with
+        # object.__new__ (the tests, and _named_cache) and would not get it
+        if self._col_types is None:
+            self._col_types = {}
+        if column not in self._col_types:
+            qry = """SELECT data_type FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = %s
+                  AND column_name = %s"""
+            typ = None
+            try:
+                with self._cursor(internal=False) as cursor:
+                    cursor.execute(qry, (self.name, column))
+                    row = cursor.fetchone()
+                    typ = row["data_type"] if row else None
+            except Exception as e:
+                print(f"could not read type of {self.name}.{column}: {e}")
+            self._col_types[column] = typ
+        typ = self._col_types[column]
+        # only the types these tables actually key on; anything else is left
+        # uncast rather than guessed at
+        return "::uuid[]" if typ == "uuid" else ""
+
     def get(self, key, _key_type=None, raw=False):
         # Get a record either by YUID or internal identifier,
         if _key_type is None:
@@ -568,15 +605,17 @@ class PooledCache(object):
         if not keys:
             return {}
         self._read_barrier()
+        # same cast, and for the same reason, as has_multi
+        cast = self._array_cast(_key_type)
         qry = (f"SELECT {self._select_list(raw)} FROM {self.name} "
-               f"WHERE {_key_type} = ANY(%s)")
+               f"WHERE {_key_type} = ANY(%s{cast})")
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry, (keys,))
             rows = cursor.fetchall()
         out = {}
         for row in rows:
             row["source"] = self.config["name"]
-            out[row[_key_type]] = row
+            out[str(row[_key_type])] = row
         return out
 
     def get_fresh(self, key, since=None, raw=False, _key_type=None):
@@ -1064,10 +1103,13 @@ class PooledCache(object):
         if not keys:
             return set()
         self._read_barrier()
-        qry = f"SELECT {_key_type} FROM {self.name} WHERE {_key_type} = ANY(%s)"
+        cast = self._array_cast(_key_type)
+        qry = f"SELECT {_key_type} FROM {self.name} WHERE {_key_type} = ANY(%s{cast})"
         with self._cursor(internal=False) as cursor:
             cursor.execute(qry, (keys,))
-            return {row[_key_type] for row in cursor.fetchall()}
+            # str(): a uuid column comes back as uuid.UUID once psycopg2's
+            # typecaster is registered, and callers compare against strings
+            return {str(row[_key_type]) for row in cursor.fetchall()}
 
     def commit(self):
         # Normally a no-op: we commit after every write unless deferring

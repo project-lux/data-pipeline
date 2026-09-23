@@ -202,3 +202,81 @@ def test_has_multi_can_be_asked_about_another_column():
     assert c.has_multi(["abc", "def"], _key_type="identifier") == {"abc"}
     (qry, _) = c.conn.queries[-1]
     assert qry == f"SELECT identifier FROM {c.name} WHERE identifier = ANY(%s)"
+
+
+# --- typed parameters for ANY() ---------------------------------------------
+#
+# `col = %s` works on a uuid column because postgres resolves a single
+# unknown literal to the column's type. `col = ANY(%s)` does not: psycopg2
+# sends a text[] and there is no `uuid = text` operator. This shipped, and
+# merge died on the first batch with
+#
+#   psycopg2.errors.UndefinedFunction: operator does not exist: uuid = text
+#   LINE 1: ...yuid FROM merged_merged_record_cache WHERE yuid = ANY(ARRA...
+#
+# The stubbed cursor cannot catch a type mismatch, so what these pin is the
+# generated SQL. The cast goes on the *parameter*: `col::text = ANY(...)`
+# would answer correctly and sequential-scan the table to do it.
+
+def uuid_keyed(c):
+    """Make the stubbed information_schema lookup report a uuid column."""
+    c.conn.row = {"data_type": "uuid"}
+    c.conn.rows_all = []
+    return c
+
+
+def test_has_multi_casts_the_parameter_for_a_uuid_key():
+    c = uuid_keyed(cache())
+    c.has_multi([YUID])
+    (qry, _) = c.conn.queries[-1]
+    assert "= ANY(%s::uuid[])" in qry
+
+
+def test_get_multi_casts_it_too():
+    """Same ANY(), same latent break -- it had just never been called on a
+    uuid-keyed cache."""
+    c = uuid_keyed(cache())
+    c.get_multi([YUID])
+    (qry, _) = c.conn.queries[-1]
+    assert "= ANY(%s::uuid[])" in qry
+
+
+def test_a_text_key_is_not_cast():
+    c = cache()
+    c.conn.row = {"data_type": "text"}
+    c.conn.rows_all = []
+    c.has_multi(["abc"], _key_type="identifier")
+    (qry, _) = c.conn.queries[-1]
+    assert "= ANY(%s)" in qry
+    assert "uuid" not in qry
+
+
+def test_an_unknown_column_type_is_left_uncast():
+    """Guessing a cast would be worse than sending what we always sent."""
+    c = cache()
+    c.conn.row = None
+    c.conn.rows_all = []
+    c.has_multi(["abc"], _key_type="identifier")
+    assert "= ANY(%s)" in c.conn.queries[-1][0]
+
+
+def test_the_column_type_is_read_once_per_column():
+    c = uuid_keyed(cache())
+    for _ in range(4):
+        c.has_multi([YUID])
+    looked_up = [q for q, _ in c.conn.queries if "information_schema" in q]
+    assert len(looked_up) == 1
+
+
+def test_the_cast_is_not_shared_between_caches():
+    """_col_types is a class attribute defaulting to None so an instance
+    built without __init__ still works; it must not become a dict on the
+    class and leak one table's column types into another's."""
+    from pipeline.storage.cache.postgres import PooledCache
+    a, b = uuid_keyed(cache()), cache()
+    b.conn.row = {"data_type": "text"}
+    b.conn.rows_all = []
+    a.has_multi([YUID])
+    b.has_multi(["abc"], _key_type="identifier")
+    assert "uuid" not in b.conn.queries[-1][0]
+    assert PooledCache._col_types is None
