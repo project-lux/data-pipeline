@@ -134,6 +134,80 @@ def test_the_guard_names_the_table_not_excluded_twice(batched):
     assert "idmap.yuid" in where
 
 
+# --- not sending it at all --------------------------------------------------
+
+PERSON_X = "https://lux.collections.yale.edu/data/person/x"
+PERSON_Y = "https://lux.collections.yale.edu/data/person/y"
+
+
+def member_rows(seen):
+    return next(args for sql, args in seen if "(uri, yuid)" in sql)
+
+
+def yuid_upsert(seen):
+    return next(sql for sql, _ in seen if "(yuid, token)" in sql)
+
+
+def test_a_member_already_pointing_at_the_yuid_is_never_sent(batched):
+    """The guard keeps the server from writing the row. It does not keep the
+    row from being serialized, sent and probed against idmap_pkey (5.9GB) --
+    ~0.7ms of random btree descent each, which on a measured run was 10.7 of
+    identify's 14.1 hours. prior already says what the row holds."""
+    m = idmap()
+    got = m.assign_bulk([(PERSON_X, ["aat:1##quaPerson"],
+                          {"aat:1##quaPerson": PERSON_X})])
+    assert got["unchanged"] == 1
+    assert got["set"] == 1        # still counts the member
+    assert got["moved"] == 0      # it did not move; it did not go anywhere
+
+
+def test_an_all_unchanged_cluster_still_stamps_its_yuid(batched):
+    """The update token is per-build, so a cluster that did not move still has
+    to be marked as seen by this one -- the early return that used to skip the
+    whole statement block would have dropped it."""
+    m = idmap()
+    m.assign_bulk([(PERSON_X, ["aat:1##quaPerson"],
+                    {"aat:1##quaPerson": PERSON_X})])
+    assert len(batched) == 1
+    assert "(yuid, token)" in yuid_upsert(batched)
+
+
+def test_a_moved_member_is_still_sent(batched):
+    m = idmap()
+    got = m.assign_bulk([(PERSON_X, ["aat:1##quaPerson"],
+                          {"aat:1##quaPerson": PERSON_Y})])
+    assert got["moved"] == 1
+    assert got["unchanged"] == 0
+    assert len(member_rows(batched)) == 1
+
+
+def test_a_member_with_no_prior_is_still_sent(batched):
+    """A blank prior means no row at all, not a row that matches."""
+    m = idmap()
+    got = m.assign_bulk([(PERSON_X, ["aat:1##quaPerson"], {})])
+    assert got["unchanged"] == 0
+    assert len(member_rows(batched)) == 1
+
+
+def test_a_mixed_cluster_sends_only_what_changed(batched):
+    m = idmap()
+    got = m.assign_bulk([(PERSON_X,
+                          ["aat:1##quaPerson", "aat:2##quaPerson",
+                           "aat:3##quaPerson"],
+                          {"aat:1##quaPerson": PERSON_X,     # unchanged
+                           "aat:2##quaPerson": PERSON_Y})])  # moved
+    assert got == {"set": 3, "moved": 1, "clusters": 1, "unchanged": 1}
+    rows = member_rows(batched)
+    assert len(rows) == 2
+    assert all("aat:1##quaPerson" not in r[0] for r in rows)
+
+
+def test_nothing_at_all_still_does_nothing(batched):
+    m = idmap()
+    assert m.assign_bulk([])["clusters"] == 0
+    assert batched == []
+
+
 # --- the deliberate exceptions ---------------------------------------------
 
 def test_mint_keeps_its_no_op_update():

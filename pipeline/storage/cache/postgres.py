@@ -1049,6 +1049,26 @@ class PooledCache(object):
         # sys.stdout.write('?');sys.stdout.flush()
         return bool(rows)
 
+    def has_multi(self, keys, _key_type=None):
+        """Which of `keys` this cache holds, as a set of the ones present.
+
+        For the caller that would otherwise call has_item() in a loop --
+        merge's claim_member() walks every internal member of a cluster to
+        find the smallest one that still exists, and was paying a round trip
+        per candidate for it. Missing keys are simply absent from the result,
+        as in get_multi(), and no row is returned, so this stays cheap on a
+        cluster whose members are large records."""
+        if _key_type is None:
+            _key_type = self.key
+        keys = [k for k in keys if not (_key_type == "yuid" and len(k) != 36)]
+        if not keys:
+            return set()
+        self._read_barrier()
+        qry = f"SELECT {_key_type} FROM {self.name} WHERE {_key_type} = ANY(%s)"
+        with self._cursor(internal=False) as cursor:
+            cursor.execute(qry, (keys,))
+            return {row[_key_type] for row in cursor.fetchall()}
+
     def commit(self):
         # Normally a no-op: we commit after every write unless deferring
         self.flush()

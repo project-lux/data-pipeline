@@ -33,7 +33,9 @@ class Cursor:
 
     def execute(self, sql, params=None):
         self.conn.executed.append(sql)
-        if sql.startswith("VACUUM") and self.conn.fail_on in sql:
+        # the table is the last token, so fail_on="idmap" fails that table
+        # and not idmap_yuid, which a substring match would also catch
+        if sql.startswith("VACUUM") and sql.split()[-1] == self.conn.fail_on:
             raise RuntimeError("could not get lock")
 
     def fetchall(self):
@@ -64,23 +66,43 @@ def vacuums(conn):
 def test_both_tables_are_vacuumed():
     m = idmap()
     m.optimize(report=False)
+    assert vacuums(m.conn) == ["VACUUM (ANALYZE, FREEZE) idmap",
+                               "VACUUM (ANALYZE, FREEZE) idmap_yuid"]
+
+
+def test_both_options_can_be_turned_off():
+    """`VACUUM () idmap` is a syntax error -- with neither option the
+    statement has to come out as the plain vacuum that was asked for."""
+    m = idmap()
+    m.optimize(analyze=False, freeze=False, report=False)
+    assert vacuums(m.conn) == ["VACUUM idmap", "VACUUM idmap_yuid"]
+
+
+def test_freeze_is_on_by_default():
+    """Without it a vacuum can only advance relfrozenxid to the current XID
+    minus vacuum_freeze_min_age, so the map keeps ageing towards
+    autovacuum_freeze_max_age and eventually trips a forced anti-wraparound
+    autovacuum that will not yield its lock to anything."""
+    m = idmap()
+    m.optimize(report=False)
+    assert all("FREEZE" in q for q in vacuums(m.conn))
+
+
+def test_freeze_can_be_turned_off_on_its_own():
+    """The first FREEZE reads the whole table; a caller that only wants the
+    planner statistics refreshed should not have to pay for that."""
+    m = idmap()
+    m.optimize(freeze=False, report=False)
     assert vacuums(m.conn) == ["VACUUM (ANALYZE) idmap",
                                "VACUUM (ANALYZE) idmap_yuid"]
-
-
-def test_analyze_can_be_turned_off():
-    """ANALYZE is the expensive half on a table this size."""
-    m = idmap()
-    m.optimize(analyze=False, report=False)
-    assert vacuums(m.conn) == ["VACUUM idmap", "VACUUM idmap_yuid"]
 
 
 def test_a_failure_on_one_table_does_not_skip_the_other():
     """A VACUUM that cannot get its lock should not cost you the second
     table, or leave identify looking like it succeeded."""
-    m = idmap(fail_on="idmap ")
+    m = idmap(fail_on="idmap")
     m.optimize(report=False)
-    assert "VACUUM (ANALYZE) idmap_yuid" in m.conn.executed
+    assert "VACUUM (ANALYZE, FREEZE) idmap_yuid" in m.conn.executed
 
 
 def test_the_report_reads_the_stats_before_vacuuming():
@@ -114,5 +136,5 @@ def test_stats_failure_does_not_stop_the_vacuum():
     m = idmap()
     m.conn = Broken()
     m.optimize(report=True)
-    assert vacuums(m.conn) == ["VACUUM (ANALYZE) idmap",
-                               "VACUUM (ANALYZE) idmap_yuid"]
+    assert vacuums(m.conn) == ["VACUUM (ANALYZE, FREEZE) idmap",
+                               "VACUUM (ANALYZE, FREEZE) idmap_yuid"]

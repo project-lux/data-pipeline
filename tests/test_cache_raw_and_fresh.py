@@ -37,6 +37,8 @@ class Cursor:
         self.conn.queries.append((" ".join(qry.split()), params))
 
     def fetchall(self):
+        if self.conn.rows_all is not None:
+            return self.conn.rows_all
         return [{"column_name": c} for c in COLUMNS]
 
     def fetchone(self):
@@ -51,6 +53,9 @@ class Conn:
         self.queries = []
         self.row = None
         self.rows = []
+        # None means "answer the column-name lookup"; a list is what the
+        # query under test should see
+        self.rows_all = None
 
     def cursor(self, **kw):
         return Cursor(self)
@@ -146,3 +151,54 @@ def test_iter_records_slice_passes_raw_through():
     qs = [q for q, _ in c.conn.queries if "information_schema" not in q]
     assert "data::text AS data" in qs[0]
     assert "hashtext" in qs[0]
+
+
+# --- has_multi ---------------------------------------------------------------
+#
+# merge's claim_member() walked every internal member of a cluster to find the
+# smallest one that still exists, one has_item() round trip per candidate:
+# 1.2M calls at 28ms each over a 100.7M record merge, the worst per-call cost
+# in the phase by a factor of seven. One query answers all of them.
+
+def test_has_multi_asks_once_for_every_key():
+    c = cache()
+    c.conn.rows_all = [{"yuid": YUID}]
+    got = c.has_multi([YUID, YUID.replace("0", "1")])
+    assert got == {YUID}
+    (qry, params) = c.conn.queries[-1]
+    assert qry == f"SELECT yuid FROM {c.name} WHERE yuid = ANY(%s)"
+    assert len(params[0]) == 2
+
+
+def test_has_multi_selects_no_payload():
+    """A cluster's members can be large records; presence must not drag the
+    data column back with it."""
+    c = cache()
+    c.conn.rows_all = []
+    c.has_multi([YUID])
+    (qry, _) = c.conn.queries[-1]
+    assert "data" not in qry
+    assert "SELECT yuid" in qry
+
+
+def test_has_multi_keeps_has_items_key_guard():
+    """yuid keys that are not 36 characters never match a row, and get_multi
+    drops them rather than sending them."""
+    c = cache()
+    c.conn.rows_all = []
+    assert c.has_multi(["too-short"]) == set()
+    assert c.conn.queries == []          # nothing worth asking
+
+
+def test_has_multi_of_nothing_asks_nothing():
+    c = cache()
+    assert c.has_multi([]) == set()
+    assert c.conn.queries == []
+
+
+def test_has_multi_can_be_asked_about_another_column():
+    c = cache()
+    c.conn.rows_all = [{"identifier": "abc"}]
+    assert c.has_multi(["abc", "def"], _key_type="identifier") == {"abc"}
+    (qry, _) = c.conn.queries[-1]
+    assert qry == f"SELECT identifier FROM {c.name} WHERE identifier = ANY(%s)"

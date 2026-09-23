@@ -19,6 +19,7 @@ moved and the tests move with them:
 
 import glob
 import json
+import pytest
 import random
 import sys
 from collections import defaultdict
@@ -137,6 +138,19 @@ class FakeIdMap:
         self.yuids.update(yuids)
         self.members.update(rows)
         return stats
+
+    supports_member_dump = True
+
+    def dump_members(self, fh):
+        """The bulk fetch_prior path: hand over the whole map in short form.
+
+        Present on the postgres backend and absent on redis, which is the
+        switch _fetch_prior_stream reads."""
+        n = 0
+        for uri, yuid in self.members.items():
+            fh.write(f"{uri}\t{yuid}\n")
+            n += 1
+        return n
 
     def delete_empty_yuids(self, yuids):
         """A YUID with no members left is dropped -- the NOT EXISTS sweep."""
@@ -303,6 +317,77 @@ def test_stream_prior_reuse_exact(tmp_path):
 
     resolve(cfgs, idmap, tmp_path)
     assert idmap.forward() == expected
+
+
+def _prior_file(work):
+    """The one clusters.prior under a kept temp dir."""
+    found = list(Path(work).glob("identity-*/clusters.prior"))
+    assert len(found) == 1, found
+    return found[0].read_text()
+
+
+def _run_with_priors(work, clusters, seeds, rng, monkeypatch, probe):
+    work.mkdir()
+    cfgs = StubConfigs(temp_dir=work)
+    write_assertions(cfgs, clusters, 2, rng)
+    idmap = FakeIdMap(cfgs)
+    for member, yuid in seeds:
+        idmap.seed(member, yuid)
+    if probe:
+        monkeypatch.setenv("LUX_PRIOR_PROBE", "1")
+    else:
+        monkeypatch.delenv("LUX_PRIOR_PROBE", raising=False)
+    stats = resolve(cfgs, idmap, work, keep_temp=True)
+    return _prior_file(work), idmap.forward(), stats
+
+
+def test_bulk_prior_is_byte_identical_to_probing(tmp_path, monkeypatch):
+    """One scan of the map merge-joined against the members has to produce
+    the same clusters.prior as a key-at-a-time get_multi, line order and all
+    -- everything downstream reads that file with _grouped()."""
+    rng = random.Random(11)
+    clusters = make_clusters(rng, 40)
+    # a prior YUID for about half the members, some of them shared so there
+    # is real contention to resolve
+    yuids = [f"{StubConfigs.internal_uri}concept/Y{i}" for i in range(6)]
+    seeds = [(qua(m), rng.choice(yuids))
+             for c in clusters for m in c if rng.random() < 0.5]
+
+    probe = _run_with_priors(tmp_path / "probe", clusters, seeds,
+                             random.Random(3), monkeypatch, probe=True)
+    bulk = _run_with_priors(tmp_path / "bulk", clusters, seeds,
+                            random.Random(3), monkeypatch, probe=False)
+
+    assert probe[0] == bulk[0]          # the file itself
+    assert probe[1] == bulk[1]          # the resulting map
+    assert probe[2] == bulk[2]          # the stats
+    assert "\t" in probe[0] and probe[0].count("\n") > 40
+
+
+def test_bulk_prior_handles_an_empty_map(tmp_path, monkeypatch):
+    """First build ever: nothing to dump, every prior blank."""
+    rng = random.Random(5)
+    clusters = make_clusters(rng, 8)
+    prior, fwd, _ = _run_with_priors(tmp_path / "empty", clusters, [],
+                                     random.Random(2), monkeypatch, probe=False)
+    assert all(line.endswith("\t") for line in prior.splitlines())
+    assert fwd                                   # everything still minted
+
+
+def test_probe_path_still_used_without_dump_members(tmp_path, monkeypatch):
+    """redis cannot dump and the subsidiary map must not, so the switch has
+    to fall back on its own rather than needing the env var set."""
+    rng = random.Random(9)
+    cfgs = StubConfigs(temp_dir=tmp_path)
+    clusters = make_clusters(rng, 6)
+    write_assertions(cfgs, clusters, 1, rng)
+    monkeypatch.setattr(FakeIdMap, "supports_member_dump", False)
+    monkeypatch.setattr(FakeIdMap, "dump_members",
+                        lambda self, fh: pytest.fail("should not dump"))
+    monkeypatch.delenv("LUX_PRIOR_PROBE", raising=False)
+    idmap = FakeIdMap(cfgs)
+    resolve(cfgs, idmap, tmp_path)
+    assert idmap.forward()
 
 
 def test_stream_minority_moves_and_old_set_cleaned(tmp_path):

@@ -106,7 +106,7 @@ class IdMap(object):
 
     def assign_bulk(self, items):
         """In-memory equivalent of the backends' bulk cluster assignment."""
-        stats = {"set": 0, "moved": 0, "clusters": 0}
+        stats = {"set": 0, "moved": 0, "clusters": 0, "unchanged": 0}
         for yuid, members, prior in items:
             stats["clusters"] += 1
             for m in members:
@@ -114,8 +114,13 @@ class IdMap(object):
                 if old and old != yuid:
                     self._remove(old, m)
                     stats["moved"] += 1
-                self.set(m, yuid)
                 stats["set"] += 1
+                if old == yuid:
+                    # already there; counted so the stats line means the same
+                    # thing on every backend
+                    stats["unchanged"] += 1
+                    continue
+                self.set(m, yuid)
             self._add(yuid, *members)
         return stats
 

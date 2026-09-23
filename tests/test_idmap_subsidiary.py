@@ -410,3 +410,15 @@ def test_a_master_on_another_server_does_not_trip_the_guard():
     m.change_table = "idmap_changes"
     m._conn_kw = {"dbname": "lux"}
     m._guard_distinct(master)
+
+
+def test_subsidiary_declines_the_bulk_member_dump():
+    """identify's fetch_prior takes one scan of the map instead of probing
+    per key, but only where the table *is* the map. Here it is a cache of the
+    master, so a member not yet hydrated would dump as absent -- and absent
+    reads as "never had a YUID", which mints a second one over the master's."""
+    from pipeline.storage.idmap import postgres as master
+    from pipeline.storage.idmap import subsidiary as sub
+
+    assert master.IdMap.supports_member_dump is True
+    assert sub.IdMap.supports_member_dump is False

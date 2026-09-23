@@ -452,6 +452,14 @@ if "--bloat" in sys.argv:
     for name, t, cache in _maintenance_caches():
         print(cache.bloat_line())
 
+if "--idmap-indexes" in sys.argv:
+    # One-off DDL: give the map the covering (yuid, uri) index that makes
+    # get_cluster()'s member scan index-only, and drop the (yuid) one it
+    # replaces. Builds CONCURRENTLY, so it can run against a live map -- but
+    # it still waits on SHARE UPDATE EXCLUSIVE, and an anti-wraparound
+    # autovacuum will not yield to it. Check pg_stat_progress_vacuum first.
+    idmap.ensure_covering_indexes(drop_old="--keep-old-index" not in sys.argv)
+
 if "--drop-time-indexes" in sys.argv:
     # One-off DDL: remove the insert_time index from every cache that has no
     # query for it. The data caches keep theirs -- latest() reads it.

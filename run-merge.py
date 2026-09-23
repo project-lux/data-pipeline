@@ -148,13 +148,32 @@ def claim_member(cluster, present=()):
     Returns (member_uri, source_config), or (None, None) when the cluster
     has no internal member -- those clusters belong to the reference pass.
     """
+    cands = []
     for cand in sorted(m for m in cluster
                        if not m.startswith("__") and m.startswith(internal_namespaces)):
         try:
             (csrc, crecid) = cfgs.split_uri(cfgs.split_qua(cand)[0])
         except Exception:
             continue
-        if cand in present or crecid in csrc["recordcache"]:
+        cands.append((cand, csrc, crecid))
+
+    # One existence query per source rather than one per candidate. This used
+    # to be `crecid in csrc["recordcache"]` inside the loop, which is a round
+    # trip each: 1.2M calls at 28ms, the worst per-call cost in the phase by
+    # a factor of seven. Still walks the candidates in order and returns on
+    # the first that exists -- the answer has to be the *smallest* surviving
+    # member, so the walk is the rule -- but the first time a source is
+    # needed it is asked about every candidate it holds at once. A cluster
+    # whose smallest member is in `present` still costs nothing.
+    asked = {}
+    for cand, csrc, crecid in cands:
+        if cand in present:
+            return (cand, csrc)
+        name = csrc["name"]
+        if name not in asked:
+            mine = [c for (_u, s, c) in cands if s["name"] == name]
+            asked[name] = csrc["recordcache"].has_multi(mine)
+        if crecid in asked[name]:
             return (cand, csrc)
     return (None, None)
 
@@ -200,8 +219,22 @@ for src_name, src in to_do:
         # column, so the forward pointer and the class it points at come back
         # together. get_cluster caches both halves exactly as the two lookups
         # did, which is what keeps idmap_equivs below a memory hit.
-        with timer.stage("idmap_cluster"):
-            (full_yuid, cluster) = idmap.get_cluster(qrecid)
+        #
+        # Except on the resume path, which only needs the YUID to key the
+        # check below and throws the class away. Measured on a resumed run:
+        # 97.4% of records were skipped, and get_cluster on them was 72.6%
+        # of all worker time -- 22.6 hours of scanning idmap_yuid_idx and
+        # fetching a heap row per member, for an answer discarded a
+        # microsecond later. A resumed record that survives the check pays
+        # two round trips instead of one, which on that mix is 2.6% of them
+        # paying double so the other 97.4% pay a fraction.
+        cluster = None
+        if RESUME:
+            with timer.stage("resume_lookup"):
+                full_yuid = idmap[qrecid]
+        else:
+            with timer.stage("idmap_cluster"):
+                (full_yuid, cluster) = idmap.get_cluster(qrecid)
         if not full_yuid:
             print(f" !!! Couldn't find YUID for internal record: {qrecid}")
             timer.skip()
@@ -213,6 +246,19 @@ for src_name, src in to_do:
             if ins_time is not None: # and (RESUME or ins_time["insert_time"] > start_time):
                 timer.skip()
                 continue
+            # survived the check, so now the class is actually needed. The
+            # forward half is already in the memory cache from the lookup
+            # above, so this is one statement, not two.
+            with timer.stage("idmap_cluster"):
+                (full_yuid, cluster) = idmap.get_cluster(qrecid)
+            if not full_yuid:
+                print(f" !!! Couldn't find YUID for internal record: {qrecid}")
+                timer.skip()
+                continue
+            # Same value the forward lookup gave -- nothing writes the map
+            # during merge -- but derived from what is actually in hand
+            # rather than trusting the two calls to agree.
+            yuid = full_yuid.rsplit("/", 1)[1]
 
         # Deterministic cross-slice claim: when several internal records
         # share this YUID, the insert_time guard above is a check-then-act

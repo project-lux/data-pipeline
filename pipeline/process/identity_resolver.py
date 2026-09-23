@@ -125,6 +125,10 @@ class IdentityResolver(object):
         self.clusters_path = "clusters.tsv"
         self.clusters_sorted_path = "clusters.sorted"
         self.prior_path = "clusters.prior"
+        self.map_dump_path = "map.tsv"
+        self.map_sorted_path = "map.sorted"
+        self.members_by_member_path = "clusters.bymember"
+        self.prior_by_member_path = "prior.bymember"
         self.claims_path = "claims.tsv"
         self.claims_sorted_path = "claims.sorted"
         self.detail_path = "detail.tsv"
@@ -455,7 +459,7 @@ class IdentityResolver(object):
         holding only tokens are deleted.
         """
         touched_old = set()
-        stats = {"set": 0, "moved": 0, "clusters": 0}
+        stats = {"set": 0, "moved": 0, "clusters": 0, "unchanged": 0}
 
         items = list(clusters.items())
         for i in range(0, len(items), self.batch_size):
@@ -468,7 +472,7 @@ class IdentityResolver(object):
                         touched_old.add(old)
                 batch.append((yuid, list(members), prior))
             got = self.idmap.assign_bulk(batch)
-            for k in ("set", "moved", "clusters"):
+            for k in stats:
                 stats[k] += got.get(k, 0)
 
         stats["deleted_yuids"] = self._delete_dead_yuids(sorted(touched_old))
@@ -690,7 +694,24 @@ class IdentityResolver(object):
         return n
     
     
-    def _fetch_prior_stream(self):
+    def _fetch_prior_stream(self, tmpdir):
+        """member -> prior YUID for every member, as
+        ``root<TAB>member<TAB>prior`` grouped by root (prior blank when the
+        member had none).
+
+        Two implementations with identical output. The probe version asks the
+        backend a thousand keys at a time; the bulk version takes the whole
+        map in one scan and merge-joins it. Which one runs depends on whether
+        the backend's own table is the whole answer -- redis cannot dump at
+        all, and the subsidiary map's is a partial view of its master -- and
+        on LUX_PRIOR_PROBE, which forces the probe version if the bulk path
+        ever needs to be taken out of the line."""
+        if os.getenv("LUX_PRIOR_PROBE") or not getattr(
+                self.idmap, "supports_member_dump", False):
+            return self._fetch_prior_probe()
+        return self._fetch_prior_bulk(tmpdir)
+
+    def _fetch_prior_probe(self):
         """Batched member -> prior-YUID lookup, streamed. Reads the by-root
         clusters file and writes ``root<TAB>member<TAB>prior`` (prior blank when
         the member had none), preserving order so the file stays grouped."""
@@ -701,6 +722,57 @@ class IdentityResolver(object):
                     val = got.get(member)
                     prior = val if isinstance(val, str) and val else ""
                     fout.write(f"{root}\t{member}\t{prior}\n")
+
+    def _fetch_prior_bulk(self, tmpdir):
+        """The same file, from one scan of the map instead of 45M probes.
+
+        This phase looks up every member of every cluster, every run -- that
+        is how it discovers what changed, so its cost does not fall when a
+        build changes almost nothing. Probing for all of them costs a btree
+        descent into idmap_pkey per key plus a heap fetch per hit, and was
+        measured at 2.63 hours. Here it is a sequential scan, two sorts of
+        the map dump and the member list, a linear merge, and one sort back
+        into root order for the consumer.
+
+        The last sort has to reproduce the probe version's line order exactly
+        or the two are not interchangeable. It does: `sort` falls back to
+        comparing whole lines, so -k1,1 orders by (root, member, prior), and
+        member is unique within the file, which is the order the by-root
+        clusters file had."""
+        t0 = time.time()
+        with open(self.map_dump_path, "w") as fh:
+            n = self.idmap.dump_members(fh)
+        self._say(f"    dumped {n:,} map rows in {self._hms(time.time() - t0)}")
+        if self._timer:
+            self._timer.add("fetch_prior.dump:map", time.time() - t0)
+        self._sort([self.map_dump_path], self.map_sorted_path, ["-k1,1"], tmpdir)
+        self._sort([self.clusters_sorted_path], self.members_by_member_path,
+                   ["-k2,2"], tmpdir)
+        self._merge_prior(self.members_by_member_path, self.map_sorted_path,
+                          self.prior_by_member_path)
+        self._sort([self.prior_by_member_path], self.prior_path, ["-k1,1"], tmpdir)
+
+    def _merge_prior(self, members_path, map_path, out_path):
+        """Merge-join two files sorted on the member column, one pass each.
+
+        Both were sorted by LC_ALL=C `sort`, and UTF-8 byte order is python
+        str order, so a plain `<` advances the map side correctly. The map
+        holds the short form of the yuid, which expand() turns into the full
+        URI the probe version got back from get_multi."""
+        t0 = time.time()
+        rows = self._iter_tsv(map_path)
+        cur = next(rows, None)
+        with open(out_path, "w") as fout:
+            for parts in self._iter_tsv(members_path):
+                root, member = parts[0], parts[1]
+                while cur is not None and cur[0] < member:
+                    cur = next(rows, None)
+                prior = ""
+                if cur is not None and cur[0] == member and len(cur) > 1 and cur[1]:
+                    prior = self.expand(cur[1])
+                fout.write(f"{root}\t{member}\t{prior}\n")
+        if self._timer:
+            self._timer.add("fetch_prior.merge:prior", time.time() - t0)
         
     def _emit_claims(self):
         """Per cluster (grouped by root): compute the full-URI cluster key (min
@@ -736,7 +808,7 @@ class IdentityResolver(object):
         cluster kept no prior YUID, and bulk-load the result into redis. Old
         yuid keys that lost a member are appended to touched_path for the final
         dead-set sweep."""
-        stats = {"set": 0, "moved": 0, "clusters": 0}
+        stats = {"set": 0, "moved": 0, "clusters": 0, "unchanged": 0}
 
         won = self._grouped(self.won_sorted_path)
         won_key = None
@@ -766,7 +838,7 @@ class IdentityResolver(object):
             if not batch:
                 return
             got = self.idmap.assign_bulk(batch)
-            for k in ("set", "moved", "clusters"):
+            for k in stats:
                 stats[k] += got.get(k, 0)
             batch = []
             pending = 0
@@ -784,11 +856,19 @@ class IdentityResolver(object):
                     member = r[1]
                     prior = r[2] if len(r) > 2 else ""
                     members.append(member)
-                    if prior and prior != yuid:
+                    if prior:
+                        # Every prior, not just the ones that moved. A member
+                        # whose prior already equals the yuid being assigned
+                        # needs no write at all, and the backend can only know
+                        # that if it is told -- which is 10 of the 14 hours a
+                        # measured run spent. apply_assignments has always
+                        # handed over the whole prior map; this is the
+                        # streaming path catching up with it.
                         prior_map[member] = prior
-                        # full URI now, not the internal short form: the sweep
-                        # takes what every other public call takes
-                        ftouched.write(f"{prior}\n")
+                        if prior != yuid:
+                            # full URI now, not the internal short form: the
+                            # sweep takes what every other public call takes
+                            ftouched.write(f"{prior}\n")
                     pending += 1
                 batch.append((yuid, members, prior_map))
                 pending += 1
@@ -850,6 +930,10 @@ class IdentityResolver(object):
             self.clusters_path = p("clusters.tsv")
             self.clusters_sorted_path = p("clusters.sorted")
             self.prior_path = p("clusters.prior")
+            self.map_dump_path = p("map.tsv")
+            self.map_sorted_path = p("map.sorted")
+            self.members_by_member_path = p("clusters.bymember")
+            self.prior_by_member_path = p("prior.bymember")
             self.claims_path = p("claims.tsv")
             self.claims_sorted_path = p("claims.sorted")
             self.detail_path = p("detail.tsv")
@@ -890,7 +974,7 @@ class IdentityResolver(object):
             self._say(f"      {n_singletons:,} singletons")
 
             with self._step("fetch_prior"):
-                self._fetch_prior_stream() # clus clup
+                self._fetch_prior_stream(td)
 
             with self._step("assign"):
                 n_clusters = self._emit_claims()

@@ -548,6 +548,13 @@ class IdMap(postgres.IdMap):
             (yuid, members) = super().get_cluster(key)
         return (yuid, members)
 
+    # No. The local table holds only what has been hydrated so far, so a
+    # dump of it is missing every key that still lives only in the master --
+    # and a blank prior does not read as "not here yet", it reads as "never
+    # had a YUID", which would mint a second one over the top of the
+    # master's. get_multi() below is the one that knows to go and ask.
+    supports_member_dump = False
+
     def get_multi(self, keys, chunk=1000):
         keys = list(keys)
         out = super().get_multi(keys, chunk=chunk)
@@ -929,13 +936,18 @@ class IdMap(postgres.IdMap):
                         f"RESTART IDENTITY")
         self.memory_cache.clear()
 
-    def optimize(self, analyze=True, report=True):
-        before = super().optimize(analyze=analyze, report=report)
-        opts = "(ANALYZE)" if analyze else ""
+    def optimize(self, analyze=True, freeze=True, report=True):
+        """The map's two tables, plus origin and changes.
+
+        Those two age towards wraparound like any other table, and they are
+        the ones that were caught by a forced anti-wraparound autovacuum --
+        so they get the same FREEZE the map does. See IdMap.optimize()."""
+        before = super().optimize(analyze=analyze, freeze=freeze, report=report)
+        opts = self._vacuum_opts(analyze, freeze)
         for name in (self.origin_table, self.change_table):
             try:
                 with self._cursor() as cur:
-                    cur.execute(f"VACUUM {opts} {name}".replace("  ", " "))
+                    cur.execute(f"VACUUM {opts}{name}")
             except Exception as e:
                 print(f"  could not vacuum {name}: {e}")
         return before

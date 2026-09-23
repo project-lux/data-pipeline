@@ -35,6 +35,12 @@ import psycopg2.extras
 
 from pipeline.storage.uricache import URICache
 
+
+def _fmt_bytes(n):
+    """GB for the indexes this is really about, MB below that."""
+    n = float(n or 0)
+    return f"{n / 1e9:.1f}GB" if n >= 1e9 else f"{n / 1e6:.0f}MB"
+
 # Two workers merging overlapping classes can be picked as a deadlock victim.
 # Same treatment as the record caches: it is transient, so retry.
 DEADLOCK_RETRIES = 5
@@ -161,17 +167,24 @@ def _refs_connection(kw, config):
     return _connect(kw, tag="refs" if want_async else "", async_commit=want_async)
 
 
-SCHEMA = """
+TABLES = """
 CREATE TABLE IF NOT EXISTS {idmap} (
     uri   TEXT PRIMARY KEY,
     yuid  TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS {idmap}_yuid_idx ON {idmap} (yuid);
 CREATE TABLE IF NOT EXISTS {yuids} (
     yuid    TEXT PRIMARY KEY,
     token   TEXT,
     minted  TIMESTAMP DEFAULT now()
 );
+"""
+
+# (yuid, uri), not (yuid): get_cluster()'s member scan reads uri for every
+# member, so the second column is what makes that scan index-only instead of
+# a random heap fetch per member. See IdMap.ensure_covering_indexes(), which
+# is how an existing map gets here.
+INDEXES = """
+CREATE INDEX IF NOT EXISTS {idmap}_yuid_uri_idx ON {idmap} (yuid, uri);
 CREATE INDEX IF NOT EXISTS {yuids}_token_idx ON {yuids} (token);
 """
 
@@ -187,8 +200,17 @@ class IdMap(object):
             self.prefix_map_out[cf["name"]] = cf["namespace"]
         self.prefix_map_in = {v: k for (k, v) in self.prefix_map_out.items()}
 
+        # Curie prefixes of the external sources. Keys are stored shortened
+        # and only external namespaces are in the prefix map -- an internal
+        # source's uri stays a full http one, and a YUID gets the reserved
+        # "yuid" prefix -- so carrying one of these is what marks a key as
+        # belonging to an external member.
+        self._external_prefixes = frozenset(
+            pfx for pfx in self.prefix_map_out if pfx != "yuid")
+
         self.memory_cache_enabled = False
-        self.memory_cache = URICache(capacity=config.get("memoryCacheSize", 200000))
+        self.memory_cache = URICache(capacity=config.get("memoryCacheSize", 200000),
+                                     reusable=self._reusable_key)
         self.clean_on_remove = False
 
         with open(os.path.join(self.configs.data_dir, "idmap_update_token.txt")) as fh:
@@ -210,8 +232,37 @@ class IdMap(object):
     # ------------------------------------------------------------------ setup
 
     def _ensure_schema(self):
+        """Tables always; indexes only on a table this call just created.
+
+        Every process that opens the map runs this, and merge opens 24 of
+        them within a few seconds. `CREATE INDEX IF NOT EXISTS` is a cheap
+        catalog check when the index is there -- but when it is *not*, on a
+        50M row table, it is a ShareLock and a full build, attempted by all
+        24 at once with 23 of them queued behind the one doing it. Index
+        changes on a populated map belong to ensure_covering_indexes(), which
+        builds CONCURRENTLY and can be run when nothing else is.
+
+        A map that is missing the yuid index still answers every query, just
+        by sequential scan, so this says so rather than fixing it."""
+        fmt = {"idmap": self.table, "yuids": self.yuid_table}
         with self.conn.cursor() as cur:
-            cur.execute(SCHEMA.format(idmap=self.table, yuids=self.yuid_table))
+            cur.execute("SELECT to_regclass(%s)", (self.table,))
+            existed = cur.fetchone()[0] is not None
+            cur.execute(TABLES.format(**fmt))
+            if not existed:
+                # empty table: the builds are instant and nothing can be
+                # waiting on them
+                cur.execute(INDEXES.format(**fmt))
+                return
+            cur.execute("SELECT 1 FROM pg_index x JOIN pg_class i "
+                        "ON i.oid = x.indexrelid JOIN pg_class t "
+                        "ON t.oid = x.indrelid WHERE t.relname = %s "
+                        "AND i.relname <> %s LIMIT 1",
+                        (self.table, f"{self.table}_pkey"))
+            if cur.fetchone() is None:
+                print(f"*** {self.table} has no index on yuid: every cluster "
+                      f"lookup is a sequential scan. Run "
+                      f"manage-data.py --idmap-indexes")
 
     def _cursor(self):
         return self.conn.cursor()
@@ -294,6 +345,24 @@ class IdMap(object):
     # what is stored is the CURIE form. Keeping the same on-disk shape means a
     # fingerprint or an export is comparable across the two.
 
+    def _reusable_key(self, ikey):
+        """Whether this key is worth protecting from the one-shot churn.
+
+        Merge walks a slice of internal records and visits each exactly
+        once, so a record's own uri -> yuid entry is inserted and then never
+        read again -- as is the member set of the cluster it builds, once
+        idmap_equivs has had it two stages later. The keys that do come back
+        are the external members: the aat concept or wikidata place that
+        thousands of records all reference, which the reidentifier's
+        get_multi prefetch asks for over and over.
+
+        Under a single LRU the one-shot keys evict those continuously, which
+        is why a 200k cache showed almost no hit rate across 100M records.
+        Both kinds are still cached; they no longer compete.
+        """
+        i = ikey.find(":")
+        return i > 0 and ikey[:i] in self._external_prefixes
+
     def _manage_key_in(self, key):
         if key.startswith("http"):
             for (k, v) in self.prefix_map_in.items():
@@ -361,6 +430,30 @@ class IdMap(object):
             print(f"idmap lookup failed for {ikey}: {e}")
             self.conn.rollback()
             return None
+
+    # Whether dump_members() below returns the whole truth. The subsidiary
+    # map says no, because its table is a partial view of the master.
+    supports_member_dump = True
+
+    def dump_members(self, fh):
+        """Stream the whole member table to `fh` as `uri<TAB>yuid`, internal
+        short form both sides, and return the row count.
+
+        For the caller that wants the prior YUID of *most* of the map at once.
+        Doing that a thousand keys at a time costs one btree descent into
+        idmap_pkey (5.9GB) per key, plus a heap fetch for every hit because
+        yuid is not in the index -- measured at 2.63 hours for one identify
+        run, and that number does not move when a build changes almost
+        nothing, because the lookups are how it finds out what changed. One
+        sequential scan answers the same question.
+
+        COPY text format, so a literal tab, newline or backslash inside a uri
+        would come back escaped. The rest of the phase writes and reads raw
+        TSV on the same assumption."""
+        with self._cursor() as cur:
+            cur.copy_expert(
+                f"COPY (SELECT uri, yuid FROM {self.table}) TO STDOUT", fh)
+            return cur.rowcount
 
     def get_cluster(self, key, typ=""):
         """A key's YUID and that YUID's whole member set, in one round trip.
@@ -650,15 +743,20 @@ class IdMap(object):
         """Assign whole clusters at once: the identity phase's write path.
 
         `items` is an iterable of (yuid, members, prior) where members are full
-        member URIs and prior maps a member to the YUID it is leaving, if any.
-        Every member is pointed at yuid, and yuid is stamped with the current
-        update token.
+        member URIs and prior maps a member to the YUID it currently holds, if
+        any. Every member is pointed at yuid, and yuid is stamped with the
+        current update token.
+
+        A member whose prior already *is* yuid is skipped entirely -- see the
+        comment on the member upsert below. The caller is trusted on that:
+        prior comes from a get_multi() against this same map, and identify is
+        the only writer, so within one run it cannot go stale.
 
         Detaching a member from its old YUID needs no work here: membership is
         derived from the yuid column, so re-pointing the row *is* the removal.
         On redis it takes an SREM against a second structure that can disagree
         with the first."""
-        stats = {"set": 0, "moved": 0, "clusters": 0}
+        stats = {"set": 0, "moved": 0, "clusters": 0, "unchanged": 0}
         # Dict rather than list: two rows for one uri in a single
         # execute_values would fail with "cannot affect row a second time",
         # and a duplicate here means a clustering bug, not a load that should
@@ -670,29 +768,49 @@ class IdMap(object):
             yuids[iyuid] = self.update_token
             stats["clusters"] += 1
             for m in members:
-                rows[self._manage_key_in(m)] = iyuid
                 stats["set"] += 1
                 old = (prior or {}).get(m)
                 if old and old != yuid:
                     stats["moved"] += 1
-        if not rows:
+                if old == yuid:
+                    # Already points here, so there is nothing to write and
+                    # nothing to send: see the member upsert below.
+                    stats["unchanged"] += 1
+                    continue
+                rows[self._manage_key_in(m)] = iyuid
+        if not yuids:
             return stats
         with self._cursor() as cur:
+            # Unconditional, even when every member was skipped: the token is
+            # per-build, so a cluster that did not move still has to be
+            # stamped as seen by this one. Its own guard below makes the
+            # re-run case cheap.
             psycopg2.extras.execute_values(
                 cur,
                 f"INSERT INTO {self.yuid_table} (yuid, token) VALUES %s "
                 f"ON CONFLICT (yuid) DO UPDATE SET token = EXCLUDED.token "
                 f"WHERE {self.yuid_table}.token IS DISTINCT FROM EXCLUDED.token",
                 list(yuids.items()), page_size=1000)
-            # The WHERE is the whole cost of this statement. Re-running
-            # identify over unchanged data computes the same clusters, so
-            # every member already points at the YUID being written --
-            # measured on a production run, `touched.tsv` (a line per member
-            # that actually moved) held exactly ONE entry against ~45M
-            # members. Without the guard all 45M rows are rewritten to the
-            # value they already hold: a new tuple version, a WAL record and
-            # a dead tuple each, for nothing. That is where _apply_stream's
-            # hours went, and where the 9.1% dead tuples in idmap came from.
+            if not rows:
+                return stats
+            # The WHERE is what stops a re-run rewriting the whole map.
+            # Re-running identify over unchanged data computes the same
+            # clusters, so every member already points at the YUID being
+            # written -- measured on a production run, `touched.tsv` (a line
+            # per member that actually moved) held exactly ONE entry against
+            # ~45M members. Without the guard all 45M rows are rewritten to
+            # the value they already hold: a new tuple version, a WAL record
+            # and a dead tuple each, for nothing. That is where the 9.1% dead
+            # tuples in idmap came from.
+            #
+            # What the guard cannot save is getting here at all. Every one of
+            # those 45M rows was still serialized, sent, and probed against
+            # idmap_pkey (5.9GB) for the server to conclude there was nothing
+            # to do, at roughly 0.7ms of random btree descent apiece -- 10.7
+            # of the 14.1 hours a measured identify run spent, with the
+            # process 68% off-CPU waiting for exactly this. Hence the skip
+            # above: prior already says what the row holds, so an unchanged
+            # member never reaches the network.
             #
             # No staleness argument needed, unlike merge_refs: this is one
             # atomic statement, and if the stored yuid already equals the new
@@ -818,7 +936,97 @@ class IdMap(object):
             print(f"could not read table stats: {e}")
         return out
 
-    def optimize(self, analyze=True, report=True):
+    @staticmethod
+    def _vacuum_opts(analyze, freeze):
+        """The option list for VACUUM, including the trailing space.
+
+        Empty when both are off, because `VACUUM () idmap` is a syntax error
+        where `VACUUM idmap` is the plain vacuum that was asked for."""
+        opts = ", ".join(o for o, on in (("ANALYZE", analyze),
+                                         ("FREEZE", freeze)) if on)
+        return f"({opts}) " if opts else ""
+
+    # (yuid, uri) rather than (yuid): see ensure_covering_indexes().
+    COVERING_YUID_INDEX = "idmap_yuid_uri_idx"
+
+    def index_sizes(self):
+        """{index name: bytes} for the map's two tables."""
+        out = {}
+        with self._cursor() as cur:
+            cur.execute(
+                "SELECT i.relname, pg_relation_size(i.oid) FROM pg_index x "
+                "JOIN pg_class i ON i.oid = x.indexrelid "
+                "JOIN pg_class t ON t.oid = x.indrelid "
+                "WHERE t.relname = ANY(%s)",
+                ([self.table, self.yuid_table],))
+            for name, size in cur.fetchall():
+                out[name] = size
+        return out
+
+    def ensure_covering_indexes(self, drop_old=True, report=True):
+        """Make get_cluster()'s member scan index-only. DDL, so it is its own
+        command rather than part of optimize().
+
+        get_cluster runs the "cluster" prepared statement, which resolves the
+        forward pointer in a subselect and then scans the class it points at.
+        That outer scan reads `uri` for every member of the cluster, and
+        {idmap}_yuid_idx indexes `yuid` alone -- so each member costs a
+        random heap fetch on top of the btree descent. Measured over a merge
+        of 100.7M records: 3.84ms per call, 107 of the phase's 299 worker
+        hours, with the workers 54% off-cpu waiting for exactly this.
+
+        An index on (yuid, uri) answers the whole scan from the index. It
+        replaces the single-column one rather than joining it -- every query
+        that used (yuid) can use (yuid, uri) as its leading column -- so the
+        cost is the extra `uri` in the leaf pages, not a second index.
+
+        CONCURRENTLY, because merge holds ACCESS SHARE on this table for as
+        long as it runs and a plain CREATE INDEX would queue behind it (and
+        then block it). CONCURRENTLY cannot run inside a transaction, which
+        _maintenance() already arranges, and it still waits on anything
+        holding SHARE UPDATE EXCLUSIVE -- an anti-wraparound autovacuum will
+        not yield to it, so check pg_stat_progress_vacuum first.
+
+        Index-only scans only skip the heap for pages the visibility map
+        marks all-visible, which is what optimize()'s FREEZE sets. Running
+        this without having frozen the map buys much less than it looks.
+        """
+        if not self.conn.autocommit:
+            # CONCURRENTLY cannot run inside a transaction, and this class
+            # keeps the shared connection in autocommit precisely so that
+            # statements like this one work. Refuse rather than silently
+            # taking the lock a plain CREATE INDEX would.
+            raise RuntimeError("idmap connection is not in autocommit; "
+                               "CREATE INDEX CONCURRENTLY cannot run")
+        before = self.index_sizes() if report else {}
+        old = f"{self.table}_yuid_idx"
+        new = self.COVERING_YUID_INDEX
+        if report:
+            for name, size in sorted(before.items()):
+                print(f"  {name}: {_fmt_bytes(size)}")
+        if new in before:
+            print(f"  {new} already exists")
+        else:
+            start = time.time()
+            print(f"  CREATE INDEX CONCURRENTLY {new} -- this takes a while")
+            with self._cursor() as cur:
+                cur.execute(f"CREATE INDEX CONCURRENTLY IF NOT EXISTS {new} "
+                            f"ON {self.table} (yuid, uri)")
+            print(f"  built {new} in {time.time() - start:.0f}s")
+        if drop_old and old in self.index_sizes():
+            # After the new one is valid, never before: dropping first would
+            # leave the yuid lookup on a sequential scan if the build failed.
+            with self._cursor() as cur:
+                cur.execute(f"DROP INDEX CONCURRENTLY IF EXISTS {old}")
+            print(f"  dropped {old}, {_fmt_bytes(before.get(old, 0))} returned")
+        elif not drop_old:
+            print(f"  keeping {old} -- drop it once plans have moved over")
+        if report:
+            for name, size in sorted(self.index_sizes().items()):
+                print(f"  {name}: {_fmt_bytes(size)}")
+        return True
+
+    def optimize(self, analyze=True, freeze=True, report=True):
         """VACUUM the map. Nothing else will.
 
         The table carries no storage parameters, and autovacuum's default 20%
@@ -837,6 +1045,25 @@ class IdMap(object):
         So this runs at the end of run-identify.py -- the one writer -- and
         the map reaches merge clean.
 
+        FREEZE is the other half, and it is about when the work happens
+        rather than how much of it there is. Without it a vacuum can only
+        advance relfrozenxid to the current XID minus vacuum_freeze_min_age
+        (50M on the defaults), so the map keeps ageing towards
+        autovacuum_freeze_max_age and eventually trips a *forced*
+        anti-wraparound autovacuum. That one picks its own moment, and unlike
+        an ordinary autovacuum it will not cancel itself to let anything
+        through: observed on idmap_mds_changes, 1h33m holding
+        SHARE UPDATE EXCLUSIVE, with a CREATE INDEX (ShareLock) queued behind
+        it and every write to the table it had already locked queued behind
+        that. Freezing here, at the one point in the build where the map has
+        just been rewritten and nothing else needs it, is what keeps that
+        from landing mid-merge.
+
+        The first FREEZE reads the whole table instead of skipping
+        all-visible pages, so it costs more than the vacuum before it did.
+        Later ones do not: freezing is what sets the visibility map in the
+        first place.
+
         What it cannot do is give space back: VACUUM marks dead tuples
         reusable and leaves the files the size they grew to, and it does not
         shrink an index at all. A map that has been accumulating across many
@@ -849,13 +1076,13 @@ class IdMap(object):
                 pct = dead / (live + dead) * 100 if (live + dead) else 0
                 print(f"  {name}: {live:,} live, {dead:,} dead ({pct:.1f}%)"
                       + ("" if last else ", never autovacuumed"))
-        opts = "(ANALYZE)" if analyze else ""
+        opts = self._vacuum_opts(analyze, freeze)
         for name in (self.table, self.yuid_table):
             start = time.time()
             try:
                 # the shared connection is in autocommit, which VACUUM needs
                 with self._cursor() as cur:
-                    cur.execute(f"VACUUM {opts} {name}".replace("  ", " "))
+                    cur.execute(f"VACUUM {opts}{name}")
             except Exception as e:
                 print(f"  could not vacuum {name}: {e}")
                 continue

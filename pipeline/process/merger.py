@@ -8,12 +8,57 @@ from pipeline.process.reidentifier import Reidentifier
 
 
 class MergeHandler(object):
+    # How many of a cluster's members actually get merged. A cluster this
+    # large is a reconciliation failure rather than a record: the biggest
+    # legitimate one seen is a few dozen. Measured on a europeana build,
+    # `yuid:person/bcd070a7-...` -- labelled "anonymous" -- had 88,447
+    # members, every unattributed creator in the corpus resolved to one
+    # person. Merging that means 88,447 record fetches, 88,447 reidentify
+    # calls (each of which walks the whole cluster), and a merged record
+    # carrying 88,447 equivalents.
+    #
+    # The members that lose the cut are not silently dropped: every one of
+    # them still has its reference-queue entry cleared, and still resolves
+    # to this YUID everywhere it is referenced. What they lose is the
+    # chance to contribute content -- and their recordcache2 row, which
+    # they were overwriting each other in anyway, since that row is keyed
+    # by YUID rather than by member.
+    MAX_CLUSTER_MEMBERS = 100
+
     def __init__(self, config, idmap, ref_mgr=None):
         self.config = config
         self.idmap = idmap
         self.merger = RecordMerger(config, idmap)
         self.reference_manager = ref_mgr
         self.reidentifier = Reidentifier(config, idmap)
+        self.MAX_CLUSTER_MEMBERS = getattr(config, "max_cluster_members", self.MAX_CLUSTER_MEMBERS)
+
+    @staticmethod
+    def _fetch_members(cache, idents):
+        """A cluster's member rows by identifier, raw where the cache can.
+
+        get_multi() is a postgres cache method; FsCache and the in-memory
+        doubles only do single-key access, so this degrades to that rather
+        than requiring it. The raw path is an optimisation -- the fallback
+        returns parsed rows and _data_size handles both."""
+        batch = getattr(cache, "get_multi", None)
+        if batch is not None:
+            return batch(idents, raw=True)
+        out = {}
+        for ident in idents:
+            rec = cache[ident]
+            if rec:
+                out[ident] = rec
+        return out
+
+    @staticmethod
+    def _data_size(rec):
+        """Bytes of the record's document. Free on the raw path, where it is
+        still the text postgres stored; paid for on the fallback."""
+        data = rec.get("data")
+        if data is None:
+            return 0
+        return len(data) if isinstance(data, str) else len(json.dumps(data))
 
     def pre_merge_fixes(self, record, to_do):
         # Trash part_of from internal places if there's a part_of from an external
@@ -44,13 +89,17 @@ class MergeHandler(object):
         # lands in a table another worker owns, and the two deadlock over it.
         my_yuid = record["data"]["id"].rsplit("/", 1)[-1]
 
-        to_do = []
+        # Identify the members first, fetch them second. One round trip per
+        # member was fine at a few dozen; at 88,447 it is the phase.
+        by_src = {}
         for eq in to_merge:
             if eq.startswith("__"):
                 # This is the idmap's update token
                 continue
 
-            # Delete via Reference Manager
+            # Delete via Reference Manager. Every member, including the ones
+            # the cap below drops: the queue records what has been dealt
+            # with, not what contributed content.
             self.reference_manager.delete_done_ref(eq)
 
             try:
@@ -60,10 +109,41 @@ class MergeHandler(object):
                 continue
             if ext_src["type"] == "internal":
                 ident = ident.split("#")[0]
-            ext_rec = ext_src["recordcache"][ident]
-            if not ext_rec:
-                print(f"Reference to non-existent record {ident} in {ext_src['name']}")
-                continue
+            by_src.setdefault(ext_src["name"], (ext_src, []))[1].append(ident)
+
+        # raw=True, so the jsonb comes back as the text postgres stores and
+        # nothing is parsed on the way in. len() of that text is the size to
+        # rank by, and only the records that survive the cap are parsed --
+        # measured 7.4x faster than fetching 60k records parsed. Asking
+        # postgres for the sizes instead (octet_length(data::text)) was
+        # measured 4.5x *slower* than just fetching them: it detoasts and
+        # serialises every row server-side and then sorts, which is more
+        # work than streaming the rows out.
+        rows = []
+        for (ext_src, idents) in by_src.values():
+            got = self._fetch_members(ext_src["recordcache"], idents)
+            for ident in idents:
+                ext_rec = got.get(ident)
+                if not ext_rec:
+                    print(f"Reference to non-existent record {ident} in {ext_src['name']}")
+                    continue
+                rows.append((ext_src, ext_rec))
+
+        if len(rows) > self.MAX_CLUSTER_MEMBERS:
+            print(f"OVERSIZED-CLUSTER: {my_yuid} has {len(rows):,} members; "
+                  f"merging the {self.MAX_CLUSTER_MEMBERS} largest")
+            # Biggest first -- a longer record carries more information --
+            # and then the same key the merge order below uses, so records
+            # of equal size break the tie identically in every worker.
+            rows.sort(key=lambda x: (-self._data_size(x[1]),
+                                     x[0]["merge_order"], x[0].get("name", ""),
+                                     str(x[1].get("identifier", ""))))
+            rows = rows[: self.MAX_CLUSTER_MEMBERS]
+
+        to_do = []
+        for ext_src, ext_rec in rows:
+            if isinstance(ext_rec.get("data"), str):
+                ext_rec["data"] = json.loads(ext_rec["data"])
             to_do.append((ext_src, ext_rec))
 
         # Find best order to merge in. to_merge comes from a redis set, so

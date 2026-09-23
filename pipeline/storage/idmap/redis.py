@@ -262,14 +262,15 @@ class IdMap(RedisCache):
         """Assign whole clusters at once: the identity phase's write path.
 
         `items` is an iterable of (yuid, members, prior) where members are full
-        member URIs and prior maps a member to the YUID it is leaving, if any.
+        member URIs and prior maps a member to the YUID it currently holds, if
+        any.
 
         This is the pipeline IdentityResolver used to run against .conn
         directly, moved behind the interface so the resolver works on any
         backend. The order of operations is unchanged: per member, SREM from
         the old set if it moved, then SET the forward pointer; then one SADD of
         every member plus the update token."""
-        stats = {"set": 0, "moved": 0, "clusters": 0}
+        stats = {"set": 0, "moved": 0, "clusters": 0, "unchanged": 0}
         pipe = self.conn.pipeline(transaction=False)
         ops = 0
         for yuid, members, prior in items:
@@ -283,8 +284,16 @@ class IdMap(RedisCache):
                     pipe.srem(self._manage_value_in(old), im)
                     stats["moved"] += 1
                     ops += 1
-                pipe.set(im, iyuid)
                 stats["set"] += 1
+                if old == yuid:
+                    # The pointer already holds this value. The SADD below
+                    # still gets the member -- it is what stamps the set with
+                    # the update token -- but the SET is a round trip that
+                    # would change nothing. Same skip as the postgres
+                    # backend, for the same reason.
+                    stats["unchanged"] += 1
+                    continue
+                pipe.set(im, iyuid)
                 ops += 1
             if imembers:
                 pipe.sadd(iyuid, *imembers, self.update_token)

@@ -9,6 +9,14 @@ class Reidentifier(object):
     # process_entity: still correct, but a round trip per miss.
     batch_misses = 0
 
+    # How many *internal* equivalents a record may advertise. External ones
+    # are never capped: a hundred wikidata or aat equivalents would be a
+    # different problem, and they are the valuable ones. Internal members
+    # of an oversized cluster are not: `yuid:person/bcd070a7-...` had
+    # 88,447 of them, so every member record was being handed an
+    # `equivalent` array of 88,447 entries.
+    MAX_CLUSTER_EQUIVS = 100
+
     def __init__(self, configs, idmap):
         self.configs = configs
         self.ignore_ns = []
@@ -23,6 +31,11 @@ class Reidentifier(object):
         self.ignore_props = ["access_point", "conforms_to"]
         self.use_slug = True
         self.equivalent_refs = True
+
+        # startswith() wants a tuple, and this is tested once per cluster
+        # member per record
+        self.internal_ns = tuple(self.ignore_ns)
+        self.MAX_CLUSTER_EQUIVS = getattr(configs, "max_cluster_equivs", self.MAX_CLUSTER_EQUIVS)
 
         self.preserve_equivalents = {}
         for g in configs.globals:
@@ -143,6 +156,26 @@ class Reidentifier(object):
         except Exception as e:
             print(f"reidentifier prefetch failed ({e}); using per-node lookups")
             return {}
+
+    def _cap_equivs(self, all_equivs):
+        """Cap the internal members a record advertises as equivalent.
+
+        External equivalents are never capped: a hundred wikidata or aat
+        equivalents would be a different problem, and they are the ones
+        worth having. Internal members of an oversized cluster are not --
+        `yuid:person/bcd070a7-...` had 88,447, so every member record was
+        being handed an `equivalent` array of 88,447 entries.
+
+        Sorting also makes the result deterministic, which the uncapped
+        list was not: _lookup() returns the idmap's member *set*, and set
+        iteration order varies between processes."""
+        if len(all_equivs) <= self.MAX_CLUSTER_EQUIVS:
+            return all_equivs
+        internal = sorted(x for x in all_equivs if x.startswith(self.internal_ns))
+        if len(internal) <= self.MAX_CLUSTER_EQUIVS:
+            return all_equivs
+        external = [x for x in all_equivs if not x.startswith(self.internal_ns)]
+        return external + internal[: self.MAX_CLUSTER_EQUIVS]
 
     def _lookup(self, key):
         """Prefetched value if this record's batch has it, else a live
@@ -277,6 +310,7 @@ class Reidentifier(object):
                 # one-line helper at 17% of the whole process.
                 all_equivs = [x.split("##qua", 1)[0] for x in all_equivs
                               if not x.startswith("__")]
+                all_equivs = self._cap_equivs(all_equivs)
                 # A set, because the membership test below runs once per
                 # member against it: as a list that is the same quadratic
                 # scan merge_common had, and on the big clusters it was 33%
