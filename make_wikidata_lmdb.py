@@ -4,10 +4,15 @@ Same layout as make_dataset_lmdb.py:
 
     data   key -> zlib(json of the mapped record)
     index  class -> packed keys, idx_batch_size at a time (dupsort)
+    types  type name -> its type character
 
-The dataset store's keys are 16 byte UUIDs; here they are the Q number as a
-4 byte big-endian uint32, so they are fixed width (the index packing needs
-that) and sort numerically. Q123 is (123).to_bytes(4, "big").
+The dataset store's keys are 16 byte UUIDs; here they are 5 bytes: the Q
+number as a 4 byte big-endian uint32, then a character for the type the
+record was built as (TYPE_CODES: P Person, p Place, E any event, ...). The
+cache holds one record per Q-id per type it was asked for (Q90##quaPlace and
+Q90##quaGroup are both Paris), so the Q number alone is not unique. Fixed width keeps the index packing working, and every type of
+Q123 is the range starting (123).to_bytes(4, "big"); Q123 as a Person is
+(123).to_bytes(4, "big") + b"P".
 
 The same pass runs every record through the qlever mapper and writes the
 triples to NT_PATH, as run-source-build.py does for the other externals.
@@ -60,15 +65,38 @@ total_recs = rcache.len_estimate()
 total_size = (8192 + 128) * max(total_recs, 1000000)
 
 
-def qid_key(identifier):
-    """'Q123##quaPerson' -> 4 byte key, or None if it isn't a usable Q-id"""
-    qid = identifier.split("##qua", 1)[0]
+# the type character, by qua type (make_qua has already folded Material, Language,
+# Currency and MeasurementUnit into Type)
+TYPE_CODES = {
+    "HumanMadeObject": "H",
+    "DigitalObject": "D",
+    "LinguisticObject": "L",
+    "Person": "P",
+    "Group": "G",
+    "VisualItem": "V",
+    "Place": "p",
+    "Type": "C",
+    "Activity": "E",
+    "Event": "E",
+    "Period": "E",
+    "Set": "S",
+}
+
+
+def qid_key(identifier, rectype):
+    """'Q123##quaPerson' -> 5 byte key, or None if it isn't a usable Q-id.
+    A bare identifier takes its type from the record."""
+    qid, _, qua = identifier.partition("##qua")
     if not QID.match(qid):
         return None
     n = int(qid[1:])
     if n > UINT32_MAX:
         return None
-    return n.to_bytes(4, "big")
+    typ = qua or cfgs.parent_record_types.get(rectype, rectype)
+    code = TYPE_CODES.get(typ)
+    if code is None:
+        return None
+    return n.to_bytes(4, "big") + code.encode("ascii")
 
 
 def build():
@@ -79,7 +107,10 @@ def build():
         env = lmdb.open(DB_PATH, map_size=total_size, max_dbs=3, metasync=False, sync=False, map_async=True)
         db = env.open_db(b"data", dupsort=False)
         idx = env.open_db(b"index", dupsort=True)
+        types_db = env.open_db(b"types", dupsort=False)
         txn = env.begin(write=True)
+        for t, code in TYPE_CODES.items():
+            txn.put(key=t.encode("utf-8"), value=code.encode("ascii"), db=types_db)
     batches = defaultdict(list)
 
     ql_mpr = QleverMapper(src) if do_nt else None
@@ -94,16 +125,17 @@ def build():
             js = rec["data"]
 
             if do_lmdb:
-                key = qid_key(rec["identifier"])
+                key = qid_key(rec["identifier"], js["type"])
                 if key is None:
                     print(f"Skipping unusable identifier {rec['identifier']}")
                     bad += 1
                     continue
                 value = zlib.compress(json.dumps(js).encode("utf-8"), level=1)
-                # a Q-id cached under two types is a leftover from an earlier
-                # build; keep the first and say so rather than index it twice
+                # a bare Q123 alongside Q123##quaX of the same type, or one Q-id
+                # cached as two event types, collide; keep the first rather
+                # than index it twice
                 if not txn.put(key=key, value=value, db=db, overwrite=False):
-                    print(f"Duplicate Q-id {rec['identifier']}, keeping the first")
+                    print(f"Duplicate key {rec['identifier']}, keeping the first")
                     dupes += 1
                     continue
 
@@ -150,7 +182,7 @@ def build():
             fh.close()
 
     print(f"Wrote {n} records in {time() - start:.2f}s")
-    print(f"  {bad} unusable identifiers, {dupes} duplicate Q-ids, {ql_fail} qlever failures")
+    print(f"  {bad} unusable identifiers, {dupes} duplicate keys, {ql_fail} qlever failures")
 
 
 if __name__ == "__main__":
