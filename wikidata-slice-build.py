@@ -51,6 +51,7 @@ from dotenv import load_dotenv
 from pipeline.config import Config
 
 QID = re.compile(r"Q[1-9][0-9]*$")
+UINT32_MAX = np.iinfo(np.uint32).max
 SCHOLARLY_ARTICLE = "Q13442814"
 CACHED_TYPES = ("Person", "Group")
 
@@ -102,7 +103,9 @@ def mapped_qids(node, ns, out):
 
 
 def qnums(qids):
-    return np.fromiter((int(q[1:]) for q in qids), dtype=np.uint32, count=len(qids))
+    # malformed values (e.g. Q5806108879) can't be real Q-ids, so can't match
+    nums = [n for n in (int(q[1:]) for q in qids) if n <= UINT32_MAX]
+    return np.array(nums, dtype=np.uint32)
 
 
 def contains(sorted_arr, vals):
