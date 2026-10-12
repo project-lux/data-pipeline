@@ -43,7 +43,7 @@ credfn = os.path.join(cfgs.data_dir, "credentials.json")
 if os.path.exists(tokfn):
     creds = Credentials.from_authorized_user_file(tokfn, SCOPES)
 # If there are no (valid) credentials available, let the user log in.
-if not creds or not creds.valid:
+if not creds or not creds.valid or not os.path.exists(credfn):
     if creds and creds.expired and creds.refresh_token:
         creds.refresh(Request())
     else:
