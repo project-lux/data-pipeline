@@ -4,6 +4,7 @@ from .fetcher import WdFetcher
 from .base import WdConfigManager
 import ujson as json
 import gzip
+import bz2
 import time
 import os
 
@@ -57,7 +58,8 @@ class WdLoader(WdFetcher, WdConfigManager, Loader):
             self.out_cache.resume_commits()
 
     def _load_dump(self, slicen, maxSlice):
-        with gzip.open(self.in_path, "rt") as fh, \
+        opener = bz2.open if self.in_path.endswith(".bz2") else gzip.open
+        with opener(self.in_path, "rt") as fh, \
             open(os.path.join(self.configs.temp_dir, f'wd_equivs_{slicen}.csv'), 'w') as efh, \
             open(os.path.join(self.configs.temp_dir, f'wd_diffs_{slicen}.csv'), 'w') as dfh:
 
