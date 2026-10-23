@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import pytest
 
 from lux_pipeline.process.utils.mapper_utils import make_datetime
-from lux_pipeline.sources.authorities.lc.mapper import LcnafMapper
+from lux_pipeline.sources.lc.mapper import LcnafMapper
 
 
 # --- make_datetime ----------------------------------------------------------

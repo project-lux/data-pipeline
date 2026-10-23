@@ -7,8 +7,8 @@
     "wikidata_property": ["P6766"],
     "merge_order": 60,
     
-    "fetcherClass": "sources.general.wof.fetcher.WofFetcher",
-    "mapperClass": "sources.general.wof.mapper.WofMapper",
+    "fetcherClass": "sources.wof.fetcher.WofFetcher",
+    "mapperClass": "sources.wof.mapper.WofMapper",
 
     "dumpFilePath": "wof/latest_wof.db",
     "cycleBreakPath": "wof_cycle_breaks.json"

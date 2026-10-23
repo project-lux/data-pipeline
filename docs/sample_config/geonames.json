@@ -7,9 +7,9 @@
     "wikidata_property": ["P1566"],
     "merge_order": 80,
     
-    "fetcherClass": "sources.general.geonames.fetcher.GnFetcher",
-    "mapperClass": "sources.general.geonames.mapper.GnMapper",
-    "loaderClass": "sources.general.geonames.loader.GnLoader",
+    "fetcherClass": "sources.geonames.fetcher.GnFetcher",
+    "mapperClass": "sources.geonames.mapper.GnMapper",
+    "loaderClass": "sources.geonames.loader.GnLoader",
 
     "dumpFilePath": "geonames",
     "cycleBreakPath": "geonames_cycle_breaks.json"

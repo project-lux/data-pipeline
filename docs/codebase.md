@@ -5,7 +5,7 @@ Ordered from Easiest to Most Diabolical to understand
 
 ### Code Layout
 
-Data source specific code is in sources/, divided by organization that publishes the data.
+Data source specific code is in lux_pipeline/sources/, one directory per source (plus yale/ for Yale units and lux/ for LUX's own outputs).
 
 The rest of the code is divided among directories according to function: 
 * cache: store records

@@ -7,11 +7,11 @@
     "wikidata_property": ["P244"],
     "merge_order": 22,
     
-    "fetcherClass": "sources.authorities.lc.fetcher.LcnafFetcher",
-    "mapperClass": "sources.authorities.lc.mapper.LcnafMapper",
-    "loaderClass": "sources.authorities.lc.loader.LcLoader",
-    "indexLoaderClass": "sources.authorities.lc.index_loader.LCIndexLoader",
-    "reconcilerClass": "sources.authorities.lc.reconciler.LcnafReconciler",
+    "fetcherClass": "sources.lc.fetcher.LcnafFetcher",
+    "mapperClass": "sources.lc.mapper.LcnafMapper",
+    "loaderClass": "sources.lc.loader.LcLoader",
+    "indexLoaderClass": "sources.lc.index_loader.LCIndexLoader",
+    "reconcilerClass": "sources.lc.reconciler.LcnafReconciler",
 
     "reconcileDbPath": "label_to_lcnaf.sqlite",
     "inverseEquivDbPath": "id_to_lcnaf.sqlite",

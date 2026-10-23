@@ -7,7 +7,7 @@
     "wikidata_property": ["P268"],
     "merge_order": 30,
     
-    "fetcherClass": "sources.libraries.bnf.fetcher.BnfXmlFetcher",
-    "mapperClass": "sources.libraries.bnf.mapper.BnfXmlMapper",
+    "fetcherClass": "sources.bnf.fetcher.BnfXmlFetcher",
+    "mapperClass": "sources.bnf.mapper.BnfXmlMapper",
     "cycleBreakPath": "bnf_cycle_breaks.json"
 }

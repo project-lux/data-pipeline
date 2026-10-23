@@ -8,9 +8,9 @@
     "wikidata_property": ["P227"],
     "merge_order": 31,
     
-    "fetcherClass": "sources.libraries.dnb.fetcher.DnbFetcher",
-    "mapperClass": "sources.libraries.dnb.mapper.DnbMapper",
-    "loaderClass": "sources.libraries.dnb.loader.DnbLoader",
+    "fetcherClass": "sources.dnb.fetcher.DnbFetcher",
+    "mapperClass": "sources.dnb.mapper.DnbMapper",
+    "loaderClass": "sources.dnb.loader.DnbLoader",
 
     "dumpFilePath": "dnb/authorities-gnd_entityfacts.jsonld.gz",
     "remoteDumpFile": "https://data.dnb.de/opendata/authorities_entityfacts.jsonld.gz",

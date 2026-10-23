@@ -6,11 +6,11 @@
     "fetch": "https://www.wikidata.org/wiki/Special:EntityData/{identifier}.json",
     "merge_order": 50,
     
-    "fetcherClass": "sources.general.wikidata.fetcher.WdFetcher",
-    "mapperClass": "sources.general.wikidata.mapper.WdMapper",
-    "loaderClass": "sources.general.wikidata.loader.WdLoader",
-    "indexLoaderClass": "sources.general.wikidata.index_loader.RawWdIndexLoader",
-    "reconcilerClass": "sources.general.wikidata.reconciler.WdReconciler",
+    "fetcherClass": "sources.wikidata.fetcher.WdFetcher",
+    "mapperClass": "sources.wikidata.mapper.WdMapper",
+    "loaderClass": "sources.wikidata.loader.WdLoader",
+    "indexLoaderClass": "sources.wikidata.index_loader.RawWdIndexLoader",
+    "reconcilerClass": "sources.wikidata.reconciler.WdReconciler",
 
     "inverseEquivDbPath": "id_to_wikidata.sqlite",
     "dumpFilePath": "wikidata/latest-all.json.gz",

@@ -21,6 +21,7 @@
 * process/Reidentifier: Recursively external rewrite URIs in a record to internal identifiers, given an IdMap.
 * process/ReferenceManager: Manages inter-record connections
 * process/UpdateManager: Manages harvesting and updates to caches
+* sources/\*/: one directory per source (plus yale/ for the Yale units and lux/ for LUX's own outputs), each holding the classes below.
 * sources/\*/Acquirer: Wraps Fetcher and Mapper to acquire a record either from the network or a cache
 * sources/\*/Fetcher: Fetches identified record from external source to a Cache.
 * sources/\*/Harvester: Retrieve multiple records via IIIF Change Discovery or OAI-PMH

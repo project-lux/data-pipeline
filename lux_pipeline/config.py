@@ -1,4 +1,5 @@
 import os
+import re
 import logging
 import importlib
 from .storage.cache.filesystem import FsCache
@@ -8,8 +9,12 @@ from .storage.uricache import URICache, _MISSING
 logger = logging.getLogger("lux_pipeline")
 
 # Object paths from configs written before the package was renamed from
-# `pipeline` to `lux_pipeline`. Each distinct legacy path is warned about once.
+# `pipeline` to `lux_pipeline` and the category level (`sources.authorities.lc`
+# -> `sources.lc`) was removed. Each distinct legacy path is warned about once.
 _LEGACY_PACKAGE_PREFIX = "pipeline."
+_LEGACY_SOURCE_CATEGORY = re.compile(
+    r"^((?:lux_pipeline\.)?sources\.)(?:archives|authorities|general|libraries|museums)\.(.+)$"
+)
 _warned_legacy_paths = set()
 
 
@@ -23,6 +28,11 @@ def _modernize_object_type(objectType):
     """Rewrite dotted object paths that use the pre-rename layout."""
     if objectType.startswith(_LEGACY_PACKAGE_PREFIX):
         new = "lux_pipeline." + objectType[len(_LEGACY_PACKAGE_PREFIX) :]
+        _warn_legacy_once(objectType, new)
+        objectType = new
+    m = _LEGACY_SOURCE_CATEGORY.match(objectType)
+    if m:
+        new = m.group(1) + m.group(2)
         _warn_legacy_once(objectType, new)
         objectType = new
     return objectType

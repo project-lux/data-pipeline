@@ -72,7 +72,7 @@ Three defects in the differentFrom guard, fixed together:
    The test proved known-distinct pairs sailed through untouched.
    Dropped ids are now removed from `record["data"]["equivalent"]`.
 
-### `lux_pipeline/sources/authorities/getty/reconciler.py` (`extract_names`)
+### `lux_pipeline/sources/getty/reconciler.py` (`extract_names`)
 Two bugs made AAT name matching systematically lossy: names whose
 language wasn't in `check_langs` kept their original case, but the name
 index is built lowercased — those lookups could never match; and the
@@ -89,7 +89,7 @@ builds, so every record that name-reconciled against that key got a
 different equivalence assertion per build. Now the smallest recid wins,
 making the index a pure function of its inputs.
 
-### `lux_pipeline/sources/authorities/oclc/index_loader.py` (VIAF)
+### `lux_pipeline/sources/oclc/index_loader.py` (VIAF)
 - A stale `viaf_sort_equivs.csv` from a previous build was silently
   reused if present; now regenerated whenever any shard is newer.
 - Sort now runs under `LC_ALL=C` (locale-independent ordering).

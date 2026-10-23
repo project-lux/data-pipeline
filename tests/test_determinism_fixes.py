@@ -310,7 +310,7 @@ def test_merge_output_independent_of_equivalent_set_order():
 # ---------------------------------------------------------------------------
 
 def test_aat_extract_names_lowercases_and_keeps_best_priority():
-    from lux_pipeline.sources.authorities.getty.reconciler import AatReconciler
+    from lux_pipeline.sources.getty.reconciler import AatReconciler
 
     class AatConfigs(StubConfigs):
         external = {"aat": {"namespace": "http://vocab.getty.edu/aat/"}}

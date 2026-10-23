@@ -145,12 +145,12 @@ class Reconciler(object):
                 x for x in record["data"]["equivalent"] if x["id"] not in dropped
             ]
 
-        # [<lux_pipeline.sources.authorities.getty.reconciler.AatReconciler object at 0x7fc89991dbe0>,
-        # <lux_pipeline.sources.authorities.lc.reconciler.LcnafReconciler object at 0x7fc8985b7a00>,
-        # <lux_pipeline.sources.authorities.lc.reconciler.LcshReconciler object at 0x7fc89841a550>,
-        # <lux_pipeline.sources.authorities.getty.reconciler.UlanReconciler object at 0x7fc897c71e20>,
-        # <lux_pipeline.sources.authorities.oclc.reconciler.ViafReconciler object at 0x7fc897b69a00>,
-        # <lux_pipeline.sources.general.wikidata.reconciler.WdReconciler object at 0x7fc8916b6bb0>,
+        # [<lux_pipeline.sources.getty.reconciler.AatReconciler object at 0x7fc89991dbe0>,
+        # <lux_pipeline.sources.lc.reconciler.LcnafReconciler object at 0x7fc8985b7a00>,
+        # <lux_pipeline.sources.lc.reconciler.LcshReconciler object at 0x7fc89841a550>,
+        # <lux_pipeline.sources.getty.reconciler.UlanReconciler object at 0x7fc897c71e20>,
+        # <lux_pipeline.sources.oclc.reconciler.ViafReconciler object at 0x7fc897b69a00>,
+        # <lux_pipeline.sources.wikidata.reconciler.WdReconciler object at 0x7fc8916b6bb0>,
         # <lux_pipeline.sources.lux.final.reconciler.GlobalReconciler object at 0x7fc8911dd610>]
 
         reconcilers = self.reconcilers

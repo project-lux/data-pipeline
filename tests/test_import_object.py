@@ -71,3 +71,38 @@ def test_missing_class_raises():
 def test_malformed_path_raises():
     with pytest.raises(ValueError):
         importObject("Validator")
+
+
+# --- flattened sources/ (the category level was removed) -------------------
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "lux_pipeline.sources.lc.mapper.LcnafMapper",
+        "sources.lc.mapper.LcnafMapper",
+        "sources.authorities.lc.mapper.LcnafMapper",
+        "lux_pipeline.sources.authorities.lc.mapper.LcnafMapper",
+        "pipeline.sources.authorities.lc.mapper.LcnafMapper",
+    ],
+)
+def test_source_paths_with_or_without_category_resolve_to_the_same_class(path):
+    from lux_pipeline.sources.lc.mapper import LcnafMapper
+
+    assert importObject(path) is LcnafMapper
+
+
+def test_legacy_category_warns_once_with_the_flat_path(caplog):
+    with caplog.at_level(logging.WARNING, logger="lux_pipeline"):
+        importObject("sources.authorities.lc.mapper.LcnafMapper")
+        importObject("sources.authorities.lc.mapper.LcnafMapper")
+    assert len(caplog.records) == 1
+    assert "'sources.lc.mapper.LcnafMapper'" in caplog.records[0].getMessage()
+
+
+def test_grouped_source_dirs_are_not_treated_as_categories(caplog):
+    from lux_pipeline.sources.yale.ycba.mapper import YcbaMapper
+
+    with caplog.at_level(logging.WARNING, logger="lux_pipeline"):
+        assert importObject("sources.yale.ycba.mapper.YcbaMapper") is YcbaMapper
+    assert not caplog.records

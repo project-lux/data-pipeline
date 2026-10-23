@@ -25,7 +25,7 @@ Regression tests: `tests/test_determinism_fixes.py` (fixed items) and
 | 9 | `lux_pipeline/storage/cache/postgres.py` `iter_keys_type_slice` | Sliced by row position over an **unordered** SELECT | Parallel workers saw different row orders (synchronized seq scans) → records double-processed and skipped; now `ORDER BY` key |
 | 10 | `lux_pipeline/storage/cache/redis.py` | Cache db-number allocation was check-then-set | Two workers could allocate the same redis db for different caches (cross-cache corruption); now SETNX/INCR atomic |
 | 11 | `lux_pipeline/process/base/index_loader.py` | Name/URI index collisions were last-writer-wins over an unordered record stream | The index winner for a shared name/URI differed between builds → different equivalence assertions → different clusters; now smallest recid wins (order-independent) |
-| 12 | `lux_pipeline/sources/authorities/getty/reconciler.py` `extract_names` | Keys not lowercased in the fallback path (index is lowercased → silent miss) and matched language priorities clobbered to 3 by later iterations | Systematic dropped/incorrectly-ranked AAT name matches |
+| 12 | `lux_pipeline/sources/getty/reconciler.py` `extract_names` | Keys not lowercased in the fallback path (index is lowercased → silent miss) and matched language priorities clobbered to 3 by later iterations | Systematic dropped/incorrectly-ranked AAT name matches |
 | 13 | `merge-metatypes.py` | Unordered `glob` | Per-key metatype list order varied by filesystem |
 | 14 | `lux_pipeline/process/reference_manager.py` `iter_done_refs` | Empty/blank line yielded a bogus `[""]` item (`"".split("|")` is truthy) | Single-process merge crashed/mishandled on empty ref file |
 

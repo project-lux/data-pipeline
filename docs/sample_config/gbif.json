@@ -8,6 +8,6 @@
     "merge_order": 41,
     
     "fetcherClass": "process.base.fetcher.Fetcher",
-    "mapperClass": "sources.authorities.gbif.mapper.GbifMapper"
+    "mapperClass": "sources.gbif.mapper.GbifMapper"
 
 }
