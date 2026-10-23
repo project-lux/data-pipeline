@@ -1,3 +1,4 @@
+import logging
 import requests
 import ujson as json
 from requests_toolbelt.multipart import decoder
@@ -9,6 +10,8 @@ from requests.packages.urllib3.filepost import encode_multipart_formdata
 
 from requests.auth import HTTPDigestAuth, HTTPBasicAuth
 import urllib3
+
+logger = logging.getLogger("lux_pipeline")
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
@@ -43,7 +46,7 @@ class RequestThread(threading.Thread):
         resp = requests.post(self.store.rest, params=params, auth=self.store.auth, \
             headers=headers, data=post_body, timeout=self.store.timeout_short, verify=self.store.verify_ssl)
         if resp.status_code != 200:
-            print(resp.text)
+            logger.error(resp.text)
         self.result = resp
 
 class MarkLogicStore(object):
@@ -186,14 +189,14 @@ class MarkLogicStore(object):
         try:
             js = json.loads(resp.text)
         except:
-            print(resp.text)
+            logger.error(resp.text)
             return None
         if 'errorResponse' in js:
             # If unauthorized, then alert to fix it
             if js['errorResponse']['statusCode'] in [401, 403]:
-                print(f"ERROR: Could not authenticate to MarkLogic: {js['errorResponse']['message']}")
+                logger.error(f"ERROR: Could not authenticate to MarkLogic: {js['errorResponse']['message']}")
             else:
-                print(f"ERROR: Could not access MarkLogic: {js['errorResponse']['message']}")                
+                logger.error(f"ERROR: Could not access MarkLogic: {js['errorResponse']['message']}")                
             return None
         else:
             return js

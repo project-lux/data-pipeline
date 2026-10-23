@@ -5,6 +5,8 @@ import time
 import datetime
 import gzip
 from dotenv import load_dotenv
+import logging
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 from lux_pipeline.config import Config
 from lux_pipeline.process.reference_manager import ReferenceManager
 from lux_pipeline.process.update_manager import UpdateManager

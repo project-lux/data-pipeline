@@ -1,9 +1,12 @@
 
+import logging
 import os
 import redis
 import uuid
 import sys
 import random
+
+logger = logging.getLogger("lux_pipeline")
 
 
 # URICache moved to storage/uricache.py so config.py can use it without
@@ -67,7 +70,7 @@ class RedisCache(object):
             self.set(k, v)
             x += 1
             if not x % 100000:
-                print(f'{x}'); sys.stdout.flush()
+                logger.info(f'{x}')
         self._restoring_data_state = False
 
     def clear(self):
@@ -117,7 +120,7 @@ class RedisCache(object):
         # 100 rounds without claiming anything: either everything is being
         # drained by other workers (fine to report empty) or the db holds
         # only non-string keys. Don't crash the slice either way.
-        print("popitem: no claimable string keys after 100 rounds; treating as empty")
+        logger.warning("popitem: no claimable string keys after 100 rounds; treating as empty")
         return None
 
     # WARNING: this doesn't scale for long, but is useful for debugging and testing
@@ -171,7 +174,7 @@ class IdMap(RedisCache):
             token = fh.read()
         token = token.strip()
         if not token.startswith('__') or not token.endswith('__'):
-            print("Idmap Update Token is badly formed, should be 8 character date with leading/trailing __")
+            logger.warning("Idmap Update Token is badly formed, should be 8 character date with leading/trailing __")
             raise ValueError("update token")
         else:
             self.update_token = token
@@ -373,7 +376,7 @@ class IdMap(RedisCache):
         try:
             val = self.conn.smembers(key) if is_set else self.conn.get(key)
         except Exception as e:
-            print(f"idmap lookup failed for {key}: {e}")
+            logger.error(f"idmap lookup failed for {key}: {e}")
             return None
         if not val:
             return None
@@ -412,7 +415,7 @@ class IdMap(RedisCache):
             try:
                 vals = self.conn.mget([ik for _, ik in batch])
             except Exception as e:
-                print(f"idmap mget failed ({len(batch)} keys): {e}")
+                logger.error(f"idmap mget failed ({len(batch)} keys): {e}")
                 vals = [None] * len(batch)
             for (key, ikey), val in zip(batch, vals):
                 v = self._manage_value_out(val) if val else None
@@ -433,7 +436,7 @@ class IdMap(RedisCache):
                         pipe.smembers(ik)
                     res = pipe.execute()
             except Exception as e:
-                print(f"idmap pipelined smembers failed ({len(batch)} keys): {e}")
+                logger.error(f"idmap pipelined smembers failed ({len(batch)} keys): {e}")
                 res = [None] * len(batch)
             for (key, ikey), val in zip(batch, res):
                 v = {self._manage_value_out(x) for x in val} if val else None
@@ -471,7 +474,7 @@ class IdMap(RedisCache):
                         pipe.unwatch()
                         return
                     if old is not None:
-                        print(f"key: {key} old: {old} new value: {value}")
+                        logger.debug(f"key: {key} old: {old} new value: {value}")
                         # Changing to a different yuid: keep all keys assigned
                         # to old_yuid assigned to new_yuid
                         pipe.watch(old)
@@ -483,7 +486,7 @@ class IdMap(RedisCache):
                             pipe.sadd(ivalue, *all_vals)
                             pipe.delete(old)
                         else:
-                            print(f"Requested members for {old} and got [] ???")
+                            logger.warning(f"Requested members for {old} and got [] ???")
                         pipe.sadd(ivalue, ikey)
                         pipe.set(ikey, ivalue)
                         pipe.execute()
@@ -535,7 +538,7 @@ class IdMap(RedisCache):
         elif t == 'set':
             raise ValueError(f"{key} is a YUID ({t}) and cannot be manually deleted")
         else:
-            print(f"Got {t} as type of key in idmap?")
+            logger.warning(f"Got {t} as type of key in idmap?")
         return None
 
 
@@ -748,7 +751,7 @@ class ReferenceMap(NetworkOperationMap):
                         pipe.hgetall(k)
                     res = pipe.execute()
             except Exception as e:
-                print(f"refmap pipelined hgetall failed ({len(batch)} keys): {e}")
+                logger.error(f"refmap pipelined hgetall failed ({len(batch)} keys): {e}")
                 res = [None] * len(batch)
             for k, d in zip(batch, res):
                 if d:
@@ -785,7 +788,7 @@ class ReferenceMap(NetworkOperationMap):
                         pipe.execute()
                 except redis.ResponseError as e:
                     # scripting unavailable/disabled: fall back for good
-                    print(f"refmap merge script unusable ({e}); "
+                    logger.error(f"refmap merge script unusable ({e}); "
                           f"falling back to per-ref WATCH transactions")
                     self._scripting = False
                     for it in items[i:]:
@@ -850,7 +853,7 @@ class ReferenceMap(NetworkOperationMap):
                             self._pop_script(keys=[k], args=[], client=pipe)
                         res = pipe.execute()
                 except redis.ResponseError as e:
-                    print(f"refmap pop script unusable ({e}); falling back to popitem()")
+                    logger.error(f"refmap pop script unusable ({e}); falling back to popitem()")
                     self._scripting = False
                     return out + self.popitems(count - len(out))
                 for k, flat in zip(keys, res):
@@ -1006,7 +1009,7 @@ class ReferenceMap(NetworkOperationMap):
             for (k, v) in d.items():
                 n[self._manage_key_out(k)] = self._manage_value_out(v)
             return (self._manage_key_out(rk), n)
-        print("popitem: no claimable hash keys after 100 rounds; treating as empty")
+        logger.warning("popitem: no claimable hash keys after 100 rounds; treating as empty")
         return None
 
     def update(self, values):

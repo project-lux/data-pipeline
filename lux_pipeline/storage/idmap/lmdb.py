@@ -37,10 +37,13 @@
 # .lmdb files open with this code and files written by it open with the old
 # code.
 
+import logging
 from pathlib import Path
 
 import lmdb
 import ujson as json
+
+logger = logging.getLogger("lux_pipeline")
 
 ### Storage Layer
 
@@ -257,7 +260,7 @@ class Lmdb(object):
         try:
             return self._pre_key(key)
         except ValueError as e:
-            print(f"\n*** LMDB lookup got {e} for '{str(key)[:100]}' ***")
+            logger.error(f"*** LMDB lookup got {e} for '{str(key)[:100]}' ***")
             return None
 
     def __getitem__(self, key):

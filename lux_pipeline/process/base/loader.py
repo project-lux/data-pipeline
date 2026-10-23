@@ -1,8 +1,11 @@
+import logging
 import os
 import time
 import gzip
 import zipfile
 import ujson as json
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class Loader(object):
@@ -55,7 +58,7 @@ class Loader(object):
             if what and what in self.out_cache:
                 done_x += 1
                 if not done_x % 10000:
-                    print(f"Skipping past {done_x} {time.time() - start}")
+                    logger.info(f"Skipping past {done_x} {time.time() - start}")
                 continue
             # Cache assumes JSON as input, so need to parse it
             try:
@@ -66,13 +69,13 @@ class Loader(object):
             try:
                 new = self.post_process_json(js)
             except:
-                print(f"Failed to process {l}")
+                logger.error(f"Failed to process {l}")
                 raise
             if new is not None:
                 if not what:
                     what = self.get_identifier_json(new)
                     if not what:
-                        print(l)
+                        logger.warning(l)
                         raise NotImplementedError(
                             f"is get_identifier_raw or _json implemented for {self.__class__.__name__}?"
                         )
@@ -81,7 +84,7 @@ class Loader(object):
                 t = time.time() - start
                 xps = x / t
                 ttls = self.total / xps
-                print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls / 3600} hrs)")
+                logger.info(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls / 3600} hrs)")
         fh.close()
         self.out_cache.commit()
 
@@ -89,7 +92,7 @@ class Loader(object):
         where = self.config["all_configs"].dumps_dir +"/harvested"
         fn = os.path.join(where, f"export_{self.config['name']}.jsonl.gz")
         if not os.path.exists(fn):
-            print(fn)
+            logger.error(fn)
             return None
 
         self.out_cache.defer_commits(every=1000)
@@ -106,7 +109,7 @@ class Loader(object):
             if not x % 10000:
                 t = time.time() - start
                 xps = x / t
-                print(f"{x} in {t} = {xps}/s")
+                logger.info(f"{x} in {t} = {xps}/s")
         fh.close()
         self.out_cache.flush()
 
@@ -119,13 +122,13 @@ class Loader(object):
         if os.path.exists(zipfn):
             zh = zipfile.ZipFile(zipfn, "r", compression=zipfile.ZIP_BZIP2)
         else:
-            print("Could not find export zip")
+            logger.error("Could not find export zip")
             return None
         start = time.time()
         x = 0
         idents = zh.namelist()
         total = len(idents)
-        print(total)
+        logger.info(total)
         for ident in idents:
             fh = zh.open(ident)
             data = fh.read()
@@ -134,7 +137,7 @@ class Loader(object):
                 data = data.decode("utf-8")
                 js = json.loads(data)
             except Exception as e:
-                print(e)
+                logger.error(e)
                 continue
             x += 1
             self.out_cache[ident] = js["data"]
@@ -142,5 +145,5 @@ class Loader(object):
                 t = time.time() - start
                 xps = x / t
                 ttls = total / xps
-                print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls / 3600} hrs)")
+                logger.info(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls / 3600} hrs)")
         zh.close()

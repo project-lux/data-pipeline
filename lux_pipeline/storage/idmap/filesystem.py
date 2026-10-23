@@ -3,10 +3,13 @@
 # A memory managed, filesystem backed map
 # For use with tests or debugging, not in a production environment
 
+import logging
 import os
 import sys
 import uuid
 import ujson as json
+
+logger = logging.getLogger("lux_pipeline")
 
 class FsMap(object):
 
@@ -57,7 +60,7 @@ class FsMap(object):
             del self.data[key]
             self._persist()
         except:
-            print(f"idmap tried to delete non-existent key: {key}")
+            logger.warning(f"idmap tried to delete non-existent key: {key}")
 
     def has_item(self, key):
         return key in self.data
@@ -107,7 +110,7 @@ class IdMap(FsMap):
             token = fh.read()
         token = token.strip()
         if not token.startswith('__') or not token.endswith('__'):
-            print("Idmap Update Token is badly formed, should be 8 character date with leading/trailing __")
+            logger.warning("Idmap Update Token is badly formed, should be 8 character date with leading/trailing __")
             raise ValueError("update token")
         else:
             self.update_token = token
@@ -147,7 +150,7 @@ class IdMap(FsMap):
         if self.should_mint_new_ids:
             # Make a new id of the form: yuid:{uuid}
             uu = str(uuid.uuid4())
-            print(f"Minting new YUID {slug}/{uu} for {key}")
+            logger.info(f"Minting new YUID {slug}/{uu} for {key}")
             if slug:
                 value = f"{self.prefix_map_out['yuid']}{slug}/{uu}"
             else:

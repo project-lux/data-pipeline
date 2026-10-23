@@ -10,6 +10,8 @@ from pstats import SortKey
 
 from dotenv import load_dotenv
 
+import logging
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 from lux_pipeline.config import Config
 from lux_pipeline.process.merge_batch import MERGE_BATCH, prefetched
 from lux_pipeline.process.merger import MergeHandler

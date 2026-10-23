@@ -1,8 +1,11 @@
+import logging
 from lux_pipeline.process.utils.mapper_utils import get_year_from_timespan
 from sqlitedict import SqliteDict
 from lux_pipeline.storage.idmap.lmdb import TabLmdb
 import re
 import time
+
+logger = logging.getLogger("lux_pipeline")
 
 
 # Abstract class definition, useless without actual data
@@ -87,12 +90,12 @@ class Reconciler(object):
             langs = nm.get("language", [])
             langids = [lg.get("id", None) for lg in langs]
             if None in langids:
-                print(f"  None in Name language: {rec['id']}")
+                logger.warning(f"None in Name language: {rec['id']}")
 
             cxns = nm.get("classified_as", [])
             cxnids = [cx.get("id", None) for cx in cxns]
             if None in cxnids:
-                print(f"  None in Name classifications: {rec['id']}")
+                logger.warning(f"None in Name classifications: {rec['id']}")
 
 
             # Desired result: lowest numbered language that matches
@@ -222,7 +225,7 @@ class LmdbReconciler(Reconciler):
             vals = dict(sorted(vals.items(), key=lambda item: (item[1], -len(item[0]))))
             for nm, num in vals.items():
                 if self.debug:
-                    print(f" names: {vals}")
+                    logger.debug(f"names: {vals}")
                 # One lookup. This was `in` then `[nm]`, and a third
                 # `[nm]` whenever the value did not unpack -- three
                 # transactions against the index for one answer, per name, per
@@ -249,7 +252,7 @@ class LmdbReconciler(Reconciler):
                         try:
                             matches[k].append(nm)
                             if num > 1:
-                                print(
+                                logger.error(
                                     f"!!!Base reconciler matched a non-English name: {nm}, with lang value {num}"
                                 )
                         except Exception:
@@ -262,7 +265,7 @@ class LmdbReconciler(Reconciler):
                 if hit is not None:
                     (uri, typ) = hit
                     if my_type != typ and self.debug:
-                        print(
+                        logger.debug(
                             f"cross-type match: record has {my_type} and external has {typ}"
                         )
                     try:
@@ -286,7 +289,7 @@ class LmdbReconciler(Reconciler):
             # landed last in dict order. Tie-break on uri for determinism.
             ms.sort(key=lambda x: (-len(x[1]), x[0]))
             if self.debug:
-                print(f"Found multiple matches: {ms}")
+                logger.debug(f"Found multiple matches: {ms}")
             return f"{self.namespace}{ms[0][0]}"
         else:
             return None
@@ -369,7 +372,7 @@ class SqliteReconciler(Reconciler):
                     (uri, typ) = self.id_index[e]
                     if my_type != typ:
                         if self.debug:
-                            print(
+                            logger.debug(
                                 f"cross-type match: record has {my_type} and external has {typ}"
                             )
                     try:
@@ -385,7 +388,7 @@ class SqliteReconciler(Reconciler):
             # landed last in dict order. Tie-break on uri for determinism.
             ms.sort(key=lambda x: (-len(x[1]), x[0]))
             if self.debug:
-                print(f"Found multiple matches: {ms}")
+                logger.debug(f"Found multiple matches: {ms}")
             return f"{self.namespace}{ms[0][0]}"
         else:
             return None

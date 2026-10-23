@@ -56,7 +56,7 @@ def importObject(objectType):
                 return importObject("lux_pipeline.%s" % objectType)
             except Exception:
                 pass
-        print(f"Failed to import {objectType}")
+        logger.error(f"Failed to import {objectType}")
         raise e
     return getattr(m, className)
 
@@ -145,7 +145,7 @@ class Config(object):
             elif rec["type"] == "map":
                 self.map_stores[rec["name"]] = rec
             else:
-                print(f"Unknown config type: {rec['type']} in {k}")
+                logger.error(f"Unknown config type: {rec['type']} in {k}")
 
     def process_base(self, rec):
         vcls = None
@@ -208,7 +208,7 @@ class Config(object):
             identifier = identifier.replace(".html", "")
 
         if not "mapper" in source:
-            print(f"Could not fix identifier {identifier} from {source} as no mapper")
+            logger.error(f"Could not fix identifier {identifier} from {source} as no mapper")
         elif source["mapper"]:
             identifier = source["mapper"].fix_identifier(identifier)
         return identifier
@@ -246,7 +246,7 @@ class Config(object):
         try:
             identifier = uri.rsplit(m, 1)[1]
         except:
-            print(f"Failed in split_uri() m: {m} source: {source['name']}")
+            logger.error(f"Failed in split_uri() m: {m} source: {source['name']}")
             return None
         if identifier.startswith("http://") or identifier.startswith("https://"):
             # Urgh, fix double wrapping
@@ -522,7 +522,7 @@ class Config(object):
             else:
                 cfg["tester"] = None
         except Exception as e:
-            print(f"Failed to build component for {cfg['name']}")
+            logger.error(f"Failed to build component for {cfg['name']}")
             raise
 
         return cfg

@@ -24,6 +24,7 @@ means a lookup here never leaves a transaction open holding an ACCESS SHARE
 lock.
 """
 
+import logging
 import os
 import random
 import time
@@ -34,6 +35,8 @@ import psycopg2
 import psycopg2.extras
 
 from lux_pipeline.storage.uricache import URICache
+
+logger = logging.getLogger("lux_pipeline")
 
 
 def _fmt_bytes(n):
@@ -130,7 +133,7 @@ def _server_sync_commit(kw):
         except Exception as e:
             # Unknown: assume the server wants durability, which keeps the
             # separate connection -- the conservative answer either way.
-            print(f"could not read synchronous_commit ({e}); assuming 'on'")
+            logger.error(f"could not read synchronous_commit ({e}); assuming 'on'")
             _SERVER_SYNC_COMMIT[target] = "on"
     return _SERVER_SYNC_COMMIT[target]
 
@@ -162,7 +165,7 @@ def _refs_connection(kw, config):
         key = tuple(sorted(kw.items()))
         if key not in _SHARE_NOTED:
             _SHARE_NOTED.add(key)
-            print("refs: sharing the idmap connection "
+            logger.warning("refs: sharing the idmap connection "
                   "(server synchronous_commit is already off)")
     return _connect(kw, tag="refs" if want_async else "", async_commit=want_async)
 
@@ -216,7 +219,7 @@ class IdMap(object):
         with open(os.path.join(self.configs.data_dir, "idmap_update_token.txt")) as fh:
             token = fh.read().strip()
         if not token.startswith("__") or not token.endswith("__"):
-            print("Idmap Update Token is badly formed, should be 8 character date with leading/trailing __")
+            logger.warning("Idmap Update Token is badly formed, should be 8 character date with leading/trailing __")
             raise ValueError("update token")
         self.update_token = token
 
@@ -260,7 +263,7 @@ class IdMap(object):
                         "AND i.relname <> %s LIMIT 1",
                         (self.table, f"{self.table}_pkey"))
             if cur.fetchone() is None:
-                print(f"*** {self.table} has no index on yuid: every cluster "
+                logger.error(f"*** {self.table} has no index on yuid: every cluster "
                       f"lookup is a sequential scan. Run "
                       f"manage-data.py --idmap-indexes")
 
@@ -298,7 +301,7 @@ class IdMap(object):
                 self._stmt[name] = stmt
             except psycopg2.Error as e:
                 # Not fatal: the callers fall back to plain SQL, just slower
-                print(f"idmap: could not prepare {name}: {str(e).strip()[:80]}")
+                logger.error(f"idmap: could not prepare {name}: {str(e).strip()[:80]}")
                 self.conn.rollback()
 
     def _run(self, name, params):
@@ -427,7 +430,7 @@ class IdMap(object):
             row = self._run("fwd", (ikey,)).fetchone()
             return self._manage_value_out(row[0]) if row else None
         except Exception as e:
-            print(f"idmap lookup failed for {ikey}: {e}")
+            logger.error(f"idmap lookup failed for {ikey}: {e}")
             self.conn.rollback()
             return None
 
@@ -492,7 +495,7 @@ class IdMap(object):
             # Correctness over speed: fall back to the two lookups this
             # method exists to replace rather than reporting a missing YUID,
             # which merge would turn into a skipped record.
-            print(f"idmap cluster lookup failed for {ikey}: {e}")
+            logger.error(f"idmap cluster lookup failed for {ikey}: {e}")
             self.conn.rollback()
             yuid = self.get(key)
             return (yuid, self.get(yuid)) if yuid else (None, None)
@@ -533,7 +536,7 @@ class IdMap(object):
                                 ([ik for _, ik in batch],))
                     found = {r[0]: r[1] for r in cur.fetchall()}
             except Exception as e:
-                print(f"idmap batch lookup failed ({len(batch)} keys): {e}")
+                logger.error(f"idmap batch lookup failed ({len(batch)} keys): {e}")
             for key, ikey in batch:
                 raw = found.get(ikey)
                 v = self._manage_value_out(raw) if raw else None
@@ -553,7 +556,7 @@ class IdMap(object):
                     for yuid, uri in cur.fetchall():
                         members.setdefault(yuid, set()).add(self._manage_value_out(uri))
             except Exception as e:
-                print(f"idmap batch member lookup failed ({len(batch)} keys): {e}")
+                logger.error(f"idmap batch member lookup failed ({len(batch)} keys): {e}")
             for key, ikey in batch:
                 v = members.get(ikey)
                 out[key] = v
@@ -688,7 +691,7 @@ class IdMap(object):
                 # Two workers merging overlapping classes; one is chosen as
                 # the victim. Transient -- run it again.
                 if attempt == DEADLOCK_RETRIES - 1:
-                    print(f"idmap.set({key}) deadlocked {DEADLOCK_RETRIES} times: {e}")
+                    logger.error(f"idmap.set({key}) deadlocked {DEADLOCK_RETRIES} times: {e}")
                     raise
                 time.sleep(DEADLOCK_BACKOFF * (attempt + 1) * (0.5 + random.random()))
 
@@ -709,7 +712,7 @@ class IdMap(object):
                     # workers merging the same pair queue instead of deadlock
                     lo, hi = sorted([old, ivalue])
                     cur.execute("SELECT pg_advisory_xact_lock(hashtext(%s), hashtext(%s))", (lo, hi))
-                    print(f"key: {key} old: {old} new value: {value}")
+                    logger.debug(f"key: {key} old: {old} new value: {value}")
                     cur.execute(f"SELECT uri FROM {self.table} WHERE yuid = %s", (old,))
                     moved = [r[0] for r in cur.fetchall()]
                     cur.execute(f"UPDATE {self.table} SET yuid = %s WHERE yuid = %s", (ivalue, old))
@@ -933,7 +936,7 @@ class IdMap(object):
                 for relname, live, dead, last in cur.fetchall():
                     out[relname] = (live or 0, dead or 0, last)
         except Exception as e:
-            print(f"could not read table stats: {e}")
+            logger.error(f"could not read table stats: {e}")
         return out
 
     @staticmethod
@@ -1003,27 +1006,27 @@ class IdMap(object):
         new = self.COVERING_YUID_INDEX
         if report:
             for name, size in sorted(before.items()):
-                print(f"  {name}: {_fmt_bytes(size)}")
+                logger.info(f"{name}: {_fmt_bytes(size)}")
         if new in before:
-            print(f"  {new} already exists")
+            logger.warning(f"{new} already exists")
         else:
             start = time.time()
-            print(f"  CREATE INDEX CONCURRENTLY {new} -- this takes a while")
+            logger.info(f"CREATE INDEX CONCURRENTLY {new} -- this takes a while")
             with self._cursor() as cur:
                 cur.execute(f"CREATE INDEX CONCURRENTLY IF NOT EXISTS {new} "
                             f"ON {self.table} (yuid, uri)")
-            print(f"  built {new} in {time.time() - start:.0f}s")
+            logger.info(f"built {new} in {time.time() - start:.0f}s")
         if drop_old and old in self.index_sizes():
             # After the new one is valid, never before: dropping first would
             # leave the yuid lookup on a sequential scan if the build failed.
             with self._cursor() as cur:
                 cur.execute(f"DROP INDEX CONCURRENTLY IF EXISTS {old}")
-            print(f"  dropped {old}, {_fmt_bytes(before.get(old, 0))} returned")
+            logger.info(f"dropped {old}, {_fmt_bytes(before.get(old, 0))} returned")
         elif not drop_old:
-            print(f"  keeping {old} -- drop it once plans have moved over")
+            logger.warning(f"keeping {old} -- drop it once plans have moved over")
         if report:
             for name, size in sorted(self.index_sizes().items()):
-                print(f"  {name}: {_fmt_bytes(size)}")
+                logger.info(f"{name}: {_fmt_bytes(size)}")
         return True
 
     def optimize(self, analyze=True, freeze=True, report=True):
@@ -1074,7 +1077,7 @@ class IdMap(object):
         if report:
             for name, (live, dead, last) in sorted(before.items()):
                 pct = dead / (live + dead) * 100 if (live + dead) else 0
-                print(f"  {name}: {live:,} live, {dead:,} dead ({pct:.1f}%)"
+                logger.info(f"{name}: {live:,} live, {dead:,} dead ({pct:.1f}%)"
                       + ("" if last else ", never autovacuumed"))
         opts = self._vacuum_opts(analyze, freeze)
         for name in (self.table, self.yuid_table):
@@ -1084,10 +1087,10 @@ class IdMap(object):
                 with self._cursor() as cur:
                     cur.execute(f"VACUUM {opts}{name}")
             except Exception as e:
-                print(f"  could not vacuum {name}: {e}")
+                logger.error(f"could not vacuum {name}: {e}")
                 continue
             if report:
-                print(f"  vacuumed {name} in {time.time() - start:.0f}s")
+                logger.info(f"vacuumed {name} in {time.time() - start:.0f}s")
         return before
 
     # ---------------------------------------------------------- update tokens
@@ -1320,7 +1323,7 @@ class ReferenceMap(object):
                     break
                 except psycopg2.errors.DeadlockDetected:
                     if attempt == DEADLOCK_RETRIES - 1:
-                        print(f"{self.table}: deadlocked {DEADLOCK_RETRIES} times "
+                        logger.error(f"{self.table}: deadlocked {DEADLOCK_RETRIES} times "
                               f"merging {len(page)} references")
                         raise
                     time.sleep(DEADLOCK_BACKOFF * (attempt + 1) * (0.5 + random.random()))

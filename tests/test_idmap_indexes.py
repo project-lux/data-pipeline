@@ -15,6 +15,7 @@ merge's 299 worker hours. CONCURRENTLY, because merge holds ACCESS SHARE on
 the table for as long as it runs.
 """
 
+import logging
 import sys
 from pathlib import Path
 
@@ -91,10 +92,11 @@ def test_an_existing_table_is_left_alone():
     assert any(q.startswith("CREATE TABLE") for q in ddl(conn))
 
 
-def test_a_map_with_no_yuid_index_says_so_rather_than_building_one(capsys):
+def test_a_map_with_no_yuid_index_says_so_rather_than_building_one(caplog):
     conn = Conn(answers=[("idmap",), None])   # exists; no non-pkey index
-    idmap(conn)._ensure_schema()
-    out = capsys.readouterr().out
+    with caplog.at_level(logging.WARNING, logger="lux_pipeline"):
+        idmap(conn)._ensure_schema()
+    out = caplog.text
     assert "no index on yuid" in out
     assert "--idmap-indexes" in out
     assert not any(q.startswith("CREATE INDEX") for q in ddl(conn))

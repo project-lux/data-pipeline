@@ -35,6 +35,7 @@ in-memory union-find at all.
 
 """
 
+import logging
 import os
 import shutil
 import subprocess
@@ -50,6 +51,8 @@ import ujson as json
 
 from lux_pipeline.process.timing import PhaseTimer
 from lux_pipeline.storage.idmap.lmdb import TabLmdb
+
+logger = logging.getLogger("lux_pipeline")
 
 # ---------------------------------------------------------------------------
 # Union-find implementation
@@ -248,9 +251,9 @@ class IdentityResolver(object):
             try:
                 diff_index = TabLmdb.open(fn, "r", readahead=False, writemap=True)
             except Exception as e:
-                print(f"Could not open differents index {fn}: {e}")
+                logger.error(f"Could not open differents index {fn}: {e}")
         else:
-            print("No differentDbPath configured; clustering without diff constraints")
+            logger.warning("No differentDbPath configured; clustering without diff constraints")
         
         if diff_index is None:
             return diffs

@@ -1,3 +1,4 @@
+import logging
 import datetime
 import random
 import threading
@@ -6,6 +7,8 @@ from contextlib import contextmanager
 
 import psycopg2
 import ujson
+
+logger = logging.getLogger("lux_pipeline")
 
 # Parallel workers upserting the same row can be picked as a deadlock victim.
 # It is transient, so retry the statement rather than killing the build.
@@ -265,7 +268,7 @@ class PooledCache(object):
             res = cursor.fetchone()
             if res is None:
                 # No such table, build it.
-                print(f"Making cache table {self.name}")
+                logger.info(f"Making cache table {self.name}")
                 self._make_table()
 
     def shutdown(self):
@@ -397,7 +400,7 @@ class PooledCache(object):
                     cursor.execute(idxQry)
                 self.conn.commit()
             except Exception as e:
-                print(f"Make table failed: {e}")
+                logger.error(f"Make table failed: {e}")
                 self.conn.rollback()
 
     def len(self):
@@ -413,7 +416,7 @@ class PooledCache(object):
         if _key_type is None:
             _key_type = self.key
         if _key_type == "yuid" and len(key) != 36:
-            print(f"{self.name} has UUIDs as keys")
+            logger.warning(f"{self.name} has UUIDs as keys")
             return None
         if not field in ["insert_time", "record_time", "refresh_time", "valid", "change"]:
             raise ValueError(f"Unknown metadata field in cache: {field}")
@@ -429,7 +432,7 @@ class PooledCache(object):
         if _key_type is None:
             _key_type = self.key
         if _key_type == "yuid" and len(key) != 36:
-            print(f"{self.name} has UUIDs as keys")
+            logger.warning(f"{self.name} has UUIDs as keys")
             return None
         if not field in ["record_time", "refresh_time", "valid", "change"]:
             raise ValueError(f"Attempt to set unsettable metadata field in cache: {field}")
@@ -569,7 +572,7 @@ class PooledCache(object):
                     row = cursor.fetchone()
                     typ = row["data_type"] if row else None
             except Exception as e:
-                print(f"could not read type of {self.name}.{column}: {e}")
+                logger.error(f"could not read type of {self.name}.{column}: {e}")
             self._col_types[column] = typ
         typ = self._col_types[column]
         # only the types these tables actually key on; anything else is left
@@ -581,7 +584,7 @@ class PooledCache(object):
         if _key_type is None:
             _key_type = self.key
         if _key_type == "yuid" and len(key) != 36:
-            print(f"{self.name} has UUIDs as keys")
+            logger.warning(f"{self.name} has UUIDs as keys")
             return None
 
         self._read_barrier()
@@ -631,7 +634,7 @@ class PooledCache(object):
         if _key_type is None:
             _key_type = self.key
         if _key_type == "yuid" and len(key) != 36:
-            print(f"{self.name} has UUIDs as keys")
+            logger.warning(f"{self.name} has UUIDs as keys")
             return None
 
         self._read_barrier()
@@ -654,7 +657,7 @@ class PooledCache(object):
         if _key_type is None:
             _key_type = self.key
         if _key_type == "yuid" and len(key) != 36:
-            print(f"{self.name} has UUIDs as keys")
+            logger.warning(f"{self.name} has UUIDs as keys")
             return None
 
         # ORDER BY in case we have multiple copies from different times:
@@ -937,11 +940,11 @@ class PooledCache(object):
                     replay = True
                 if attempt == DEADLOCK_RETRIES - 1:
                     if self.pools.deferring:
-                        print(f"Deadlock in {self.name} while deferring, and "
+                        logger.error(f"Deadlock in {self.name} while deferring, and "
                               f"{len(self.pools.deferred_stmts)} replayed writes "
                               f"could not land either. Deferral expects workers "
                               f"to write disjoint keys -- see defer_commits().")
-                    print(f"Failed to upsert {identifier}/{yuid} in "
+                    logger.error(f"Failed to upsert {identifier}/{yuid} in "
                           f"{self.name} after {DEADLOCK_RETRIES} "
                           f"attempts: {e}")
                     self.pools.deferred_stmts.clear()
@@ -952,10 +955,10 @@ class PooledCache(object):
             except Exception as e:
                 # A swallowed failure here silently loses the write; log
                 # and re-raise so the caller/build sees it
-                print(f"Failed to upsert {identifier}/{yuid} in {self.name}: {e}")
+                logger.error(f"Failed to upsert {identifier}/{yuid} in {self.name}: {e}")
                 self.conn.rollback()
                 if self.pools.deferring:
-                    print(f"  ... discarding {len(self.pools.deferred_stmts)} "
+                    logger.warning(f"... discarding {len(self.pools.deferred_stmts)} "
                           f"writes since the last flush()")
                     self.pools.deferred_stmts.clear()
                     self.pools.pending_writes = 0
@@ -1039,12 +1042,12 @@ class PooledCache(object):
             except psycopg2.errors.UniqueViolation:
                 # expected when re-inserting without overwrite; the row
                 # is already present, keep it
-                print(f"Duplicate key for {identifier}/{yuid} in {self.name}; keeping existing")
+                logger.warning(f"Duplicate key for {identifier}/{yuid} in {self.name}; keeping existing")
                 self.conn.rollback()
             except Exception as e:
                 # anything else (serialization failure, value too long,
                 # deadlock) used to be silently dropped
-                print(f"Failed to insert {identifier}/{yuid} in {self.name}: {e}")
+                logger.error(f"Failed to insert {identifier}/{yuid} in {self.name}: {e}")
                 self.conn.rollback()
                 raise
         # sys.stdout.write('S');sys.stdout.flush()
@@ -1219,7 +1222,7 @@ class PooledCache(object):
         reports that and rewrite() is what fixes it."""
         if report:
             # before the VACUUM: it zeroes the dead tuple count
-            print(self.bloat_line())
+            logger.info(self.bloat_line())
         start = time.time()
         with self._maintenance() as cursor:
             opts = ["ANALYZE"]
@@ -1230,7 +1233,7 @@ class PooledCache(object):
                 opts.append(f"PARALLEL {self.MAINTENANCE_PARALLEL}")
             cursor.execute(f"VACUUM ({', '.join(opts)}) {self.name}")
         if report:
-            print(f"  vacuumed {self.name} in {time.time() - start:.0f}s")
+            logger.info(f"vacuumed {self.name} in {time.time() - start:.0f}s")
 
     def bloat(self):
         """How much of the table is space that VACUUM will not give back.
@@ -1307,17 +1310,17 @@ class PooledCache(object):
         separate from optimize() because it is DDL: it changes the table
         rather than tidying it."""
         if self.TIME_INDEX:
-            print(f"{self.name}: keeping its insert_time index, latest() uses it")
+            logger.warning(f"{self.name}: keeping its insert_time index, latest() uses it")
             return False
         idx = f"{self.name}_time_idx"
         with self._maintenance() as cursor:
             cursor.execute("SELECT pg_relation_size(to_regclass(%s)) AS size", (idx,))
             row = cursor.fetchone()
             if row["size"] is None:
-                print(f"{self.name}: no insert_time index")
+                logger.warning(f"{self.name}: no insert_time index")
                 return False
             cursor.execute(f"DROP INDEX IF EXISTS {idx}")
-            print(f"{self.name}: dropped {idx}, {_fmt_bytes(row['size'])} returned")
+            logger.info(f"{self.name}: dropped {idx}, {_fmt_bytes(row['size'])} returned")
         return True
 
     def _pk_index(self):
@@ -1348,7 +1351,7 @@ class PooledCache(object):
         if idx is None:
             raise ValueError(f"{self.name} has no primary key index to cluster on")
         before = self.bloat()
-        print(f"{before['name']}: rewriting {_fmt_bytes(before['total'])} on {idx} "
+        logger.info(f"{before['name']}: rewriting {_fmt_bytes(before['total'])} on {idx} "
               f"(exclusive lock, needs that much free disk)")
         start = time.time()
         with self._maintenance() as cursor:
@@ -1356,7 +1359,7 @@ class PooledCache(object):
             # CLUSTER leaves the statistics alone
             cursor.execute(f"ANALYZE {self.name}")
         after = self.bloat()
-        print(f"  {_fmt_bytes(after['total'])} after {time.time() - start:.0f}s "
+        logger.info(f"{_fmt_bytes(after['total'])} after {time.time() - start:.0f}s "
               f"({_fmt_bytes(before['total'] - after['total'])} returned)")
 
     ### Behave like a dict
@@ -1393,7 +1396,7 @@ class PooledCache(object):
     def __bool__(self):
         # Don't let it go through to len
         # and warn that the code shouldn't do this
-        print(f"*** code somewhere is asking for a cache as a boolean value and shouldn't ***")
+        logger.error(f"*** code somewhere is asking for a cache as a boolean value and shouldn't ***")
         return True
 
 

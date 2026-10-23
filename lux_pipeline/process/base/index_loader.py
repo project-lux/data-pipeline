@@ -1,3 +1,4 @@
+import logging
 import csv
 import os
 import sys
@@ -6,6 +7,8 @@ import time
 from sqlitedict import SqliteDict
 
 from lux_pipeline.storage.idmap.lmdb import TabLmdb
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class IndexLoader(object):
@@ -36,7 +39,7 @@ class IndexLoader(object):
         (index, eqindex) = self.get_storage()
 
         if index is None and eqindex is None:
-            print(f"{self.name} has no indexes configured")
+            logger.warning(f"{self.name} has no indexes configured")
             return None
 
         if self.reconciler is None:
@@ -57,7 +60,7 @@ class IndexLoader(object):
         start = time.time()
         all_names = {}
         all_uris = {}
-        print("starting...")
+        logger.info("starting...")
         for rec in self.in_cache.iter_records():
             res = self.acquire_record(rec)
             if res is None:
@@ -86,7 +89,7 @@ class IndexLoader(object):
                                 if prev is None or str(recid) < str(prev[0]):
                                     all_names[key] = [recid, typ]
                             else:
-                                print(f"Dropping name as too long ({len(nm)}>500):\n\t{nm}")
+                                logger.warning(f"Dropping name as too long ({len(nm)}>500):\n\t{nm}")
                 if eqindex is not None:
                     eqs = self.extract_uris(res["data"])
                     for eq in eqs:
@@ -98,19 +101,18 @@ class IndexLoader(object):
             n += 1
             if not n % 100000:
                 durn = time.time() - start
-                print(f"{n} of {ttl} in {int(durn)} = {n / durn}/sec -> {ttl / (n / durn)} secs")
-                sys.stdout.flush()
+                logger.info(f"{n} of {ttl} in {int(durn)} = {n / durn}/sec -> {ttl / (n / durn)} secs")
 
         if index is not None and all_names:
             start = time.time()
             index.update(all_names)
             durn = time.time() - start
-            print(f"names insert time: {int(durn)} = {len(all_names) / durn}/sec")
+            logger.info(f"names insert time: {int(durn)} = {len(all_names) / durn}/sec")
         if eqindex is not None and all_uris:
             start = time.time()
             eqindex.update(all_uris)
             durn = time.time() - start
-            print(f"uris insert time: {int(durn)} = {len(all_names) / durn}/sec")
+            logger.info(f"uris insert time: {int(durn)} = {len(all_names) / durn}/sec")
 
 
 class LmdbIndexLoader(IndexLoader):

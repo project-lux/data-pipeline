@@ -1,5 +1,8 @@
+import logging
 import requests
 import ujson as json
+
+logger = logging.getLogger("lux_pipeline")
 
 class Fetcher(object):
 
@@ -35,18 +38,18 @@ class Fetcher(object):
     def fetch(self, identifier):
         # fetch 
         if not self.enabled:
-            print(f"Called fetch for {self.name}:{identifier} but network is disabled")
+            logger.warning(f"Called fetch for {self.name}:{identifier} but network is disabled")
             return None
 
         url = self.make_fetch_uri(identifier)
         if not url:
-            print(f"Invalid identifier for {self.name}: {identifier}")
+            logger.error(f"Invalid identifier for {self.name}: {identifier}")
             return None
 
         if self.use_networkmap and url in self.networkmap:
             resp = self.networkmap[url]
             if resp in ['0', '000'] or (len(resp) == 3 and resp.isnumeric() and int(resp) > 399):
-                print(f"Networkmap has {resp} but requesting anyway")
+                logger.warning(f"Networkmap has {resp} but requesting anyway")
             elif len(resp) > 3:
                 # a previous redirect
                 # XXX FIXME: Don't refollow? Do refollow? configurable?
@@ -58,7 +61,7 @@ class Fetcher(object):
             resp = self.session.get(url, allow_redirects=self.allow_redirects, timeout=self.timeout)
         except:
             # Failed to open network, resolve DNS, or similar
-            print(f"Failed to get response from {url}")
+            logger.error(f"Failed to get response from {url}")
             if self.use_networkmap:
                 self.networkmap[url] = 0
             return None
@@ -78,7 +81,7 @@ class Fetcher(object):
             data = self.post_process(data, identifier)
         else:
             # URL returned fail status
-            print(f"Got failure {resp.status_code} from {url}")
+            logger.error(f"Got failure {resp.status_code} from {url}")
             if self.use_networkmap:
                 self.networkmap[url] = resp.status_code
             return None

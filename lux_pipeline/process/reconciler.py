@@ -1,4 +1,7 @@
+import logging
 from .collector import Collector
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class Reconciler(object):
@@ -54,12 +57,12 @@ class Reconciler(object):
                         self.debug_graph[record["data"]["id"]].append((eq["id"], "eq"))
                     except Exception:
                         self.debug_graph[record["data"]["id"]] = [(eq["id"], "eq")]
-            print(f"\n--- {record['data']['id']} ---")
+            logger.debug(f"--- {record['data']['id']} ---")
 
         leq = len(record["data"].get("equivalent", []))
         try:
             if self.debug:
-                print("    (uris)")
+                logger.debug("    (uris)")
             self.reconcile_uris(record)
             leqs = record["data"].get("equivalent", [])
             if self.filter_internal:  ## FIXME: uhhh... huh????
@@ -76,15 +79,15 @@ class Reconciler(object):
                 # XXX -- this could be smarter perhaps?
                 # Try and reconcile based on names
                 if self.debug:
-                    print("    (names)")
+                    logger.debug("    (names)")
                 self.call_reconcilers(record, reconcileType="name")
                 n2leq = len(record["data"].get("equivalent", []))
                 if n2leq > nleq:
                     if self.debug:
-                        print("    (uris)")
+                        logger.debug("    (uris)")
                     self.reconcile_uris(record)
         except Exception:
-            print(f"\nERROR --- reconciliation errored for {record['identifier']}")
+            logger.error(f"ERROR --- reconciliation errored for {record['identifier']}")
             raise
         return record
 
@@ -106,8 +109,8 @@ class Reconciler(object):
                         [x["id"] for x in record["data"].get("equivalent", [])]
                     )
         except Exception as e:
-            print(
-                f"\nERROR: Reconciling broke for {record['source']}/{record['identifier']}: {e}"
+            logger.error(
+                f"ERROR: Reconciling broke for {record['source']}/{record['identifier']}: {e}"
             )
             raise
         return record
@@ -131,7 +134,7 @@ class Reconciler(object):
             if diffs:
                 for d in sorted(diffs):
                     if d in ids and eq in ids and d != eq:
-                        print(
+                        logger.warning(
                             f"UHOH... Found two distinct entities already in equivalents: {d} and {eq} in {record['data']['id']}"
                         )
                         loser = max(d, eq)
@@ -175,7 +178,7 @@ class Reconciler(object):
                                 self.debug_graph[k] = v
                         r.debug_graph = {}
                 except Exception:
-                    print(r)
+                    logger.error(r)
                     raise
                 if newids:
                     if not type(newids) in [list, set]:
@@ -183,8 +186,8 @@ class Reconciler(object):
                     for nid in newids:
                         if nid not in ids:
                             if self.debug:
-                                print(
-                                    f" --- reconciler {r} / {reconcileType} found {nid} for {record['data']['id']}"
+                                logger.debug(
+                                    f"--- reconciler {r} / {reconcileType} found {nid} for {record['data']['id']}"
                                 )
                             # Test distinct to avoid adding bad
                             diffs = self.global_reconciler.reconcile(nid, "diffs")
@@ -192,7 +195,7 @@ class Reconciler(object):
                             for d in diffs:
                                 if d in ids:
                                     if self.debug:
-                                        print(
+                                        logger.debug(
                                             f"Found two distinct entities: {d} and {nid} in {record['data']['id']}"
                                         )
                                     okay_to_add = False
@@ -206,7 +209,7 @@ class Reconciler(object):
                 for i in ids:
                     if not i in curr:
                         if self.debug:
-                            print(f"Adding {i} to record")
+                            logger.debug(f"Adding {i} to record")
                         record["data"]["equivalent"].append(
                             {"id": i, "type": t, "_label": lbl}
                         )

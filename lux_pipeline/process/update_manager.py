@@ -1,6 +1,9 @@
+import logging
 import os
 import sys
 import ujson as json
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class UpdateManager(object):
@@ -60,11 +63,11 @@ class UpdateManager(object):
                         except ValueError as e:
                             # members re-appeared since the delete was
                             # recorded; the next merge will rebuild instead
-                            print(f"pending-delete kept yuid: {e}")
+                            logger.warning(f"pending-delete kept yuid: {e}")
                     stats["processed"] += 1
                     done.append(line)
                 except Exception as e:
-                    print(f"pending-delete failed for {line[:120]}: {e}")
+                    logger.error(f"pending-delete failed for {line[:120]}: {e}")
                     stats["errors"] += 1
 
         # rotate: append processed entries to .done, rewrite remainder
@@ -144,8 +147,8 @@ class UpdateManager(object):
                     storage.set(record["data"], identifier=ident, record_time=changeTime)
                     self.changed.append((record, ident, config))
                 except:
-                    print(f"Failed to process {ident}")
-                    print(f"Got: {record['data']}")
+                    logger.error(f"Failed to process {ident}")
+                    logger.debug(f"Got: {record['data']}")
 
     def harvest_all(self, store_only=False):
         self.changed = []
@@ -176,7 +179,7 @@ class UpdateManager(object):
         harvester = config["harvester"]
         if harvester.last_harvest[:4] == "0001":
             harvester.last_harvest = storage.latest()
-        print(f"Harvesting until {harvester.last_harvest}")
+        logger.info(f"Harvesting until {harvester.last_harvest}")
         for change, ident, record, changeTime in harvester.crawl():
             self.process_change(config, change, ident, record, changeTime)
 
@@ -185,11 +188,11 @@ class UpdateManager(object):
         harvester.fetcher.enabled = True
         storage = config["datacache"]
         if storage is None:
-            print(f"No datacache for {config['name']}? Can't harvest")
+            logger.error(f"No datacache for {config['name']}? Can't harvest")
             return
         fn = os.path.join(self.configs.temp_dir, f"all_{config['name']}_uris.txt")
         if not os.path.exists(fn):
-            print(f"No uri/change list to harvest for {config['name']}. Run get_record_list()")
+            logger.warning(f"No uri/change list to harvest for {config['name']}. Run get_record_list()")
             return
 
         with open(fn, "r") as fh:
@@ -214,15 +217,11 @@ class UpdateManager(object):
                 try:
                     itjs = harvester.fetcher.fetch(ident)
                     if itjs is None:
-                        print(f"Got None for {ident}")
+                        logger.warning(f"Got None for {ident}")
                         continue
                 except:
-                    sys.stdout.write("-")
-                    sys.stdout.flush()
                     continue
                 storage[ident] = itjs
-                sys.stdout.write(".")
-                sys.stdout.flush()
 
     def get_record_list(self, config, until="0001-01-01T00:00:00"):
         # build the set of records that should be in the cache
@@ -230,7 +229,7 @@ class UpdateManager(object):
 
         harvester = config["harvester"]
         harvester.last_harvest = until
-        print(f"Gathering all from stream until {until}")
+        logger.info(f"Gathering all from stream until {until}")
         records = {}
         deleted = {}
         for change, ident, record, changeTime in harvester.crawl(refsonly=True):
@@ -240,7 +239,7 @@ class UpdateManager(object):
             elif ident in records:
                 if change == "delete":
                     # This is a recreate?
-                    print(f"Saw record {ident} at {records[ident]} then got delete at {changeTime}")
+                    logger.warning(f"Saw record {ident} at {records[ident]} then got delete at {changeTime}")
             elif change == "delete":
                 # haven't seen a ref, so most recent is delete
                 deleted[ident] = changeTime

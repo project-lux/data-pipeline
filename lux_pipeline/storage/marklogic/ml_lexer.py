@@ -1,3 +1,4 @@
+import logging
 import ply.lex as lex
 import ujson as json
 from .query_token_rules import *
@@ -6,6 +7,8 @@ import numpy as np
 from .cts import Prefixer
 from .cts import fieldRangeQuery, fieldWordQuery, andQuery, orQuery, andNotQuery, \
     notQuery, tripleRangeQuery, kwTripleRangeQuery, documentQuery, triples, sem_iri
+
+logger = logging.getLogger("lux_pipeline")
 
 prefs = Prefixer()
 
@@ -142,7 +145,7 @@ class SimilarQuery(BaseQuery):
         rec = self.fetch_record()
         fn = getattr(self, f"make_{self.query_class.lower()}_query")
         qstr = fn(rec)
-        print(qstr)
+        logger.debug(qstr)
         p = Parser(self.ml_store)
         q = p.parse(self.query_class, qstr)
         return q.to_cts()
@@ -251,7 +254,7 @@ class InverseRelQuery(RelQuery):
 
     def to_cts(self):
         q = self.query.to_cts()
-        print(self.searchtag)
+        logger.debug(self.searchtag)
         p,t = self.searchtag.split(':')
         pf = getattr(prefs, p)
         return documentQuery(triples(q, [pf(t)]))

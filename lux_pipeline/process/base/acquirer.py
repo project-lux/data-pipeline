@@ -1,7 +1,10 @@
+import logging
 import os
 import traceback
 
 from lux_pipeline.process import timing
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class Acquirer(object):
@@ -45,14 +48,14 @@ class Acquirer(object):
         # XXX Shouldn't this just be "enabled" per source?
         if self.name in self.ignore_sources:
             if self.debug:
-                print(f"       Skipping {self.name}/{identifier} in acquire due to ignore_sources")
+                logger.debug(f"Skipping {self.name}/{identifier} in acquire due to ignore_sources")
             return None
 
         if self.fetcher.enabled:
             rec = self.fetcher.fetch(identifier)
             if rec is None:
                 if self.debug:
-                    print(f"Got no record fetching {self.name}/{identifier}; skipping")
+                    logger.debug(f"Got no record fetching {self.name}/{identifier}; skipping")
                 return None
             if "identifier" in rec and rec["identifier"] != identifier:
                 # Might have been redirected
@@ -62,7 +65,7 @@ class Acquirer(object):
         else:
             # don't have it, can't fetch it...
             if self.debug:
-                print(f"Fetcher for {self.name}/{identifier} disabled; skipping")
+                logger.debug(f"Fetcher for {self.name}/{identifier} disabled; skipping")
             return None
         return rec
 
@@ -75,7 +78,7 @@ class Acquirer(object):
                 if errs:
                     # err... now what?
                     for error in errs:
-                        print(f"  /{'/'.join([str(x) for x in error.absolute_path])} --> {error.message} ")
+                        logger.error(f"/{'/'.join([str(x) for x in error.absolute_path])} --> {error.message} ")
                     if self.raise_on_error:
                         raise ValueError(errs)
                     else:
@@ -85,7 +88,7 @@ class Acquirer(object):
                     try:
                         qrecid = self.configs.make_qua(rec3["identifier"], rectype)
                     except:
-                        print(f"{rec3['identifier']} in {self.config['name']} has no type?? {rec3['data']}")
+                        logger.error(f"{rec3['identifier']} in {self.config['name']} has no type?? {rec3['data']}")
                         raise
                     rec3["identifier"] = qrecid
                     self.recordcache[qrecid] = rec3
@@ -93,7 +96,7 @@ class Acquirer(object):
                     self.recordcache[identifier] = rec3
         else:
             if self.debug:
-                print(f"Post Mapping killed {rectype} record {self.name}/{identifier}")
+                logger.debug(f"Post Mapping killed {rectype} record {self.name}/{identifier}")
         return rec3
 
     def acquire_all(self, identifier, store=True, data=None):
@@ -116,7 +119,7 @@ class Acquirer(object):
         # validate identifier
         if self.fetcher and not self.fetcher.validate_identifier(identifier):
             if self.debug:
-                print(f"{identifier} is not a valid identifier for {self.name}")
+                logger.debug(f"{identifier} is not a valid identifier for {self.name}")
             return None
 
         # Return already built record
@@ -152,8 +155,8 @@ class Acquirer(object):
                 rec["data"]["type"].remove("Type")  # Prefer Language/Material to Type
                 rec["data"]["type"] = rec["data"]["type"][0]  # and pick the first, right or wrong
             if type(rec["data"]["type"]) == dict:
-                print(rec["identifier"])
-                print(rec["data"]["type"])
+                logger.debug(rec["identifier"])
+                logger.debug(rec["data"]["type"])
                 return None
 
             if rec["data"]["type"] in self.configs.ok_record_types:
@@ -171,12 +174,12 @@ class Acquirer(object):
             # field and answers it outright.
             tb = traceback.extract_tb(e.__traceback__)
             where = f" [{os.path.basename(tb[-1].filename)}:{tb[-1].lineno}]" if tb else ""
-            print(f"Failed to map record {identifier} for {self.name}: {e}{where}")
+            logger.error(f"Failed to map record {identifier} for {self.name}: {e}{where}")
             return None
 
         if rec2 is None:
             if self.debug:
-                print(f"Cannot map {self.name}/{identifier} into Linked Art (as {rectype})")
+                logger.debug(f"Cannot map {self.name}/{identifier} into Linked Art (as {rectype})")
             return None
         rec2["identifier"] = identifier
 

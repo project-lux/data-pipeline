@@ -15,6 +15,7 @@ synchronous commit back on, which is what most of these check.
 No live postgres -- psycopg2.connect is stubbed.
 """
 
+import logging
 import sys
 from pathlib import Path
 
@@ -128,7 +129,7 @@ def test_both_reference_maps_land_on_the_same_connection(server):
     assert a is b
 
 
-def test_an_unreadable_setting_keeps_the_separate_connection(server, capsys):
+def test_an_unreadable_setting_keeps_the_separate_connection(server, caplog):
     """The conservative answer: assume the server wants durability."""
     def boom(**kw):
         raise RuntimeError("no server")
@@ -136,5 +137,6 @@ def test_an_unreadable_setting_keeps_the_separate_connection(server, capsys):
     with pytest.raises(Exception):
         pgmap._connect(KW)
     # the helper swallows it and assumes 'on'
-    assert pgmap._server_sync_commit(KW) == "on"
-    assert "assuming 'on'" in capsys.readouterr().out
+    with caplog.at_level(logging.WARNING, logger="lux_pipeline"):
+        assert pgmap._server_sync_commit(KW) == "on"
+    assert "assuming 'on'" in caplog.text
