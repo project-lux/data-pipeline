@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pipeline.sources.lux.marklogic.mapper import MlMapper
+from lux_pipeline.sources.lux.marklogic.mapper import MlMapper
 
 IGNORE = {"identified_by", "referred_to_by", "equivalent", "subject_of", "language"}
 INTERNAL = "https://lux.collections.yale.edu/data/"

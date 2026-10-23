@@ -1,9 +1,9 @@
-"""Unit tests for pipeline.process.identity_resolver (deterministic identity
+"""Unit tests for lux_pipeline.process.identity_resolver (deterministic identity
 resolution). Pure-function coverage: clustering semantics, differentFrom
 constraints, voted conflict resolution, YUID assignment/reuse, and the
 assertion log round-trip. No redis or postgres required.
 
-Ported from the module-level API of the old `pipeline.process.identity`,
+Ported from the module-level API of the old `lux_pipeline.process.identity`,
 which no longer exists -- everything here is now a method on
 `IdentityResolver`, and the prefix maps it uses are built by the idmap rather
 than by a `build_prefix_maps()` helper. The assertions are unchanged in
@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pipeline.process.identity_resolver import IdentityResolver
+from lux_pipeline.process.identity_resolver import IdentityResolver
 
 
 class StubConfigs:

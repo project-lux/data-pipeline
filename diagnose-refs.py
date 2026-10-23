@@ -14,7 +14,7 @@ from collections import Counter
 import psycopg2
 from dotenv import load_dotenv
 
-from pipeline.config import Config
+from lux_pipeline.config import Config
 
 
 def main():

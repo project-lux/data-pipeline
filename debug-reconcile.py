@@ -3,10 +3,10 @@ import sys
 import json
 import time
 from dotenv import load_dotenv
-from pipeline.config import Config
-from pipeline.process.reconciler import Reconciler
-from pipeline.process.reference_manager import ReferenceManager
-from pipeline.storage.cache.postgres import poolman
+from lux_pipeline.config import Config
+from lux_pipeline.process.reconciler import Reconciler
+from lux_pipeline.process.reference_manager import ReferenceManager
+from lux_pipeline.storage.cache.postgres import poolman
 
 import matplotlib.pyplot as plt
 import networkx as nx

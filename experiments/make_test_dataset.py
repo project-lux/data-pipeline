@@ -6,10 +6,10 @@ import random
 import shutil
 import datetime
 from dotenv import load_dotenv
-from pipeline.config import Config
-from pipeline.storage.cache.filesystem import FsCache
-from pipeline.process.reconciler import Reconciler
-from pipeline.process.reference_manager import ReferenceManager
+from lux_pipeline.config import Config
+from lux_pipeline.storage.cache.filesystem import FsCache
+from lux_pipeline.process.reconciler import Reconciler
+from lux_pipeline.process.reference_manager import ReferenceManager
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")

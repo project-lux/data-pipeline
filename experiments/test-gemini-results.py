@@ -3,7 +3,7 @@ import sys
 import json
 import requests
 from dotenv import load_dotenv
-from pipeline.config import Config
+from lux_pipeline.config import Config
 from cromulent.model import Place
 
 load_dotenv()

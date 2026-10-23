@@ -8,6 +8,6 @@
     "wikidata_property": ["P349"],
     "merge_order": 35,
     
-    "fetcherClass": "sources.libraries.japan.fetcher.JapanFetcher",
-    "mapperClass": "sources.libraries.japan.mapper.JapanMapper"
+    "fetcherClass": "sources.japan.fetcher.JapanFetcher",
+    "mapperClass": "sources.japan.mapper.JapanMapper"
 }

@@ -27,10 +27,10 @@ from pstats import SortKey
 import ujson
 from dotenv import load_dotenv
 
-from pipeline.config import Config
-from pipeline.process.merge_batch import in_batches
-from pipeline.process.timing import PhaseTimer
-from pipeline.storage.cache.postgres import PoolManager
+from lux_pipeline.config import Config
+from lux_pipeline.process.merge_batch import in_batches
+from lux_pipeline.process.timing import PhaseTimer
+from lux_pipeline.storage.cache.postgres import PoolManager
 
 
 def dumps(obj):

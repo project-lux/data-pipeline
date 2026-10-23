@@ -36,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
 
-from pipeline.sources.lux.qlever.mapper2 import QleverMapper
+from lux_pipeline.sources.lux.qlever.mapper2 import QleverMapper
 
 GLOBALS = {"primaryName": "urn:PN", "sortName": "urn:SN", "gender": "urn:GEN",
            "nationality": "urn:NAT", "occupation": "urn:OCC"}
@@ -379,7 +379,7 @@ def test_qlever_index_parses_every_line(mapper, tmp_path):
 
 # --- what the mapper does with bad values: repair or drop -------------------
 
-from pipeline.sources.lux.qlever.mapper2 import clean_datetime, clean_iri, format_decimal
+from lux_pipeline.sources.lux.qlever.mapper2 import clean_datetime, clean_iri, format_decimal
 
 
 @pytest.mark.parametrize("value,expected", [
@@ -445,7 +445,7 @@ def test_non_polygon_wkt_is_written(mapper):
 
 # --- partial dates are padded out to the start or end of their period -------
 
-from pipeline.sources.lux.qlever.mapper2 import pad_datetime
+from lux_pipeline.sources.lux.qlever.mapper2 import pad_datetime
 
 
 @pytest.mark.parametrize("value,end,expected", [

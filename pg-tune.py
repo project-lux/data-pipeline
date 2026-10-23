@@ -305,7 +305,7 @@ def connect(args):
         from dotenv import load_dotenv
         load_dotenv()
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        from pipeline.config import Config
+        from lux_pipeline.config import Config
         db = Config(basepath=os.getenv("LUX_BASEPATH", "")).caches or {}
         kw = {"user": db.get("user") or os.getenv("USER"),
               "dbname": db.get("dbname") or os.getenv("USER")}
@@ -847,7 +847,7 @@ def _tail(srv, m, args):
     if srv and not ref:
         print("\n-- all_refs / done_refs do not exist yet; they are created with the")
         print("-- right storage parameters (see REF_STORAGE in")
-        print("-- pipeline/storage/idmap/postgres.py). Nothing to do.")
+        print("-- lux_pipeline/storage/idmap/postgres.py). Nothing to do.")
     elif need or not srv:
         print("\n-- The reference queues are work queues, not tables: every claim")
         print("-- deletes a row, so they bloat in seconds and the claim is a LIMIT")

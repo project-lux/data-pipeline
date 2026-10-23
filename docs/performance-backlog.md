@@ -164,7 +164,7 @@ Collect during the next run:
 * `SHOW synchronous_commit`. `docs/idmap-migration.md` prescribes `off` and
   reconcile is the phase it was written for, but **nothing in the code sets it
   for the record-cache pool** — only the reference maps set it for themselves
-  (`pipeline/storage/idmap/postgres.py:95`). If it reads `on`, that alone may
+  (`lux_pipeline/storage/idmap/postgres.py:95`). If it reads `on`, that alone may
   explain reconcile's profile and several items below are moot.
 * `n_dead_tup` on `all_refs` and `done_refs` throughout reconcile — see the
   caveat in §3.2.
@@ -173,7 +173,7 @@ Also re-run one slice with the `acquire.*` sub-stages, which were added in
 `96c85e4` **after** the overnight run and so are absent from the report above.
 Reconcile's `acquire` is 63.5% of the phase and currently a single opaque
 number; `acquire.cache_hit` / `.fetch` / `.map` / `.post_map`
-(`pipeline/process/base/acquirer.py`) split it four ways.
+(`lux_pipeline/process/base/acquirer.py`) split it four ways.
 
 ---
 
@@ -262,7 +262,7 @@ run-2 figures.
 
 ### 3.1 The upsert sent every document twice
 
-`pipeline/storage/cache/postgres.py:787`
+`lux_pipeline/storage/cache/postgres.py:787`
 
 `PooledCache.set()` built `... ON CONFLICT (key) DO UPDATE SET (cols) =
 (%s,...)` and passed the parameter list twice (`qvs * 2`). psycopg2's `Json`
@@ -300,7 +300,7 @@ rather than about this change:
 ### 3.2 Reconcile fetched every row it had just listed
 
 `run-reconcile.py:154`, with `data=` threaded through
-`pipeline/process/base/acquirer.py` (`do_fetch` / `acquire` / `acquire_all`).
+`lux_pipeline/process/base/acquirer.py` (`do_fetch` / `acquire` / `acquire_all`).
 
 The loop walked `iter_keys_slice()` and handed each key to `acquire()`, which
 SELECTed that same row straight back — one round trip and one large jsonb parse
@@ -322,7 +322,7 @@ reclaim dead tuples in *any* table while it is open, `all_refs` and `done_refs`
 included. Merge already does this, but merge does not churn the reference
 queue; reconcile does, in the same process, at the same time — and that
 queue's whole performance story depends on aggressive vacuuming (measured, see
-the comment at `pipeline/storage/idmap/postgres.py:720`: a poll costs 1.1 ms
+the comment at `lux_pipeline/storage/idmap/postgres.py:720`: a poll costs 1.1 ms
 bloated against 0.1 ms after a `VACUUM`).
 
 **Result (run 2): confirmed, and the largest win in the build.** Reconcile
@@ -369,12 +369,12 @@ ORDER BY identifier LIMIT 10000
 
 which still removes 9,999 of every 10,000 round trips but keeps each snapshot
 alive for seconds. `identifier` is the primary key on every `DataCache`
-(`pipeline/storage/cache/postgres.py:1140`), and the hash is computable from
+(`lux_pipeline/storage/cache/postgres.py:1140`), and the hash is computable from
 the index key, so it stays an index scan.
 
 ### 3.3 The YUID and its class were two round trips (was §4.1)
 
-`IdMap.get_cluster()` in `pipeline/storage/idmap/postgres.py`, used at
+`IdMap.get_cluster()` in `lux_pipeline/storage/idmap/postgres.py`, used at
 `run-merge.py:192`.
 
 `idmap[qrecid]` then `idmap[full_yuid]` was two sequential single-row lookups
@@ -416,7 +416,7 @@ If `idmap_equivs` jumps, the memory caching broke.
 
 `defer_commits(every=500, batch=25)` at `run-merge.py:112`; the mechanism is
 `_buffer` / `_emit_batch` / `_read_barrier` in
-`pipeline/storage/cache/postgres.py`.
+`lux_pipeline/storage/cache/postgres.py`.
 
 Deferring had already removed the fsync per write, which left one round trip
 and one parse per record. Rows now accumulate and go out 25 to a statement.
@@ -450,7 +450,7 @@ contention is normal.
 
 ### 3.5 The write connection was not in autocommit (was §4.11)
 
-`PoolManager.set_autocommit()` in `pipeline/storage/cache/postgres.py`, applied
+`PoolManager.set_autocommit()` in `lux_pipeline/storage/cache/postgres.py`, applied
 in `make_pool()` and driven by `defer_commits()` / `resume_commits()`.
 
 Both connections were created with psycopg2's default `autocommit = False`.
@@ -466,7 +466,7 @@ four round trips to two.
 not §4.2: in autocommit a lock lives from the statement to its implicit
 commit, where before it was held until an explicitly-issued COMMIT arrived a
 round trip later. `run-reconcile.py:106`'s reasoning is served, not
-contradicted. The precedent is `pipeline/storage/idmap/postgres.py:85`, which
+contradicted. The precedent is `lux_pipeline/storage/idmap/postgres.py:85`, which
 has run its own connection this way all along.
 
 Scope and the things that had to move with it, all pinned in
@@ -503,7 +503,7 @@ COMMIT call counts collapse.
 
 ### 3.6 The report double-counted nested stages (was §2.0)
 
-`split_stages()` in `pipeline/process/timing.py`, used by `PhaseTimer.summary()`,
+`split_stages()` in `lux_pipeline/process/timing.py`, used by `PhaseTimer.summary()`,
 `.report()`, `.finish()` and by `timing-report.py`.
 
 `timing.stage("acquire.map")` runs inside `timer.stage("acquire")`, so summing
@@ -521,7 +521,7 @@ The second half of the fix matters as much. The sub-stages are **not a
 breakdown of their parent**: `timing.stage()` attributes to whichever
 PhaseTimer is active, so the acquirer's stages accumulate whether it was
 called from the top of the loop or from inside `reconcile()` via
-`pipeline/process/collector.py:169`. In run 2 the four `acquire.*` stages
+`lux_pipeline/process/collector.py:169`. In run 2 the four `acquire.*` stages
 totalled 19.03 worker-hours against `acquire`'s 13.32. Printing them indented
 under `acquire` would imply a partition that isn't one, so the report says it
 outright:
@@ -549,7 +549,7 @@ shape.
 
 ### 3.7 The reference queues took a connection they no longer needed
 
-`_refs_connection()` in `pipeline/storage/idmap/postgres.py`.
+`_refs_connection()` in `lux_pipeline/storage/idmap/postgres.py`.
 
 `all_refs` and `done_refs` shared a connection of their own, separate from the
 identity map's, for exactly one reason: they issue `SET synchronous_commit =
@@ -585,7 +585,7 @@ not 4x.
 
 **Still open, found while counting:** `NetworkOperationMap` and
 `TransitiveMultiMap` — the classes behind the `networkmap` and `redirects`
-maps — exist only in `pipeline/storage/idmap/redis.py`; `postgres.py`
+maps — exist only in `lux_pipeline/storage/idmap/redis.py`; `postgres.py`
 implements `IdMap` and `ReferenceMap` and nothing else. `run-reconcile.py:22`
 instantiates `networkmap` on every run. Check what `storeClass` those two maps
 are set to on the build box: if they are still redis, the postgres-only
@@ -594,7 +594,7 @@ been pointed at `storage.idmap.postgres.IdMap` that is a semantic mismatch.
 
 ### 3.8 The identity map was never vacuumed (was §4.12)
 
-`IdMap.optimize()` in `pipeline/storage/idmap/postgres.py`, called at the end
+`IdMap.optimize()` in `lux_pipeline/storage/idmap/postgres.py`, called at the end
 of `run-identify.py` (skip with `--no-vacuum`).
 
 **§3.10 found the cause of the dead tuples this section cleans up.** The
@@ -636,7 +636,7 @@ after identify.
 
 ### 3.9 Two reference lookups became one (was §4.10)
 
-`ReferenceMap.get_multi_pair()` in `pipeline/storage/idmap/postgres.py`, used
+`ReferenceMap.get_multi_pair()` in `lux_pipeline/storage/idmap/postgres.py`, used
 by `ReferenceManager.resolve_refs()`.
 
 `resolve_refs` asked the same question of `all_refs` and `done_refs` for every
@@ -675,7 +675,7 @@ from `pg_stat_activity` as a statement of its own.
 
 ### 3.10 identify rewrote 45M rows to the values they already held
 
-`assign_bulk()` in `pipeline/storage/idmap/postgres.py`.
+`assign_bulk()` in `lux_pipeline/storage/idmap/postgres.py`.
 
 The member upsert was:
 
@@ -818,7 +818,7 @@ numbers.
 
 ### 4.3 `reidentify` — merge, 10.23 wh (21.9%), still one opaque number
 
-**Where:** `pipeline/process/reidentifier.py`.
+**Where:** `lux_pipeline/process/reidentifier.py`.
 
 845 µs/call (run 2; 1127 in run 1) covers three different things and no one
 knows the split:
@@ -834,7 +834,7 @@ Do them in this order:
    `reidentify.walk`. Cheap, and it decides whether the next two are worth
    anything.
 2. **Raise the idmap memory cache.** `memoryCacheSize` defaults to 200,000
-   (`pipeline/storage/idmap/postgres.py:127`) and `get_multi` consults it
+   (`lux_pipeline/storage/idmap/postgres.py:127`) and `get_multi` consults it
    (`:297`). Over 43.8M records the qua'd external keys repeat heavily
    (AAT, ULAN, common concepts), and every hit both saves a round trip and
    shrinks the `ANY()` array. `idmap_equivs` at 13.5 µs is the proof the cache
@@ -858,7 +858,7 @@ same way. Step 1 (instrument) is still worth doing first and on its own.
 
 ### 4.4 Reconcile's guaranteed-miss recordcache probe — 2.77 wh, 43.8M pointless probes
 
-**Where:** `pipeline/process/base/acquirer.py:120-134`.
+**Where:** `lux_pipeline/process/base/acquirer.py:120-134`.
 
 Run 2 sizes this precisely. `acquire.cache_hit` is 3.82 wh over **60,476,605
 calls**, against 52,123,139 `acquire.fetch` calls — so 8.35M lookups (13.8%)
@@ -872,7 +872,7 @@ the phase.** The other 16.6M are external-authority lookups inside
 this must be scoped to the main loop on a full rebuild, not applied globally.
 On an incremental build the probe is what makes the phase fast and must stay.
 
-It needs a flag. `pipeline/process/base/acquirer.py:17` has
+It needs a flag. `lux_pipeline/process/base/acquirer.py:17` has
 `# self.force_rebuild = config.get("force_rebuild", False)` commented out,
 which is where this was heading already.
 
@@ -883,7 +883,7 @@ count should fall from ~60.5M to ~16.6M, and its hit rate should rise from
 
 ### 4.5 `reconcile-refs` claim starvation — 7.11 wh (47.4%), unimproved in run 2
 
-**Where:** `pipeline/process/reference_manager.py:197` (`_claim_size`), `:255`
+**Where:** `lux_pipeline/process/reference_manager.py:197` (`_claim_size`), `:255`
 (`pop_ref`), `:44` (`ref_batch = 50`).
 
 `_claim_size()` calls `queue_length(ceiling)` on **every** buffer refill and
@@ -916,7 +916,7 @@ is to make it cheaper, not to remove it.
 SELECT relname, reloptions FROM pg_class WHERE relname IN ('all_refs','done_refs');
 ```
 
-`REF_STORAGE` (`pipeline/storage/idmap/postgres.py:735`) is applied only in the
+`REF_STORAGE` (`lux_pipeline/storage/idmap/postgres.py:735`) is applied only in the
 `CREATE`, and `idmap-migration.md` says existing tables need a one-time
 `ALTER`. Without those settings the claim cost grows with the corpse pile
 exactly as the comment at `:720` predicts — and see §3.2, which can suppress
@@ -927,7 +927,7 @@ buffered, but at 0.48 wh it is not worth touching until the claim is fixed.
 
 ### 4.6 Is `recordcache2` needed for every source? — merge, 8.28 wh (17.8%)
 
-**Where:** `run-merge.py:241`, `:363`; `pipeline/process/merger.py:95`.
+**Where:** `run-merge.py:241`, `:363`; `lux_pipeline/process/merger.py:95`.
 
 `write_rewritten` is 20% of merge's worker time, and the only reader of those
 `*_rewritten_record_cache` tables in the tree is `post-build-portal.py:74`,
@@ -936,7 +936,7 @@ write for the other five internal sources deletes a fifth of the phase rather
 than optimising it — no code cleverness required.
 
 This is a **product question, not a performance question**: ask before
-changing it. Note `pipeline/process/merger.py:95` also writes external `recordcache2` rows from
+changing it. Note `lux_pipeline/process/merger.py:95` also writes external `recordcache2` rows from
 inside the `merge` stage, which is a separate decision from the internal ones.
 
 ### 4.7 Instrument merge's unattributed 9.5% — 4.44 wh
@@ -957,7 +957,7 @@ in increasing order of goodness:
 
 * batch the probes per source with `identifier = ANY(...)`;
 * better, have `write_done_refs()`
-  (`pipeline/process/reference_manager.py:90`) — a single process that is
+  (`lux_pipeline/process/reference_manager.py:90`) — a single process that is
   already resolving each cluster's YUID — also record which internal source,
   if any, owns the cluster. `merge-refs` then reads it from
   `reference_uris.txt` and issues no queries at all. The file format is
@@ -1078,7 +1078,7 @@ for a divergent local copy.
   cutting write bytes made *unrelated* read stages 12–25% faster — points hard
   at queueing.
 * **`TIME_INDEX`** is `False` on every cache except `DataCache`
-  (`pipeline/storage/cache/postgres.py:156`, `:1144`). Confirmed correct as
+  (`lux_pipeline/storage/cache/postgres.py:156`, `:1144`). Confirmed correct as
   written — `latest()` is only asked of the data caches — but if a new caller
   starts reading `insert_time` in an order on another cache it will
   seq-scan silently.

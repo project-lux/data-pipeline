@@ -19,7 +19,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pipeline.process.merger import MergeHandler
+from lux_pipeline.process.merger import MergeHandler
 
 X = "https://lux.test/data/person/" + "1" * 32   # the cluster being built
 Y = "https://lux.test/data/person/" + "0" * 32   # a DIFFERENT cluster

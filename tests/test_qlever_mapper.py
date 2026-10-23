@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
 
-from pipeline.sources.lux.qlever.mapper2 import QleverMapper
+from lux_pipeline.sources.lux.qlever.mapper2 import QleverMapper
 
 GLOBALS = {"primaryName": "urn:PN", "sortName": "urn:SN", "gender": "urn:GEN",
            "nationality": "urn:NAT", "occupation": "urn:OCC"}

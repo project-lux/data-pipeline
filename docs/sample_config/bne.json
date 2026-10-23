@@ -8,6 +8,6 @@
     "merge_order": 100,
     
     "fetcherClass": "process.base.fetcher.Fetcher",
-    "mapperClass": "sources.libraries.bne.mapper.BneMapper",
+    "mapperClass": "sources.bne.mapper.BneMapper",
     "cycleBreakPath": "bne_cycle_breaks.json"
 }

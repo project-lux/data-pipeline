@@ -2,9 +2,9 @@ import os
 import sys
 import json
 from dotenv import load_dotenv
-from pipeline.config import Config
-from pipeline.process.reference_manager import ReferenceManager
-from pipeline.process.update_manager import UpdateManager
+from lux_pipeline.config import Config
+from lux_pipeline.process.reference_manager import ReferenceManager
+from lux_pipeline.process.update_manager import UpdateManager
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")

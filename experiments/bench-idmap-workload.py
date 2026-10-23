@@ -23,12 +23,12 @@ from collections import Counter
 
 from dotenv import load_dotenv
 
-from pipeline.config import Config
-from pipeline.process.reconciler import Reconciler
-from pipeline.process.reference_manager import ReferenceManager
-from pipeline.process.reidentifier import Reidentifier
-from pipeline.storage.idmap import postgres as pg_idmap
-from pipeline.storage.idmap import redis as redis_idmap
+from lux_pipeline.config import Config
+from lux_pipeline.process.reconciler import Reconciler
+from lux_pipeline.process.reference_manager import ReferenceManager
+from lux_pipeline.process.reidentifier import Reidentifier
+from lux_pipeline.storage.idmap import postgres as pg_idmap
+from lux_pipeline.storage.idmap import redis as redis_idmap
 
 # Stages that only read the map. The others write identity.
 READ_ONLY_STAGES = ("reidentify", "merge")

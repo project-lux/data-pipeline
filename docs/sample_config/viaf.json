@@ -7,11 +7,11 @@
     "wikidata_property": ["P214"],
     "merge_order": 70,
     
-	"fetcherClass": "sources.authorities.oclc.fetcher.ViafFetcher",
-	"mapperClass": "sources.authorities.oclc.mapper.ViafMapper",
-	"loaderClass": "sources.authorities.oclc.loader.ViafLoader",
-	"indexLoaderClass": "sources.authorities.oclc.index_loader.ViafIndexLoader",
-	"reconcilerClass": "sources.authorities.oclc.reconciler.ViafReconciler",
+	"fetcherClass": "sources.oclc.fetcher.ViafFetcher",
+	"mapperClass": "sources.oclc.mapper.ViafMapper",
+	"loaderClass": "sources.oclc.loader.ViafLoader",
+	"indexLoaderClass": "sources.oclc.index_loader.ViafIndexLoader",
+	"reconcilerClass": "sources.oclc.reconciler.ViafReconciler",
 
     "inverseEquivDbPath": "id_to_viaf.sqlite",        
 	"reconcileDumpPath": "viaf/viaf-links.txt.gz",

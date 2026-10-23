@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 # the timer that writes the JSON -- see split_stages' docstring for what
 # counting them twice did to the unattributed figure.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from pipeline.process.timing import split_stages
+from lux_pipeline.process.timing import split_stages
 
 
 def load(directory, phase=None):
@@ -184,7 +184,7 @@ def main():
     directory = args.dir
     if directory is None:
         load_dotenv()
-        from pipeline.config import Config
+        from lux_pipeline.config import Config
         cfgs = Config(basepath=os.getenv("LUX_BASEPATH", ""))
         directory = cfgs.log_dir
     print(f"# {directory}")

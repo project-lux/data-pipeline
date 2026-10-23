@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
 
-from pipeline.process.merger import RecordMerger
+from lux_pipeline.process.merger import RecordMerger
 
 
 class Configs:
@@ -146,7 +146,7 @@ def test_the_dedup_collections_are_sets():
     """
     import inspect
 
-    from pipeline.process import merger as mod
+    from lux_pipeline.process import merger as mod
 
     src = inspect.getsource(mod.RecordMerger.merge_common)
     assert 'ids = {x["id"] for x in rec[rp] if "id" in x}' in src

@@ -24,7 +24,7 @@ import sys
 
 from dotenv import load_dotenv
 
-from pipeline.config import Config
+from lux_pipeline.config import Config
 
 DIFF_COLS = ("kind", "uri", "master_yuid", "local_yuid")
 CHANGE_COLS = ("id", "ts", "op", "uri", "old_yuid", "new_yuid")

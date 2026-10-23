@@ -1,11 +1,11 @@
 import os
 import sys
 from dotenv import load_dotenv
-from pipeline.config import Config
-from pipeline.process.reconciler import Reconciler
-from pipeline.process.reference_manager import ReferenceManager
-from pipeline.process.reidentifier import Reidentifier
-from pipeline.process.merger import MergeHandler
+from lux_pipeline.config import Config
+from lux_pipeline.process.reconciler import Reconciler
+from lux_pipeline.process.reference_manager import ReferenceManager
+from lux_pipeline.process.reidentifier import Reidentifier
+from lux_pipeline.process.merger import MergeHandler
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")

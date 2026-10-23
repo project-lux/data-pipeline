@@ -8,7 +8,7 @@ The old reconcile phase wrote two-column, full-URI lines::
 (the asserter was implicitly the first column, and a record with no
 equivalents wrote ``uri\turi``).
 
-The new AssertionWriter (pipeline/process/identity.py) writes three columns
+The new AssertionWriter (lux_pipeline/process/identity.py) writes three columns
 of *shortened* (curie) URIs in canonical order::
 
     <lesser-uri>\t<greater-uri>\t<asserter-uri>
@@ -34,7 +34,7 @@ import os
 import sys
 import time
 
-from pipeline.process.identity import build_prefix_maps, expand, shorten
+from lux_pipeline.process.identity import build_prefix_maps, expand, shorten
 
 
 # ---------------------------------------------------------------------------
@@ -88,10 +88,10 @@ def load_prefix_maps():
     """(prefix_in, prefix_out, source-label). Prefer the real Config so the
     short forms match the live idmap; fall back to the built-in LUX map."""
     try:
-        from pipeline.config import Config
+        from lux_pipeline.config import Config
         cfgs = Config(basepath=os.getenv("LUX_BASEPATH", ""))
         pin, pout = build_prefix_maps(cfgs)
-        return pin, pout, "pipeline.config.Config"
+        return pin, pout, "lux_pipeline.config.Config"
     except Exception as e:
         pin, pout = build_prefix_maps(_FallbackConfig())
         return pin, pout, f"fallback map ({type(e).__name__} loading Config)"

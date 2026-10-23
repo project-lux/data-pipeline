@@ -3,7 +3,7 @@ import sys
 import json
 import time
 from dotenv import load_dotenv
-from pipeline.config import Config
+from lux_pipeline.config import Config
 
 from rich import pretty, print, inspect
 

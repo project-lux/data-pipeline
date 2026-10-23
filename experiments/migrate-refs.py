@@ -26,8 +26,8 @@ import psycopg2.extras
 import redis
 from dotenv import load_dotenv
 
-from pipeline.config import Config
-from pipeline.storage.idmap.postgres import ReferenceMap
+from lux_pipeline.config import Config
+from lux_pipeline.storage.idmap.postgres import ReferenceMap
 
 
 def redis_conn(cfg):

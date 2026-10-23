@@ -166,7 +166,7 @@ def test_statements_are_valid_shaped_sql():
 
 def test_the_fourth_connection_is_dropped_when_the_server_is_already_async():
     """The reference queues share the idmap's connection when their session
-    setting matches the server's -- see pipeline/storage/idmap/postgres.py's
+    setting matches the server's -- see lux_pipeline/storage/idmap/postgres.py's
     _refs_connection()."""
     off = server(synchronous_commit=("off", ""))
     on = server(synchronous_commit=("on", ""))

@@ -21,8 +21,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import psycopg2
 
-from pipeline.storage.idmap.postgres import IdMap
-from pipeline.storage.uricache import URICache
+from lux_pipeline.storage.idmap.postgres import IdMap
+from lux_pipeline.storage.uricache import URICache
 
 INTERNAL = "https://lux.collections.yale.edu/data/"
 AAT = "http://vocab.getty.edu/aat/"

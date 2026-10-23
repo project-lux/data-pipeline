@@ -6,7 +6,7 @@ exercise the whole pipeline against an in-memory fake idmap (no redis, no
 postgres) and compare the resulting identity map / cluster partition to the
 reference.
 
-Ported from the old `pipeline.process.identity` module API. Three things
+Ported from the old `lux_pipeline.process.identity` module API. Three things
 moved and the tests move with them:
 
 * the free functions are now methods on `IdentityResolver`;
@@ -27,7 +27,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pipeline.process.identity_resolver import IdentityResolver
+from lux_pipeline.process.identity_resolver import IdentityResolver
 
 
 # ---------------------------------------------------------------------------

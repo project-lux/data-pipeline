@@ -16,8 +16,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pipeline.process.reference_manager import ReferenceManager
-from pipeline.storage.idmap.redis import ReferenceMap
+from lux_pipeline.process.reference_manager import ReferenceManager
+from lux_pipeline.storage.idmap.redis import ReferenceMap
 
 AAT = "http://vocab.getty.edu/aat/"
 LUX = "https://lux.collections.yale.edu/data/"

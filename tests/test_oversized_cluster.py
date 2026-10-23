@@ -26,7 +26,7 @@ import json
 
 import pytest
 
-from pipeline.process.merger import MergeHandler
+from lux_pipeline.process.merger import MergeHandler
 
 
 NS = "https://europeana.linked.art/data/"
