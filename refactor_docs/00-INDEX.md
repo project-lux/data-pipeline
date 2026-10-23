@@ -13,7 +13,7 @@ you finish an item.
 | # | Document | Pri | Size | Depends on | Done |
 |---|---|---|---|---|---|
 | 00 | [Layout: rename to `lux_pipeline`, flatten `sources/` (two PRs)](00-layout-rename-and-flatten.md) | P0 | L (mechanical) | — | ☑ |
-| 01 | [Logging in core modules](01-logging-core.md) | P0 | M | 00 | ☐ |
+| 01 | [Logging in core modules](01-logging-core.md) | P0 | M | 00 | ☑ |
 | 02 | [Progress protocol (`lux_pipeline/progress.py`)](02-progress-protocol.md) | P0 | S | 00 | ☐ |
 | 03 | [Runtime context (`lux_pipeline/runtime.py`)](03-runtime-context.md) | P0 | S | 00 | ☐ |
 | 04 | [Config: system/defaults/paths/downloader](04-config-system-defaults.md) | P0 | M | 01 | ☐ |

@@ -17,6 +17,8 @@ import sys
 import time
 
 from dotenv import load_dotenv
+import logging
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 from lux_pipeline.config import Config
 from lux_pipeline.process.identity_resolver import IdentityResolver
 

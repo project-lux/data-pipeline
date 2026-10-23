@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger("lux_pipeline")
+
 
 KEYWORD_OPTIONS = ['case-insensitive','diacritic-insensitive','punctuation-insensitive','whitespace-sensitive','stemmed','wildcarded']
 VALUES_OPTIONS = ['eager', 'concurrent']
@@ -20,7 +24,7 @@ class FunctionProxy(object):
         elif isinstance(a, FunctionProxy):
             return a.toPlan()
         else:
-            print(f"Unknown arg in {self}: {a}")
+            logger.warning(f"Unknown arg in {self}: {a}")
 
     def toPlan(self):
         argstr = self.recurse_args(self.args)[1:-1]

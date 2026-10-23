@@ -1,6 +1,9 @@
+import logging
 import os
 import time
 import ujson as json
+
+logger = logging.getLogger("lux_pipeline")
 
 # properties whose contents are never followed for references; a frozenset
 # rather than a list literal rebuilt on every key of every node
@@ -125,14 +128,14 @@ class ReferenceManager(object):
                     x += 1
                     dist = vals.get("dist")
                     if dist is None:
-                        print("Got distance of 'None' from done_refs")
+                        logger.warning("Got distance of 'None' from done_refs")
                         continue
                     if dist <= maxd:
                         wanted.append((key, dist))
                 if x - reported >= 100000:
                     reported = x
                     fh.flush()
-                    print(x)
+                    logger.info(x)
                 if not wanted:
                     continue
                 # get_multi rejects unqua'd keys; those can't be looked up at
@@ -152,7 +155,7 @@ class ReferenceManager(object):
                         seen.add(token)
                     kept += 1
                     fh.write(f"{dist}|{yuid or ''}|{key}\n")
-        print(f"reference_uris.txt: {kept} lines from {x} done refs "
+        logger.info(f"reference_uris.txt: {kept} lines from {x} done refs "
               f"({deduped} duplicate YUIDs dropped, {unresolved} with no YUID)")
 
     @staticmethod
@@ -423,7 +426,7 @@ class ReferenceManager(object):
         try:
             self.walk_for_refs(rec, pending, distance + 1, top=True)
         except ValueError as e:
-            print(f"\nERROR: Reference walk error in {rec['id']}: {e}")
+            logger.error(f"ERROR: Reference walk error in {rec['id']}: {e}")
             raise
 
         if "equivalent" in rec:
@@ -458,16 +461,16 @@ class ReferenceManager(object):
         if uu is not None:
             # We know about this entity/record already
             if self.debug:
-                print(f"Found {uu} for {qrecid}")
+                logger.debug(f"Found {uu} for {qrecid}")
             equiv_map[qrecid] = uu
             uuset = self.idmap[uu]
             if uuset:
                 existing = list(uuset)
                 if self.debug:
-                    print(f"Found existing: {existing}")
+                    logger.debug(f"Found existing: {existing}")
         else:
             if self.debug:
-                print(f"Got None for {qrecid}, will mint or find")
+                logger.debug(f"Got None for {qrecid}, will mint or find")
 
         updated_token = False
         # if we have the current update token, then we've already been touched
@@ -482,7 +485,7 @@ class ReferenceManager(object):
         # But only the first time we see this uuid
         if uu and rebuild:
             if self.debug:
-                print("No update token!")
+                logger.debug("No update token!")
             self.idmap.add_update_token(uu)
             updated_token = True
             if existing:
@@ -491,19 +494,19 @@ class ReferenceManager(object):
                 for x in existing.copy():
                     if not x in qequivs:
                         if self.debug:
-                            print(f"Removing {x} not in new equivs")
+                            logger.debug(f"Removing {x} not in new equivs")
                         existing.remove(x)
                         if not x.startswith("__"):
                             try:
                                 del self.idmap[x]
                                 if self.debug:
-                                    print(f"deleted {x}")
+                                    logger.debug(f"deleted {x}")
                             except:
-                                print(f"\nWhile processing {recid} found {equivs} in record")
-                                print(f"Tried to delete {x} for {uu}")
+                                logger.error(f"While processing {recid} found {equivs} in record")
+                                logger.error(f"Tried to delete {x} for {uu}")
                     else:
                         if self.debug:
-                            print(f"Found {x} in existing and new")
+                            logger.debug(f"Found {x} in existing and new")
 
         # Build map of equivalent ids given in current record
         if equivs:
@@ -514,7 +517,7 @@ class ReferenceManager(object):
                     if myqeq is not None:
                         equiv_map[eq] = myqeq
                     if self.debug:
-                        print(f"qeq: {qeq} / {myqeq}")
+                        logger.debug(f"qeq: {qeq} / {myqeq}")
 
         # Ensure existing from idmap are in equivalent map
         # This will only make changes on second and subsequent times
@@ -536,14 +539,14 @@ class ReferenceManager(object):
             self.idmap.add_update_token(uu)
             updated_token = True
             if self.debug:
-                print(f"Minted {slug}/{uu} for {qrecid} ")
+                logger.debug(f"Minted {slug}/{uu} for {qrecid} ")
 
             for eq in equivs:
                 qeq = self.configs.make_qua(eq, typ)
                 try:
                     self.idmap[qeq] = uu
                 except:
-                    print(f"\nERROR: Failed to set {qeq} as yuid: {uu} for {qrecid} having just minted it?")
+                    logger.error(f"ERROR: Failed to set {qeq} as yuid: {uu} for {qrecid} having just minted it?")
 
         else:
             # We have something from the data and/or previous build
@@ -558,14 +561,14 @@ class ReferenceManager(object):
                     # e.g. second occurence of Wiley painting
                     try:
                         if self.debug:
-                            print(f"Setting {qrecid} to {uu} as uus=1")
+                            logger.debug(f"Setting {qrecid} to {uu} as uus=1")
                         self.idmap[qrecid] = uu
                     except:
-                        print(f"Failed to set {qrecid} to {uu} from {equiv_map} / {uus}")
+                        logger.error(f"Failed to set {qrecid} to {uu} from {equiv_map} / {uus}")
                         raise
             else:
                 # Merge the yuids together
-                print(f" --- Merging {uus}")
+                logger.info(f"--- Merging {uus}")
 
                 # Pick internal then external, and within pick the one with the most references
                 internals = []
@@ -606,15 +609,15 @@ class ReferenceManager(object):
                                 try:
                                     self.idmap.delete(eqd)
                                 except:
-                                    print(f" Failed to delete {eqd} from idmap; ref_mgr")
+                                    logger.error(f"Failed to delete {eqd} from idmap; ref_mgr")
                                 try:
                                     self.idmap[eqd] = uu
                                 except:
-                                    print(f" Failed to set {eqd} to {uu} in idmap; ref_mgr")
+                                    logger.error(f"Failed to set {eqd} to {uu} in idmap; ref_mgr")
 
         # Ensure we touch the token
         if not updated_token and not has_update:
-            print(f"Fell through to final touch! {uu} in {qrecid}")
+            logger.error(f"Fell through to final touch! {uu} in {qrecid}")
             self.idmap.add_update_token(uu)
 
         # Ensure all equivs match to the yuid
@@ -625,11 +628,11 @@ class ReferenceManager(object):
                 else:
                     qeq = eq
                 if self.debug:
-                    print(f"Setting {qeq} to {uu} in idmap")
+                    logger.debug(f"Setting {qeq} to {uu} in idmap")
                 try:
                     self.idmap[qeq] = uu
                 except Exception as e:
-                    print(f"Failed to set {qeq} to {uu}?: {e}")
+                    logger.error(f"Failed to set {qeq} to {uu}?: {e}")
             else:
                 if self.debug:
-                    print(f"Saw {eq} in existing, not setting")
+                    logger.debug(f"Saw {eq} in existing, not setting")

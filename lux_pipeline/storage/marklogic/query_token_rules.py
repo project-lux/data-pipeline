@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger("lux_pipeline")
+
 tokens = ('BOOL','LPAREN','RPAREN','COMMA','WORD','COLON','QUOTE', 'COMP')
 
 # Regular expression rules for simple tokens
@@ -15,5 +19,5 @@ t_ignore  = ' \t\n\r'
 
 # Error handling rule
 def t_error(t):
-  print("Illegal character '%s'" % t.value[0])
+  logger.error("Illegal character '%s'" % t.value[0])
   t.lexer.skip(1)

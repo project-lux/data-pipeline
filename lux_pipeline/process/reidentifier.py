@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger("lux_pipeline")
+
 class Reidentifier(object):
     # Prefetched {qua_key: yuid_or_None} for the record currently being
     # processed, populated by prefetch() at the top of each record tree.
@@ -154,7 +158,7 @@ class Reidentifier(object):
                 batch.update(mget([uu]))
             return batch
         except Exception as e:
-            print(f"reidentifier prefetch failed ({e}); using per-node lookups")
+            logger.error(f"reidentifier prefetch failed ({e}); using per-node lookups")
             return {}
 
     def _cap_equivs(self, all_equivs):
@@ -251,7 +255,7 @@ class Reidentifier(object):
             if not equiv_map:
                 # Don't know anything at all, ask for a new yuid??
                 # This shouldn't happen if previous phases have worked
-                print(f"\n!!! reidentifier couldn't find YUID for {recid} --> {equivs}")
+                logger.error(f"!!! reidentifier couldn't find YUID for {recid} --> {equivs}")
                 return result
             else:
                 # The record's OWN assignment wins. min() over the whole
@@ -279,7 +283,7 @@ class Reidentifier(object):
                 if len(uus) > 1:
                     # This also shouldn't happen
                     if self.debug:
-                        print(f"Found more than one YUID for {recid} / {equivs}")
+                        logger.debug(f"Found more than one YUID for {recid} / {equivs}")
                 elif not recid in equiv_map:
                     # recid not in idmap but its equivalents are: a gap in
                     # the identify phase. The idmap is read-only outside
@@ -287,7 +291,7 @@ class Reidentifier(object):
                     # workers would reintroduce nondeterministic identity
                     # mutations. Use the resolved YUID for output and log
                     # the gap durably so identify can be fixed instead.
-                    print(f"IDMAP-GAP: {qrecid} resolved to {uu} only via "
+                    logger.warning(f"IDMAP-GAP: {qrecid} resolved to {uu} only via "
                           f"equivalents; identify phase did not register it")
 
             # And set up the URI on the way out
@@ -296,7 +300,7 @@ class Reidentifier(object):
             if top:
                 all_equivs = self._lookup(uu)
                 if not all_equivs:
-                    print(f"\n!!! Found missing yuid: {uu} from: {recid} / {equivs}")
+                    logger.error(f"!!! Found missing yuid: {uu} from: {recid} / {equivs}")
                     all_equivs = []
                     return result
                 # all_equivs is the whole cluster, which for the largest
@@ -385,13 +389,13 @@ class Reidentifier(object):
         try:
             res = self._reidentify(rec, rectype, top=True)
         except:
-            print(f"Reidentifier Broke processing rec: {recid}")
+            logger.error(f"Reidentifier Broke processing rec: {recid}")
             raise
 
         try:
             new_id = res["id"]
         except:
-            print(f"Couldn't find YUID for record {recid}")
+            logger.error(f"Couldn't find YUID for record {recid}")
             return None
         uu = new_id[new_id.rfind("/") + 1 :]
         record2 = {

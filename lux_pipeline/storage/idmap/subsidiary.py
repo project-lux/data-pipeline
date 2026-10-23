@@ -63,6 +63,7 @@ master. Read iter_divergence() and apply it deliberately, with whatever
 review that deserves.
 """
 
+import logging
 import time
 import uuid
 
@@ -70,6 +71,8 @@ import psycopg2
 import psycopg2.extras
 
 from lux_pipeline.storage.idmap import postgres
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class ReadOnlyMasterError(RuntimeError):
@@ -297,7 +300,7 @@ class IdMap(postgres.IdMap):
             except psycopg2.Error as e:
                 # Same treatment as the parent: not fatal, the callers below
                 # fall back to plain SQL.
-                print(f"subsidiary idmap: could not prepare {name}: "
+                logger.error(f"subsidiary idmap: could not prepare {name}: "
                       f"{str(e).strip()[:80]}")
                 self.conn.rollback()
 
@@ -386,7 +389,7 @@ class IdMap(postgres.IdMap):
             # Nothing recorded, so the next lookup tries again. Degrades to
             # "not in this map", which is what the parent does with a failed
             # lookup too.
-            print(f"subsidiary idmap: {e}")
+            logger.warning(f"subsidiary idmap: {e}")
         return True
 
     def _absorb(self, yuid, members):
@@ -414,7 +417,7 @@ class IdMap(postgres.IdMap):
             except (AttributeError, ReadOnlyMasterError):
                 pass
             except Exception as e:
-                print(f"subsidiary idmap: master update token for {yuid}: {e}")
+                logger.warning(f"subsidiary idmap: master update token for {yuid}: {e}")
 
         with self._cursor() as cur:
             cur.execute(f"INSERT INTO {self.yuid_table} (yuid, token) "
@@ -494,7 +497,7 @@ class IdMap(postgres.IdMap):
             want = sorted({v for v in fwd.values() if v} | set(yuids))
             mem = self._master_get_multi(want, chunk) if want else {}
         except MasterUnavailable as e:
-            print(f"subsidiary idmap: {e}")
+            logger.warning(f"subsidiary idmap: {e}")
             return [k for (k, _) in todo]
 
         for y in want:
@@ -795,7 +798,7 @@ class IdMap(postgres.IdMap):
                     f"(op, uri, old_yuid, new_yuid) VALUES %s",
                     rows, page_size=1000)
         except Exception as e:
-            print(f"subsidiary idmap: could not log {len(rows)} change(s): {e}")
+            logger.error(f"subsidiary idmap: could not log {len(rows)} change(s): {e}")
 
     # -------------------------------------------------------------- tracking
 
@@ -915,16 +918,16 @@ class IdMap(postgres.IdMap):
     def report(self):
         """Print what this map has taken from the master and done since."""
         s = self.divergence_summary()
-        print(f"subsidiary idmap {self.table} "
+        logger.info(f"subsidiary idmap {self.table} "
               f"(master: {self.master_name})")
-        print(f"  copied in : {s['uris_asked']:,} URIs asked "
+        logger.info(f"copied in : {s['uris_asked']:,} URIs asked "
               f"({s['master_misses']:,} unknown to the master), "
               f"{s['classes_copied']:,} classes")
-        print(f"  diverged  : {s['swapped']:,} swapped, {s['added']:,} added, "
+        logger.info(f"diverged  : {s['swapped']:,} swapped, {s['added']:,} added, "
               f"{s['removed']:,} removed"
               + (f", {s['unseen']:,} with no baseline" if s["unseen"] else ""))
-        print(f"  new YUIDs : {s['yuids_minted_here']:,}")
-        print(f"  logged    : {s['logged']:,} changes")
+        logger.info(f"new YUIDs : {s['yuids_minted_here']:,}")
+        logger.info(f"logged    : {s['logged']:,} changes")
         return s
 
     # -------------------------------------------------------------- lifecycle
@@ -949,5 +952,5 @@ class IdMap(postgres.IdMap):
                 with self._cursor() as cur:
                     cur.execute(f"VACUUM {opts}{name}")
             except Exception as e:
-                print(f"  could not vacuum {name}: {e}")
+                logger.error(f"could not vacuum {name}: {e}")
         return before

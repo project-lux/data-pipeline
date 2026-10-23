@@ -2,6 +2,8 @@ import os
 import sys
 import time
 import datetime
+import logging
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 from lux_pipeline.config import Config
 from dotenv import load_dotenv
 

@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta
 
 import ujson as json
@@ -5,6 +6,8 @@ from shapely import wkt
 from shapely.geometry import shape
 
 from lux_pipeline.process.reidentifier import Reidentifier
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class MergeHandler(object):
@@ -105,7 +108,7 @@ class MergeHandler(object):
             try:
                 (ext_src, ident) = self.config.split_uri(eq)
             except:
-                print(f" --- Failed to split uri: {eq}")
+                logger.error(f"--- Failed to split uri: {eq}")
                 continue
             if ext_src["type"] == "internal":
                 ident = ident.split("#")[0]
@@ -125,12 +128,12 @@ class MergeHandler(object):
             for ident in idents:
                 ext_rec = got.get(ident)
                 if not ext_rec:
-                    print(f"Reference to non-existent record {ident} in {ext_src['name']}")
+                    logger.warning(f"Reference to non-existent record {ident} in {ext_src['name']}")
                     continue
                 rows.append((ext_src, ext_rec))
 
         if len(rows) > self.MAX_CLUSTER_MEMBERS:
-            print(f"OVERSIZED-CLUSTER: {my_yuid} has {len(rows):,} members; "
+            logger.warning(f"OVERSIZED-CLUSTER: {my_yuid} has {len(rows):,} members; "
                   f"merging the {self.MAX_CLUSTER_MEMBERS} largest")
             # Biggest first -- a longer record carries more information --
             # and then the same key the merge order below uses, so records
@@ -166,7 +169,7 @@ class MergeHandler(object):
                         # its rewritten row is another worker's to write.
                         # Merge the content -- the data is still ours to use
                         # -- but don't reach into their table.
-                        print(f"CLUSTER-ESCAPE: {ext_src['name']} "
+                        logger.warning(f"CLUSTER-ESCAPE: {ext_src['name']} "
                               f"{ext_rec.get('identifier', '?')} is in "
                               f"{my_yuid} but reidentifies to "
                               f"{ext_rec2['yuid']}; not writing its "
@@ -179,9 +182,9 @@ class MergeHandler(object):
                     except:
                         raise
                         try:
-                            print(f"****** Failed to merge {record['data']['id']}")
+                            logger.error(f"****** Failed to merge {record['data']['id']}")
                         except:
-                            print(f"****** Failed to merge {to_do}")
+                            logger.error(f"****** Failed to merge {to_do}")
 
         return record
 
@@ -217,15 +220,15 @@ class RecordMerger(object):
                 except KeyError:
                     rc = mc  # avoid triggering next line
                 if len(mc) != len(rc):
-                    print(f"In {rec['id']} - Strange creation influences - different counts!")
-                    print(f"    {mc}\n    {rc}")
+                    logger.warning(f"In {rec['id']} - Strange creation influences - different counts!")
+                    logger.warning(f"{mc}\n    {rc}")
                 else:
                     infs = []
                     for i in range(len(mc)):
                         if mc[i] != rc[i]:
                             if not "id" in mc[i] or not "id" in rc[i]:
                                 # uh-oh!
-                                print(
+                                logger.warning(
                                     f"Missing URI for concept components in {rec.get('id', '-')} / {merge.get('id', '-')}"
                                 )
                             elif mc[i]["id"] == rc[i]["id"]:
@@ -262,7 +265,7 @@ class RecordMerger(object):
                             infs.append(rc[i])
                     rec["created_by"]["influenced_by"] = infs
             else:
-                print("--- merge of Type creation needs work")
+                logger.warning("--- merge of Type creation needs work")
                 # One example -- sets created by a group that isn't apparently reconciled
                 # for now just keep the record
 
@@ -294,17 +297,17 @@ class RecordMerger(object):
                                 ftr = ftrs[0]
                             else:
                                 # Multiple features in the collection?
-                                print(f"Found multiple features: {ftrs}")
+                                logger.warning(f"Found multiple features: {ftrs}")
                                 ftr = ftrs[0]
                             shapes.append(shape(ftr["geometry"]))
                     elif x.startswith("POINT") or x.startswith("POLYGON"):
                         try:
                             shapes.append(wkt.loads(x))
                         except:
-                            print(f"Invalid WKT in {rec['id']}: {x}")
+                            logger.error(f"Invalid WKT in {rec['id']}: {x}")
                             shapes.append(None)
                     else:
-                        print(f"Unknown place.defined_by value: {x}")
+                        logger.warning(f"Unknown place.defined_by value: {x}")
                         shapes.append(None)
 
                 awkt = shapes[0].wkt if shapes[0] else None
@@ -344,7 +347,7 @@ class RecordMerger(object):
                     # Nope
                     pass
                 else:
-                    print(f"Failed to compare {awkt} and {bwkt}")
+                    logger.error(f"Failed to compare {awkt} and {bwkt}")
 
         for rp in ["part_of", "approximated_by"]:
             if rp in merge and not rp in skip:
@@ -400,7 +403,7 @@ class RecordMerger(object):
         # born, died, carried_out, contact_point, residence
         if "born" in merge and not "born" in skip:
             if type(rec["born"]) is not dict or type(merge["born"]) is not dict:
-                print(f"Can't merge born on {rec['id']} / {merge['id']}; not dicts")
+                logger.error(f"Can't merge born on {rec['id']} / {merge['id']}; not dicts")
             self.merge_common(rec["born"], merge["born"], msource)
 
         if "died" in merge and not "died" in skip:
@@ -506,7 +509,7 @@ class RecordMerger(object):
         values = ["content", "format"]
         for vp in values:
             if vp in merge and not vp in skip and rec[vp].strip() != merge[vp].strip():
-                print(f"Can't merge {rec[vp]} and {merge[vp]} in {rec['id']}")
+                logger.error(f"Can't merge {rec[vp]} and {merge[vp]} in {rec['id']}")
 
         # Single Event - created_by
         part_skips = ["carried_out_by", "took_place_at", "influenced_by", "caused_by"]
@@ -682,9 +685,9 @@ class RecordMerger(object):
                     mts["end_of_the_end"] = f"{int(me[:4]) - 1}-12-31T23:59:59Z"
                     me = mts["end_of_the_end"]
             except Exception:
-                print(rec)
-                print(rb)
-                print(re)
+                logger.debug(rec)
+                logger.debug(rb)
+                logger.debug(re)
 
             # Throw out estimated
             done = False
@@ -719,7 +722,7 @@ class RecordMerger(object):
                     except Exception:
                         rdelta = timedelta(100000)
                 else:
-                    print(f"Record's timespan: {rts}")
+                    logger.warning(f"Record's timespan: {rts}")
                     rdelta = timedelta(100000)
 
                 if mb and me:
@@ -776,7 +779,7 @@ class RecordMerger(object):
                 self.merge_exhibition_parts(rec, merge, msource, skip)
             else:
                 # FIXME: WTF is this record?
-                print(f"Unknown activity record type with parts: {rec['id']}")
+                logger.warning(f"Unknown activity record type with parts: {rec['id']}")
 
     def merge_provenance_parts(self, rec, merge, msource, skip):
         # FIXME: do something with parts
@@ -791,7 +794,7 @@ class RecordMerger(object):
             del merge["id"]
 
         if type(rec) is not dict or type(merge) is not dict:
-            print(f"FAILED to merge {rec} and {merge}, not actual records")
+            logger.error(f"FAILED to merge {rec} and {merge}, not actual records")
             if type(rec) is dict:
                 return rec
             elif type(merge) is dict:
@@ -975,7 +978,7 @@ class RecordMerger(object):
                 conts = {x.get("content", "").strip() for x in rec["referred_to_by"]}
             except:
                 # if this breaks, everything else will too
-                print(f"Broken ref_to_by in {rec}")
+                logger.error(f"Broken ref_to_by in {rec}")
                 conts = set()
             if conts:
                 has_ai = any("AI generated" in x for x in conts)
@@ -1039,7 +1042,7 @@ class RecordMerger(object):
                 try:
                     rap = rep["digitally_shown_by"][0]["access_point"][0]["id"]
                 except:
-                    print(f" -- no dsb or access_point in {rep}")
+                    logger.warning(f"-- no dsb or access_point in {rep}")
                     continue
                 if rap and not rap in curr:
                     rec["representation"].append(rep)
@@ -1060,7 +1063,7 @@ class RecordMerger(object):
         elif base_src in self.configs.external:
             base_config = self.configs.external[base_src]
         else:
-            print(f"Unknown base source in merge: {base_src}")
+            logger.warning(f"Unknown base source in merge: {base_src}")
             return True
 
         if merge_src in self.configs.internal:
@@ -1068,7 +1071,7 @@ class RecordMerger(object):
         elif merge_src in self.configs.external:
             merge_config = self.configs.external[merge_src]
         else:
-            print(f"Unknown merge source in merge: {merge_src}")
+            logger.warning(f"Unknown merge source in merge: {merge_src}")
             return True
 
         if "mapper" in base_config:
@@ -1097,7 +1100,7 @@ class RecordMerger(object):
         if "data" in base:
             rec = base["data"]
         else:
-            print(base)
+            logger.debug(base)
             raise ValueError("Passed in a non-record as base")
 
         if "data" in to_merge and "source" in to_merge:
@@ -1112,7 +1115,7 @@ class RecordMerger(object):
                 try:
                     eqid = merge["equivalent"][0]["id"]
                 except:
-                    print(f"No id in equivalent[0]: {merge['equivalent']}")
+                    logger.warning(f"No id in equivalent[0]: {merge['equivalent']}")
                     return rec
                 if "equivalent" in rec:
                     reqs = [x["id"] for x in rec["equivalent"]]
@@ -1125,9 +1128,9 @@ class RecordMerger(object):
                     # Still good
                     merge["id"] = rec["id"]
                 else:
-                    print("Failed to detect identifier merge:")
-                    print(f"Main record: {rec['id']} = {reqs}")
-                    print(f"Merging: {merge['id']} = {eqid}")
+                    logger.error("Failed to detect identifier merge:")
+                    logger.error(f"Main record: {rec['id']} = {reqs}")
+                    logger.error(f"Merging: {merge['id']} = {eqid}")
                     # print(f"Merge eq in idmap: {self.idmap[eqid]}")
                     # Something has gone HORRIBLY wrong
                     # raise ValueError()

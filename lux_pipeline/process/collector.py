@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger("lux_pipeline")
+
 class Collector(object):
     def __init__(self, config, idmap=None, networkmap=None):
         self.configs = config
@@ -26,7 +30,7 @@ class Collector(object):
             xy = int(botbx[:4])
             if abs(ry - xy) > 10:
                 if self.debug:
-                    print(f"Failed as years are too far apart: {botbr} vs {botbx}")
+                    logger.debug(f"Failed as years are too far apart: {botbr} vs {botbx}")
                 return False
         except:
             pass
@@ -125,7 +129,7 @@ class Collector(object):
         try:
             cls = rec["type"]
         except:
-            print(f"Record without a type: {record}")
+            logger.warning(f"Record without a type: {record}")
             raise
 
         lbl = rec.get("_label", "")
@@ -140,15 +144,15 @@ class Collector(object):
         # Reconciliation against indexes will have already been done
         # This function just crawls for records
         if self.debug:
-            print(f"    Collecting {rec['id']}")
+            logger.debug(f"Collecting {rec['id']}")
         while equiv:
             uri = equiv.pop(0)
 
             if self.debug:
-                print(f"      ... collect processing {uri}")
+                logger.debug(f"... collect processing {uri}")
             if uri in done:
                 if self.debug:
-                    print(f"Skipping {uri} as done")
+                    logger.debug(f"Skipping {uri} as done")
                 continue
 
             try:
@@ -156,7 +160,7 @@ class Collector(object):
             except TypeError:
                 # returned None
                 if self.debug:
-                    print(f"       couldn't split {uri} to a known source")
+                    logger.debug(f"couldn't split {uri} to a known source")
                 if not uri in base:
                     done.append(uri)
                 continue
@@ -175,25 +179,25 @@ class Collector(object):
                 try:
                     okay = self.should_process_record(rec, xrec, equiv_recs)
                 except:
-                    print(f"Collect failed to decide if should process {identifier}...")
+                    logger.error(f"Collect failed to decide if should process {identifier}...")
                     continue
                 if not okay:
                     # Skip this one
                     if self.debug:
-                        print(f"       Not processing {xrec['id']} into {rec['id']}")
+                        logger.debug(f"Not processing {xrec['id']} into {rec['id']}")
                     continue  # go to next equiv
                 else:
                     # Good to add this one
                     try:
                         xrid = xrec["id"]
                     except:
-                        print(f"In collect, record has no id?! {xrec}")
+                        logger.warning(f"In collect, record has no id?! {xrec}")
                         continue
                     xrlbl = xrec.get("_label", lbl)
                     rec["equivalent"].append({"id": xrid, "type": cls, "_label": xrlbl})
                     equiv_recs[xrec["id"]] = xrec
                     if self.debug:
-                        print(f"  {xrid} / {xrlbl} into {rec['id']} tested okay")
+                        logger.debug(f"{xrid} / {xrlbl} into {rec['id']} tested okay")
 
                 # 2. xrec is okay, so process *its* equivalents
                 if "equivalent" in xrec:
@@ -214,7 +218,7 @@ class Collector(object):
                         if xpfxs[myxpfx] > 2:
                             # Clearly they don't know what is happening so ignore them all
                             if self.debug:
-                                print(f"me: {myxpfx}\nxpfxs: {xpfxs}")
+                                logger.debug(f"me: {myxpfx}\nxpfxs: {xpfxs}")
                             continue
 
                         known = self.configs.split_uri(eqid)
@@ -223,7 +227,7 @@ class Collector(object):
                             eqid = f"{known[0]['namespace']}{known[1]}"
                         currids = equiv_recs.keys()
                         if self.debug:
-                            print(f"     testing {eqid} from {xrec['id']}")
+                            logger.debug(f"testing {eqid} from {xrec['id']}")
 
                         diffs = self.global_reconciler.reconcile(eqid, "diffs")
                         if diffs is None:
@@ -258,13 +262,13 @@ class Collector(object):
                                         if xid.startswith(known[0]["namespace"]):
                                             # Just trash it
                                             if self.debug:
-                                                print(f"Dropping {eqid} as already have {xid}")
+                                                logger.debug(f"Dropping {eqid} as already have {xid}")
                                             known = None
                                             break
                             if known or okay:
                                 equiv.append(eqid)
                                 if self.debug:
-                                    print(f"       --> Adding {eqid} from {xrec['id']}")
+                                    logger.debug(f"--> Adding {eqid} from {xrec['id']}")
                                 if self.debug:
                                     try:
                                         self.debug_graph[xrec["id"]].append((eqid, "eq"))
@@ -272,7 +276,7 @@ class Collector(object):
                                         self.debug_graph[xrec["id"]] = [(eqid, "eq")]
                             else:
                                 if self.debug:
-                                    print(f"       --> NOT adding {eqid} from {xrec['id']}")
+                                    logger.debug(f"--> NOT adding {eqid} from {xrec['id']}")
             done.append(uri)
 
         return record

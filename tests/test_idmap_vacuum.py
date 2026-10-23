@@ -13,6 +13,7 @@ times against a 9% bloated index.
 No live postgres -- the cursor is stubbed.
 """
 
+import logging
 import sys
 from pathlib import Path
 
@@ -114,10 +115,11 @@ def test_the_report_reads_the_stats_before_vacuuming():
     assert m.conn.executed[1].startswith("VACUUM")
 
 
-def test_never_autovacuumed_is_called_out(capsys):
+def test_never_autovacuumed_is_called_out(caplog):
     m = idmap(stats=[("idmap", 50_761_975, 5_101_830, None)])
-    m.optimize()
-    out = capsys.readouterr().out
+    with caplog.at_level(logging.INFO, logger="lux_pipeline"):
+        m.optimize()
+    out = caplog.text
     assert "9.1%" in out
     assert "never autovacuumed" in out
 

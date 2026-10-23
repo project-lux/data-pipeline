@@ -1,5 +1,8 @@
+import logging
 import os
 import ujson as json
+
+logger = logging.getLogger("lux_pipeline")
 
 # Very simple cache API against files in a directory
 # Could be more complete for actual FS based implementation
@@ -79,7 +82,7 @@ class FsCache(object):
             return {self.key: key, 'data': json.dumps(js) if raw else js,
                     'source': self.source, 'insert_time':'', 'record_time':''}
         else:
-            print(f"File does not exist: {self.directory}/{key2}")
+            logger.warning(f"File does not exist: {self.directory}/{key2}")
             return None
 
     def set(self, value, identifier=None, yuid=None, record_time=None, change=None):
@@ -165,7 +168,7 @@ class FsCache(object):
     def __bool__(self):
         # Don't let it go through to len
         # and warn that the code shouldn't do this
-        print(f"*** code somewhere is asking for a cache as a boolean value and shouldn't ***")
+        logger.error(f"*** code somewhere is asking for a cache as a boolean value and shouldn't ***")
         return True
 
 class DataCache(FsCache):
