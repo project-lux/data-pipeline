@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
 
-from pipeline.storage.cache.postgres import PoolManager, PooledCache
+from lux_pipeline.storage.cache.postgres import PoolManager, PooledCache
 
 COLUMNS = ["yuid", "insert_time", "record_time", "refresh_time", "valid", "change", "data"]
 
@@ -272,7 +272,7 @@ def test_the_cast_is_not_shared_between_caches():
     """_col_types is a class attribute defaulting to None so an instance
     built without __init__ still works; it must not become a dict on the
     class and leak one table's column types into another's."""
-    from pipeline.storage.cache.postgres import PooledCache
+    from lux_pipeline.storage.cache.postgres import PooledCache
     a, b = uuid_keyed(cache()), cache()
     b.conn.row = {"data_type": "text"}
     b.conn.rows_all = []

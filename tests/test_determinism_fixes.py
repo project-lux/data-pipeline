@@ -15,10 +15,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pipeline.process.base.reconciler import LmdbReconciler
-from pipeline.process.merger import MergeHandler, RecordMerger
-from pipeline.process.reconciler import Reconciler
-from pipeline.process.reidentifier import Reidentifier
+from lux_pipeline.process.base.reconciler import LmdbReconciler
+from lux_pipeline.process.merger import MergeHandler, RecordMerger
+from lux_pipeline.process.reconciler import Reconciler
+from lux_pipeline.process.reidentifier import Reidentifier
 
 
 # ---------------------------------------------------------------------------
@@ -310,7 +310,7 @@ def test_merge_output_independent_of_equivalent_set_order():
 # ---------------------------------------------------------------------------
 
 def test_aat_extract_names_lowercases_and_keeps_best_priority():
-    from pipeline.sources.authorities.getty.reconciler import AatReconciler
+    from lux_pipeline.sources.authorities.getty.reconciler import AatReconciler
 
     class AatConfigs(StubConfigs):
         external = {"aat": {"namespace": "http://vocab.getty.edu/aat/"}}
@@ -349,7 +349,7 @@ def test_aat_extract_names_lowercases_and_keeps_best_priority():
 # ---------------------------------------------------------------------------
 
 def test_iter_done_refs_skips_blank_lines(tmp_path, monkeypatch):
-    from pipeline.process.reference_manager import ReferenceManager
+    from lux_pipeline.process.reference_manager import ReferenceManager
 
     rm = object.__new__(ReferenceManager)
     monkeypatch.chdir(tmp_path)
@@ -370,7 +370,7 @@ def test_iter_done_refs_rejects_the_pre_dedupe_format(tmp_path, monkeypatch):
     workers upsert the same rows. Fail at the first line, not an hour in with
     `deadlock detected`."""
     import pytest
-    from pipeline.process.reference_manager import ReferenceManager
+    from lux_pipeline.process.reference_manager import ReferenceManager
 
     rm = object.__new__(ReferenceManager)
     monkeypatch.chdir(tmp_path)

@@ -22,7 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pipeline.process.timing import PhaseTimer, split_stages
+from lux_pipeline.process.timing import PhaseTimer, split_stages
 
 
 def timer(elapsed=100.0):

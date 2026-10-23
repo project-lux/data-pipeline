@@ -20,9 +20,9 @@ import time
 
 from dotenv import load_dotenv
 
-from pipeline.config import Config
-from pipeline.storage.idmap import redis as redis_idmap
-from pipeline.storage.idmap import postgres as pg_idmap
+from lux_pipeline.config import Config
+from lux_pipeline.storage.idmap import redis as redis_idmap
+from lux_pipeline.storage.idmap import postgres as pg_idmap
 
 
 def build(cfgs, args):

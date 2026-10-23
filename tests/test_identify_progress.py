@@ -21,8 +21,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
 
-from pipeline.process.identity_resolver import IdentityResolver
-from pipeline.process.timing import PhaseTimer
+from lux_pipeline.process.identity_resolver import IdentityResolver
+from lux_pipeline.process.timing import PhaseTimer
 
 
 def resolver(with_timer=True):
@@ -111,7 +111,7 @@ def test_a_sort_is_recorded_as_nested_inside_its_step():
     recorded under a name that does not start with its enclosing step's would
     be summed alongside it -- the double-count that made a phase report -53%
     unattributed (see §3.6)."""
-    from pipeline.process.timing import split_stages
+    from lux_pipeline.process.timing import split_stages
 
     r = resolver()
     r._timer.t0 -= 2500

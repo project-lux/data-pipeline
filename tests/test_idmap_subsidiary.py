@@ -28,11 +28,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import psycopg2.extras
 
-from pipeline.storage.idmap import subsidiary
-from pipeline.storage.idmap.subsidiary import (IdMap, MasterUnavailable,
+from lux_pipeline.storage.idmap import subsidiary
+from lux_pipeline.storage.idmap.subsidiary import (IdMap, MasterUnavailable,
                                                ReadOnlyMaster,
                                                ReadOnlyMasterError)
-from pipeline.storage.uricache import URICache
+from lux_pipeline.storage.uricache import URICache
 
 INTERNAL = "https://lux.collections.yale.edu/data/"
 AAT = "http://vocab.getty.edu/aat/"
@@ -417,8 +417,8 @@ def test_subsidiary_declines_the_bulk_member_dump():
     per key, but only where the table *is* the map. Here it is a cache of the
     master, so a member not yet hydrated would dump as absent -- and absent
     reads as "never had a YUID", which mints a second one over the master's."""
-    from pipeline.storage.idmap import postgres as master
-    from pipeline.storage.idmap import subsidiary as sub
+    from lux_pipeline.storage.idmap import postgres as master
+    from lux_pipeline.storage.idmap import subsidiary as sub
 
     assert master.IdMap.supports_member_dump is True
     assert sub.IdMap.supports_member_dump is False

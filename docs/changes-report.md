@@ -30,7 +30,7 @@ made a pure function of the inputs:
 
 | File | Change |
 |---|---|
-| `pipeline/process/identity.py` (**new**) | The engine. `AssertionWriter` (per-slice append-only log of `(asserter, a, b)` sameAs assertions, mirroring the qua handling of `manage_identifiers`); `cluster()` — union-find over voted pair-edges, processed most-voted-first with lexicographic tie-breaks, refusing any union that would join a differentFrom pair (checked cluster-wide); `assign()` — prior-YUID reuse by member vote so adding a URI never changes a cluster's YUID, deterministic split-claim resolution, `uuid5(min member)` minting for genuinely new clusters; `apply_assignments()` — pipelined bulk load into the redis idmap (member→yuid strings, yuid→member sets + current update token, stale-set cleanup). |
+| `lux_pipeline/process/identity.py` (**new**) | The engine. `AssertionWriter` (per-slice append-only log of `(asserter, a, b)` sameAs assertions, mirroring the qua handling of `manage_identifiers`); `cluster()` — union-find over voted pair-edges, processed most-voted-first with lexicographic tie-breaks, refusing any union that would join a differentFrom pair (checked cluster-wide); `assign()` — prior-YUID reuse by member vote so adding a URI never changes a cluster's YUID, deterministic split-claim resolution, `uuid5(min member)` minting for genuinely new clusters; `apply_assignments()` — pipelined bulk load into the redis idmap (member→yuid strings, yuid→member sets + current update token, stale-set cleanup). |
 | `run-reconcile.py` | Both `ref_mgr.manage_identifiers(rec2)` call sites replaced with `assertion_log.write_record(rec2)`. **Reconcile workers no longer write to the idmap at all** — removing both the nondeterminism and the 24-way redis contention (measured: 7–8M sequential round trips per build reduced to ~300 pipelined ones). |
 | `run-identify.py` (**new**) | Runs once after all slices finish: aggregates `assertions-*.tsv`, loads differentFrom pairs from the merged `differentDbPath` LMDB, resolves clusters + YUIDs, bulk-loads the idmap, writes refused assertions to `identity_conflicts.jsonl` (a reviewable curation artifact instead of silent wrong merges). |
 | `run-all.sh`, `full-build.sh`, `reconcile_parallel.sh` | Orchestration: clear stale assertion logs at reconcile start; run `run-identify.py` after the reconcile wait-loop (build fails loudly if it fails). **Note:** `run-all.sh` is the *live* orchestrator — `full-build.sh` is dead code (`exit 0` at top); both were updated, but the `run-all.sh` edit is the one that matters and was initially missed by everything except the audit. |
@@ -46,7 +46,7 @@ differentFrom violations, 4–6× faster, in every LUX class.
 
 ## 2. Reconciliation correctness fixes
 
-### `pipeline/process/base/reconciler.py`
+### `lux_pipeline/process/base/reconciler.py`
 - **Dead multi-match tie-break** (Lmdb + Sqlite variants): the "pick the
   best-supported match" sort used `key=lambda x: len(x)` where `x` is a
   `(uri, [matches])` 2-tuple — `len(x)` is always 2, so the winner was
@@ -59,7 +59,7 @@ differentFrom violations, 4–6× faster, in every LUX class.
   **zero assertions for its entire slice** with no error. Now retries
   with backoff (3× lmdb, 5× sqlite) then raises with a clear message.
 
-### `pipeline/process/reconciler.py` (`call_reconcilers`)
+### `lux_pipeline/process/reconciler.py` (`call_reconcilers`)
 Three defects in the differentFrom guard, fixed together:
 1. it mutated `ids` while iterating it, so removals skipped the next
    element's diff check entirely;
@@ -72,7 +72,7 @@ Three defects in the differentFrom guard, fixed together:
    The test proved known-distinct pairs sailed through untouched.
    Dropped ids are now removed from `record["data"]["equivalent"]`.
 
-### `pipeline/sources/authorities/getty/reconciler.py` (`extract_names`)
+### `lux_pipeline/sources/authorities/getty/reconciler.py` (`extract_names`)
 Two bugs made AAT name matching systematically lossy: names whose
 language wasn't in `check_langs` kept their original case, but the name
 index is built lowercased — those lookups could never match; and the
@@ -81,7 +81,7 @@ fallback value on every later non-matching language. Now mirrors the
 base class: always `clean_names()` (lowercase), break on first language
 match, keep the best (lowest) priority per name.
 
-### `pipeline/process/base/index_loader.py`
+### `lux_pipeline/process/base/index_loader.py`
 Name/URI index collisions (two records sharing a normalized name, or
 claiming the same equivalent URI) were **last-writer-wins over an
 unordered record stream** — the index winner could differ between
@@ -89,7 +89,7 @@ builds, so every record that name-reconciled against that key got a
 different equivalence assertion per build. Now the smallest recid wins,
 making the index a pure function of its inputs.
 
-### `pipeline/sources/authorities/oclc/index_loader.py` (VIAF)
+### `lux_pipeline/sources/authorities/oclc/index_loader.py` (VIAF)
 - A stale `viaf_sort_equivs.csv` from a previous build was silently
   reused if present; now regenerated whenever any shard is newer.
 - Sort now runs under `LC_ALL=C` (locale-independent ordering).
@@ -109,7 +109,7 @@ symptom. Now: mark done only after a successful acquire (failed refs
 stay eligible for re-queue when re-encountered); permanently unusable
 URIs (unsplittable) are still marked done so they don't loop.
 
-### `pipeline/process/reference_manager.py`
+### `lux_pipeline/process/reference_manager.py`
 - **`add_ref` distance races**: min-distance updates were
   read-then-write over shared redis, so a slower worker could overwrite
   a shorter distance with a longer one — pushing a reference past
@@ -132,7 +132,7 @@ list order is stable across builds.
 
 ## 4. Merge/export-phase fixes
 
-### `pipeline/process/merger.py`
+### `lux_pipeline/process/merger.py`
 - **Nondeterministic merge order**: `to_merge` comes from a redis
   *set*; sorting only by `merge_order` (a stable sort) preserved
   set-iteration order for ties, so sources with equal `merge_order`
@@ -156,7 +156,7 @@ list order is stable across builds.
   lexicographically-smallest internal member still present in its
   recordcache builds the merged record — deterministic, no race.
 
-### `pipeline/process/reidentifier.py`
+### `lux_pipeline/process/reidentifier.py`
 - **Arbitrary YUID choice**: with >1 YUID in `equiv_map`, `set.pop()`
   picked one at random per process. Now `min(uus)` — deterministic.
 - **Merge-phase idmap write removed** (third wave): the fallback
@@ -175,7 +175,7 @@ re-transforms when the merged record is newer.
 
 ## 5. Storage-layer fixes
 
-### `pipeline/storage/idmap/redis.py`
+### `lux_pipeline/storage/idmap/redis.py`
 - **`IdMap.set()` rekey/merge** was a multi-step read-modify-write with
   no atomicity: concurrent rekeys could lose set members, leave dangling
   forward-pointers, or (via a get-after-exists race) silently drop the
@@ -198,14 +198,14 @@ re-transforms when the merged record is newer.
   subsequent build until someone manually cleared the map). Successes
   and redirects still persist.
 
-### `pipeline/storage/cache/redis.py`
+### `lux_pipeline/storage/cache/redis.py`
 Cache **db-number allocation** was check-then-set on a shared counter:
 two workers starting simultaneously could read the same `next`, assign
 the same redis db to two different caches, and corrupt both. Now
 SETNX/INCR atomic claim (a lost same-name race wastes one slot,
 harmlessly).
 
-### `pipeline/storage/cache/postgres.py`
+### `lux_pipeline/storage/cache/postgres.py`
 - `iter_keys_type_slice` partitioned rows by position over an
   **unordered** SELECT — with synchronized sequential scans, parallel
   workers see different row orders, so records were double-processed by
@@ -217,7 +217,7 @@ harmlessly).
 - `get_like` promised "most recent" in its comment but had no
   `ORDER BY`; now `ORDER BY insert_time DESC`.
 
-### `pipeline/storage/idmap/lmdb.py` (TabLmdb)
+### `lux_pipeline/storage/idmap/lmdb.py` (TabLmdb)
 - Members containing a literal tab silently split into phantom members
   on read (tab is the separator); now rejected at write time.
 - Over-long keys (>500 bytes, LMDB's limit) made `__contains__` swallow
@@ -226,7 +226,7 @@ harmlessly).
   cannot exist in the store); *other* LMDB errors now propagate instead
   of masquerading as absence.
 
-### `pipeline/storage/marklogic/rest.py` + `run-load.py`
+### `lux_pipeline/storage/marklogic/rest.py` + `run-load.py`
 The batch-update reaper checked `kill.resp` — a field that was **never
 assigned** (the thread stores its response in `.result`) — so failed
 batch PUTs to MarkLogic always reported success. Now: the thread
@@ -236,14 +236,14 @@ catches its own exceptions into `.error`, the reaper reads
 in-flight batches, which previously were never checked at all.
 
 ### Broken/latent modules repaired
-- `pipeline/storage/idmap/memory.py`: had a syntax error (couldn't even
+- `lux_pipeline/storage/idmap/memory.py`: had a syntax error (couldn't even
   be imported), an undefined `self.configs`, and a broken `delete`
   using a nonexistent `self.conn`. Now a working in-memory IdMap for
   tests.
-- `pipeline/storage/idmap/filesystem.py`: `NameError` on construction
+- `lux_pipeline/storage/idmap/filesystem.py`: `NameError` on construction
   (undefined global `cfgs`); whole-file persist was truncate-then-write
   (a crash corrupted the entire map) — now atomic temp+rename.
-- `pipeline/storage/cache/filesystem.py`: Internal/External/yuid-keyed
+- `lux_pipeline/storage/cache/filesystem.py`: Internal/External/yuid-keyed
   record caches all defaulted to the *same* directory
   (`{name}_record_cache`), so internal and external records for one
   identifier overwrote each other — now distinct directories mirroring
@@ -255,7 +255,7 @@ in-flight batches, which previously were never checked at all.
 
 ---
 
-## 6. Delete handling (`pipeline/process/update_manager.py` + `run-process-deletes.py`)
+## 6. Delete handling (`lux_pipeline/process/update_manager.py` + `run-process-deletes.py`)
 
 The harvest delete path removed a record and its idmap entry, then hit
 three `pass`/FIXME branches — dependents were never rebuilt and
@@ -315,4 +315,4 @@ orphaned merged records were never removed, silently. Now:
 1. `docs/determinism-audit.md` — every defect with file:line and effect
 2. this document — what changed, by subsystem
 3. `docs/build-comparison-report.md` — measured outcomes on the full dataset
-4. `pipeline/process/identity.py` + `tests/` — the engine and its contracts
+4. `lux_pipeline/process/identity.py` + `tests/` — the engine and its contracts

@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import psycopg2
 
-from pipeline.storage.cache.postgres import PooledCache, PoolManager
+from lux_pipeline.storage.cache.postgres import PooledCache, PoolManager
 
 
 class Cursor:

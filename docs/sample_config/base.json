@@ -4,7 +4,7 @@
     "allow_network": false,
     "debug_reconciliation": false,
     "max_distance": 3,
-    "validatorClass": "pipeline.process.validator.Validator",
+    "validatorClass": "lux_pipeline.process.validator.Validator",
     "validate_allow_underscore_properties": true,
 
     "internal_uri": "https://your.local.domain/data/",

@@ -10,13 +10,13 @@ from pstats import SortKey
 
 from dotenv import load_dotenv
 
-from pipeline.config import Config
-from pipeline.process.merge_batch import MERGE_BATCH, prefetched
-from pipeline.process.merger import MergeHandler
-from pipeline.process.reference_manager import ReferenceManager
-from pipeline.process.reidentifier import Reidentifier
-from pipeline.process.timing import PhaseTimer
-from pipeline.storage.cache.postgres import PoolManager
+from lux_pipeline.config import Config
+from lux_pipeline.process.merge_batch import MERGE_BATCH, prefetched
+from lux_pipeline.process.merger import MergeHandler
+from lux_pipeline.process.reference_manager import ReferenceManager
+from lux_pipeline.process.reidentifier import Reidentifier
+from lux_pipeline.process.timing import PhaseTimer
+from lux_pipeline.storage.cache.postgres import PoolManager
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")

@@ -18,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pipeline.process.reidentifier import Reidentifier
+from lux_pipeline.process.reidentifier import Reidentifier
 
 
 class StubConfigs:

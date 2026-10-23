@@ -34,8 +34,8 @@ import lmdb
 import ujson as json
 from dotenv import load_dotenv
 
-from pipeline.config import Config
-from pipeline.sources.lux.qlever.mapper2 import QleverMapper
+from lux_pipeline.config import Config
+from lux_pipeline.sources.lux.qlever.mapper2 import QleverMapper
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")

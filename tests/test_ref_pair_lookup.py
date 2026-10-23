@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pipeline.storage.idmap.postgres import ReferenceMap
+from lux_pipeline.storage.idmap.postgres import ReferenceMap
 
 
 class Cursor:
@@ -106,7 +106,7 @@ def test_maps_on_different_connections_fall_back_to_two_queries():
 def test_the_manager_falls_back_when_the_backend_has_no_paired_form():
     """The redis ReferenceMap has no get_multi_pair; resolve_refs must still
     work against it."""
-    from pipeline.process.reference_manager import ReferenceManager
+    from lux_pipeline.process.reference_manager import ReferenceManager
 
     class Plain:
         def __init__(self):
@@ -132,7 +132,7 @@ def test_the_manager_falls_back_when_the_backend_has_no_paired_form():
 
 
 def test_the_manager_uses_the_paired_form_when_it_exists():
-    from pipeline.process.reference_manager import ReferenceManager
+    from lux_pipeline.process.reference_manager import ReferenceManager
 
     a, d, conn = maps()
     calls = []

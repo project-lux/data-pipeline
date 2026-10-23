@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
 
-from pipeline.storage.uricache import URICache
+from lux_pipeline.storage.uricache import URICache
 
 
 def external(key):
@@ -151,7 +151,7 @@ class Configs:
 
 
 def _idmap():
-    from pipeline.storage.idmap.postgres import IdMap
+    from lux_pipeline.storage.idmap.postgres import IdMap
     m = object.__new__(IdMap)
     m.configs = Configs()
     m.prefix_map_out = {"yuid": Configs.internal_uri}

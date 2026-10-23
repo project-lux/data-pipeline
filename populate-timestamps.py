@@ -9,7 +9,7 @@ import os
 import logging
 from pathlib import Path
 from datetime import datetime, timedelta
-from pipeline.config import Config
+from lux_pipeline.config import Config
 from dotenv import load_dotenv
 
 logging.basicConfig(

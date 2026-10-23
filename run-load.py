@@ -2,7 +2,7 @@ import os
 import sys
 import time
 import datetime
-from pipeline.config import Config
+from lux_pipeline.config import Config
 from dotenv import load_dotenv
 
 load_dotenv()

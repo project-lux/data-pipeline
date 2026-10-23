@@ -1,7 +1,7 @@
 import os
 import sys
 from dotenv import load_dotenv
-from pipeline.config import Config
+from lux_pipeline.config import Config
 import json
 
 load_dotenv()

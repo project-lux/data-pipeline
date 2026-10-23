@@ -53,7 +53,7 @@ def new_way(all_equivs, record):
 
 
 def split_qua(recid):
-    """pipeline.config.Config.split_qua"""
+    """lux_pipeline.config.Config.split_qua"""
     return recid.split("##qua")
 
 
@@ -127,7 +127,7 @@ def test_unchanged_cluster_keeps_the_records_own_list():
 def test_the_source_has_no_scan_and_no_split_qua_call():
     import inspect
 
-    from pipeline.process.reidentifier import Reidentifier
+    from lux_pipeline.process.reidentifier import Reidentifier
 
     src = inspect.getsource(Reidentifier.process_entity)
     assert 'my_equivs = {x["id"] for x in record.get("equivalent", [])}' in src
@@ -147,7 +147,7 @@ INT_NS = ("https://europeana.linked.art/data/", "https://ycba.example/")
 
 
 def capper(limit=100):
-    from pipeline.process.reidentifier import Reidentifier
+    from lux_pipeline.process.reidentifier import Reidentifier
     r = object.__new__(Reidentifier)
     r.internal_ns = INT_NS
     r.MAX_CLUSTER_EQUIVS = limit
@@ -164,7 +164,7 @@ EXTERNALS = ["http://vocab.getty.edu/aat/300404670",
 
 
 def test_the_default_cap_is_100():
-    from pipeline.process.reidentifier import Reidentifier
+    from lux_pipeline.process.reidentifier import Reidentifier
     assert Reidentifier.MAX_CLUSTER_EQUIVS == 100
 
 

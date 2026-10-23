@@ -22,8 +22,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
 
-from pipeline.storage.idmap import postgres as pgmap
-from pipeline.storage.idmap.postgres import IdMap
+from lux_pipeline.storage.idmap import postgres as pgmap
+from lux_pipeline.storage.idmap.postgres import IdMap
 
 
 class Cursor:

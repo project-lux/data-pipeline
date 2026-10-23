@@ -1,7 +1,7 @@
 import os
 import json
 from dotenv import load_dotenv
-from pipeline.config import Config
+from lux_pipeline.config import Config
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")

@@ -17,10 +17,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pipeline.storage.idmap import redis as idmap_redis
-from pipeline.storage.idmap.lmdb import TabLmdb
-from pipeline.storage.idmap.memory import IdMap as MemoryIdMap
-from pipeline.process.reference_manager import ReferenceManager
+from lux_pipeline.storage.idmap import redis as idmap_redis
+from lux_pipeline.storage.idmap.lmdb import TabLmdb
+from lux_pipeline.storage.idmap.memory import IdMap as MemoryIdMap
+from lux_pipeline.process.reference_manager import ReferenceManager
 
 
 # ---------------------------------------------------------------------------
@@ -251,7 +251,7 @@ def test_memory_idmap_roundtrip():
 
 
 def test_filesystem_caches_use_distinct_directories(tmp_path):
-    from pipeline.storage.cache import filesystem as fscache
+    from lux_pipeline.storage.cache import filesystem as fscache
 
     made = {}
     for cls in (fscache.InternalRecordCache, fscache.ExternalRecordCache,
@@ -265,7 +265,7 @@ def test_filesystem_caches_use_distinct_directories(tmp_path):
 
 
 def test_filesystem_cache_set_get_delete(tmp_path):
-    from pipeline.storage.cache import filesystem as fscache
+    from lux_pipeline.storage.cache import filesystem as fscache
 
     c = fscache.DataCache({"name": "src", "base_dir": str(tmp_path)})
     c["some/ident"] = {"data": {"id": "x"}, "identifier": "some/ident"}
@@ -292,7 +292,7 @@ def test_delete_yuid_only_when_token_only(tmp_path):
 
 
 def test_process_pending_deletes(tmp_path):
-    from pipeline.process.update_manager import UpdateManager
+    from lux_pipeline.process.update_manager import UpdateManager
 
     idmap = make_idmap(tmp_path)
     y = idmap.mint("http://ext/gone##quaType", "concept")

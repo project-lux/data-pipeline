@@ -6,7 +6,7 @@ concepts dataset (505,326 merged concept clusters, 970,858 member URIs,
 ~1.15M simulated source records). "Legacy" is the actual
 `ReferenceManager.manage_identifiers` code driven record-by-record in
 arrival order, exactly as `run-reconcile.py` drove it before the
-refactor. "New" is `pipeline/process/identity.py`: assertion log →
+refactor. "New" is `lux_pipeline/process/identity.py`: assertion log →
 voted constrained union-find → prior-YUID-reuse assignment → bulk apply.
 Both consume **byte-identical input records** and write to the same
 redis-shaped idmap (fakeredis, in-process). 1,000 differentFrom conflict
@@ -84,7 +84,7 @@ with edge count and parallelizes by qua-type shard if ever needed (see
 ## Everything fixed (three commits on this branch)
 
 **1. Deterministic identity resolution** (`661cf17`):
-`pipeline/process/identity.py` + `run-identify.py` + orchestration;
+`lux_pipeline/process/identity.py` + `run-identify.py` + orchestration;
 reconcile slices log assertions instead of live-minting. Validated by
 `experiments/recon_test` (clean + adversarially dirtied replay of all
 505k concepts) and now by this head-to-head comparison.

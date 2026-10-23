@@ -3,12 +3,12 @@ import sys
 import json
 import time
 from dotenv import load_dotenv
-from pipeline.config import Config
-from pipeline.process.timing import PhaseTimer
-from pipeline.process.reconciler import Reconciler
-from pipeline.process.reference_manager import ReferenceManager
-from pipeline.process.identity_resolver import IdentityResolver
-from pipeline.storage.cache.postgres import PoolManager
+from lux_pipeline.config import Config
+from lux_pipeline.process.timing import PhaseTimer
+from lux_pipeline.process.reconciler import Reconciler
+from lux_pipeline.process.reference_manager import ReferenceManager
+from lux_pipeline.process.identity_resolver import IdentityResolver
+from lux_pipeline.storage.cache.postgres import PoolManager
 
 import io
 import cProfile

@@ -15,7 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from pipeline.process.base.acquirer import Acquirer
+from lux_pipeline.process.base.acquirer import Acquirer
 
 
 class Cache:

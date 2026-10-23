@@ -11,7 +11,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from pipeline.config import Config
+from lux_pipeline.config import Config
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")

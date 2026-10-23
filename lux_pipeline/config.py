@@ -1,0 +1,518 @@
+import os
+import logging
+import importlib
+from .storage.cache.filesystem import FsCache
+from .storage.uricache import URICache, _MISSING
+
+
+logger = logging.getLogger("lux_pipeline")
+
+# Object paths from configs written before the package was renamed from
+# `pipeline` to `lux_pipeline`. Each distinct legacy path is warned about once.
+_LEGACY_PACKAGE_PREFIX = "pipeline."
+_warned_legacy_paths = set()
+
+
+def _warn_legacy_once(old, new):
+    if old not in _warned_legacy_paths:
+        _warned_legacy_paths.add(old)
+        logger.warning(f"Config refers to '{old}'; update it to '{new}'")
+
+
+def _modernize_object_type(objectType):
+    """Rewrite dotted object paths that use the pre-rename layout."""
+    if objectType.startswith(_LEGACY_PACKAGE_PREFIX):
+        new = "lux_pipeline." + objectType[len(_LEGACY_PACKAGE_PREFIX) :]
+        _warn_legacy_once(objectType, new)
+        objectType = new
+    return objectType
+
+
+# c.f. https://github.com/cheshire3/cheshire3/blob/develop/cheshire3/dynamic.py#L43
+def importObject(objectType):
+    # print(f"Trying to import {objectType}")
+    if not objectType:
+        return None
+    objectType = _modernize_object_type(objectType)
+    try:
+        (modName, className) = objectType.rsplit(".", 1)
+    except ValueError:
+        raise ValueError("Need module.class instead of %s" % objectType)
+    try:
+        m = importlib.import_module(modName)
+    except ModuleNotFoundError as e:
+        if not objectType.startswith("lux_pipeline."):
+            try:
+                return importObject("lux_pipeline.%s" % objectType)
+            except Exception:
+                pass
+        print(f"Failed to import {objectType}")
+        raise e
+    return getattr(m, className)
+
+
+class Config(object):
+    def __init__(self, configcache=None, basepath=None):
+        self.internal = {}
+        self.external = {}
+        self.caches = {}
+        self.results = {}
+        self.marklogic_stores = {}
+        self.map_stores = {}
+        self.globals = {}
+        self.globals_cfg = {}
+        self.validator = None
+        self.configcache = None
+        # Flattened (match, source) pairs; built lazily on first split_uri()
+        self._match_pairs = None
+        # canonicalize() is a pure function of the URI (the fix_identifier
+        # implementations it reaches are all plain string manipulation) and
+        # gets called tens of times per record on a small set of repeating
+        # URIs. Bounded so memory stays predictable across parallel workers;
+        # invalidated wherever _match_pairs is.
+        self._canon_cache = URICache(capacity=100000)
+
+        # This (thus) needs a directory called 'config_cache'
+        if configcache:
+            # Just use the one passed in
+            pass
+        else:
+            # Use default filesystem based one
+            # Note, at this point we haven't seen base.json yet
+            # and hence we don't have any idea of default paths
+            if basepath is None:
+                basepath = os.path.dirname(__file__)
+            bootstrap = {
+                "name": "config",
+                "datacacheClass": "storage.cache.filesystem.FsCache",
+                "base_dir": basepath,
+                "tabletype": "cache",
+            }
+            configcache = FsCache(bootstrap)
+            self.configcache = configcache
+
+        base = configcache["base"]["data"]
+        self.process_base(base)
+
+        if not self.data_dir.startswith("/"):
+            self.data_dir = os.path.join(self.base_dir, self.data_dir)
+        if not self.exports_dir.startswith("/"):
+            self.exports_dir = os.path.join(self.base_dir, self.exports_dir)
+        if hasattr(self, "log_dir") and not self.log_dir.startswith("/"):
+            self.log_dir = os.path.join(self.base_dir, self.log_dir)
+        if hasattr(self, "tests_dir") and not self.tests_dir.startswith("/"):
+            self.tests_dir = os.path.join(self.base_dir, self.tests_dir)
+        if hasattr(self, "temp_dir") and not self.temp_dir.startswith("/"):
+            self.temp_dir = os.path.join(self.base_dir, self.temp_dir)
+        if hasattr(self, "dumps_dir") and not self.dumps_dir.startswith("/"):
+            self.dumps_dir = os.path.join(self.base_dir, self.dumps_dir)
+
+
+        if hasattr(self, "validatorClass"):
+            vcls = importObject(self.validatorClass)
+            if vcls is not None:
+                self.validator = vcls(self)
+            else:
+                self.validator = None
+
+        for k in configcache.iter_keys():
+            rec = configcache[k]["data"]
+            if rec["type"] == "internal":
+                self.internal[k] = rec
+            elif rec["type"] == "external":
+                self.external[k] = rec
+            elif rec["type"] == "results":
+                self.results[k] = rec
+            elif rec["type"] == "caches":
+                self.caches = rec
+            elif rec["type"] == "globals":
+                del rec["type"]
+                self.globals_cfg = rec
+            elif rec["type"] == "base":
+                pass
+            elif rec["type"] == "marklogic":
+                self.marklogic_stores[rec["name"]] = rec
+            elif rec["type"] == "map":
+                self.map_stores[rec["name"]] = rec
+            else:
+                print(f"Unknown config type: {rec['type']} in {k}")
+
+    def process_base(self, rec):
+        vcls = None
+        for k, v in rec.items():
+            if k != "type" and not hasattr(self, k):
+                setattr(self, k, v)
+
+    ### URI management utility functions
+
+    def is_qua(self, recid):
+        return "##qua" in recid
+
+    def make_qua(self, recid, typ):
+        concept_subtypes = []
+        # No op, don't duplicate
+        if "##qua" in recid:
+            return recid
+        if not typ in self.ok_record_types:
+            raise ValueError(f"Unknown type: {typ}")
+        if typ in self.parent_record_types:
+            typ = self.parent_record_types[typ]
+        return f"{recid}##qua{typ}"
+
+    def split_qua(self, recid):
+        return recid.split("##qua")
+
+    def split_curie(self, curie):
+        # yuag:obj/12345.json --> (yuag config, "obj/12345.json")
+        try:
+            (src, recid) = curie.split(":", 1)
+        except:
+            return None
+        if src in self.internal:
+            source = self.internal[src]
+        elif src in self.external:
+            source = self.external[src]
+        elif src in ["yuid", "final", "merged"]:
+            source = self.results["merged"]
+        elif src in ["ml", "marklogic"]:
+            source = self.results["marklogic"]
+        else:
+            return None
+
+        okay = True
+        if "fetcher" in source and source["fetcher"] is not None:
+            okay = source["fetcher"].validate_identifier(recid)
+            if not okay:
+                return None
+        return (source, recid)
+
+    def fix_identifier(self, source, identifier):
+        identifier = identifier.strip()
+        identifier = identifier.replace(" ", "")
+        identifier = identifier.replace('"', "")
+        identifier = identifier.replace("”", "")
+        # FIXME: What about open quotes too?
+        if identifier.endswith("/"):
+            identifier = identifier[:-1]
+        elif identifier.endswith(".html"):
+            identifier = identifier.replace(".html", "")
+
+        if not "mapper" in source:
+            print(f"Could not fix identifier {identifier} from {source} as no mapper")
+        elif source["mapper"]:
+            identifier = source["mapper"].fix_identifier(identifier)
+        return identifier
+
+    def pre_split_fix_uri(self, uri):
+        # FIXME: Shouldn't this just be canonicalize?
+        if "page/aat" in uri:
+            return uri.replace("page/aat", "aat")
+        elif "aat/page" in uri:
+            return uri.replace("aat/page", "aat")
+        else:
+            return uri
+
+    def build_match_index(self):
+        # Flatten every source's `matches` into one ordered tuple, in exactly
+        # the order split_uri() used to walk them: internal sources first,
+        # then external, each source's own matches in config order. First
+        # match still wins, so selection is unchanged -- this only avoids
+        # rebuilding the source list and re-checking `matches` on every call.
+        # Call this again (or set _match_pairs = None) if sources or their
+        # `matches` are ever changed after config load.
+        pairs = []
+        for s in [*self.internal.values(), *self.external.values()]:
+            ms = s.get("matches", [])
+            if type(ms) != list:
+                ms = [ms]
+            for m in ms:
+                pairs.append((m, s))
+        self._match_pairs = tuple(pairs)
+        # canonicalize()'s answers depend on these pairs, so they go too
+        self._canon_cache.clear()
+        return self._match_pairs
+
+    def _finish_split(self, uri, m, source):
+        try:
+            identifier = uri.rsplit(m, 1)[1]
+        except:
+            print(f"Failed in split_uri() m: {m} source: {source['name']}")
+            return None
+        if identifier.startswith("http://") or identifier.startswith("https://"):
+            # Urgh, fix double wrapping
+            return self.split_uri(identifier)
+        identifier = self.fix_identifier(source, identifier)
+        if not identifier:
+            return None
+        else:
+            return source, identifier
+
+    def _split_uri_scan(self, uri, sources):
+        # Explicit-sources path: the index doesn't apply, walk what we're given
+        source = None
+        for s in sources:
+            ms = s.get("matches", [])
+            if type(ms) != list:
+                ms = [ms]
+            for m in ms:
+                if m in uri:
+                    source = s
+                    break
+            if source:
+                break
+        if not source:
+            return None
+        return self._finish_split(uri, m, source)
+
+    def split_uri(self, uri, sources=[]):
+        uri = self.pre_split_fix_uri(uri)
+        if sources:
+            return self._split_uri_scan(uri, sources)
+        pairs = self._match_pairs
+        if pairs is None:
+            pairs = self.build_match_index()
+        for m, source in pairs:
+            if m in uri:
+                return self._finish_split(uri, m, source)
+        return None
+
+    def canonicalize(self, uri):
+        # ~7us of string work, called tens of times per record on a heavily
+        # repeating set of URIs. The sentinel matters: None is a real result
+        # here (an unmatched URI) and is worth caching.
+        hit = self._canon_cache.get(uri)
+        if hit is not _MISSING:
+            return hit
+        result = self._canonicalize(uri)
+        self._canon_cache.put(uri, result)
+        return result
+
+    def _canonicalize(self, uri):
+        for bad, good in self.external_uri_rewrites.items():
+            if bad in uri:
+                uri = uri.replace(bad, good)
+                break
+        try:
+            source, identifier = self.split_uri(uri)
+        except TypeError:
+            for ext in self.other_external_matches:
+                if ext in uri:
+                    return uri
+            # Trash them
+            # print(f" No split, no match: {uri}")
+            return None
+        # print(f" Canon: {uri} -> {source['namespace']}{identifier}")
+        return f"{source['namespace']}{identifier}"
+
+    def merge_configs(self, base, overlay):
+        cfg = base.copy()
+        for k, v in overlay.items():
+            if not k in cfg:
+                cfg[k] = v
+        return cfg
+
+    def get_idmap(self):
+        return self.instantiate_map(self.idmap_name)["store"]
+
+    def cache_globals(self, idmap=None):
+        new = {}
+        glbs = self.globals_cfg
+        idmap_name = self.idmap_name
+        if idmap_name == "":
+            raise ValueError(f"No idmap set in config/base.json via code")
+
+        cfg = self.map_stores[idmap_name]
+        if "store" in cfg and cfg["store"] is not None:
+            idmap = cfg["store"]
+        else:
+            cfg = self.instantiate_map(idmap_name)
+            idmap = cfg["store"]
+
+        for k, v in glbs.items():
+            if v[0] == "3":
+                qid = self.make_qua(f"http://vocab.getty.edu/aat/{v}", "Type")
+            elif v[0] == "Q":
+                qid = self.make_qua(f"http://www.wikidata.org/entity/{v}", "Type")
+            elif v.startswith("http"):
+                qid = self.make_qua(v, "Type")
+            else:
+                continue
+            uu = idmap[qid]
+            self.globals[k] = uu
+
+    def instantiate_all(self):
+        for k in self.internal.keys():
+            self.instantiate(k, "internal")
+        for k in self.external.keys():
+            self.instantiate(k, "external")
+        for k in self.results.keys():
+            self.instantiate(k, "results")
+        for k in self.marklogic_stores.keys():
+            self.instantiate_ml(k)
+
+    def instantiate_ml(self, key):
+        if not key or not key in self.marklogic_stores:
+            raise ValueError("No such marklogic store config")
+        else:
+            cfg = self.marklogic_stores[key]
+        if "store" in cfg and cfg["store"] is not None:
+            return cfg
+
+        cfg["all_configs"] = self
+        clss = cfg.get("storeClass", "storage.marklogic.rest.MarkLogicStore")
+        clso = importObject(clss)
+        cfg["store"] = clso(cfg)
+        return cfg
+
+    def instantiate_map(self, key):
+        if not key or not key in self.map_stores:
+            raise ValueError("No such map store config")
+        else:
+            cfg = self.map_stores[key]
+        if "store" in cfg and cfg["store"] is not None:
+            return cfg
+
+        cfg["all_configs"] = self
+        clss = cfg.get("storeClass", "storage.idmap.redis.IdMap")
+        clso = importObject(clss)
+        cfg["store"] = clso(cfg)
+        return cfg
+
+    def instantiate(self, key, which=None):
+        # build the set of components for a configured source
+
+        if which and not which in ["internal", "external", "results"]:
+            raise ValueError(f"Which should be internal or external, got {which}")
+        elif which and not key in getattr(self, which):
+            raise ValueError(f"{key} not a valid key in {which}")
+        elif which:
+            cfg = getattr(self, which)[key]
+        else:
+            cfg = self.external.get(key, self.internal.get(key, None))
+            if not cfg:
+                raise ValueError(f"{key} is not a valid key in either internal or external")
+
+        for k, ptype in self.path_types.items():
+            if k in cfg:
+                pth = cfg[k]
+                if pth and not pth.startswith("/"):
+                    # put the right type of base directory before it
+                    pfx = getattr(self, ptype)
+                    if not pfx.startswith("/"):
+                        bd = self.base_dir
+                        path = os.path.join(bd, pfx, pth)
+                    else:
+                        path = os.path.join(pfx, pth)
+                    cfg[k] = path
+
+        # Add self to config
+        cfg["all_configs"] = self
+
+        try:
+            # Harvester needs the datacache to be in config
+            dcc = cfg.get("datacacheClass", "storage.cache.postgres.DataCache")
+            cls3 = importObject(dcc)
+            tmp_cfg = self.merge_configs(cfg, self.caches)
+            cfg["datacache"] = cls3(tmp_cfg)
+
+            if "fetch" in cfg:
+                cls1 = importObject(cfg.get("fetcherClass", "process.base.fetcher.Fetcher"))
+                cfg["fetcher"] = cls1(cfg)
+
+                nmap_name = cfg.get("networkmap_name", "networkmap")
+                if nmap_name in self.map_stores:
+                    nmap_c = self.map_stores[nmap_name]
+                    if "store" in nmap_c and nmap_c["store"] is not None:
+                        nmap = nmap_c["store"]
+                    else:
+                        nmap = self.instantiate_map(nmap_name)["store"]
+                else:
+                    raise ValueError(f"{cfg['name']} references network map store that does not exist: {nmap_name}")
+                cfg["fetcher"].networkmap = nmap
+
+            rcl = cfg.get("reconcilerClass", None)
+            if rcl:
+                rclcls = importObject(rcl)
+                cfg["reconciler"] = rclcls(cfg)
+            else:
+                cfg["reconciler"] = None
+
+            idx = cfg.get("indexLoaderClass", None)
+            if idx:
+                idxcls = importObject(idx)
+                cfg["indexLoader"] = idxcls(cfg)
+            else:
+                cfg["indexLoader"] = None
+
+            if cfg["type"] == "external":
+                hclsName = cfg.get("harvesterClass", None)
+                if hclsName:
+                    hcls = importObject(hclsName)
+                    cfg["harvester"] = hcls(cfg)
+                else:
+                    cfg["harvester"] = None
+
+                rrcc = cfg.get("recordcacheReconciledClass", "storage.cache.postgres.ExternalReconciledRecordCache")
+                cls5 = importObject(rrcc)
+                tmp_cfg = self.merge_configs(cfg, self.caches)
+                cfg["reconciledRecordcache"] = cls5(tmp_cfg)
+
+                rcc = cfg.get("recordcacheClass", "storage.cache.postgres.ExternalRecordCache")
+            else:
+                rcc = cfg.get("recordcacheClass", "storage.cache.postgres.InternalRecordCache")
+
+                if cfg["type"] == "internal":
+                    cls1 = importObject(cfg.get("harvesterClass", "process.base.harvester.ASHarvester"))
+                    cfg["harvester"] = cls1(cfg)
+                else:
+                    cfg["harvester"] = None
+
+            # Different default classes for record caches based on internal/external
+            cls4 = importObject(rcc)
+            tmp_cfg = self.merge_configs(cfg, self.caches)
+            cfg["recordcache"] = cls4(tmp_cfg)
+
+            # Everything needs a mapper to get from data to record
+            cls2 = importObject(cfg.get("mapperClass", "process.base.mapper.Mapper"))
+            if cls2:
+                cfg["mapper"] = cls2(cfg)
+            else:
+                cfg["mapper"] = None
+
+            ldr = cfg.get("loaderClass", "process.base.loader.Loader")
+            if ldr:
+                ldrcls = importObject(ldr)
+                cfg["loader"] = ldrcls(cfg)
+            else:
+                cfg["loader"] = None
+
+            rcc2 = cfg.get("recordcache2Class", "storage.cache.postgres.RecordCache")
+            if rcc2:
+                cls5 = importObject(rcc2)
+                tmp_cfg = self.merge_configs(cfg, self.caches)
+                cfg["recordcache2"] = cls5(tmp_cfg)
+            else:
+                cfg["recordcache2"] = None
+
+            acq = importObject(cfg.get("acquirerClass", "process.base.acquirer.Acquirer"))
+            if acq:
+                try:
+                    cfg["acquirer"] = acq(cfg)
+                except:
+                    # maybe a config that doesn't need one? e.g. marklogic and merged
+                    # then should be null in the config
+                    raise
+            else:
+                cfg["acquirer"] = None
+
+            tstr = cfg.get("testerClass", None)
+            if tstr:
+                cls6 = importObject(tstr)
+                cfg["tester"] = cls6(cfg)
+            else:
+                cfg["tester"] = None
+        except Exception as e:
+            print(f"Failed to build component for {cfg['name']}")
+            raise
+
+        return cfg

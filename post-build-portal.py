@@ -4,8 +4,8 @@ import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from dotenv import load_dotenv
-from pipeline.config import Config
-from pipeline.storage.cache.postgres import PoolManager
+from lux_pipeline.config import Config
+from lux_pipeline.storage.cache.postgres import PoolManager
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")

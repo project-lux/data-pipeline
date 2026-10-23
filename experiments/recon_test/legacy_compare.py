@@ -8,7 +8,7 @@ consuming byte-identical input records:
            idmap, exactly as run-reconcile.py drove it before the
            deterministic refactor. uuid4 minting, first-wins merging,
            update-token rebuild pruning.
-  new    - pipeline.process.identity: aggregate assertions -> voted
+  new    - lux_pipeline.process.identity: aggregate assertions -> voted
            constrained union-find -> prior-YUID-reuse assignment ->
            bulk apply to the same redis-shaped idmap.
 
@@ -41,9 +41,9 @@ import orjson
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
-from pipeline.process.reference_manager import ReferenceManager
-from pipeline.process import identity as det_identity
-from pipeline.storage.idmap import redis as idmap_redis
+from lux_pipeline.process.reference_manager import ReferenceManager
+from lux_pipeline.process import identity as det_identity
+from lux_pipeline.storage.idmap import redis as idmap_redis
 
 DB_PATH = "/Users/wjm55/lux-concepts-scc/concepts.lmdb"
 CONFLICT_SEED = 42

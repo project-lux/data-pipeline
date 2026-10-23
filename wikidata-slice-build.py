@@ -48,7 +48,7 @@ import numpy as np
 import ujson
 from dotenv import load_dotenv
 
-from pipeline.config import Config
+from lux_pipeline.config import Config
 
 QID = re.compile(r"Q[1-9][0-9]*$")
 UINT32_MAX = np.iinfo(np.uint32).max

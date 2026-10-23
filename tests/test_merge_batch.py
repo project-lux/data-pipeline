@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
 
-from pipeline.process.merge_batch import built_yuids, in_batches, prefetched
+from lux_pipeline.process.merge_batch import built_yuids, in_batches, prefetched
 
 
 NS = "https://europeana.linked.art/data/"

@@ -5,9 +5,9 @@ import time
 import datetime
 import gzip
 from dotenv import load_dotenv
-from pipeline.config import Config
-from pipeline.process.reference_manager import ReferenceManager
-from pipeline.process.update_manager import UpdateManager
+from lux_pipeline.config import Config
+from lux_pipeline.process.reference_manager import ReferenceManager
+from lux_pipeline.process.update_manager import UpdateManager
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")
@@ -259,7 +259,7 @@ if "--nt" in sys.argv:
     else:
         my_slice = max_slice = -1
 
-    from pipeline.sources.lux.qlever.mapper2 import QleverMapper
+    from lux_pipeline.sources.lux.qlever.mapper2 import QleverMapper
 
     mpr = QleverMapper(cfgs.results["marklogic"])
     rc = cfgs.results["merged"]["recordcache"]
