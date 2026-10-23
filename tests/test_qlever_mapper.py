@@ -21,7 +21,8 @@ from pipeline.sources.lux.qlever.mapper2 import QleverMapper
 
 GLOBALS = {"primaryName": "urn:PN", "sortName": "urn:SN", "gender": "urn:GEN",
            "nationality": "urn:NAT", "occupation": "urn:OCC"}
-IDMAP = {"https://vocab.getty.edu/aat/300456575##quaType": "urn:SORTID",
+IDMAP = {"http://vocab.getty.edu/aat/300456575##quaType": "urn:SORTID",
+         "http://vocab.getty.edu/aat/300025976##quaType": "urn:COLLECTION",
          "http://vocab.getty.edu/aat/300055644##quaType": "urn:H",
          "http://vocab.getty.edu/aat/300055647##quaType": "urn:W",
          "http://vocab.getty.edu/aat/300072633##quaType": "urn:D",
@@ -89,6 +90,7 @@ def test_person_triples(mapper):
         f'<{LUX}person/p1> <{NS}agentName> "lovelace, ada" .',
         f'<{LUX}person/p1> <{NS}name> "lovelace, ada" .',
         f'<{LUX}person/p1> <{NS}sortIdentifier> "12345" .',
+        f'<{LUX}person/p1> <{NS}agentHasDigitalImage> "0"^^<http://www.w3.org/2001/XMLSchema#decimal> .',
         f"<{LUX}person/p1> <{NS}agentClassification> <urn:brit> .",
         f"<{LUX}person/p1> <{NS}agentAny> <urn:brit> .",
         f"<{LUX}person/p1> <{NS}agentClassification> <urn:math> .",

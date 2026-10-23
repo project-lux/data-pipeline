@@ -1,4 +1,7 @@
+import math
+import re
 import unicodedata
+from decimal import Decimal
 from string import punctuation, whitespace
 
 import lxml.etree
@@ -45,6 +48,104 @@ PREFIX_BY_TYPE = {
 # -- no replacement produces a character a later one would match -- so this
 # is exactly equivalent.
 SANITIZE_TABLE = str.maketrans({"\r": " ", "\n": " ", "\t": " ", "-": " ", '"': None, "\\": None})
+
+# Every IRI and typed literal taken from a record is checked before it is
+# written. A bad one used to go straight into the .nt file. A `"` or `\` in
+# an IRI fails the qlever index build. A `"` in a literal is worse: the serial
+# parser logs "Parsing of line has Failed", exits 0, and silently drops every
+# triple after that line. tests/test_qlever_mapper_ntriples.py has the cases.
+#
+# An http(s) IRI needs a host, so `https:/` is rejected; any other IRI needs
+# at least a scheme. The fast path is one fullmatch, because nearly every IRI
+# is fine.
+_IRI_CHAR = r'[^\x00-\x20<>"{}|^`\\]'
+VALID_IRI = re.compile(
+    rf"(?i:https?)://[^/?#\x00-\x20<>\"{{}}|^`\\]{_IRI_CHAR}*"
+    rf"|(?!(?i:https?):)[A-Za-z][A-Za-z0-9+.\-]*:{_IRI_CHAR}+")
+# Line breaks inside a source IRI are wrapping, so delete them; the other
+# characters N-Triples forbids get percent-encoded (as sanitize_uri used to
+# do for spaces and braces).
+IRI_ESCAPE_TABLE = str.maketrans(
+    {**{chr(c): f"%{c:02X}" for c in range(0x21)},
+     **{c: f"%{ord(c):02X}" for c in '<>"{}|^`\\'},
+     "\n": None, "\r": None, "\t": None})
+
+VALID_DATETIME = re.compile(
+    r"-?(?:[1-9]\d{4,}|\d{4})-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)?")
+
+
+def clean_iri(value):
+    """The value as a writable IRI (percent-encoding where it can), or None
+    if it can't be made into one."""
+    if type(value) is not str:
+        return None
+    if VALID_IRI.fullmatch(value):
+        return value
+    value = value.strip().translate(IRI_ESCAPE_TABLE)
+    if VALID_IRI.fullmatch(value):
+        return value
+    return None
+
+
+def clean_datetime(value):
+    """The value if it is a valid xsd:dateTime, else None."""
+    if type(value) is not str:
+        return None
+    value = value.strip()
+    if VALID_DATETIME.fullmatch(value):
+        return value
+    return None
+
+
+# year, year-month or year-month-day with no time
+PARTIAL_DATE = re.compile(r"(-?(?:[1-9]\d{4,}|\d{4}))(?:-(\d\d)(?:-(\d\d))?)?")
+
+
+def _days_in_month(year, month):
+    if month == 2:
+        # proleptic Gregorian; % is floored in python, so this holds for
+        # negative years too
+        return 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28
+    return 30 if month in (4, 6, 9, 11) else 31
+
+
+def pad_datetime(value, end):
+    """Pad a year, year-month or date out to an xsd:dateTime. A begin value
+    is padded to the start of that period, and an end value to the end of
+    it: 1815 -> 1815-01-01T00:00:00 or 1815-12-31T23:59:59. Returns None if
+    the value isn't one of those forms."""
+    if type(value) is not str:
+        return None
+    m = PARTIAL_DATE.fullmatch(value.strip())
+    if not m:
+        return None
+    year, month, day = m.groups()
+    if month is None:
+        month = 12 if end else 1
+    elif not 1 <= int(month) <= 12:
+        return None
+    else:
+        month = int(month)
+    last = _days_in_month(int(year), month)
+    if day is None:
+        day = last if end else 1
+    elif not 1 <= int(day) <= last:
+        return None
+    else:
+        day = int(day)
+    time = "23:59:59" if end else "00:00:00"
+    return f"{year}-{month:02d}-{day:02d}T{time}"
+
+
+def format_decimal(value):
+    """A float as an xsd:decimal lexical form, or None if it has no such
+    form. str() writes 1e+30 and nan, and neither is a valid decimal."""
+    if not math.isfinite(value):
+        return None
+    s = str(value)
+    if "e" in s:
+        s = format(Decimal(s), "f")
+    return s
 
 
 class QleverMapper(Mapper):
@@ -93,18 +194,6 @@ class QleverMapper(Mapper):
         self.temp_collection_uri = self.idmap[f"{self.temp_collection_aat}##quaType"]
 
 
-    def sanitize_uri(self, uri):
-        if not uri.startswith(self.datans):
-            # sanitize external links
-            uri = uri.replace(" ", "%20")
-            uri = uri.replace("\n", "")
-            uri = uri.replace("\t", "")
-            uri = uri.replace("\r", "")
-            uri = uri.replace('"', "")
-            uri = uri.replace("{", "%7B")
-            uri = uri.replace("}", "%7D")
-        return uri
-
     def sanitize_string(self, string):
         if not string:
             return ""
@@ -143,6 +232,17 @@ class QleverMapper(Mapper):
             return tree.text_content()
         return content
 
+    def datetime_value(self, value, end, me):
+        """The value as an xsd:dateTime, padding a partial date out to the
+        start (or end) of its period, or None if it can't be used."""
+        dt = clean_datetime(value)
+        if dt:
+            return dt
+        dt = pad_datetime(value, end)
+        if dt:
+            print(f"*** padded {'end' if end else 'begin'} date {value!r} to {dt} in {me} ***")
+        return dt
+
     def get_prefix(self, which):
         if type(which) is dict and "type" in which:
             which = which["type"]
@@ -156,7 +256,11 @@ class QleverMapper(Mapper):
 
     def transform(self, record, rectype=None, reference=False):
         data = record["data"]
-        me = data["id"]
+        # Cleaned the same way as every reference to it, so links still meet
+        me = clean_iri(data["id"])
+        if not me:
+            raise ValueError(f"Record id is not a usable IRI: {data['id']!r}")
+        iri = clean_iri
         rectype = data["type"]
         pfx = self.get_prefix(rectype)
         triples = []
@@ -249,7 +353,7 @@ class QleverMapper(Mapper):
         # equivalents
         t["predicate"] = f"{self.lans}equivalent"
         for eq in data.get("equivalent", []):
-            if eqid := eq.get("id", None):
+            if eqid := iri(eq.get("id")):
                 t["object"] = eqid
                 triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
 
@@ -276,10 +380,10 @@ class QleverMapper(Mapper):
         # agentClassification, workClassification (etc)
         t["predicate"] = f"{luxns}{pfx}Classification"
         for cls in data.get("classified_as", []):
-            if "id" in cls:
-                t["object"] = cls["id"]
+            if o := iri(cls.get("id")):
+                t["object"] = o
                 triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
-                anyt["object"] = cls["id"]
+                anyt["object"] = o
                 triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
         # beginning/endingis 
@@ -322,19 +426,19 @@ class QleverMapper(Mapper):
                     whos = bit.get("carried_out_by", [])
                     t["predicate"] = f"{luxns}agentOf{pcls}"
                     for who in whos:
-                        if "id" in who:
-                            t["object"] = who["id"]
+                        if o := iri(who.get("id")):
+                            t["object"] = o
                             triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
-                            anyt["object"] = who["id"]
+                            anyt["object"] = o
                             triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
                     wheres = bit.get("took_place_at", [])
                     t["predicate"] = f"{luxns}placeOf{pcls}"
                     for where in wheres:
-                        if "id" in where:
-                            t["object"] = where["id"]
+                        if o := iri(where.get("id")):
+                            t["object"] = o
                             triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
-                            anyt["object"] = where["id"]
+                            anyt["object"] = o
                             triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
                     # concatenate, don't extend: bit.get() returns the
@@ -343,18 +447,18 @@ class QleverMapper(Mapper):
                     types = bit.get("classified_as", []) + bit.get("technique", [])
                     t["predicate"] = f"{luxns}typeOf{pcls}"
                     for typ in types:
-                        if "id" in typ:
-                            t["object"] = typ["id"]
+                        if o := iri(typ.get("id")):
+                            t["object"] = o
                             triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
-                            anyt["object"] = typ["id"]
+                            anyt["object"] = o
                             triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
                     causes = bit.get("caused_by", [])
                     t["predicate"] = f"{luxns}causeOf{pcls}"
                     for cause in causes:
-                        if "id" in cause:
-                            t["object"] = cause["id"]
+                        if o := iri(cause.get("id")):
+                            t["object"] = o
                             triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
-                            anyt["object"] = cause["id"]
+                            anyt["object"] = o
                             triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
                     infs = bit.get("influenced_by", []) + bit.get("used_specific_object", [])
                     for inf in infs:
@@ -363,22 +467,22 @@ class QleverMapper(Mapper):
                             t["predicate"] = f"{luxns}{infpfx}InfluenceOf{pcls}"
                         else:
                             continue
-                        if "id" in inf:
-                            t["object"] = inf["id"]
+                        if o := iri(inf.get("id")):
+                            t["object"] = o
                             triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
-                            anyt["object"] = inf["id"]
+                            anyt["object"] = o
                             triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
                     # timespan
                     timespan = bit.get("timespan", {})
                     if timespan:
                         # start, end dates
                         lt["datatype"] = self.date_type
-                        startval = timespan.get("begin_of_the_begin", "")
+                        startval = self.datetime_value(timespan.get("begin_of_the_begin"), False, me)
                         if startval:
                             lt["predicate"] = f"{luxns}startOf{pcls}"
                             lt["value"] = startval
                             triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
-                        endval = timespan.get("end_of_the_end", "")
+                        endval = self.datetime_value(timespan.get("end_of_the_end"), True, me)
                         if endval:
                             lt["predicate"] = f"{luxns}endOf{pcls}"
                             lt["value"] = endval
@@ -386,21 +490,26 @@ class QleverMapper(Mapper):
 
         # memberOf
         for member in data.get("member_of", []):
-            if "id" in member:
-                t["object"] = member["id"]
-                t["predicate"] = f"{luxns}{pfx}MemberOf{member['type']}"
+            # the type is spliced into the predicate IRI, so it must be a
+            # plain class name
+            mtyp = member.get("type")
+            if type(mtyp) is not str or not (mtyp.isascii() and mtyp.isalnum()):
+                continue
+            if o := iri(member.get("id")):
+                t["object"] = o
+                t["predicate"] = f"{luxns}{pfx}MemberOf{mtyp}"
                 triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
-                anyt["object"] = member["id"]
+                anyt["object"] = o
                 triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
         # partOf
         parents = data.get("part_of", [])
         for parent in parents:
-            if "id" in parent:
+            if o := iri(parent.get("id")):
                 t["predicate"] = f"{luxns}{pfx}PartOf"
-                t["object"] = parent["id"]
+                t["object"] = o
                 triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
-                anyt["object"] = parent["id"]
+                anyt["object"] = o
                 triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
         # isOnline for items, works, sets
@@ -437,21 +546,21 @@ class QleverMapper(Mapper):
             langs = data.get("language", [])
             t["predicate"] = f"{luxns}{pfx}Language"
             for lang in langs:
-                if "id" in lang:
-                    t["object"] = lang["id"]
+                if o := iri(lang.get("id")):
+                    t["object"] = o
                     triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
-                    anyt["object"] = lang["id"]
+                    anyt["object"] = o
                     triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
             # Subjects
             abouts = data.get("about", []) + data.get("represents", [])
             for about in abouts:
-                if "id" in about:
-                    t["object"] = about["id"]
+                if o := iri(about.get("id")):
+                    t["object"] = o
                     abpfx = self.get_prefix(about)
                     t["predicate"] = f"{luxns}{pfx}About{abpfx.title()}"
                     triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
-                    anyt["object"] = about["id"]
+                    anyt["object"] = o
                     triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
             # Public Domain
@@ -476,10 +585,10 @@ class QleverMapper(Mapper):
                 t["predicate"] = f"{luxns}setCuratedBy"
                 for c in curates:
                     for cby in c.get("carried_out_by", []):
-                        if "id" in cby:
-                            t["object"] = cby["id"]
+                        if o := iri(cby.get("id")):
+                            t["object"] = o
                             triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
-                            anyt["object"] = cby["id"]
+                            anyt["object"] = o
                             triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
         elif pfx == "item":
@@ -488,21 +597,21 @@ class QleverMapper(Mapper):
                        + data.get("digitally_carries", [])
                        + data.get("digitally_shows", []))
             for c in carries:
-                if "id" in c:
-                    t["object"] = c["id"]
+                if o := iri(c.get("id")):
+                    t["object"] = o
                     t["predicate"] = f"{luxns}carries"
                     triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
-                    anyt["object"] = c["id"]
+                    anyt["object"] = o
                     triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
             # materials
             mats = data.get("made_of", [])
             t["predicate"] = f"{luxns}material"
             for mat in mats:
-                if "id" in mat:
-                    t["object"] = mat["id"]
+                if o := iri(mat.get("id")):
+                    t["object"] = o
                     triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
-                    anyt["object"] = mat["id"]
+                    anyt["object"] = o
                     triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
             # dimensions
@@ -512,9 +621,12 @@ class QleverMapper(Mapper):
                 if "value" in d:
                     try:
                         # if it doesn't convert, then it'll break in qlever regardless
-                        lt["value"] = float(d["value"])
-                    except ValueError:
+                        val = format_decimal(float(d["value"]))
+                    except (ValueError, TypeError):
                         continue
+                    if val is None:
+                        continue
+                    lt["value"] = val
                     cxns = [x["id"] for x in d.get("classified_as", []) if "id" in x]
                     if self.height in cxns:
                         lt["predicate"] = f"{luxns}height"
@@ -534,7 +646,7 @@ class QleverMapper(Mapper):
             # nationality, occupation, gender
             cxns = data.get("classified_as", [])
             for cxn in cxns:
-                if "id" in cxn:
+                if o := iri(cxn.get("id")):
                     metas = [x["id"] for x in cxn.get("classified_as", []) if "id" in x]
                     if self.nationality in metas:
                         t["predicate"] = f"{luxns}nationality"
@@ -544,17 +656,17 @@ class QleverMapper(Mapper):
                         t["predicate"] = f"{luxns}gender"
                     else:
                         continue
-                    t["object"] = cxn["id"]
+                    t["object"] = o
                     triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
 
         elif pfx == "concept":
             broaders = data.get("broader", [])
             for b in broaders:
-                if "id" in b:
+                if o := iri(b.get("id")):
                     t["predicate"] = f"{luxns}broader"
-                    t["object"] = b["id"]
+                    t["object"] = o
                     triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
-                    anyt["object"] = b["id"]
+                    anyt["object"] = o
                     triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
         elif pfx == "place":
@@ -570,19 +682,18 @@ class QleverMapper(Mapper):
                 except Exception as e:
                     okay = False
                 if okay:
-                    # step through each point in the geometry
-                    # and test if within the bounds of lat/long
-                    if geom.geom_type == "Point":
-                        if not (-90 <= geom.y <= 90 and -180 <= geom.x <= 180):
-                            okay = False
-                    else:
-                        for point in geom.exterior.coords:
-                            if not (-90 <= point[1] <= 90 and -180 <= point[0] <= 180):
-                                okay = False
-                                break
+                    # test the whole geometry is within the bounds of
+                    # lat/long. The bounding box covers every geometry type;
+                    # this used to read geom.exterior, which only Polygons
+                    # have, so a LINESTRING raised and lost the whole record
+                    minx, miny, maxx, maxy = geom.bounds
+                    if not (-90 <= miny and maxy <= 90 and -180 <= minx and maxx <= 180):
+                        okay = False
                     if okay:
                         lt["predicate"] = f"{luxns}placeWKT"
-                        lt["value"] = wkt
+                        # shapely accepts line breaks that would split the
+                        # triple; collapse all whitespace to single spaces
+                        lt["value"] = " ".join(wkt.split())
                         lt["datatype"] = self.wkt_type
                         triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
 
@@ -590,26 +701,26 @@ class QleverMapper(Mapper):
             whos = data.get("carried_out_by", [])
             t["predicate"] = f"{luxns}agentOfEvent"
             for who in whos:
-                if "id" in who:
-                    t["object"] = who["id"]
+                if o := iri(who.get("id")):
+                    t["object"] = o
                     triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
-                    anyt["object"] = who["id"]
+                    anyt["object"] = o
                     triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
             wheres = data.get("took_place_at", [])
             t["predicate"] = f"{luxns}placeOfEvent"
             for where in wheres:
-                if "id" in where:
-                    t["object"] = where["id"]
+                if o := iri(where.get("id")):
+                    t["object"] = o
                     triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
-                    anyt["object"] = where["id"]
+                    anyt["object"] = o
                     triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
             causes = data.get("caused_by", [])
             t["predicate"] = f"{luxns}causeOfEvent"
             for cause in causes:
-                if "id" in cause:
-                    t["object"] = cause["id"]
+                if o := iri(cause.get("id")):
+                    t["object"] = o
                     triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
-                    anyt["object"] = cause["id"]
+                    anyt["object"] = o
                     triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
             infs = data.get("influenced_by", []) + data.get("used_specific_object", [])
             for inf in infs:
@@ -618,22 +729,22 @@ class QleverMapper(Mapper):
                     t["predicate"] = f"{luxns}eventUsed{infpfx.title()}"
                 else:
                     continue
-                if "id" in inf:
-                    t["object"] = inf["id"]
+                if o := iri(inf.get("id")):
+                    t["object"] = o
                     triples.append(f'<{me}> <{t["predicate"]}> <{t["object"]}> .')
-                    anyt["object"] = inf["id"]
+                    anyt["object"] = o
                     triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
             # timespan
             timespan = data.get("timespan", {})
             if timespan:
                 # start, end dates
                 lt["datatype"] = self.date_type
-                startval = timespan.get("begin_of_the_begin", "")
+                startval = self.datetime_value(timespan.get("begin_of_the_begin"), False, me)
                 if startval:
                     lt["predicate"] = f"{luxns}startOfEvent"
                     lt["value"] = startval
                     triples.append(f'<{me}> <{lt["predicate"]}> "{lt["value"]}"{lt["datatype"]} .')
-                endval = timespan.get("end_of_the_end", "")
+                endval = self.datetime_value(timespan.get("end_of_the_end"), True, me)
                 if endval:
                     lt["predicate"] = f"{luxns}endOfEvent"
                     lt["value"] = endval
