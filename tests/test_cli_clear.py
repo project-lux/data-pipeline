@@ -145,6 +145,25 @@ def test_source_all_is_every_group_but_not_maps():
         "merged.recordcache", "merged.recordcache2"]
 
 
+def test_source_all_never_touches_a_datacache():
+    cfgs = StubConfigs()
+    run(cfgs, ["--force", "--refs"], source="all")
+    for group in ("internal", "external", "results"):
+        for cfg in getattr(cfgs, group).values():
+            dc = cfg.get("datacache")
+            if isinstance(dc, StubStore):
+                assert dc.cleared == 0, cfg["name"]
+    assert not any(label.endswith(".datacache") for label in cfgs.cleared())
+    assert "idmap" not in cfgs.cleared()
+
+
+def test_cache_all_is_not_an_expansion():
+    """There is no 'all' for --cache: datacache is only ever cleared by name."""
+    cfgs = StubConfigs()
+    run(cfgs, ["--cache", "all", "--force"], source="all")
+    assert cfgs.cleared() == []
+
+
 def test_unknown_source_clears_nothing():
     cfgs = StubConfigs()
     with pytest.raises(ValueError, match="Unknown source: nope"):
@@ -204,6 +223,23 @@ def test_idmap_refuses_without_force():
     cfgs = StubConfigs()
     with pytest.raises(ValueError, match="idmap without --force"):
         run(cfgs, ["--map", "idmap"])
+    assert cfgs.cleared() == []
+
+
+@pytest.mark.parametrize("tty", [False, True])
+@pytest.mark.parametrize("rest,source", [
+    (["--map", "idmap"], None),
+    (["--map", "all_refs,idmap"], None),
+    (["--map", "idmap", "--refs"], "all"),
+])
+def test_idmap_refuses_without_force_regardless_of_tty(monkeypatch, tty, rest, source):
+    """The refusal is not a confirmation question: it applies with or
+    without a terminal, and nothing else in the same call is cleared."""
+    cfgs = StubConfigs()
+    monkeypatch.setattr(clear.sys.stdin, "isatty", lambda: tty, raising=False)
+    monkeypatch.setattr("builtins.input", lambda prompt: "y")
+    with pytest.raises(ValueError, match="idmap without --force"):
+        run(cfgs, rest, source=source)
     assert cfgs.cleared() == []
 
 
