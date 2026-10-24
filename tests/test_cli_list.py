@@ -40,8 +40,12 @@ class StubConfigs:
                      "reconcileDbPath": "/data/indexes/label_to_wd.lmdb"},
     }
     results = {
+        # acquirerClass: null is how the live merged.json switches the
+        # acquirer off; a class object is what a config built in code holds
         "merged": {"name": "merged", "namespace": "https://lux.collections.yale.edu/data/",
-                   "mapperClass": "sources.lux.merged.mapper.MergedMapper"},
+                   "mapperClass": "sources.lux.merged.mapper.MergedMapper",
+                   "acquirerClass": None,
+                   "reconcilerClass": ""},
     }
     map_stores = {
         "idmap": {"name": "idmap", "storeClass": "storage.idmap.postgres.IdMap",
@@ -115,6 +119,21 @@ def test_unknown_named_source_is_reported(capsys):
     text = out(capsys)
     assert "Unknown source:" in text and "nope" in text
     assert "AatMapper" in text
+
+
+def test_null_and_empty_class_keys_are_skipped(capsys):
+    run(source="results")
+    text = out(capsys)
+    assert "Mapper: MergedMapper" in text
+    assert "Acquirer" not in text and "Reconciler" not in text and "None" not in text
+
+
+def test_short_class_accepts_class_objects():
+    class ThingMapper:
+        pass
+    assert list_cmd._short_class(ThingMapper) == "ThingMapper"
+    assert list_cmd._short_class("sources.a.b.C") == "C"
+    assert list_cmd._short_class("C") == "C"
 
 
 def test_class_keys_include_the_ones_added_for_main():
