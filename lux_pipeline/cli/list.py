@@ -41,10 +41,12 @@ GROUP_TITLES = {
 }
 
 
-def _short_class(dotted: str) -> str:
-    """Return just the class name from a dotted module path."""
-    parts = dotted.rsplit(".", 1)
-    return parts[-1] if parts else dotted
+def _short_class(value) -> str:
+    """Just the class name from a dotted module path; a class object (a
+    config that was built in code) by its name."""
+    if not isinstance(value, str):
+        return getattr(value, "__name__", str(value))
+    return value.rsplit(".", 1)[-1]
 
 
 def _namespace_display(ns: str) -> str:
@@ -63,8 +65,10 @@ def _row_values(s: str, cfg: dict | None) -> tuple[str, str, str, str]:
         return s, "(not found)", "", ""
     namespace = _namespace_display(cfg.get("namespace", ""))
     merge_order = str(cfg.get("merge_order", ""))
+    # a key set to null in the config switches that component off
+    # (merged.json and marklogic.json do it for acquirerClass): not a class
     class_lines = [
-        f"{label}: {_short_class(cfg[key])}" for key, label in _CLASS_KEYS if key in cfg
+        f"{label}: {_short_class(cfg[key])}" for key, label in _CLASS_KEYS if cfg.get(key)
     ]
     return s, namespace, merge_order, "\n".join(class_lines)
 
