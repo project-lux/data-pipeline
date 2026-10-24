@@ -61,6 +61,7 @@ why the port is tractable.
 | Storage layer changes (postgres cache, redis idmap, lmdbm index, GithubCache) | **Do not port** | SUPERSEDED |
 | Process‑layer logic changes (merger, reidentifier, reference manager, reconciler, acquirer, fetcher, date utils) | **Do not port** | SUPERSEDED |
 | Source mappers | **Do not port** (`main` is newer for every one) | SUPERSEDED |
+| Backup / restore of any store (Postgres, Redis, LMDB, filesystem) | **New**: neither branch has it; `backup_tables.sh` and the test‑only `_export_state()` are the only precedents | 39 |
 
 ## Ground rules for every PR
 
