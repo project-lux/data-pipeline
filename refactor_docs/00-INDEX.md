@@ -22,7 +22,7 @@ you finish an item.
 | 07 | [Task engines and `TaskManager`](07-task-engines.md) | P0 | M | 02, 03, 05, 06 | ☑ |
 | 08 | [`lux counts`](08-counts-command.md) | P1 | S | 05 | ☑ |
 | 09 | [`lux clear`](09-clear-command.md) | P1 | S | 05 | ☑ |
-| 10 | [`lux list`](10-list-command.md) | P1 | S | 05 | ☐ |
+| 10 | [`lux list`](10-list-command.md) | P1 | S | 05 | ☑ |
 | 11 | [Mapper hooks (`make_export_filename`, `extract_index_data`)](11-mapper-hooks.md) | P1 | S | 01 | ☐ |
 | 12 | [Loader micro‑DSL (`process/base/loader.py`) + tests](12-loader-dsl.md) | P1 | L | 02, 04, 11 | ☐ |
 | 13 | [`LoadManager` and `lux load`](13-load-command.md) | P1 | S | 07, 12 | ☐ |
