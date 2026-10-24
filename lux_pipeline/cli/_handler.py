@@ -27,6 +27,10 @@ def default_prefix(cfgs, command):
 
 
 class BaseHandler:
+    # False for a command that does not need the pipeline configuration at
+    # all (entry then passes cfgs=None without trying to load one)
+    needs_configs = True
+
     def __init__(self, cfgs):
         self.configs = cfgs
         self.default_source = "all"

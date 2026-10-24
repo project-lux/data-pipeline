@@ -101,8 +101,12 @@ def run(argv=None):
     if mod is None:
         return _fail(f"lux: {err}", 2)
 
+    cfgs = None
     try:
-        cfgs = runtime.get_configs()
+        # A handler that says needs_configs = False (watch) runs without
+        # loading, and so without connecting to anything
+        if getattr(mod.CommandHandler, "needs_configs", True):
+            cfgs = runtime.get_configs()
     except Exception as e:
         if args.command in NO_CONFIG_COMMANDS:
             logger.debug(f"continuing without a configuration: {e}")
