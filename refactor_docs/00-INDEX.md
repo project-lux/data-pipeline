@@ -19,7 +19,7 @@ you finish an item.
 | 04 | [Config: system/defaults/paths/downloader](04-config-system-defaults.md) | P0 | M | 01 | ☑ |
 | 05 | [Packaging, `lux` entry point, handler base](05-packaging-cli-entry.md) | P0 | M | 03, 04 | ☑ |
 | 06 | [Console UI: `BuildView` and `lux watch`](06-rich-tui.md) | P0 | M | 01, 02 | ☑ |
-| 07 | [Task engines and `TaskManager`](07-task-engines.md) | P0 | M | 02, 03, 05, 06 | ☐ |
+| 07 | [Task engines and `TaskManager`](07-task-engines.md) | P0 | M | 02, 03, 05, 06 | ☑ |
 | 08 | [`lux counts`](08-counts-command.md) | P1 | S | 05 | ☐ |
 | 09 | [`lux clear`](09-clear-command.md) | P1 | S | 05 | ☐ |
 | 10 | [`lux list`](10-list-command.md) | P1 | S | 05 | ☐ |
