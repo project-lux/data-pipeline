@@ -141,3 +141,14 @@ def test_nesting_below_an_ignored_key_stays_ignored():
     refs, all_refs = mapper().find_named_refs(data)
     assert refs == []
     assert all_refs == [uri("deep")]
+
+
+# --- hooks (item 11) --------------------------------------------------------
+
+def test_mapper_hooks_defaults_and_ml_export_name():
+    from lux_pipeline.process.base.mapper import Mapper
+    base = object.__new__(Mapper)
+    assert base.extract_index_data({"id": "x"}) == {}
+    assert base.make_export_filename("aat", 3) == "export_aat_3.jsonl"
+    assert mapper().extract_index_data({"id": "x"}) == {}
+    assert mapper().make_export_filename("merged", 3) == "export_full_3.jsonl"

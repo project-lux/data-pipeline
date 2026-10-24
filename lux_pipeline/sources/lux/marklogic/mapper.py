@@ -11,6 +11,12 @@ from lux_pipeline.process.base.mapper import Mapper
 
 
 class MlMapper(Mapper):
+    def make_export_filename(self, name, my_slice):
+        """What run-export.py writes today. It adds .gz when compressing and
+        uses export_merged_ when MarkLogic is skipped; item 26 carries
+        those two switches."""
+        return f"export_full_{my_slice}.jsonl"
+
     def __init__(self, config):
         Mapper.__init__(self, config)
         self.start_str = datetime.datetime.now().isoformat()
