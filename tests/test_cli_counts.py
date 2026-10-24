@@ -235,6 +235,39 @@ def test_sources_without_index_paths_contribute_nothing(indexed, capsys):
     assert lines(capsys) == ["Total index records: =0"]
 
 
+# --- tables ------------------------------------------------------------------
+
+
+def test_table_renders_every_section_and_a_grand_total(indexed, capsys):
+    run(indexed, ["--table", "--map", "all", "--index", "all"], source="all")
+    out = capsys.readouterr().out
+    for title in ("Cache counts", "Map counts", "Index counts"):
+        assert title in out
+    assert "Source" in out and "Type" in out and "Cache" in out and "Index" in out
+    # a row from each section, with the same =/~ marks as the plain output
+    assert "ycba" in out and "internal" in out and "=12" in out
+    assert "~250,000" in out
+    assert "idmap" in out and "~1,000,000" in out
+    assert "missing" in out and "=3" in out
+    # section totals are separate, and the index total is exact
+    assert "~350,107" in out and "~1,000,026" in out and "=5" in out
+    assert "Grand total: ~1,350,138" in out
+
+
+def test_table_single_section_has_no_grand_total(capsys):
+    run(StubConfigs(), ["--table"], source="results")
+    out = capsys.readouterr().out
+    assert "Cache counts" in out and "merged" in out and "=40" in out and "~81" in out
+    assert "Grand total" not in out
+    assert "Map counts" not in out and "Index counts" not in out
+
+
+def test_plain_is_the_default(capsys):
+    run(StubConfigs(), source="results")
+    out = capsys.readouterr().out
+    assert "╭" not in out and "Cache counts" not in out
+
+
 # --- listing -----------------------------------------------------------------
 
 
