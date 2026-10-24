@@ -2,6 +2,7 @@ import os
 import re
 import logging
 import importlib
+import multiprocessing
 from .storage.cache.filesystem import FsCache
 from .storage.uricache import URICache, _MISSING
 
@@ -56,7 +57,7 @@ def importObject(objectType):
                 return importObject("lux_pipeline.%s" % objectType)
             except Exception:
                 pass
-        logger.error(f"Failed to import {objectType}")
+        logger.critical(f"Could not import {objectType}: {e}")
         raise e
     return getattr(m, className)
 
@@ -66,6 +67,11 @@ class Config(object):
         self.internal = {}
         self.external = {}
         self.caches = {}
+        # Per-kind defaults merged under every cache / map / marklogic store
+        # config. Populated from {"type": "default", "name": "cache"|"map"|
+        # "marklogic"} records; "cache" falls back to the single "caches"
+        # record (today's shape) when no default record exists.
+        self.defaults = {"cache": {}, "map": {}, "marklogic": {}}
         self.results = {}
         self.marklogic_stores = {}
         self.map_stores = {}
@@ -101,8 +107,19 @@ class Config(object):
             configcache = FsCache(bootstrap)
             self.configcache = configcache
 
-        base = configcache["base"]["data"]
-        self.process_base(base)
+        # Machine-specific settings live in a "system" record when the
+        # instance has one, else in "base" (today's name). Checked with `in`
+        # first so the filesystem cache does not warn about the missing one.
+        base = None
+        for name in ("system", "base"):
+            if name in configcache:
+                base = configcache[name]
+                break
+        if base is None:
+            raise ValueError(
+                f"Could not find the base configuration (system.json or base.json) in {basepath}"
+            )
+        self.process_base(base["data"])
 
         if not self.data_dir.startswith("/"):
             self.data_dir = os.path.join(self.base_dir, self.data_dir)
@@ -116,7 +133,18 @@ class Config(object):
             self.temp_dir = os.path.join(self.base_dir, self.temp_dir)
         if hasattr(self, "dumps_dir") and not self.dumps_dir.startswith("/"):
             self.dumps_dir = os.path.join(self.base_dir, self.dumps_dir)
+        if hasattr(self, "indexes_dir") and not self.indexes_dir.startswith("/"):
+            self.indexes_dir = os.path.join(self.base_dir, self.indexes_dir)
 
+        # How many workers a parallel phase may start by default: three less
+        # than the cores (postgres, redis and the controlling process need
+        # some), never fewer than one. The base record may set it explicitly.
+        if not hasattr(self, "max_workers"):
+            self.max_workers = max(1, multiprocessing.cpu_count() - 3)
+        if not hasattr(self, "temp_dir"):
+            self.temp_dir = os.path.join(self.base_dir, "tmp")
+        if not hasattr(self, "indexes_dir"):
+            self.indexes_dir = self.data_dir
 
         if hasattr(self, "validatorClass"):
             vcls = importObject(self.validatorClass)
@@ -127,28 +155,52 @@ class Config(object):
 
         for k in configcache.iter_keys():
             rec = configcache[k]["data"]
-            if rec["type"] == "internal":
-                self.internal[k] = rec
-            elif rec["type"] == "external":
-                self.external[k] = rec
-            elif rec["type"] == "results":
-                self.results[k] = rec
-            elif rec["type"] == "caches":
-                self.caches = rec
-            elif rec["type"] == "globals":
-                del rec["type"]
-                self.globals_cfg = rec
-            elif rec["type"] == "base":
-                pass
-            elif rec["type"] == "marklogic":
-                self.marklogic_stores[rec["name"]] = rec
-            elif rec["type"] == "map":
-                self.map_stores[rec["name"]] = rec
-            else:
-                logger.error(f"Unknown config type: {rec['type']} in {k}")
+            self.handle_config_record(k, rec)
+
+        # Today's single "caches" record is the cache default when the
+        # instance has no explicit one
+        if self.caches and not self.defaults["cache"]:
+            self.defaults["cache"] = self.caches
+
+    def handle_config_record(self, k, rec):
+        """File one configuration record where the rest of the code looks
+        for it, by its `type`. Sub-config stores (item 35) reuse this."""
+        if type(rec) is not dict:
+            raise ValueError(f"Config record {k} is a {type(rec).__name__}, not a dict")
+        if "type" not in rec:
+            raise ValueError(f"Config record {k} has no 'type': {rec}")
+        typ = rec["type"]
+        if typ == "internal":
+            self.internal[k] = rec
+        elif typ == "external":
+            self.external[k] = rec
+        elif typ == "results":
+            self.results[k] = rec
+        elif typ == "caches":
+            self.caches = rec
+        elif typ == "default":
+            name = rec.get("name", "")
+            if name == "ml":
+                name = "marklogic"
+            if name not in self.defaults:
+                raise ValueError(
+                    f"Config record {k} is a default for unknown kind {rec.get('name')!r}; "
+                    f"expected one of {sorted(self.defaults)}"
+                )
+            self.defaults[name] = rec
+        elif typ == "globals":
+            del rec["type"]
+            self.globals_cfg = rec
+        elif typ in ("base", "system"):
+            pass
+        elif typ == "marklogic":
+            self.marklogic_stores[rec["name"]] = rec
+        elif typ == "map":
+            self.map_stores[rec["name"]] = rec
+        else:
+            logger.critical(f"Unknown config type: {typ} in {k}")
 
     def process_base(self, rec):
-        vcls = None
         for k, v in rec.items():
             if k != "type" and not hasattr(self, k):
                 setattr(self, k, v)
@@ -369,9 +421,10 @@ class Config(object):
             return cfg
 
         cfg["all_configs"] = self
-        clss = cfg.get("storeClass", "storage.marklogic.rest.MarkLogicStore")
+        tmp_cfg = self.merge_configs(cfg, self.defaults["marklogic"])
+        clss = tmp_cfg.get("storeClass", "storage.marklogic.rest.MarkLogicStore")
         clso = importObject(clss)
-        cfg["store"] = clso(cfg)
+        cfg["store"] = clso(tmp_cfg)
         return cfg
 
     def instantiate_map(self, key):
@@ -383,9 +436,10 @@ class Config(object):
             return cfg
 
         cfg["all_configs"] = self
-        clss = cfg.get("storeClass", "storage.idmap.redis.IdMap")
+        tmp_cfg = self.merge_configs(cfg, self.defaults["map"])
+        clss = tmp_cfg.get("storeClass", "storage.idmap.redis.IdMap")
         clso = importObject(clss)
-        cfg["store"] = clso(cfg)
+        cfg["store"] = clso(tmp_cfg)
         return cfg
 
     def instantiate(self, key, which=None):
@@ -422,7 +476,7 @@ class Config(object):
             # Harvester needs the datacache to be in config
             dcc = cfg.get("datacacheClass", "storage.cache.postgres.DataCache")
             cls3 = importObject(dcc)
-            tmp_cfg = self.merge_configs(cfg, self.caches)
+            tmp_cfg = self.merge_configs(cfg, self.defaults["cache"])
             cfg["datacache"] = cls3(tmp_cfg)
 
             if "fetch" in cfg:
@@ -464,7 +518,7 @@ class Config(object):
 
                 rrcc = cfg.get("recordcacheReconciledClass", "storage.cache.postgres.ExternalReconciledRecordCache")
                 cls5 = importObject(rrcc)
-                tmp_cfg = self.merge_configs(cfg, self.caches)
+                tmp_cfg = self.merge_configs(cfg, self.defaults["cache"])
                 cfg["reconciledRecordcache"] = cls5(tmp_cfg)
 
                 rcc = cfg.get("recordcacheClass", "storage.cache.postgres.ExternalRecordCache")
@@ -479,7 +533,7 @@ class Config(object):
 
             # Different default classes for record caches based on internal/external
             cls4 = importObject(rcc)
-            tmp_cfg = self.merge_configs(cfg, self.caches)
+            tmp_cfg = self.merge_configs(cfg, self.defaults["cache"])
             cfg["recordcache"] = cls4(tmp_cfg)
 
             # Everything needs a mapper to get from data to record
@@ -496,10 +550,20 @@ class Config(object):
             else:
                 cfg["loader"] = None
 
+            # Default becomes process.base.downloader.BaseDownloader once
+            # that class exists (item 14); until then only an explicit
+            # downloaderClass builds one
+            dldr = cfg.get("downloaderClass", None)
+            if dldr:
+                dldrcls = importObject(dldr)
+                cfg["downloader"] = dldrcls(cfg)
+            else:
+                cfg["downloader"] = None
+
             rcc2 = cfg.get("recordcache2Class", "storage.cache.postgres.RecordCache")
             if rcc2:
                 cls5 = importObject(rcc2)
-                tmp_cfg = self.merge_configs(cfg, self.caches)
+                tmp_cfg = self.merge_configs(cfg, self.defaults["cache"])
                 cfg["recordcache2"] = cls5(tmp_cfg)
             else:
                 cfg["recordcache2"] = None

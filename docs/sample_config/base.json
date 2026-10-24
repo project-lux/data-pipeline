@@ -41,6 +41,8 @@
 	"MeasurementUnit", "Currency"],
 
     "base_dir": "/home/lux/pipeline",
+    "max_workers": 8,
+    "temp_dir": "tmp",
     "indexes_dir": "data/processing",
     "dumps_dir": "data/input",
     "exports_dir": "data/output/latest",

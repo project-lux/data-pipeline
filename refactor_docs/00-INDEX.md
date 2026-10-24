@@ -16,7 +16,7 @@ you finish an item.
 | 01 | [Logging in core modules](01-logging-core.md) | P0 | M | 00 | ☑ |
 | 02 | [Progress protocol (`lux_pipeline/progress.py`)](02-progress-protocol.md) | P0 | S | 00 | ☑ |
 | 03 | [Runtime context (`lux_pipeline/runtime.py`)](03-runtime-context.md) | P0 | S | 00 | ☑ |
-| 04 | [Config: system/defaults/paths/downloader](04-config-system-defaults.md) | P0 | M | 01 | ☐ |
+| 04 | [Config: system/defaults/paths/downloader](04-config-system-defaults.md) | P0 | M | 01 | ☑ |
 | 05 | [Packaging, `lux` entry point, handler base](05-packaging-cli-entry.md) | P0 | M | 03, 04 | ☐ |
 | 06 | [Console UI: `BuildView` and `lux watch`](06-rich-tui.md) | P0 | M | 01, 02 | ☐ |
 | 07 | [Task engines and `TaskManager`](07-task-engines.md) | P0 | M | 02, 03, 05, 06 | ☐ |
