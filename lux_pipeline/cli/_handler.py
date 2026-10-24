@@ -60,9 +60,9 @@ class CommandHandler(BaseHandler):
         raise NotImplementedError(f"{type(self).__name__} has no manager yet")
 
     def make_view(self, prefix, workers, args):
-        """The console view for a build, or ``None`` for plain output.
-        Item 06 supplies `BuildView`; until then there is no view."""
-        return None
+        """The console view for a build, or ``None`` for plain output."""
+        from lux_pipeline.cli._view import BuildView
+        return BuildView(prefix, workers, getattr(args, "log", "INFO"))
 
     def resolve_sources(self, args):
         """The source names this run covers, from ``--source``.
@@ -94,7 +94,7 @@ class CommandHandler(BaseHandler):
         try:
             manager = self.make_manager(wks, args)
         except NotImplementedError:
-            # Items 06/07 bring the managers and engines; report what would run
+            # a command whose manager has not been ported yet: report what would run
             print(f"{args.command}: {len(sources)} source(s) over {wks} worker(s), "
                   f"engine {args.engine}: {', '.join(sources)}")
             return None
@@ -106,6 +106,9 @@ class CommandHandler(BaseHandler):
         if view is None:
             manager.process(args.engine, prefix, None)
         else:
+            if getattr(manager, "hide_idle_workers", False):
+                for n in range(len(manager.sources), wks):
+                    view.set_visible(n, False)
             with view:
                 manager.process(args.engine, prefix, view)
         # so a build can be re-attached with `lux watch`
