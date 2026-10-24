@@ -69,13 +69,17 @@ def reset_configs():
     _cfgs = None
 
 
-def configure_logging(level="INFO", stream=sys.stdout):
+def configure_logging(level="INFO", stream=None):
     """Attach one ``StreamHandler`` to the ``lux_pipeline`` logger at `level`,
     replacing any handlers already there. Returns the handler.
 
+    `stream` defaults to whatever ``sys.stdout`` is *when called*, so a
+    redirected stdout (a test capturing output, a shell wrapper) is honoured.
     This is the only place that touches handlers for the non-UI case; the
     console UI installs its own handler instead when it is on.
     """
+    if stream is None:
+        stream = sys.stdout
     if isinstance(level, str):
         lvl = getattr(logging, level.upper(), None)
         if not isinstance(lvl, int):
