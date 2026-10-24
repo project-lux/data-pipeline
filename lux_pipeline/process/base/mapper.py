@@ -196,6 +196,14 @@ class Mapper(object):
             re.IGNORECASE,
         )
 
+    def make_export_filename(self, name, my_slice):
+        """The file this worker's export of `name` goes to, relative to the
+        exports directory. The export manager (item 26) asks the output
+        mapper, so each output format names its own files; the mappers for
+        MarkLogic and QLever override this with the names the legacy
+        scripts write today."""
+        return f"export_{name}_{my_slice}.jsonl"
+
     def process_period_record(self, record):
         # Add AAT classification
         record.setdefault("classified_as", []).append(
@@ -290,6 +298,17 @@ class Mapper(object):
 
     def to_plain_string(self, value):
         return str(value) if isinstance(value, etree._ElementUnicodeResult) else value
+
+    def extract_index_data(self, record):
+        """From a datacache record, the entries the loader (item 12) writes
+        to per-slice TSV files while loading, so the hand-written "write the
+        equivalents while loading" logic of the wikidata and viaf loaders
+        can move into their mappers:
+
+            {"label": [(key, value), ...], "equiv": [...], "diff": [...]}
+
+        Any key may be absent. Default: nothing to index."""
+        return {}
 
     def get_reference(self, identifier):
         if not self.acquirer:

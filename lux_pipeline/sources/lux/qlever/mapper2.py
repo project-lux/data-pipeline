@@ -149,6 +149,10 @@ def format_decimal(value):
 
 
 class QleverMapper(Mapper):
+    def make_export_filename(self, name, my_slice):
+        """What run-source-build.py writes today (gzipped there)."""
+        return f"sources_{my_slice}.nt"
+
     def __init__(self, config):
         Mapper.__init__(self, config)
         self.configs = config["all_configs"]

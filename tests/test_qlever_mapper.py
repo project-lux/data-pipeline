@@ -258,3 +258,8 @@ def test_classification_without_id_is_not_treated_as_a_match(mapper):
     }))
     assert f'<{LUX}object/o3> <{NS}itemIdentifier> "abc" .' in got
     assert not any("sortIdentifier" in t for t in got)
+
+
+def test_export_filename_matches_run_source_build(mapper):
+    assert mapper.make_export_filename("qlever", 7) == "sources_7.nt"
+    assert mapper.extract_index_data({}) == {}
