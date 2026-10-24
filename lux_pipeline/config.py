@@ -550,10 +550,11 @@ class Config(object):
             else:
                 cfg["loader"] = None
 
-            # Default becomes process.base.downloader.BaseDownloader once
-            # that class exists (item 14); until then only an explicit
-            # downloaderClass builds one
-            dldr = cfg.get("downloaderClass", None)
+            # Every source gets a downloader; the base class answers
+            # get_urls() from remoteDumpFile / input_files and returns []
+            # when neither is configured. Set downloaderClass to null to
+            # opt out
+            dldr = cfg.get("downloaderClass", "process.base.downloader.BaseDownloader")
             if dldr:
                 dldrcls = importObject(dldr)
                 cfg["downloader"] = dldrcls(cfg)
