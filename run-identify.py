@@ -12,19 +12,14 @@ processed records. Refused (conflicting) assertions are written to
 identity_conflicts.jsonl for review.
 """
 
-import os
 import sys
 import time
 
-from dotenv import load_dotenv
-import logging
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-from lux_pipeline.config import Config
+from lux_pipeline.runtime import configure_logging, get_configs
 from lux_pipeline.process.identity_resolver import IdentityResolver
 
-load_dotenv()
-basepath = os.getenv("LUX_BASEPATH", "")
-cfgs = Config(basepath=basepath)
+configure_logging("INFO")
+cfgs = get_configs(instantiate=False)
 idmap = cfgs.get_idmap()
 cfgs.cache_globals()
 
