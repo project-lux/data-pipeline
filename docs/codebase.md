@@ -74,3 +74,20 @@ In the future, source reconcilers might be significantly more clever... but they
 
 
 
+
+### Base configuration keys
+
+`base.json` (or `system.json`, which is read in preference when present) holds the
+machine-specific settings. Besides the `*_dir` paths, which are made absolute against
+`base_dir` when relative, two optional keys have defaults:
+
+* `max_workers`: how many workers a parallel phase starts by default. Defaults to three
+  fewer than the machine's cores (Postgres, Redis and the controlling process need some),
+  never fewer than one.
+* `temp_dir`: scratch space for sorts and partial downloads. Defaults to `tmp` under
+  `base_dir`.
+
+Per-kind defaults for stores can be given as `{"type": "default", "name": "cache" | "map"
+| "marklogic", ...}` records; keys in them are merged under every store config of that
+kind that does not set them itself. An instance without them keeps using the single
+`caches.json` record for its caches.
