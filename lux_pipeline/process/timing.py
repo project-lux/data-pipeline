@@ -25,6 +25,8 @@ import os
 import sys
 import time
 
+from lux_pipeline.progress import null_progress
+
 
 class _NullStage:
     """What `timing.stage()` returns when no phase is being timed, so library
@@ -112,7 +114,8 @@ class _Stage:
 
 class PhaseTimer:
     def __init__(self, phase, slice_n=-1, max_slice=-1, total=None,
-                 report_every=None, out_dir=None, stream=None):
+                 report_every=None, out_dir=None, stream=None,
+                 progress=null_progress):
         if report_every is None:
             report_every = float(os.getenv("LUX_TIMING_INTERVAL", 60))
         self.phase = phase
@@ -122,6 +125,9 @@ class PhaseTimer:
         self.report_every = report_every
         self.out_dir = out_dir
         self.stream = stream or sys.stdout
+        # whoever is listening for progress (see lux_pipeline.progress); the
+        # default costs one call per step
+        self.progress = progress
         self.stages = {}
         self._stage_objs = {}
         self.count = 0
@@ -132,6 +138,9 @@ class PhaseTimer:
         self._last_count = 0
         self.marks = []
         self.complete = False
+        progress(phase=phase)
+        if total is not None:
+            progress(total=total)
         # so library code can find it -- see stage() above
         global _active
         _active = self
@@ -163,16 +172,19 @@ class PhaseTimer:
     def step(self, n=1):
         """One unit of work finished. Prints progress on the interval."""
         self.count += n
+        self.progress(advance=n)
         if time.perf_counter() - self._last_report >= self.report_every:
             self.report()
 
     def skip(self, n=1):
         """Counted, but not work -- records another worker owns, resumed rows."""
         self.skipped += n
+        self.progress(advance=n)
 
     def mark(self, label):
         """Note a boundary within the phase, e.g. moving to the next source."""
         self.marks.append((label, round(time.perf_counter() - self.t0, 1)))
+        self.progress(description=label)
 
     # ------------------------------------------------------------- reporting
 
@@ -259,6 +271,7 @@ class PhaseTimer:
 
     def finish(self):
         self.complete = True
+        self.progress(completed=self.count + self.skipped, done=True)
         s = self.summary()
         el = s["seconds"]
         print(f"\n=== {self._tag()} finished", file=self.stream)
