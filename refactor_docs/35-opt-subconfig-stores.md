@@ -34,3 +34,10 @@ absolute `*_dir` values.
 
 The live instance is a single directory. Useful when the Yale‑specific and
 the public source configs are split into two repositories.
+
+**Live config copies.** `config_cache/config_cache/` is an untracked copy of the
+build machine's configuration files (see README ground rule 5). In the same PR,
+apply this item's config changes there: any `"type": "config"` record the live instance is to use (none, unless the instance is actually split). Check the edited files still
+parse as JSON and that every `*Class` value resolves through `importObject`
+without a legacy warning, and list the edited files in the PR description.
+Leave the local instance alone.

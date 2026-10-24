@@ -26,6 +26,13 @@ Set `downloaderClass` in `docs/sample_config/ror.json`, `viaf.json`
 * `RorDownloader` uses `url2.rsplit('/')[-2]` for the filename (Zenodo
   URLs end in `/content`); keep but document.
 
+**Live config copies.** `config_cache/config_cache/` is an untracked copy of the
+build machine's configuration files (see README ground rule 5). In the same PR,
+apply this item's config changes there: `downloaderClass` and the `downloadMdUrl` / `downloadXPath` / `downloadUrlBase` / `dumpFilePath` keys for `ror.json`, `viaf.json` and the pleiades config. Check the edited files still
+parse as JSON and that every `*Class` value resolves through `importObject`
+without a legacy warning, and list the edited files in the PR description.
+Leave the local instance alone.
+
 ## Acceptance criteria
 
 * `lux download --source ror --no-ui` fetches the current ROR zip to `dumps_dir`.

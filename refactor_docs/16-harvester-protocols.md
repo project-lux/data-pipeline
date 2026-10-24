@@ -94,6 +94,13 @@ and `GettyProtocol`.
 4. `python run-harvest.py --ycba` dry check against a stub (or the live
    stream with `last_update` set to now).
 
+**Live config copies.** `config_cache/config_cache/` is an untracked copy of the
+build machine's configuration files (see README ground rule 5). In the same PR,
+apply this item's config changes there: the `activitystreams_cache_source` key in `base.json` (or wherever the harvest settings live) so the hard‑coded `activitystreams` lookup is no longer needed. Check the edited files still
+parse as JSON and that every `*Class` value resolves through `importObject`
+without a legacy warning, and list the edited files in the PR description.
+Leave the local instance alone.
+
 ## Acceptance criteria
 
 * Existing configs load (`harvesterClass` names unchanged).
