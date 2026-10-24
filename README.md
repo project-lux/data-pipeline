@@ -1,5 +1,25 @@
 # Data Transformation Pipeline Code
 
+## Installation and the `lux` command
+
+```
+pip install -e .            # installs the lux_pipeline package and the `lux` script
+echo "LUX_BASEPATH=/path/to/instance/config" > .env
+lux help                    # lists the available commands
+lux watch <prefix>          # attach to a running or finished build (or: lux watch --latest)
+```
+
+`lux` is the new entry point being built up item by item; the legacy
+`run-*.py`, `manage-data.py` and `*_parallel.sh` scripts keep working until the
+port is complete. Workers write `<log_dir>/<command>-<timestamp>-w<n>.status`
+and `.log` files, which is what `lux watch` reads. See `docs/install-notes.md`
+for the surrounding setup (Postgres, Redis, directories) and
+`docs/codebase.md` for a tour of the code.
+
+The ongoing port of the `rob_refactor` branch is planned and tracked in
+`refactor_docs/` (start with its `README.md` and `00-INDEX.md`); `CLAUDE.md`
+describes the working conventions.
+
 ## Architecture
 
 ![architecture diagram](docs/architecture2.png)
