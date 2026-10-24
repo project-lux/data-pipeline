@@ -18,7 +18,7 @@ you finish an item.
 | 03 | [Runtime context (`lux_pipeline/runtime.py`)](03-runtime-context.md) | P0 | S | 00 | ☑ |
 | 04 | [Config: system/defaults/paths/downloader](04-config-system-defaults.md) | P0 | M | 01 | ☑ |
 | 05 | [Packaging, `lux` entry point, handler base](05-packaging-cli-entry.md) | P0 | M | 03, 04 | ☑ |
-| 06 | [Console UI: `BuildView` and `lux watch`](06-rich-tui.md) | P0 | M | 01, 02 | ☐ |
+| 06 | [Console UI: `BuildView` and `lux watch`](06-rich-tui.md) | P0 | M | 01, 02 | ☑ |
 | 07 | [Task engines and `TaskManager`](07-task-engines.md) | P0 | M | 02, 03, 05, 06 | ☐ |
 | 08 | [`lux counts`](08-counts-command.md) | P1 | S | 05 | ☐ |
 | 09 | [`lux clear`](09-clear-command.md) | P1 | S | 05 | ☐ |
