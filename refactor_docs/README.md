@@ -82,6 +82,15 @@ why the port is tractable.
 5. **New config keys are optional** and have fallbacks. The live instance
    config (`base.json`, `caches.json`, path‑based index settings) must load
    unchanged after every PR.
+   **Keep the build machine's config copies current.** `config_cache/config_cache/`
+   in this checkout (untracked, never committed) is a copy of the build
+   machine's live configuration files. Any PR that adds, renames or retires a
+   config key or a `*Class` path must apply the same edit to every affected
+   file there, check the files still parse as JSON and that every `*Class`
+   value resolves through `importObject` without a legacy warning, and say so
+   in the PR description. Do not touch the local instance under
+   `instance/pipeline/config`; it is rebuilt from these copies once all items
+   are in.
 6. **Read source code with `git show <branch>:<path>`**, e.g.
    `git show rob_claude_refactor:lux_pipeline/process/tasks/_task_ui_manager.py`.
    Each document says which branch to read; when both have the file, prefer

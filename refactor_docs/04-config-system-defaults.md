@@ -98,6 +98,13 @@ From `rob_claude_refactor` `Config.__init__` / helpers:
    `instantiate_all()`.
 3. Load the live instance: `python -c "from lux_pipeline.runtime import get_configs; get_configs()"` (item 03) or the eight‑line bootstrap from `run-identify.py`.
 
+**Live config copies.** `config_cache/config_cache/` is an untracked copy of the
+build machine's configuration files (see README ground rule 5). In the same PR,
+apply this item's config changes there: the new `base.json` keys (`max_workers`, `temp_dir`) and any `"type": "default"` records you introduce; the existing `caches.json` record keeps working, so only add what the item needs. Check the edited files still
+parse as JSON and that every `*Class` value resolves through `importObject`
+without a legacy warning, and list the edited files in the PR description.
+Leave the local instance alone.
+
 ## Acceptance criteria
 
 * The live config directory loads unchanged.

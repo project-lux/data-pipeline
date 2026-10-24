@@ -38,6 +38,13 @@ note for the live instance.
 2. Update `docs/sample_config/<src>.json`.
 3. Add a fixture‑based test per converted source using a 3‑record sample dump under `tests/loader_tests/sources/<src>/`.
 
+**Live config copies.** `config_cache/config_cache/` is an untracked copy of the
+build machine's configuration files (see README ground rule 5). In the same PR,
+apply this item's config changes there: the `input_files` / `dumpFileType` block for every source converted in the PR, mirroring the `docs/sample_config/<src>.json` edit. Check the edited files still
+parse as JSON and that every `*Class` value resolves through `importObject`
+without a legacy warning, and list the edited files in the PR description.
+Leave the local instance alone.
+
 ## Acceptance criteria
 
 * Converted sources load the same identifiers as before (compare `lux counts`).

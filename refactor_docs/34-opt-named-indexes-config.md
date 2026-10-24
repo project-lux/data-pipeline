@@ -40,3 +40,10 @@ a third index.
 3. `counts`/`clear`: enumerate `indexes`.
 4. Fix the name mismatch: canonical names are `reconcile_label`,
    `reconcile_id`, `equivalents`, `differents`.
+
+**Live config copies.** `config_cache/config_cache/` is an untracked copy of the
+build machine's configuration files (see README ground rule 5). In the same PR,
+apply this item's config changes there: an `indexes` block for each source config whose path‑based index settings you migrate (or none, if the live instance keeps the path‑based form). Check the edited files still
+parse as JSON and that every `*Class` value resolves through `importObject`
+without a legacy warning, and list the edited files in the PR description.
+Leave the local instance alone.

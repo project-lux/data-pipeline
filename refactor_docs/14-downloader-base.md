@@ -63,6 +63,13 @@ The whole module. Changes:
    recording `progress` saw `total` and advances summing to the size.
 4. `python -c "import lux_pipeline.sources.pleiades.downloader"` now succeeds.
 
+**Live config copies.** `config_cache/config_cache/` is an untracked copy of the
+build machine's configuration files (see README ground rule 5). In the same PR,
+apply this item's config changes there: the downloader keys the module docstring defines (`remoteDumpFile`, `dumpFilePath`, `input_files`, `dumps_dir`, `download_verify_ssl`) for every source config that should gain them. Check the edited files still
+parse as JSON and that every `*Class` value resolves through `importObject`
+without a legacy warning, and list the edited files in the PR description.
+Leave the local instance alone.
+
 ## Acceptance criteria
 
 * Tests pass; the pleiades downloader imports.
