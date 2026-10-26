@@ -60,7 +60,7 @@ from lux_pipeline.progress import Sliced, null_progress
 logger = logging.getLogger("lux_pipeline")
 
 CONTAINERS = ("dir", "dirs", "pair", "zip", "tar", "lines", "dict", "array",
-              "arraylines", "xmls", "lmdb")
+              "arraylines", "graph", "xmls", "lmdb")
 FORMATS = ("json", "raw", "other")
 COMPRESSIONS = ("gz", "bz2", "z")
 
@@ -165,6 +165,7 @@ class Loader(Sliced):
             "tar": self.iterate_tar,
             "lines": self.iterate_lines,
             "arraylines": self.iterate_arraylines,
+            "graph": self.iterate_graph,
             "dict": self.iterate_dict,
             "array": self.iterate_array,
             "xmls": self.iterate_xmls,
@@ -420,6 +421,16 @@ class Loader(Sliced):
         if len(remaining) == 1:
             self._add_total(len(data))
         for v in data:
+            yield v
+
+    def iterate_graph(self, path, comp, remaining):
+        """A JSON-LD document: the items of its top-level ``@graph`` array."""
+        with self.file_opener(path, comp) as fh:
+            data = json.load(fh)
+        items = data.get("@graph", []) if isinstance(data, dict) else []
+        if len(remaining) == 1:
+            self._add_total(len(items))
+        for v in items:
             yield v
 
     def iterate_xmls(self, path, comp, remaining):

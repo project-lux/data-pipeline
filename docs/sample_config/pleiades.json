@@ -16,11 +16,16 @@
     "input_files": {
         "records": [
             {
-                "url": "https://atlantides.org/downloads/pleiades/rdf/place-types.ttl"
+                "url": "https://atlantides.org/downloads/pleiades/rdf/place-types.ttl",
+                "path": "place-types.ttl",
+                "type": "ttl/other"
             },
             {
-                "url": "https://atlantides.org/downloads/pleiades/json/pleiades-places-latest.json.gz"
+                "url": "https://atlantides.org/downloads/pleiades/json/pleiades-places-latest.json.gz",
+                "path": "pleiades-places-latest.json.gz",
+                "type": "graph.gz/raw"
             }
         ]
-    }
+    },
+    "loaderClass": "sources.pleiades.loader.PleiadesLoader"
 }

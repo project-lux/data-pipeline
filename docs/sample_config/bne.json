@@ -2,12 +2,41 @@
     "name": "bne",
     "type": "external",
     "namespace": "https://datos.bne.es/resource/",
-    "matches": ["datos.bne.es/resource/"],
+    "matches": [
+        "datos.bne.es/resource/"
+    ],
     "fetch": "https://datos.bne.es/resource/{identifier}.jsonld",
-    "wikidata_property": ["P950"],
+    "wikidata_property": [
+        "P950"
+    ],
     "merge_order": 100,
-    
     "fetcherClass": "process.base.fetcher.Fetcher",
     "mapperClass": "sources.bne.mapper.BneMapper",
-    "cycleBreakPath": "bne_cycle_breaks.json"
+    "cycleBreakPath": "bne_cycle_breaks.json",
+    "loaderClass": "sources.bne.loader.BneLoader",
+    "dumps_dir": "bne",
+    "input_files": {
+        "records": [
+            {
+                "url": "https://www.bne.es/media/datosgob/catalogo-autoridades/entidad/entidad-JSON.zip",
+                "path": "entidad-JSON.zip",
+                "type": "zip/arraylines/json"
+            },
+            {
+                "url": "https://www.bne.es/media/datosgob/catalogo-autoridades/geografico/geografico-JSON.zip",
+                "path": "geografico-JSON.zip",
+                "type": "zip/arraylines/json"
+            },
+            {
+                "url": "https://www.bne.es/media/datosgob/catalogo-autoridades/persona/persona-JSON.zip",
+                "path": "persona-JSON.zip",
+                "type": "zip/arraylines/json"
+            },
+            {
+                "url": "https://www.bne.es/media/datosgob/catalogo-autoridades/materia/materia-JSON.zip",
+                "path": "materia-JSON.zip",
+                "type": "zip/array/raw"
+            }
+        ]
+    }
 }
