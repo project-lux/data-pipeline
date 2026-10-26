@@ -32,7 +32,7 @@ you finish an item.
 | 14 | [Downloader base class](14-downloader-base.md) | P1 | S | 02, 04 | ☑ |
 | 15 | [`DownloadManager` and `lux download`](15-download-command.md) | P1 | S | 07, 14 | ☑ |
 | 16 | [Harvester: protocol / driver split](16-harvester-protocols.md) | P1 | M | 02, 04 | ☑ |
-| 17 | [`HarvestManager` and `lux harvest`](17-harvest-command.md) | P1 | M | 07, 16 | ☐ |
+| 17 | [`HarvestManager` and `lux harvest`](17-harvest-command.md) | P1 | M | 07, 16 | ☑ |
 | 18 | [Index loader as a managed task](18-index-loader.md) | P1 | M | 02 | ☐ |
 | 19 | [`IndexLoadManager` and `lux load-index`](19-load-index-command.md) | P1 | S | 07, 18 | ☐ |
 | 34 | [Named `indexes` config block](34-named-indexes-config.md) | P1 | M | 18, 19 | ☐ |
