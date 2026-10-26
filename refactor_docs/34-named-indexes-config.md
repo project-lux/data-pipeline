@@ -39,6 +39,30 @@ class to `main`'s store. Note also that the repository's `system.json`
 `path_types` has no entries for the two legacy keys, so the block's own
 `indexes_dir` resolution is what makes its paths absolute.
 
+## Decisions (landed with this item)
+
+* Three logical indexes per source: `reconcile_label` (names),
+  `reconcile_id` (equivalent URIs) and `differents`. `equivalents` is an
+  alias of `reconcile_id`, not a fourth name: both mean
+  `inverseEquivDbPath`, which is what `main`'s global index loader and
+  reconciler read for `global_equivs.lmdb`. The plurals
+  (`reconcile_labels`, `reconcile_ids`), `equivs`, `labels`, `ids`, `diffs`
+  are accepted with a one‑time warning. A name that is none of these is a
+  custom index and passes through untouched.
+* `Config.resolve_indexes(cfg)` runs in `instantiate()`: relative `path`
+  under `indexes_dir`, an `IndexSpec` (class, path, map size; `open(flag)`
+  on demand, nothing opened at configuration time) as each entry's
+  `"index"`, and the legacy keys filled in from the block, or the block
+  built from the legacy keys, so both forms describe the same files and
+  every reader sees both. The block wins when both are given.
+* `indexClass` defaults to `storage.idmap.lmdb.TabLmdb`; the refactor's
+  `storage.index.lmdb.LmdbIndex` is mapped to it with a warning.
+* Readers use `lux_pipeline.config.index_path(cfg, name)` (reconcilers,
+  index loaders, the identity resolver's differents lookup) and
+  `source_indexes(cfg)` (`lux counts`, `lux clear`, `lux list`).
+* The `pipeline-configs` records load as they are; renaming their plural
+  index names and `indexClass` values removes the warnings.
+
 ## Steps
 
 1. Config: port the block; use `main`'s `TabLmdb`/`StringLmdb`/`JsonLmdb`

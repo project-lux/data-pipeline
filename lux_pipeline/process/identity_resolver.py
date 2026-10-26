@@ -50,6 +50,7 @@ from contextlib import contextmanager
 import ujson as json
 
 from lux_pipeline.process.timing import PhaseTimer
+from lux_pipeline.config import index_path
 from lux_pipeline.storage.idmap.lmdb import TabLmdb
 
 logger = logging.getLogger("lux_pipeline")
@@ -246,7 +247,7 @@ class IdentityResolver(object):
         diff_index = None        
         by_uri = defaultdict(list)
         
-        fn = self.configs.results["merged"].get("differentDbPath", "")
+        fn = index_path(self.configs.results["merged"], "differents", "")
         if fn:
             try:
                 diff_index = TabLmdb.open(fn, "r", readahead=False, writemap=True)

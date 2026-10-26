@@ -15,6 +15,7 @@ from rich.table import Table
 from rich.text import Text
 
 from lux_pipeline.cli._handler import BaseHandler
+from lux_pipeline.config import INDEX_LABELS, source_indexes
 
 GROUPS = ("internal", "external", "results")
 
@@ -30,9 +31,9 @@ _CLASS_KEYS = [
     ("indexLoaderClass", "IndexLoader"),
 ]
 
-# the reconcile indexes are configured as paths on the source (item 34 may
-# give them names); key -> label, the words `lux counts` uses
-INDEX_PATHS = {"reconcileDbPath": "name", "inverseEquivDbPath": "id"}
+# a source's indexes come from its named `indexes` block or the legacy path
+# keys (lux_pipeline.config.source_indexes); INDEX_LABELS gives the words
+# `lux counts` uses
 
 GROUP_TITLES = {
     "internal": "Internal sources  [dim](Yale units)[/dim]",
@@ -191,9 +192,8 @@ class CommandHandler(BaseHandler):
             for name, cfg in getattr(self.configs, group).items():
                 if names is not None and name not in names:
                     continue
-                for key, label in INDEX_PATHS.items():
-                    if cfg.get(key):
-                        rows.append((group, name, label, cfg[key]))
+                for idx_name, path in source_indexes(cfg).items():
+                    rows.append((group, name, INDEX_LABELS.get(idx_name, idx_name), path))
         return rows
 
     def process(self, args, rest):

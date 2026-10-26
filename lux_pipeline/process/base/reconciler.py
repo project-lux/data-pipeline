@@ -2,6 +2,7 @@ import logging
 from lux_pipeline.process.utils.mapper_utils import get_year_from_timespan
 from sqlitedict import SqliteDict
 from lux_pipeline.storage.idmap.lmdb import TabLmdb
+from lux_pipeline.config import index_path
 import re
 import time
 
@@ -189,8 +190,9 @@ class LazyIndexes:
     """
 
     def _init_indexes(self, config):
-        self._index_paths = {"name": config.get("reconcileDbPath", ""),
-                             "id": config.get("inverseEquivDbPath", "")}
+        # the named `indexes` block first, then the legacy path keys
+        self._index_paths = {"name": index_path(config, "reconcile_label", ""),
+                             "id": index_path(config, "reconcile_id", "")}
         self._indexes = {"name": _UNOPENED, "id": _UNOPENED}
 
     def _ensure_index_state(self):

@@ -4,7 +4,9 @@
 (mapper applied, nothing stored), and collects two tables: lower-cased
 names to ``[recid, type]`` for the name index (``reconcileDbPath``) and
 equivalent URIs to ``[recid, type]`` for the inverse-equivalents index
-(``inverseEquivDbPath``). Collisions keep the smallest ``recid`` so the
+(``inverseEquivDbPath``). The paths come from the source's named
+``indexes`` block (``reconcile_label`` / ``reconcile_id``) when it has
+one, else from those legacy keys. Collisions keep the smallest ``recid`` so the
 index is the same whatever order the records arrive in. Names longer than
 `MAX_KEY_BYTES` bytes are dropped (LMDB keys are limited to 511 bytes).
 
@@ -27,6 +29,7 @@ import time
 
 from sqlitedict import SqliteDict
 
+from lux_pipeline.config import index_path
 from lux_pipeline.progress import Sliced, null_progress
 from lux_pipeline.storage.idmap.lmdb import TabLmdb
 
@@ -45,8 +48,9 @@ class IndexLoader(Sliced):
         self.in_cache = config.get("datacache")
         self.namespace = config.get("namespace", "")
         self.in_path = config.get("reconcileDumpPath", None)
-        self.out_path = config.get("reconcileDbPath", None)
-        self.inverse_path = config.get("inverseEquivDbPath", None)
+        # the named `indexes` block first, then the legacy path keys
+        self.out_path = index_path(config, "reconcile_label")
+        self.inverse_path = index_path(config, "reconcile_id")
         self.reconciler = config.get("reconciler", None)
         self.acquirer = config.get("acquirer", None)
         self.mapper = config.get("mapper", None)

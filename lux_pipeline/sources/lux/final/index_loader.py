@@ -5,6 +5,7 @@ import unicodedata
 import ujson as json
 import yaml
 
+from lux_pipeline.config import index_path
 from lux_pipeline.process.base.index_loader import LmdbIndexLoader, TabLmdb
 from lux_pipeline.storage.idmap.lmdb import JsonLmdb
 
@@ -63,7 +64,7 @@ class GlobalIndexLoader(LmdbIndexLoader):
     def get_storage(self):
         mapExp = self.config.get("mapSizeExponent", 30)
 
-        diff_path = self.config.get("differentDbPath", None)
+        diff_path = index_path(self.config, "differents")
         if diff_path:
             index = TabLmdb.open(diff_path, "c", map_size=2**mapExp, readahead=False, writemap=True)
         else:

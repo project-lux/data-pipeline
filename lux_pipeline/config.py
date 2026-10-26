@@ -62,6 +62,116 @@ def importObject(objectType):
     return getattr(m, className)
 
 
+# --- named indexes (item 34) -------------------------------------------------
+#
+# A source's reconciliation indexes may be configured as a named block:
+#
+#     "indexes": {
+#         "reconcile_label": {"path": "label_to_aat.lmdb"},
+#         "reconcile_id":    {"path": "id_to_aat.lmdb", "indexClass": "storage.idmap.lmdb.TabLmdb"}
+#     }
+#
+# or, as today, as paths on the source (reconcileDbPath, inverseEquivDbPath,
+# and differentDbPath on merged). Config.resolve_indexes() reads both forms
+# into one canonical block and keeps the legacy keys filled in, so every
+# reader sees the same thing whichever form the configuration used.
+
+INDEX_NAMES = ("reconcile_label", "reconcile_id", "differents")
+INDEX_ALIASES = {
+    "reconcile_labels": "reconcile_label", "labels": "reconcile_label", "names": "reconcile_label",
+    "reconcile_ids": "reconcile_id", "equivalents": "reconcile_id", "equivs": "reconcile_id",
+    "ids": "reconcile_id",
+    "diffs": "differents", "different": "differents",
+}
+INDEX_LEGACY_KEYS = {"reconcile_label": "reconcileDbPath", "reconcile_id": "inverseEquivDbPath",
+                     "differents": "differentDbPath"}
+# the short words `lux counts` / `lux list` print for each index
+INDEX_LABELS = {"reconcile_label": "name", "reconcile_id": "id", "differents": "differents"}
+DEFAULT_INDEX_CLASS = "storage.idmap.lmdb.TabLmdb"
+# the refactor's wrapper class, superseded by main's stores
+_LEGACY_INDEX_CLASSES = {"storage.index.lmdb.LmdbIndex": DEFAULT_INDEX_CLASS,
+                         "lux_pipeline.storage.index.lmdb.LmdbIndex": DEFAULT_INDEX_CLASS}
+
+
+def canonical_index_name(name):
+    """The canonical name for an index: aliases (``reconcile_labels``,
+    ``equivalents``, ...) are mapped with a one-time warning; a name that is
+    neither canonical nor an alias is a custom index and is kept."""
+    if name in INDEX_NAMES:
+        return name
+    if name in INDEX_ALIASES:
+        new = INDEX_ALIASES[name]
+        _warn_legacy_once(f"index {name}", f"index {new}")
+        return new
+    return name
+
+
+def index_path(cfg, name, default=None):
+    """The file path of index `name` (canonical or alias) for source config
+    `cfg`: from its ``indexes`` block, else from the legacy key
+    (``reconcileDbPath``, ...), else `default`."""
+    name = canonical_index_name(name)
+    block = cfg.get("indexes") or {}
+    entry = block.get(name)
+    if entry is None:
+        for other, canon in INDEX_ALIASES.items():
+            if canon == name and other in block:
+                entry = block[other]
+                break
+    if isinstance(entry, dict) and entry.get("path"):
+        return entry["path"]
+    if isinstance(entry, IndexSpec):
+        return entry.path
+    key = INDEX_LEGACY_KEYS.get(name)
+    if key and cfg.get(key):
+        return cfg[key]
+    return default
+
+
+def source_indexes(cfg):
+    """``{canonical name: path}`` for every index source config `cfg` has,
+    canonical ones first, from the block when present else the legacy
+    keys."""
+    out = {}
+    block = cfg.get("indexes") or {}
+    for raw, entry in block.items():
+        path = entry.get("path") if isinstance(entry, dict) else getattr(entry, "path", None)
+        if path:
+            out[canonical_index_name(raw)] = path
+    for name, key in INDEX_LEGACY_KEYS.items():
+        if name not in out and cfg.get(key):
+            out[name] = cfg[key]
+    ordered = {n: out[n] for n in INDEX_NAMES if n in out}
+    ordered.update({n: p for n, p in out.items() if n not in ordered})
+    return ordered
+
+
+class IndexSpec:
+    """A configured index, not yet opened: ``name``, ``path``, the store
+    class and its map size. ``open(flag)`` opens it; nothing is opened at
+    configuration time, so 24 workers do not each open every index at
+    start-up and a source can be configured before its index is built."""
+
+    def __init__(self, name, path, cls, map_size=2**30):
+        self.name = name
+        self.path = path
+        self.cls = cls
+        self.map_size = map_size
+
+    def exists(self):
+        return bool(self.path) and os.path.exists(self.path)
+
+    def open(self, flag="r", **kwargs):
+        kw = {"readahead": False, "writemap": True}
+        kw.update(kwargs)
+        if flag != "r":
+            kw.setdefault("map_size", self.map_size)
+        return self.cls.open(self.path, flag, **kw)
+
+    def __repr__(self):
+        return f"IndexSpec({self.name!r}, {self.path!r}, {getattr(self.cls, '__name__', self.cls)})"
+
+
 class Config(object):
     def __init__(self, configcache=None, basepath=None):
         self.internal = {}
@@ -513,6 +623,50 @@ class Config(object):
         logger.info(f"Read {n} configuration records from sub-config store {key}")
         return n
 
+    def resolve_indexes(self, cfg):
+        """Normalise a source's index configuration in place: the ``indexes``
+        block with canonical names, every ``path`` absolute (relative ones
+        under ``indexes_dir``), an `IndexSpec` as each entry's ``"index"``;
+        and the legacy keys (``reconcileDbPath``, ``inverseEquivDbPath``,
+        ``differentDbPath``) filled in from the block, or the block from the
+        legacy keys, so both forms describe the same files. When both are
+        given for the same index the block wins. Returns the block."""
+        raw = cfg.get("indexes") or {}
+        block = {}
+        for name, entry in raw.items():
+            canon = canonical_index_name(name)
+            if isinstance(entry, IndexSpec):
+                block[canon] = {"path": entry.path, "indexClass": entry.cls, "index": entry}
+                continue
+            entry = dict(entry or {})
+            path = entry.get("path")
+            if path and not os.path.isabs(path):
+                path = os.path.join(self.indexes_dir, path)
+            entry["path"] = path
+            if canon in block:
+                logger.warning(f"{cfg.get('name')}: index {name!r} duplicates {canon!r}; keeping the first")
+                continue
+            block[canon] = entry
+        for canon, key in INDEX_LEGACY_KEYS.items():
+            if canon in block and block[canon].get("path"):
+                cfg[key] = block[canon]["path"]
+            elif cfg.get(key):
+                block[canon] = {"path": cfg[key]}
+        for canon, entry in block.items():
+            if "index" in entry:
+                continue
+            clsname = entry.get("indexClass") or DEFAULT_INDEX_CLASS
+            if clsname in _LEGACY_INDEX_CLASSES:
+                _warn_legacy_once(clsname, _LEGACY_INDEX_CLASSES[clsname])
+                clsname = _LEGACY_INDEX_CLASSES[clsname]
+            cls = clsname if not isinstance(clsname, str) else importObject(clsname)
+            exp = entry.get("mapExponent") or entry.get("mapSizeExponent") or cfg.get("mapSizeExponent", 30)
+            entry["name"] = canon
+            entry["indexClass"] = clsname
+            entry["index"] = IndexSpec(canon, entry.get("path"), cls, 2 ** int(exp))
+        cfg["indexes"] = block
+        return block
+
     def instantiate(self, key, which=None):
         # build the set of components for a configured source
 
@@ -539,6 +693,8 @@ class Config(object):
                     else:
                         path = os.path.join(pfx, pth)
                     cfg[k] = path
+
+        self.resolve_indexes(cfg)
 
         # Add self to config
         cfg["all_configs"] = self
