@@ -208,7 +208,7 @@ def test_map_and_marklogic_defaults_are_merged_under_the_store_config(tmp_path, 
     assert ml.config["user"] == "dev"
 
 
-def test_downloader_class_builds_a_downloader_and_defaults_to_none(tmp_path, monkeypatch):
+def test_downloader_class_defaults_to_the_base_downloader(tmp_path, monkeypatch):
     bp = write_configs(tmp_path, {
         "base": base_record(tmp_path),
         "caches": dict(CACHE_SETTINGS, name="_caches", type="caches"),
@@ -222,9 +222,22 @@ def test_downloader_class_builds_a_downloader_and_defaults_to_none(tmp_path, mon
                     "recordcacheReconciledClass": "x.Recording", "mapperClass": "x.Recording",
                     "loaderClass": "x.Recording", "recordcache2Class": "x.Recording",
                     "acquirerClass": "x.Recording"},
+        "opted_out": {"type": "external", "name": "opted_out", "downloaderClass": None,
+                      "datacacheClass": "x.Recording", "recordcacheClass": "x.Recording",
+                      "recordcacheReconciledClass": "x.Recording", "mapperClass": "x.Recording",
+                      "loaderClass": "x.Recording", "recordcache2Class": "x.Recording",
+                      "acquirerClass": "x.Recording"},
     })
     import lux_pipeline.config as config_mod
-    monkeypatch.setattr(config_mod, "importObject", lambda path: RecordingStore)
+    requested = []
+
+    def fake_import(path):
+        requested.append(path)
+        return RecordingStore
+
+    monkeypatch.setattr(config_mod, "importObject", fake_import)
     cfgs = Config(basepath=bp)
     assert isinstance(cfgs.instantiate("with")["downloader"], RecordingStore)
-    assert cfgs.instantiate("without")["downloader"] is None
+    assert isinstance(cfgs.instantiate("without")["downloader"], RecordingStore)
+    assert "process.base.downloader.BaseDownloader" in requested
+    assert cfgs.instantiate("opted_out")["downloader"] is None
