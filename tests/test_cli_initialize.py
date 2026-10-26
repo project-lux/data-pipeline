@@ -19,9 +19,13 @@ from lux_pipeline.config import Config
 PIPELINE_CONFIGS = ROOT.parent / "pipeline-configs" / "configs"
 
 
+from lux_pipeline.cli import _services
+
+
 @pytest.fixture(autouse=True)
 def _no_network(monkeypatch):
-    """initialize fetches the Linked Art schemas; answer with a tiny one."""
+    """initialize fetches the Linked Art schemas and probes the servers;
+    answer with a tiny schema and reachable servers."""
     class Resp:
         text = '{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}'
 
@@ -29,6 +33,11 @@ def _no_network(monkeypatch):
             pass
 
     monkeypatch.setattr(initialize.requests, "get", lambda url, **kw: Resp())
+    monkeypatch.setattr(_services, "probe_postgres", lambda s, timeout=5: f"PostgreSQL 16 at {_services.describe_postgres(s)}")
+    monkeypatch.setattr(_services, "probe_redis", lambda h, p, timeout=5: f"redis 7 at {h}:{p}")
+    # the database offer: not a tty, so nothing is asked or created unless a test says so
+    monkeypatch.setattr(_services, "postgres_database_status", lambda s, name, timeout=5: (False, True))
+    monkeypatch.setattr(initialize.sys.stdin, "isatty", lambda: False, raising=False)
 
 
 def init(rest):
@@ -51,6 +60,12 @@ def test_samples_layout_config_and_dotenv(tmp_path, capsys):
     out = capsys.readouterr().out
     assert f"Installed at {root}" in out and "lux testinstall" in out
     assert "schemas: 11 fetched" in out
+    user = os.getenv("USER")
+    assert f"postgres: OK: PostgreSQL 16 at local socket, database {user}, user {user}" in out
+    assert "redis: OK: redis 7 at localhost:6379" in out
+    caches = json.load(open(cc / "caches.json"))
+    assert (caches["user"], caches["password"], caches["dbname"]) == (user, "", user)
+    assert "database: skipped (rerun with --create-db to create 'lux')" in out
     assert sorted(p.name for p in (root / base["data_dir"] / "schema").iterdir()) == sorted(
         ["core.json", "digital.json", "group.json", "image.json", "object.json", "person.json",
          "place.json", "set.json", "text.json", "concept.json", "event.json"])
@@ -78,6 +93,115 @@ def test_no_schemas_and_fetch_failures(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "schemas: 10 fetched" in out and "FAILED: person.json" in out
     assert not (root / "data" / "files" / "schema" / "person.json").exists()
+
+
+def test_unreachable_services_are_reported_not_fatal(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(_services, "probe_postgres", lambda s, timeout=5: (_ for _ in ()).throw(OSError("connection refused")))
+    monkeypatch.setattr(_services, "probe_redis", lambda h, p, timeout=5: (_ for _ in ()).throw(ConnectionError("no route")))
+    root = tmp_path / "inst"
+    assert init([str(root)]) == root
+    out = capsys.readouterr().out
+    assert "postgres: NOT REACHABLE: local socket" in out and "OSError: connection refused" in out
+    assert "redis: NOT REACHABLE: localhost:6379: ConnectionError: no route" in out
+    assert "start or configure postgres and redis" in out
+
+
+class RecordingIdmap(dict):
+    pass
+
+
+@pytest.fixture
+def db_setup(monkeypatch):
+    """Stub the parts that touch Postgres: the create and the idmap build."""
+    created = []
+    monkeypatch.setattr(_services, "create_database", lambda s, name, timeout=5: created.append((s["dbname"], name)) or True)
+    monkeypatch.setattr(Config, "get_idmap", lambda self: RecordingIdmap())
+    return created
+
+
+def test_create_db_configures_the_database_and_an_empty_idmap(tmp_path, monkeypatch, capsys, db_setup):
+    root = tmp_path / "inst"
+    init([str(root), "--create-db"])
+    out = capsys.readouterr().out
+    assert db_setup == [(os.getenv("USER"), "lux")]
+    assert "database: created 'lux'" in out
+    cc = root / "config_cache"
+    assert json.load(open(cc / "caches.json"))["dbname"] == "lux"
+    assert json.load(open(cc / "map_idmap.json"))["storeClass"] == "storage.idmap.postgres.IdMap"
+    token = (root / "data" / "files" / "idmap_update_token.txt").read_text().strip()
+    assert len(token) == 12 and token.startswith("__") and token.endswith("__") and token[2:10].isdigit()
+    assert "idmap tables: created in 'lux' (RecordingIdmap, 0 entries)" in out
+    assert "update token:" in out and "idmap: map_idmap.json -> storage.idmap.postgres.IdMap" in out
+
+
+def test_prompt_is_asked_at_a_tty_and_a_no_skips(tmp_path, monkeypatch, capsys, db_setup):
+    monkeypatch.setattr(initialize.sys.stdin, "isatty", lambda: True, raising=False)
+    asked = []
+    monkeypatch.setattr("builtins.input", lambda q: asked.append(q) or "n")
+    root = tmp_path / "a"
+    init([str(root)])
+    assert asked == ["Create a Postgres database 'lux' for the pipeline and set up an empty idmap in it? [y/N] "]
+    assert db_setup == [] and json.load(open(root / "config_cache" / "map_idmap.json"))["storeClass"].endswith("redis.IdMap")
+    assert "database: skipped" in capsys.readouterr().out
+    monkeypatch.setattr("builtins.input", lambda q: "yes")
+    init([str(tmp_path / "b"), "--dbname", "luxtest"])
+    assert db_setup == [(os.getenv("USER"), "luxtest")]
+    assert json.load(open(tmp_path / "b" / "config_cache" / "caches.json"))["dbname"] == "luxtest"
+
+
+def test_existing_database_is_adopted_and_no_create_db_never_asks(tmp_path, monkeypatch, capsys, db_setup):
+    monkeypatch.setattr(_services, "postgres_database_status", lambda s, name, timeout=5: (True, False))
+    init([str(tmp_path / "a"), "--create-db"])
+    out = capsys.readouterr().out
+    assert "database: using existing 'lux'" in out and db_setup == []
+    assert json.load(open(tmp_path / "a" / "config_cache" / "caches.json"))["dbname"] == "lux"
+    monkeypatch.setattr(_services, "postgres_database_status", lambda s, name, timeout=5: (False, False))
+    init([str(tmp_path / "b"), "--create-db"])
+    assert "may not create databases" in capsys.readouterr().out
+    monkeypatch.setattr(_services, "postgres_database_status", lambda s, name, timeout=5: (_ for _ in ()).throw(AssertionError("should not be called")))
+    init([str(tmp_path / "c"), "--no-create-db"])
+    assert "database:" not in capsys.readouterr().out
+
+
+def test_create_db_in_a_checkout_edits_the_sub_store_map_record(tmp_path, monkeypatch, capsys, db_setup):
+    src = fake_checkout(tmp_path / "checkout")
+    cc = src / "configs" / "system" / "config_cache"
+    json.dump({"name": "cache", "type": "default", "host": "", "port": 5432, "user": "", "password": "", "dbname": ""},
+              open(cc / "default_cache.json", "w"))
+    json.dump({"name": "maps", "type": "config", "base_dir": "pipeline-configs/configs/subs",
+               "datacacheClass": "storage.cache.filesystem.FsCache", "tabletype": "cache"}, open(cc / "maps.json", "w"))
+    mc = src / "configs" / "subs" / "maps_cache"
+    mc.mkdir()
+    json.dump({"name": "idmap", "type": "map", "storeClass": "storage.idmap.redis.IdMap", "db": 0}, open(mc / "map_idmap.json", "w"))
+    root = tmp_path / "inst"
+    bp = init([str(root), "--configs", str(src), "--create-db"])
+    assert db_setup == [(os.getenv("USER"), "lux")]
+    assert json.load(open(bp / "config_cache" / "default_cache.json"))["dbname"] == "lux"
+    installed_map = root / "pipeline-configs" / "configs" / "subs" / "maps_cache" / "map_idmap.json"
+    assert json.load(open(installed_map))["storeClass"] == "storage.idmap.postgres.IdMap"
+    assert json.load(open(mc / "map_idmap.json"))["storeClass"].endswith("redis.IdMap")   # the source untouched
+    assert (root / "files" / "idmap_update_token.txt").exists()
+
+
+def test_database_setup_failure_is_reported_not_fatal(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(_services, "create_database", lambda s, name, timeout=5: (_ for _ in ()).throw(OSError("permission denied")))
+    root = tmp_path / "inst"
+    assert init([str(root), "--create-db"]) == root
+    out = capsys.readouterr().out
+    assert "database: FAILED: OSError: permission denied" in out and "start or configure the database" in out
+
+
+def test_services_module_settings():
+    s = _services.postgres_settings({"host": "db.example.org", "port": "5433", "user": "USERNAME",
+                                     "password": "PASSWORD", "dbname": "lux"})
+    assert s == {"host": "db.example.org", "port": 5433, "user": os.getenv("USER"), "password": "", "dbname": "lux"}
+    assert _services.describe_postgres(s) == "db.example.org:5433, database lux, user " + os.getenv("USER")
+    assert _services.redis_settings({"db": 3}, {"host": "cache", "port": 6380}) == {"host": "cache", "port": 6380, "db": 3}
+    maps = [{"storeClass": "storage.idmap.redis.IdMap", "host": "a"}, {"storeClass": "storage.idmap.postgres.IdMap"},
+            {"storeClass": "storage.idmap.redis.MultiMap", "host": "a", "db": 8}, {"host": "b"}]
+    assert _services.redis_targets(maps, {"port": 6379}) == [("a", 6379)]
+    assert _services.redis_targets(maps[3:], {"storeClass": "storage.idmap.redis.IdMap"}) == [("b", 6379)]
+    assert _services.redis_targets([{"storeClass": "storage.idmap.postgres.IdMap"}]) == []
 
 
 def test_refuses_an_existing_installation(tmp_path):
@@ -207,19 +331,33 @@ def test_testinstall_reports_a_broken_configuration(tmp_path, monkeypatch, capsy
     assert lines[3].startswith("FAIL  configuration builds")
 
 
-def test_testinstall_reports_the_database_as_the_first_failure_without_one(tmp_path, monkeypatch, capsys):
+def test_testinstall_reports_postgres_as_the_first_failure_without_one(tmp_path, monkeypatch, capsys):
     """The acceptance case: a fresh install on a machine without Postgres."""
     root = tmp_path / "inst"
     init([str(root)])
     capsys.readouterr()
     monkeypatch.delenv("LUX_BASEPATH", raising=False)
-    monkeypatch.setattr(Config, "get_idmap", lambda self: (_ for _ in ()).throw(ConnectionError("connection refused")))
+    monkeypatch.setattr(_services, "probe_postgres", lambda s, timeout=5: (_ for _ in ()).throw(OSError("connection refused")))
     with pytest.raises(SystemExit):
         run_testinstall(cwd=root, monkeypatch=monkeypatch)
     lines = capsys.readouterr().out.splitlines()
     assert [l[:4] for l in lines[:5]] == ["OK  ", "OK  ", "OK  ", "OK  ", "FAIL"]
-    assert lines[4].startswith("FAIL  idmap reachable: ConnectionError: connection refused")
+    assert lines[4].startswith("FAIL  postgres reachable: OSError: connection refused")
     assert "max_workers" in lines[3]
+
+
+def test_testinstall_reports_an_unreachable_idmap_after_the_servers(tmp_path, monkeypatch, capsys):
+    root = tmp_path / "inst"
+    init([str(root)])
+    capsys.readouterr()
+    monkeypatch.delenv("LUX_BASEPATH", raising=False)
+    monkeypatch.setattr(Config, "get_idmap", lambda self: (_ for _ in ()).throw(ConnectionError("no idmap")))
+    with pytest.raises(SystemExit):
+        run_testinstall(cwd=root, monkeypatch=monkeypatch)
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[4].startswith("OK    postgres reachable: PostgreSQL 16")
+    assert lines[5].startswith("OK    redis reachable: redis 7 at localhost:6379")
+    assert lines[6].startswith("FAIL  idmap reachable: ConnectionError: no idmap")
 
 
 def test_testinstall_all_ok_with_stubbed_databases_and_real_workers(tmp_path, monkeypatch, capsys):
@@ -246,9 +384,10 @@ def test_testinstall_all_ok_with_stubbed_databases_and_real_workers(tmp_path, mo
     assert run_testinstall(["--workers", "2"], cwd=root, monkeypatch=monkeypatch) is True
     lines = capsys.readouterr().out.splitlines()
     assert all(l.startswith("OK    ") for l in lines[:-1]) and lines[-1] == "All checks passed."
-    assert "1 entries" in lines[4] and "1 globals" in lines[5] and "~42 records" in lines[6]
-    assert lines[8].startswith("OK    validator schemas present: 11 schemas")
-    assert "2 workers spawned and reported" in lines[9]
+    assert lines[4].startswith("OK    postgres reachable") and lines[5].startswith("OK    redis reachable")
+    assert "1 entries" in lines[6] and "1 globals" in lines[7] and "~42 records" in lines[8]
+    assert lines[10].startswith("OK    validator schemas present: 11 schemas")
+    assert "2 workers spawned and reported" in lines[11]
     assert len(list((root / "tmp").glob("testinstall-*/spawn-w*.status"))) == 2
 
 
