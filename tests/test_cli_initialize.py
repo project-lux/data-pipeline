@@ -103,8 +103,8 @@ def test_unreachable_services_are_reported_not_fatal(tmp_path, monkeypatch, caps
     assert init([str(root)]) == root
     out = capsys.readouterr().out
     assert "postgres: NOT REACHABLE: local socket" in out and "OSError: connection refused" in out
-    assert "redis: NOT REACHABLE: localhost:6379: ConnectionError: no route" in out
-    assert "start or configure postgres and redis" in out
+    assert "redis: not reachable: localhost:6379: ConnectionError: no route (not required" in out
+    assert "start or configure postgres (" in out and "redis" not in out.split("Next:")[1]
 
 
 class RecordingIdmap(dict):
@@ -132,7 +132,8 @@ def test_create_db_configures_the_database_and_an_empty_idmap(tmp_path, monkeypa
     token = (root / "data" / "files" / "idmap_update_token.txt").read_text().strip()
     assert len(token) == 12 and token.startswith("__") and token.endswith("__") and token[2:10].isdigit()
     assert "idmap tables: created in 'lux' (RecordingIdmap, 0 entries)" in out
-    assert "update token:" in out and "idmap: map_idmap.json -> storage.idmap.postgres.IdMap" in out
+    assert "update token:" in out
+    assert "idmap: map_idmap.json" not in out          # the sample already names the Postgres store
 
 
 def test_prompt_is_asked_at_a_tty_and_a_no_skips(tmp_path, monkeypatch, capsys, db_setup):
@@ -144,7 +145,7 @@ def test_prompt_is_asked_at_a_tty_and_a_no_skips(tmp_path, monkeypatch, capsys, 
     init([str(root)])
     assert asked == ["Name of the Postgres database for the pipeline [lux]: ",
                      "Create a Postgres database 'lux' for the pipeline and set up an empty idmap in it? [y/N] "]
-    assert db_setup == [] and json.load(open(root / "config_cache" / "map_idmap.json"))["storeClass"].endswith("redis.IdMap")
+    assert db_setup == [] and json.load(open(root / "config_cache" / "caches.json"))["dbname"] != "lux"
     assert "database: skipped" in capsys.readouterr().out
     # a name typed at the prompt, then yes
     asked.clear()
@@ -466,6 +467,20 @@ def test_testinstall_reports_postgres_as_the_first_failure_without_one(tmp_path,
     assert [l[:4] for l in lines[:5]] == ["OK  ", "OK  ", "OK  ", "OK  ", "FAIL"]
     assert lines[4].startswith("FAIL  postgres reachable: OSError: connection refused")
     assert "max_workers" in lines[3]
+
+
+def test_testinstall_redis_down_is_a_warning_not_a_failure(tmp_path, monkeypatch, capsys):
+    root = tmp_path / "inst"
+    init([str(root)])
+    capsys.readouterr()
+    monkeypatch.delenv("LUX_BASEPATH", raising=False)
+    monkeypatch.setattr(_services, "probe_redis", lambda h, p, timeout=5: (_ for _ in ()).throw(ConnectionError("no redis")))
+    monkeypatch.setattr(Config, "get_idmap", lambda self: (_ for _ in ()).throw(ConnectionError("no idmap")))
+    with pytest.raises(SystemExit):
+        run_testinstall(cwd=root, monkeypatch=monkeypatch)
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[5] == "WARN  redis reachable: ConnectionError: no redis (not required)"
+    assert lines[6].startswith("FAIL  idmap reachable")           # it carried on past redis
 
 
 def test_testinstall_reports_an_unreachable_idmap_after_the_servers(tmp_path, monkeypatch, capsys):

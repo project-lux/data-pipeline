@@ -28,7 +28,8 @@ The Linked Art JSON schemas the validator reads are fetched into
 files are fetched.
 
 Postgres and Redis are then probed with the installed settings and
-reported. When Postgres answers and the role may create databases, you
+reported; only Postgres is required (Redis is probed because some map
+records still name it, and reported as not required). When Postgres answers and the role may create databases, you
 are asked for the name of the database (default ``lux``, or the one
 already configured) and whether to create it (``--dbname`` to give the
 name up front; ``--create-db`` answers yes without asking, for a script;
@@ -195,7 +196,10 @@ def setup_database(basepath, cfgs, name=None, assume=None, out=print):
         raise ValueError(f"no map record named {idmap_name!r} to configure")
 
     if not name:
-        configured = cache_rec.get("dbname") if map_rec.get("storeClass") == POSTGRES_IDMAP else None
+        # the token is written only when a database was set up here (or by
+        # a real build), so with it the cache defaults name that database
+        configured = cache_rec.get("dbname") if (map_rec.get("storeClass") == POSTGRES_IDMAP
+                                                 and token_fn.exists()) else None
         default = configured or DEFAULT_DBNAME
         name = default if assume is not None else ask_name("Name of the Postgres database for the pipeline", default)
     exists, can_create = _services.postgres_database_status(pg, name)
@@ -446,10 +450,14 @@ class CommandHandler(BaseHandler):
         problems = []
         pg_ok = False
         for label, ok, detail in probe_services(cfgs):
-            print(f"  {label}: {'OK' if ok else 'NOT REACHABLE'}: {detail}")
-            if not ok:
+            if ok:
+                print(f"  {label}: OK: {detail}")
+            elif label == "redis":
+                print(f"  {label}: not reachable: {detail} (not required; a map record still names it)")
+            else:
+                print(f"  {label}: NOT REACHABLE: {detail}")
                 problems.append(label)
-            elif label == "postgres":
+            if ok and label == "postgres":
                 pg_ok = True
         if pg_ok and not getattr(args, "no_create_db", False):
             assume = True if getattr(args, "create_db", False) else None
