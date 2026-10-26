@@ -620,7 +620,7 @@ class Config(object):
             rec = cache[k]["data"]
             self.handle_config_record(k, rec)
             n += 1
-        logger.info(f"Read {n} configuration records from sub-config store {key}")
+        logger.debug(f"Read {n} configuration records from sub-config store {key}")
         return n
 
     def resolve_indexes(self, cfg):
