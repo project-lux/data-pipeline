@@ -1,10 +1,14 @@
-from lux_pipeline.process.base.harvester import ASHarvester
-import sys
+import logging
 
-class LCHarvester(ASHarvester):
+from lux_pipeline.process.base.harvester import ASHarvester, ASProtocol
 
-    def __init__(self, config):
-        super().__init__(config)
+logger = logging.getLogger("lux_pipeline")
+
+
+class LCProtocol(ASProtocol):
+    """Library of Congress ActivityStreams: forward paging with ``next`` and
+    ``published`` timestamps, transformed into the items `process_items`
+    expects."""
 
     def fetch_collection(self, uri):
         try:
@@ -12,11 +16,11 @@ class LCHarvester(ASHarvester):
             self.page = coll.get('first', "")
         except Exception as e:
             self.page = None
-            print(f"Failed to get first page from collection {uri}: {e}")
+            logger.error(f"Failed to get first page from collection {uri}: {e}")
 
     def fetch_page(self):
         """Transforms LC's ActivityStream into the format expected by process_items."""
-        print(f"Fetching page: {self.page}")
+        logger.debug(f"Fetching page: {self.page}")
 
         if self.cache_okay and self.page_cache is not None and self.page in self.page_cache:
             rec = self.page_cache[self.page]
@@ -45,7 +49,7 @@ class LCHarvester(ASHarvester):
         try:
             items = page.get("orderedItems", [])
         except KeyError:
-            print(f"Failed to get items from page {self.page}")
+            logger.error(f"Failed to get items from page {self.page}")
             items = []
 
         try:
@@ -55,16 +59,12 @@ class LCHarvester(ASHarvester):
         except KeyError:
             self.page = None
 
-        sys.stdout.write('P')
-        sys.stdout.flush()
-
-        
         transformed_items = []
         for item in items:
             try:
                 dt = item.get('published', None)
                 if not dt:
-                    print(f"Skipping item with missing 'published' key: {item}")
+                    logger.warning(f"Skipping item with missing 'published' key: {item}")
                     continue
 
                 chg = item.get('type', '').lower()
@@ -81,7 +81,7 @@ class LCHarvester(ASHarvester):
                         break
 
                 if not json_url:
-                    print(f"Skipping item with no valid JSON URL: {item}")
+                    logger.warning(f"Skipping item with no valid JSON URL: {item}")
                     continue
 
                 # Skip records ending in '-781.json'
@@ -91,12 +91,16 @@ class LCHarvester(ASHarvester):
                 # Construct an AS-compatible item
                 transformed_items.append({
                     "type": chg,
-                    "endTime": dt,  
+                    "endTime": dt,
                     "object": {"id": json_url}
                 })
 
             except Exception as e:
-                print(f"Error transforming item: {e}")
+                logger.error(f"Error transforming item: {e}")
                 continue
 
         return transformed_items
+
+
+class LCHarvester(ASHarvester):
+    protocol_class = LCProtocol

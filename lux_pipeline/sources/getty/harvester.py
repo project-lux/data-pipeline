@@ -1,30 +1,39 @@
-from lux_pipeline.process.base.harvester import ASHarvester
+from lux_pipeline.process.base.harvester import ASHarvester, ASProtocol
 import ujson as json
 import sys
 
-class GettyHarvester(ASHarvester):
-    
-    def process_items(self, items, refsonly=False): 
-        # self.namespace = f"http://data.getty.edu/vocab/{self.prefix}/"
+
+class GettyProtocol(ASProtocol):
+    """Wrap the regular ActivityStreams protocol to rewrite the URIs.
+
+    The Getty vocabularies share one stream; keep only this vocabulary's
+    items and rewrite ``https://data.getty.edu/vocab/aat/300404670`` to
+    ``<namespace>300404670`` (e.g. ``http://vocab.getty.edu/aat/300404670``).
+    """
+
+    def process_items(self, items, refsonly=False):
         filtered_items = []
         for item in items:
             try:
-                what = item['object']['id']  
-            except:
+                what = item["object"]["id"]
+            except Exception:
                 continue
             # self.prefix is the name of the vocabulary
             if f"/{self.prefix}/" in what:
-                # https://data.getty.edu/vocab/aat/300404670
-                # --> http://vocab.getty.edu/aat/300404670
-                ident = what.rsplit('/', 1)[-1]
-                item['object']['id'] = f"{self.namespace}{ident}"                
+                ident = what.rsplit("/", 1)[-1]
+                item["object"]["id"] = f"{self.namespace}{ident}"
                 filtered_items.append(item)
+        skipped = len(items) - len(filtered_items)
+        if skipped:
+            self.progress(advance=skipped)
         if filtered_items:
-            for rec in ASHarvester.process_items(self, filtered_items, refsonly):
-                yield rec
-        else:
-            return []
-                                                     
+            yield from super().process_items(filtered_items, refsonly)
+
+
+class GettyHarvester(ASHarvester):
+    protocol_class = GettyProtocol
+
+
 class GettyHarvester2(ASHarvester):
 
     def __init__(self, config):

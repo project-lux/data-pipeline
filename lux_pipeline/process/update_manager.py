@@ -184,80 +184,13 @@ class UpdateManager(object):
             self.process_change(config, change, ident, record, changeTime)
 
     def harvest_from_list(self, config, mySlice=None, maxSlice=None):
-        harvester = config["harvester"]
-        harvester.fetcher.enabled = True
-        storage = config["datacache"]
-        if storage is None:
-            logger.error(f"No datacache for {config['name']}? Can't harvest")
-            return
-        fn = os.path.join(self.configs.temp_dir, f"all_{config['name']}_uris.txt")
-        if not os.path.exists(fn):
-            logger.warning(f"No uri/change list to harvest for {config['name']}. Run get_record_list()")
-            return
-
-        with open(fn, "r") as fh:
-            x = 0
-            l = True
-            while l:
-                l = fh.readline()
-                l = l.strip()
-                if maxSlice is not None and x % maxSlice - mySlice != 0:
-                    x += 1
-                    continue
-                x += 1
-                (ident, dt) = l.split("\t")
-                try:
-                    tm = storage.metadata(ident, "insert_time")["insert_time"]
-                except TypeError:
-                    # NoneType is not subscriptable
-                    tm = None
-                if tm is not None and tm.isoformat() > dt:
-                    # inserted after the change, no need to fetch
-                    continue
-                try:
-                    itjs = harvester.fetcher.fetch(ident)
-                    if itjs is None:
-                        logger.warning(f"Got None for {ident}")
-                        continue
-                except:
-                    continue
-                storage[ident] = itjs
+        # Phase 2 of a two-phase harvest; the driver (process.base.harvester)
+        # owns the logic since item 16
+        return config["harvester"].harvest_from_list(mySlice, maxSlice)
 
     def get_record_list(self, config, until="0001-01-01T00:00:00"):
-        # build the set of records that should be in the cache
-        # from the activity streams
-
-        harvester = config["harvester"]
-        harvester.last_harvest = until
-        logger.info(f"Gathering all from stream until {until}")
-        records = {}
-        deleted = {}
-        for change, ident, record, changeTime in harvester.crawl(refsonly=True):
-            if ident in deleted:
-                # already seen a delete, ignore
-                pass
-            elif ident in records:
-                if change == "delete":
-                    # This is a recreate?
-                    logger.warning(f"Saw record {ident} at {records[ident]} then got delete at {changeTime}")
-            elif change == "delete":
-                # haven't seen a ref, so most recent is delete
-                deleted[ident] = changeTime
-            else:
-                records[ident] = changeTime
-
-        # Write URIs to all_{name}_uris.txt and deleted_{name}_uris.txt in temp dir
-        recs = sorted(list(records.keys()))
-        with open(os.path.join(self.configs.temp_dir, f"all_{config['name']}_uris.txt"), "w") as fh:
-            for r in recs:
-                fh.write(f"{r}\t{records[r]}\n")
-
-        recs = sorted(list(deleted.keys()))
-        with open(os.path.join(self.configs.temp_dir, f"deleted_{config['name']}_uris.txt"), "w") as fh:
-            for r in recs:
-                fh.write(f"{r}\t{deleted[r]}\n")
-
-        return records, deleted
+        # Phase 1: list the records the feed says should exist
+        return config["harvester"].get_record_list(until=until)
 
     def harvest_pages(self, config, my_slice, max_slice):
         harvester = config["harvester"]
