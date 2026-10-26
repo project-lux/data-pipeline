@@ -70,14 +70,16 @@ def test_sub_store_records_land_where_the_main_directory_s_would(tmp_path, caplo
                 subs={"sources": {"lcnaf": LCNAF, "ycba": YCBA},
                       "maps": {"map_idmap": IDMAP},
                       "mls": {"ml_local": ML}})
-    with caplog.at_level("INFO", logger="lux_pipeline"):
+    with caplog.at_level("DEBUG", logger="lux_pipeline"):
         cfgs = Config(basepath=bp)
     assert cfgs.external["lcnaf"] is not None and cfgs.external["lcnaf"]["name"] == "lcnaf"
     assert cfgs.internal["ycba"]["namespace"] == YCBA["namespace"]
     assert cfgs.map_stores["idmap"]["storeClass"] == IDMAP["storeClass"]
     assert cfgs.marklogic_stores["ml_local"]["rest"] == ML["rest"]
     assert sorted(cfgs.subconfig_stores) == ["maps", "mls", "sources"]
+    # at DEBUG only: nothing is written to the console while a configuration loads
     assert "Read 2 configuration records from sub-config store sources" in caplog.text
+    assert all(r.levelname == "DEBUG" for r in caplog.records if "configuration records" in r.getMessage())
 
 
 def test_relative_base_dir_resolves_against_the_configuration_directory(tmp_path):
