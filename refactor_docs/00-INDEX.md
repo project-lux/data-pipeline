@@ -1,8 +1,10 @@
 # Index — work top to bottom
 
 Priority: **P0** foundations (everything else needs them) · **P1** the
-features the refactor exists for · **P2** completes the CLI and retires the
-old scripts · **P3** optional, do last or never.
+features the refactor exists for, including what the `pipeline-configs`
+repository needs to become the live configuration (35, 34, 29, 30) · **P2**
+completes the CLI and retires the old scripts · **P3** optional, do last or
+never.
 
 Size is the rough amount of new/changed code: S < 150 lines, M < 500, L more.
 
@@ -26,12 +28,17 @@ you finish an item.
 | 11 | [Mapper hooks (`make_export_filename`, `extract_index_data`)](11-mapper-hooks.md) | P1 | S | 01 | ☑ |
 | 12 | [Loader micro‑DSL (`process/base/loader.py`) + tests](12-loader-dsl.md) | P1 | L | 02, 04, 11 | ☑ |
 | 13 | [`LoadManager` and `lux load`](13-load-command.md) | P1 | S | 07, 12 | ☑ |
+| 35 | [Sub‑config stores](35-subconfig-stores.md) | P1 | S | 04 | ☐ |
 | 14 | [Downloader base class](14-downloader-base.md) | P1 | S | 02, 04 | ☑ |
 | 15 | [`DownloadManager` and `lux download`](15-download-command.md) | P1 | S | 07, 14 | ☐ |
 | 16 | [Harvester: protocol / driver split](16-harvester-protocols.md) | P1 | M | 02, 04 | ☑ |
 | 17 | [`HarvestManager` and `lux harvest`](17-harvest-command.md) | P1 | M | 07, 16 | ☐ |
 | 18 | [Index loader as a managed task](18-index-loader.md) | P1 | M | 02 | ☐ |
 | 19 | [`IndexLoadManager` and `lux load-index`](19-load-index-command.md) | P1 | S | 07, 18 | ☐ |
+| 34 | [Named `indexes` config block](34-named-indexes-config.md) | P1 | M | 18, 19 | ☐ |
+| 40 | [`lux guess-dump-type`](40-guess-dump-type-command.md) | P1 | M | 05, 12 | ☐ |
+| 29 | [Source loaders moved onto the DSL](29-source-loaders-dsl.md) | P1 | M | 12, 13 | ☐ |
+| 30 | [Source downloaders](30-source-downloaders.md) | P1 | S | 14, 15 | ☐ |
 | 20 | [Reconcile phase as a module](20-reconcile-phase-module.md) | P1 | M | 01 | ☐ |
 | 21 | [`ReconcileManager` and `lux reconcile`](21-reconcile-command.md) | P1 | M | 07, 20 | ☐ |
 | 22 | [`lux identify`, `lux new-token`, `lux write-refs`](22-identify-and-token-commands.md) | P1 | S | 05, 20 | ☐ |
@@ -41,15 +48,10 @@ you finish an item.
 | 26 | [`ExportManager` and `lux export`](26-export-command.md) | P1 | M | 07, 25 | ☐ |
 | 27 | [`lux interactive`](27-interactive-command.md) | P2 | S | 05 | ☐ |
 | 28 | [`lux initialize` and `lux testinstall`](28-initialize-testinstall-commands.md) | P2 | S | 05 | ☐ |
-| 29 | [Source loaders moved onto the DSL](29-source-loaders-dsl.md) | P2 | M | 12, 13 | ☐ |
-| 30 | [Source downloaders](30-source-downloaders.md) | P2 | S | 14, 15 | ☐ |
 | 31 | [Shell orchestration on the null engine](31-shell-scripts-null-engine.md) | P2 | M | 06, 13, 17, 21, 22, 24, 26 | ☐ |
 | 32 | [Docs: install, README, rebuild](32-docs-install.md) | P2 | S | 31 | ☐ |
 | 33 | [Retire the legacy scripts](33-legacy-scripts-retirement.md) | P2 | S | 31, 32 | ☐ |
 | 39 | [`lux backup` and `lux restore`](39-backup-restore-commands.md) | P2 | L | 02, 05, 08, 09 | ☐ |
-| 40 | [`lux guess-dump-type`](40-guess-dump-type-command.md) | P2 | M | 05, 12 | ☐ |
-| 34 | [Optional: named `indexes` config block](34-opt-named-indexes-config.md) | P3 | M | 18, 19 | ☐ |
-| 35 | [Optional: sub‑config stores](35-opt-subconfig-stores.md) | P3 | S | 04 | ☐ |
 | 36 | [Optional: `lux viz`](36-opt-viz-command.md) | P3 | S | 05 | ☐ |
 | 37 | [Optional: logging sweep over `lux_pipeline/sources`](37-opt-source-logging-sweep.md) | P3 | L | 01 | ☐ |
 | 38 | [Optional: `AbstractCache` interface doc class](38-opt-abstract-cache-interface.md) | P3 | S | — | ☐ |
@@ -71,11 +73,18 @@ you finish an item.
                                                       ├─► 24 merge     (needs 23 phase module)
                                                       └─► 26 export    (needs 25 phase module)
                                                                  │
-27 interactive, 28 initialize/testinstall (need 05)              ▼
-39 backup/restore (needs 05, 08, 09) ─► 33 retires backup_tables.sh
+35 sub-config stores (needs 04) ─┐
+34 named indexes (needs 18, 19) ──┴─► the pipeline-configs repo loads as the live configuration
 40 guess-dump-type (needs 05, 12) ─► 29 drafts the input_files blocks
 29 source loaders (needs 13), 30 source downloaders (needs 15) ─► 31 shell scripts ─► 32 docs ─► 33 retire scripts
+27 interactive, 28 initialize/testinstall (need 05)              ▲
+39 backup/restore (needs 05, 08, 09) ─► 33 retires backup_tables.sh
 ```
 
 Items at the same depth are independent of each other and can be done in
 parallel by different people, e.g. 08/09/10, or 12/14/16/18/20/23/25.
+
+Work order after 13: 35 (needs only 04), then 14–19, then 34, 40, 29 and 30,
+then the reconcile / merge / export items. 35 and 34 are what let the
+`pipeline-configs` repository (sub‑config stores, `indexes` blocks) load on
+`main`; 29 and 30 make its `input_files` and downloader records live.

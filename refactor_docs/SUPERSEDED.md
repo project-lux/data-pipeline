@@ -24,7 +24,7 @@ large "removed" number means `main` has that much more code.
 | `storage/idmap/redis.py` | +153/−590 | `main` grew `get_cluster`, memory‑cache controls, token handling, and then moved production to `storage/idmap/postgres.py` (see `docs/idmap-migration.md`). The live config uses the postgres store. |
 | `storage/idmap/memory.py`, `filesystem.py` | small | `main` versions match the newer interface. |
 | `storage/index/lmdb.py` (`LmdbIndex` over `lmdbm`) | new file | `main` deliberately dropped `lmdbm` for raw `lmdb` (`storage/idmap/lmdb.py`: one read txn per instance, cursor `__contains__`, `clear()` as `MDB_DROP`, chunked sorted `update()`). The refactor's wrapper re‑introduces per‑call transactions. Its `open("r"/"w")`/`close()` context‑manager API is not needed. |
-| `storage/cache/github.py` | new file | Marked "toy status" in its own header (1000‑files‑per‑dir limit, rate limiter). Only used by the optional sub‑config store (item 35), which can use `FsCache`. |
+| `storage/cache/github.py` | new file | Marked "toy status" in its own header (1000‑files‑per‑dir limit, rate limiter). Only used by the sub‑config store (item 35), which uses `FsCache` instead. |
 | `storage/cache/filesystem.py`, `redis.py`, `marklogic/rest.py` | `main` newer | keep `main`. |
 | `requirements.txt`: `lmdbm` instead of `lmdb` | | `main` needs `lmdb`. Item 05 adds `rich` and the `ray` extra; nothing else changes. |
 
@@ -41,7 +41,7 @@ large "removed" number means `main` has that much more code.
 | `process/update_manager.py` | +29/−113 | `main` has `_record_pending_delete` / `process_pending_deletes` and `harvest_pages`. Item 16 keeps them. |
 | `process/base/acquirer.py` | +33/−60 | `main` has `data=` row pass‑through, combined cache‑hit query, `timing.stage` instrumentation, traceback location in the mapper error. Take only the logging. |
 | `process/base/fetcher.py` | +9/−9 | the refactor *removed* the `use_networkmap` guard (writes to a possibly‑None map). Take only the logging. |
-| `process/base/reconciler.py` | +59/−102 | `main` has loud index‑open failures with retry, single‑lookup `get()`, deterministic multi‑match ordering, and skips a half with no index. The refactor's `config["indexes"]` lookup is item 34 (optional). Take only the logging. |
+| `process/base/reconciler.py` | +59/−102 | `main` has loud index‑open failures with retry, single‑lookup `get()`, deterministic multi‑match ordering, and skips a half with no index. The refactor's `config["indexes"]` lookup is item 34. Take only the logging. |
 | `process/base/mapper.py` | +35/−30 | `main` fixed the century regex (`group(2)` with diagnostics); the refactor has the older `group(1)`. Item 11 takes only the two hook methods and logging. |
 | `process/utils/date_utils.py` (renamed from `mapper_utils.py`) | +57/−143 | `main`'s `mapper_utils.py` has the dateparser language list (14 ms → 0.37 ms per call) and the stricter BC regex. Do not rename the module. |
 | `process/base/exporter.py` | new | Unused sketch (`Exporter`, `CacheExporter`); nothing calls it. |

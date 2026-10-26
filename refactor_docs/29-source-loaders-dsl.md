@@ -1,6 +1,6 @@
 # 29. Source loaders moved onto the DSL
 
-**Priority:** P2 · **Size:** M · **Depends on:** 12, 13 · **Helped by:** 40
+**Priority:** P1 · **Size:** M · **Depends on:** 12, 13 · **Helped by:** 40
 **Read from:** `rob_claude_refactor:lux_pipeline/sources/{bnf,ror,lc}/loader.py`, `rob_claude_refactor:lux_pipeline/sources/yale/{ycba,ypm,yuag,pmc,ipch}/loader.py`, `rob_refactor:lux_pipeline/sources/{bne,dnb}/loader.py`, `rob_refactor:lux_pipeline/sources/pleiades/*`; `main:pipeline/sources/libraries/dnb/loader.py`, `main:pipeline/sources/pleiades/mapper.py`
 
 ## Intent
