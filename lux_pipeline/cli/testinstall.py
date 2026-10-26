@@ -5,8 +5,9 @@
 
 Each check prints one line, OK or FAIL, and the command stops at the
 first failure with a non-zero exit status: .env found; LUX_BASEPATH set;
-the configuration directory exists; the Config builds; the idmap is
-reachable; the globals load; every source's components build and the
+the configuration directory exists; the Config builds; Postgres answers
+with the cache defaults' settings; Redis answers wherever a map record
+names it; the idmap is reachable; the globals load; every source's components build and the
 first datacache answers; every data directory exists and is writable;
 the validator's schema files are present; ``max_workers`` worker
 processes can be spawned and report back.
@@ -23,6 +24,7 @@ from lux_pipeline import runtime
 from lux_pipeline.process.tasks._task_manager import TaskManager
 from lux_pipeline.progress import read_status, status_path
 
+from . import _services
 from ._handler import BaseHandler
 
 logger = logging.getLogger("lux_pipeline")
@@ -105,6 +107,16 @@ class CommandHandler(BaseHandler):
         return (f"{len(cfgs.internal)} internal, {len(cfgs.external)} external, "
                 f"{len(cfgs.results)} results, {len(cfgs.map_stores)} maps, max_workers {cfgs.max_workers}")
 
+    def check_postgres(self):
+        settings = _services.postgres_settings(self.cfgs.defaults.get("cache") or {})
+        return _services.probe_postgres(settings)
+
+    def check_redis(self):
+        targets = _services.redis_targets(self.cfgs.map_stores.values(), self.cfgs.defaults.get("map") or {})
+        if not targets:
+            return "not used by this configuration"
+        return "; ".join(_services.probe_redis(host, port) for host, port in targets)
+
     def check_idmap(self):
         idmap = self.cfgs.get_idmap()
         n = len(idmap)
@@ -178,6 +190,8 @@ class CommandHandler(BaseHandler):
             ("LUX_BASEPATH", self.check_basepath),
             ("configuration directory", self.check_config_dir),
             ("configuration builds", self.check_config),
+            ("postgres reachable", self.check_postgres),
+            ("redis reachable", self.check_redis),
             ("idmap reachable", self.check_idmap),
             ("globals load", self.check_globals),
             ("source components build, caches reachable", self.check_components),
