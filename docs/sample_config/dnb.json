@@ -2,17 +2,40 @@
     "name": "dnb",
     "type": "external",
     "namespace": "https://d-nb.info/gnd/",
-    "matches": ["d-nb.info/gnd/", "hub.culturegraph.org/entityfacts/", 
-		"d-nb.info/standards/vocab/gnd/"],
+    "matches": [
+        "d-nb.info/gnd/",
+        "hub.culturegraph.org/entityfacts/",
+        "d-nb.info/standards/vocab/gnd/"
+    ],
     "fetch": "https://hub.culturegraph.org/entityfacts/{identifier}",
-    "wikidata_property": ["P227"],
+    "wikidata_property": [
+        "P227"
+    ],
     "merge_order": 31,
-    
     "fetcherClass": "sources.dnb.fetcher.DnbFetcher",
     "mapperClass": "sources.dnb.mapper.DnbMapper",
     "loaderClass": "sources.dnb.loader.DnbLoader",
-
     "dumpFilePath": "dnb/authorities-gnd_entityfacts.jsonld.gz",
-    "remoteDumpFile": "https://data.dnb.de/opendata/authorities_entityfacts.jsonld.gz",
-    "cycleBreakPath": "dnb_cycle_breaks.json"
+    "cycleBreakPath": "dnb_cycle_breaks.json",
+    "dumps_dir": "dnb",
+    "input_files": {
+        "records": [
+            {
+                "url": "https://data.dnb.de/opendata/authorities_entityfacts.jsonld.gz",
+                "path": "authorities-gnd_entityfacts.jsonld.gz",
+                "type": "arraylines.gz/json"
+            },
+            {
+                "url": "https://data.dnb.de/opendata/authorities-gnd-sachbegriff_lds.jsonld.gz",
+                "path": "authorities-gnd-sachbegriff_lds.jsonld.gz",
+                "type": "sachbegriff.gz/json"
+            }
+        ],
+        "mappings": [
+            {
+                "url": "https://data.dnb.de/opendata/mapping-authorities-gnd-lcsh-ram_lds.jsonld.gz",
+                "path": "mapping-authorities-gnd-lcsh-ram_lds.jsonld.gz"
+            }
+        ]
+    }
 }

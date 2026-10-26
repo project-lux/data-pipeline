@@ -1,105 +1,46 @@
+"""DNB (GND): two dumps loaded into one datacache, both listed as
+``input_files`` records entries:
 
-import os
-import ujson as json
-import gzip
-import time
+* entityfacts, ``arraylines.gz/json``: one record per line inside a JSON
+  array; the key is the GND id, the last segment of ``@id``;
+* the Sachbegriff (subject headings) ``_lds.jsonld.gz`` file, in its own
+  ``sachbegriff.gz/json`` container: a JSON array whose items are
+  records or lists of records. Each record whose ``@id`` is a GND id
+  (and not the ``.../about`` node) is stored as ``{"list": [record]}``
+  under that id, the shape the web fetcher returns for subjects, which
+  is what the hand-written loader did.
+
+List entityfacts first: with overwriting on, a GND id present in both
+files ends up with its subject form, as it did when the hand-written
+loader loaded subjects first and skipped ids already present.
+"""
+
 from lux_pipeline.process.base.loader import Loader
 
+GND = "/d-nb.info/gnd/"
+
+
 class DnbLoader(Loader):
+    extra_containers = ("sachbegriff",)
 
-    def __init__(self, config):
-        Loader.__init__(self, config)
-        d = config['all_configs'].data_dir
-        fn = config.get('externalLinksPath', 'authorities-sachbegriff_lds.jsonld')
-        if os.path.exists(fn):
-            self.subject_path = os.path.join(d, fn)
-        else:
-            self.subject_path = ""
+    def _init_dsl(self):
+        super()._init_dsl()
+        self.step_functions["sachbegriff"] = self.iterate_sachbegriff
 
-    def get_identifier_raw(self, line):
-        ididx = line.find('"@id":"https://d-nb.info/gnd/')
-        endidx =line[ididx+29:ididx+60].find('"')
-        what = line[ididx+29:ididx+29+endidx]
-        return what
-
-    def get_identifier_json(self, js):
-        # Should never actually get called, but for completeness...
-        uri = js['@id']
-        return uri.rsplit('/', 1)[1]
-
-    def process_sachbegriff(self, rec):
-        if '@id' in rec and '/d-nb.info/gnd/' in rec['@id'] and not rec['@id'].endswith('about'):
-            # store as a list because that's what we get from the web
-            ident = rec['@id'].rsplit('/', 1)[1]
-            self.out_cache[ident] = {'list': [rec]}
-
-    def load_sachbegriff(self):
-        if os.path.exists(self.subject_path):
-            with open(self.subject_path) as fh:
-            # has *weird* json format
-                data = fh.read()
-            js = json.loads(data)
-            del data
-        else:
-            js = []
-
-        for outer in js:
-            if type(outer) == list:
-                for inner in outer:
-                    if type(inner) == dict:
-                        self.process_sachbegriff(inner)
-                    else:
-                        print(f"Got {inner} in inner")
-            elif type(outer) == dict:
-                self.process_sachbegriff(outer)
-            else:
-                print(f"Got {outer} in outer")
-
-
-    def load(self):
-        # ensure we have the dump file
-        # self.fetch_dump()
-
-        # load the subject headings
-        self.load_sachbegriff()
-
-        # And now load the entityfacts
-
-        with gzip.open(self.in_path) as fh:
-            start = time.time()
-            x = 0 
-            done_x = 0
-            l = 1
-            while l:
-                l = fh.readline()
-                if not l:
-                    break
-                l = l.decode("utf-8")
-                if l[0] in ['[', ',']:
-                    l = l[1:]
-                elif l[-1] == ']':
-                    l = l[:-1]            
-                l = l.strip()
-
-                # Find id and check if already exists before processing JSON
-                what = self.get_identifier_raw(l)
-
-                if what in self.out_cache:
-                    done_x += 1
-                    if not done_x % 10000:
-                        print(f"Skipping past {done_x} {time.time() - start}")
+    def iterate_sachbegriff(self, path, comp, remaining):
+        """The subject headings file: an array of records or of lists of
+        records, each GND record wrapped as the web form ``{"list": [rec]}``."""
+        for member in self.iterate_array(path, comp, remaining):
+            items = member if isinstance(member, list) else [member]
+            for item in items:
+                if not isinstance(item, dict):
                     continue
-                x += 1
-                try:
-                    js = json.loads(l)
-                except:
-                    print(f"Failed to parse json from record {x}: {l}")
-                    raise
-                    continue
-                self.out_cache[what] = js
-                if not x % 10000:
-                    t = time.time() - start
-                    xps = x/t
-                    ttls = self.total / xps
-                    print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-        self.out_cache.commit()
+                ident = item.get("@id", "")
+                if GND in ident and not ident.endswith("about"):
+                    yield {"list": [item]}
+
+    def extract_identifier(self, data):
+        if isinstance(data, dict) and "list" in data:
+            data = data["list"][0]
+        uri = data.get("@id", "") if isinstance(data, dict) else ""
+        return uri.rsplit("/", 1)[-1] or None

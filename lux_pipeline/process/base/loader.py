@@ -112,6 +112,11 @@ class LmdbPointer(Pointer):
 
 
 class Loader(Sliced):
+    # a subclass may add container step names of its own: list them here
+    # and register their iterate_* functions in step_functions (see
+    # sources/dnb/loader.py for one)
+    extra_containers = ()
+
     def __init__(self, config):
         self.config = config
         self.in_url = config.get("remoteDumpFile", "")
@@ -183,7 +188,7 @@ class Loader(Sliced):
         last = bits.pop(-1)
         for b in bits:
             bb = b.split(".")
-            if bb[0] not in CONTAINERS:
+            if bb[0] not in CONTAINERS and bb[0] not in self.extra_containers:
                 raise ValueError(f"Cannot process container type {bb[0]!r} in {self.name} loader")
             if len(bb) == 2 and bb[1] not in COMPRESSIONS:
                 raise ValueError(f"Cannot process compression type {bb[1]!r} in {self.name} loader")
@@ -595,7 +600,7 @@ class Loader(Sliced):
         handler = self.step_functions.get(step[0])
         if handler is None:
             raise ValueError(f"Unknown step type {step} in {self.name}")
-        if step[0] in CONTAINERS:
+        if step[0] in CONTAINERS or step[0] in self.extra_containers:
             for child in handler(path, comp, steps[1:]):
                 if self.should_process_item(child):
                     self.process_step(steps[1:], child, step)
