@@ -5,6 +5,9 @@ import re
 import ujson as json
 
 from lux_pipeline.process.base.mapper import Mapper
+import logging
+
+logger = logging.getLogger("lux_pipeline")
 from lux_pipeline.process.utils.mapper_utils import make_datetime, validate_timespans
 
 multi_props = [
@@ -39,7 +42,11 @@ class YulMapper(Mapper):
     def __init__(self, config):
         Mapper.__init__(self, config)
         cfgs = config["all_configs"]
-        self.headings_index = cfgs.internal["ils"]["indexLoader"].load_index()
+        self.config = config
+        # the headings index is opened on first use (see headings_index): a
+        # Config is built by every command on every machine, and the ils
+        # record may name no index loader at all
+        self._headings_index = None
         data_dir = cfgs.data_dir
         fn = os.path.join(data_dir, "stupid_table.json")
         self.object_work_mismatch = {}
@@ -68,6 +75,7 @@ class YulMapper(Mapper):
         self.ycbaexhs = ycbaexhs
 
         fn = os.path.join(data_dir, "lib_okay_parts.json")
+        okay = {}       # without the file (a fresh machine) nothing is an okay part
         if os.path.exists(fn):
             with open(fn) as fh:
                 okay = json.load(fh)
@@ -141,6 +149,27 @@ class YulMapper(Mapper):
     #         else:
     #             new_block.append(a)
     #     return new_block
+
+    @property
+    def headings_index(self):
+        """The ils headings index, opened through the ils index loader on
+        first use; an empty mapping, with one warning, when the source
+        names no index loader or it has no headings path configured."""
+        if self._headings_index is None:
+            index = None
+            ldr = self.config["all_configs"].internal.get("ils", {}).get("indexLoader")
+            if ldr is not None:
+                index = ldr.load_index()
+            if index is None:
+                logger.warning("ils: no headings index (no indexLoaderClass or headingsPath configured); "
+                               "nothing will be skipped as a heading")
+                index = {}
+            self._headings_index = index
+        return self._headings_index
+
+    @headings_index.setter
+    def headings_index(self, value):
+        self._headings_index = value
 
     def transform(self, rec, rectype, reference=False):
         data = rec["data"]
