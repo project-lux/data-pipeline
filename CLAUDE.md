@@ -67,9 +67,8 @@ the files still parse as JSON and every `*Class` value resolves through
 `lux_pipeline.config.importObject` without a legacy warning, and say so in
 the PR description. Leave the local instance under
 `/Users/rs2668/Development/lux/instance` alone; Rob rebuilds it from the
-copies once the port is complete. Loading the copies as a full `Config` on
-this laptop needs `Validator.__init__` stubbed (their `base_dir` is on the
-build machine).
+copies once the port is complete. The copies load as a full `Config` on this
+laptop (the validator reads its schemas on first use, not at construction).
 
 ## Environment and testing
 
