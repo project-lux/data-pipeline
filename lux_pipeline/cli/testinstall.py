@@ -7,7 +7,8 @@ Each check prints one line, OK or FAIL, and the command stops at the
 first failure with a non-zero exit status: .env found; LUX_BASEPATH set;
 the configuration directory exists; the Config builds; Postgres answers
 with the cache defaults' settings; Redis answers wherever a map record
-names it; the idmap is reachable; the globals load; every source's components build and the
+still names it (a warning only: the pipeline no longer needs Redis);
+the idmap is reachable; the globals load; every source's components build and the
 first datacache answers; every data directory exists and is writable;
 the validator's schema files are present; ``max_workers`` worker
 processes can be spawned and report back.
@@ -56,13 +57,18 @@ class Check:
         self.failed = False
         self.detail = ""
 
-    def run(self, label, fn):
+    def run(self, label, fn, required=True):
+        """True to carry on: always after OK, and after a failure of a
+        check that is not `required` (printed as WARN)."""
         try:
             detail = fn()
         except Exception as e:
-            self.out.write(f"FAIL  {label}: {type(e).__name__}: {e}\n")
-            self.failed = True
-            return False
+            if required:
+                self.out.write(f"FAIL  {label}: {type(e).__name__}: {e}\n")
+                self.failed = True
+                return False
+            self.out.write(f"WARN  {label}: {type(e).__name__}: {e} (not required)\n")
+            return True
         self.out.write(f"OK    {label}" + (f": {detail}" if detail else "") + "\n")
         return True
 
@@ -191,7 +197,7 @@ class CommandHandler(BaseHandler):
             ("configuration directory", self.check_config_dir),
             ("configuration builds", self.check_config),
             ("postgres reachable", self.check_postgres),
-            ("redis reachable", self.check_redis),
+            ("redis reachable", self.check_redis, False),
             ("idmap reachable", self.check_idmap),
             ("globals load", self.check_globals),
             ("source components build, caches reachable", self.check_components),
@@ -201,8 +207,8 @@ class CommandHandler(BaseHandler):
         if not getattr(args, "skip_workers", False):
             steps.append(("worker processes spawn",
                           lambda: self.check_workers(args.workers or self.cfgs.max_workers)))
-        for label, fn in steps:
-            if not check.run(label, fn):
+        for label, fn, *rest in steps:
+            if not check.run(label, fn, *rest):
                 print(f"Stopped at the first failure. Fix it and run lux testinstall again.")
                 sys.exit(1)
         print("All checks passed.")

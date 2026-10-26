@@ -1,5 +1,6 @@
-"""Probes for the two servers an installation needs, Postgres and Redis,
-using the same settings the stores use: the cache defaults record for
+"""Probes for Postgres, which an installation needs, and Redis, which the
+pipeline no longer needs but some map records still name, using the
+same settings the stores use: the cache defaults record for
 Postgres (``host`` empty means the local socket; ``user`` / ``dbname``
 empty mean the operating-system user, as libpq does) and each map
 record merged with the map defaults for Redis. `lux initialize` reports

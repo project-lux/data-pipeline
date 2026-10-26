@@ -58,8 +58,9 @@ def test_samples_layout_config_and_dotenv(tmp_path, capsys):
     assert (root / base["log_dir"] / "flags").is_dir()
     assert (root / ".env").read_text() == f"LUX_BASEPATH={root}\n"
     out = capsys.readouterr().out
-    assert f"Installed at {root}" in out and "lux testinstall" in out
-    assert "schemas: 11 fetched" in out
+    assert f"Installation at {root}" in out and "lux testinstall" in out
+    assert "schemas: 0 present, 11 fetched" in out
+    assert ".env: written" in out and "directories: 7 created, 0 existing" in out
     user = os.getenv("USER")
     assert f"postgres: OK: PostgreSQL 16 at local socket, database {user}, user {user}" in out
     assert "redis: OK: redis 7 at localhost:6379" in out
@@ -91,7 +92,7 @@ def test_no_schemas_and_fetch_failures(tmp_path, monkeypatch, capsys):
     root = tmp_path / "b"
     init([str(root)])
     out = capsys.readouterr().out
-    assert "schemas: 10 fetched" in out and "FAILED: person.json" in out
+    assert "0 present, 10 fetched" in out and "FAILED: person.json" in out
     assert not (root / "data" / "files" / "schema" / "person.json").exists()
 
 
@@ -102,8 +103,8 @@ def test_unreachable_services_are_reported_not_fatal(tmp_path, monkeypatch, caps
     assert init([str(root)]) == root
     out = capsys.readouterr().out
     assert "postgres: NOT REACHABLE: local socket" in out and "OSError: connection refused" in out
-    assert "redis: NOT REACHABLE: localhost:6379: ConnectionError: no route" in out
-    assert "start or configure postgres and redis" in out
+    assert "redis: not reachable: localhost:6379: ConnectionError: no route (not required" in out
+    assert "start or configure postgres (" in out and "redis" not in out.split("Next:")[1]
 
 
 class RecordingIdmap(dict):
@@ -131,22 +132,41 @@ def test_create_db_configures_the_database_and_an_empty_idmap(tmp_path, monkeypa
     token = (root / "data" / "files" / "idmap_update_token.txt").read_text().strip()
     assert len(token) == 12 and token.startswith("__") and token.endswith("__") and token[2:10].isdigit()
     assert "idmap tables: created in 'lux' (RecordingIdmap, 0 entries)" in out
-    assert "update token:" in out and "idmap: map_idmap.json -> storage.idmap.postgres.IdMap" in out
+    assert "update token:" in out
+    assert "idmap: map_idmap.json" not in out          # the sample already names the Postgres store
 
 
 def test_prompt_is_asked_at_a_tty_and_a_no_skips(tmp_path, monkeypatch, capsys, db_setup):
     monkeypatch.setattr(initialize.sys.stdin, "isatty", lambda: True, raising=False)
     asked = []
-    monkeypatch.setattr("builtins.input", lambda q: asked.append(q) or "n")
+    answers = iter(["", "n"])
+    monkeypatch.setattr("builtins.input", lambda q: asked.append(q) or next(answers))
     root = tmp_path / "a"
     init([str(root)])
-    assert asked == ["Create a Postgres database 'lux' for the pipeline and set up an empty idmap in it? [y/N] "]
-    assert db_setup == [] and json.load(open(root / "config_cache" / "map_idmap.json"))["storeClass"].endswith("redis.IdMap")
+    assert asked == ["Name of the Postgres database for the pipeline [lux]: ",
+                     "Create a Postgres database 'lux' for the pipeline and set up an empty idmap in it? [y/N] "]
+    assert db_setup == [] and json.load(open(root / "config_cache" / "caches.json"))["dbname"] != "lux"
     assert "database: skipped" in capsys.readouterr().out
-    monkeypatch.setattr("builtins.input", lambda q: "yes")
-    init([str(tmp_path / "b"), "--dbname", "luxtest"])
-    assert db_setup == [(os.getenv("USER"), "luxtest")]
-    assert json.load(open(tmp_path / "b" / "config_cache" / "caches.json"))["dbname"] == "luxtest"
+    # a name typed at the prompt, then yes
+    asked.clear()
+    answers = iter(["mydb", "yes"])
+    init([str(tmp_path / "b")])
+    assert asked[0].endswith("[lux]: ") and "database 'mydb'" in asked[1]
+    assert db_setup == [(os.getenv("USER"), "mydb")]
+    assert json.load(open(tmp_path / "b" / "config_cache" / "caches.json"))["dbname"] == "mydb"
+    # --dbname given up front: no name prompt
+    asked.clear()
+    answers = iter(["yes"])
+    init([str(tmp_path / "c"), "--dbname", "luxtest"])
+    assert len(asked) == 1 and "database 'luxtest'" in asked[0]
+    assert db_setup[-1] == (os.getenv("USER"), "luxtest")
+    # a rerun on an installation whose database is configured defaults to that name
+    monkeypatch.setattr(_services, "postgres_database_status", lambda s, name, timeout=5: (True, True))
+    asked.clear()
+    answers = iter(["", "yes"])
+    init([str(tmp_path / "b")])
+    assert asked == ["Name of the Postgres database for the pipeline [mydb]: "]
+    assert "database: 'mydb' already configured" in capsys.readouterr().out
 
 
 def test_existing_database_is_adopted_and_no_create_db_never_asks(tmp_path, monkeypatch, capsys, db_setup):
@@ -204,15 +224,102 @@ def test_services_module_settings():
     assert _services.redis_targets([{"storeClass": "storage.idmap.postgres.IdMap"}]) == []
 
 
-def test_refuses_an_existing_installation(tmp_path):
+def test_rerun_keeps_everything_and_reports_it(tmp_path, capsys):
     root = tmp_path / "inst"
     init([str(root)])
-    with pytest.raises(ValueError, match="refusing to overwrite"):
-        init([str(root)])
+    cc = root / "config_cache"
+    # the user edited a record and a stray sample vanished; a directory was removed; .env too
+    caches = json.load(open(cc / "caches.json"))
+    caches["dbname"] = "mine"
+    json.dump(caches, open(cc / "caches.json", "w"))
+    (cc / "ror.json").unlink()
+    (root / "data" / "input").rmdir()
+    (root / ".env").unlink()
+    capsys.readouterr()
+    init([str(root)])
+    out = capsys.readouterr().out
+    assert "configuration:" in out and "exists; added the missing samples ror.json" in out
+    assert json.load(open(cc / "caches.json"))["dbname"] == "mine"           # the edit survives
+    assert (cc / "ror.json").exists() and (root / "data" / "input").is_dir()
+    assert "directories: 1 created, 6 existing (data/input)" in out
+    assert ".env: written" in out and (root / ".env").read_text() == f"LUX_BASEPATH={root}\n"
+    assert "schemas: 11 present, 0 fetched" in out
+    capsys.readouterr()
+    init([str(root)])
+    out = capsys.readouterr().out
+    assert "exists, kept" in out and ".env: kept" in out and "directories: 0 created, 7 existing" in out
+    assert "base_dir:" not in out and "placeholders" not in out
+
+
+def test_rerun_after_services_were_down_completes_the_database(tmp_path, monkeypatch, capsys, db_setup):
+    """The case Rob raised: Postgres was not up the first time."""
+    monkeypatch.setattr(_services, "probe_postgres", lambda s, timeout=5: (_ for _ in ()).throw(OSError("connection refused")))
+    root = tmp_path / "inst"
+    init([str(root), "--create-db"])
+    out = capsys.readouterr().out
+    assert "postgres: NOT REACHABLE" in out and "run lux initialize" in out and "carries on from here" in out
+    assert db_setup == [] and json.load(open(root / "config_cache" / "caches.json"))["dbname"] != "lux"
+    # Postgres is up now
+    monkeypatch.setattr(_services, "probe_postgres", lambda s, timeout=5: "PostgreSQL 16")
+    init([str(root), "--create-db"])
+    out = capsys.readouterr().out
+    assert "configuration:" in out and "exists, kept" in out
+    assert db_setup == [(os.getenv("USER"), "lux")] and "database: created 'lux'" in out
+    assert json.load(open(root / "config_cache" / "caches.json"))["dbname"] == "lux"
+    assert json.load(open(root / "config_cache" / "map_idmap.json"))["storeClass"] == "storage.idmap.postgres.IdMap"
+    # and a third run only verifies
+    monkeypatch.setattr(_services, "postgres_database_status", lambda s, name, timeout=5: (True, True))
+    init([str(root), "--create-db"])
+    out = capsys.readouterr().out
+    assert "database: 'lux' already configured" in out and "idmap tables: verified in 'lux'" in out
+    assert "cache defaults:" not in out and "idmap: map_idmap.json" not in out
+    assert db_setup == [(os.getenv("USER"), "lux")]
+
+
+def test_already_configured_database_asks_nothing(tmp_path, monkeypatch, capsys, db_setup):
+    root = tmp_path / "inst"
+    init([str(root), "--create-db"])
+    monkeypatch.setattr(_services, "postgres_database_status", lambda s, name, timeout=5: (True, True))
+    monkeypatch.setattr(initialize.sys.stdin, "isatty", lambda: True, raising=False)
+
+    def only_the_name(q):
+        assert q.startswith("Name of the Postgres database"), f"asked: {q}"
+        return ""                                   # the default: the configured database
+    monkeypatch.setattr("builtins.input", only_the_name)
+    capsys.readouterr()
+    init([str(root)])
+    assert "database: 'lux' already configured" in capsys.readouterr().out
+
+
+def test_partial_layout_is_completed(tmp_path, capsys):
+    """config_cache was created by hand (or a crashed run): no .env, no dirs."""
+    root = tmp_path / "inst"
+    cc = root / "config_cache"
+    cc.mkdir(parents=True)
+    for fn in initialize.SAMPLES.glob("*.json"):
+        (cc / fn.name).write_text(fn.read_text())
+    init([str(root)])
+    out = capsys.readouterr().out
+    assert "exists, kept" in out and f"base_dir: set to {root}" in out
+    assert "directories: 7 created" in out and ".env: written" in out
+    assert json.load(open(cc / "base.json"))["base_dir"] == str(root)
+
+
+def test_dotenv_pointing_at_another_valid_install_is_kept_a_stale_one_rewritten(tmp_path, capsys):
     other = tmp_path / "other"
-    (other / "config_cache").mkdir(parents=True)
-    with pytest.raises(ValueError, match="config_cache already exists"):
-        init([str(other)])
+    init([str(other)])
+    root = tmp_path / "inst"
+    root.mkdir()
+    (root / ".env").write_text(f"LUX_BASEPATH={other}\n")
+    capsys.readouterr()
+    init([str(root)])
+    out = capsys.readouterr().out
+    assert f".env: kept; it points at {other}, not {root}" in out
+    assert (root / ".env").read_text() == f"LUX_BASEPATH={other}\n"
+    (root / ".env").write_text("LUX_BASEPATH=/nowhere\n")
+    init([str(root)])
+    assert ".env: rewritten (was LUX_BASEPATH=/nowhere" in capsys.readouterr().out
+    assert (root / ".env").read_text() == f"LUX_BASEPATH={root}\n"
 
 
 def test_default_directory_is_the_current_one(tmp_path, monkeypatch):
@@ -256,6 +363,13 @@ def test_configs_checkout_is_copied_and_wired(tmp_path):
     # and it loads, sub-store included (item 35)
     cfgs = Config(basepath=str(bp))
     assert "aat" in cfgs.external and cfgs.base_dir == str(root)
+    # a rerun, with the flag or without, finds the installed checkout and keeps an edit in it
+    rec = json.load(open(bp / "config_cache" / "system.json"))
+    rec["max_workers"] = 3
+    json.dump(rec, open(bp / "config_cache" / "system.json", "w"))
+    assert init([str(root), "--configs", str(src)]) == bp
+    assert init([str(root)]) == bp
+    assert json.load(open(bp / "config_cache" / "system.json"))["max_workers"] == 3
 
 
 def test_configs_accepts_the_configs_dir_itself_and_rejects_other_dirs(tmp_path):
@@ -264,6 +378,12 @@ def test_configs_accepts_the_configs_dir_itself_and_rejects_other_dirs(tmp_path)
     assert (bp / "config_cache" / "system.json").exists()
     with pytest.raises(ValueError, match="not a pipeline-configs checkout"):
         init([str(tmp_path / "b"), "--configs", str(tmp_path)])
+    # a checkout already at <root>/pipeline-configs is used in place
+    root = tmp_path / "c"
+    fake_checkout(root / "pipeline-configs")
+    bp = init([str(root), "--configs", str(root / "pipeline-configs")])
+    assert bp == root / "pipeline-configs" / "configs" / "system"
+    assert json.load(open(bp / "config_cache" / "sources.json"))["base_dir"] == "../subs"
 
 
 def test_clone_runs_git_and_wires_the_result(tmp_path, monkeypatch):
@@ -280,6 +400,9 @@ def test_clone_runs_git_and_wires_the_result(tmp_path, monkeypatch):
     assert calls == [["git", "clone", initialize.PIPELINE_CONFIGS_URL, str(root / "pipeline-configs")]]
     assert bp == root / "pipeline-configs" / "configs" / "system"
     assert json.load(open(bp / "config_cache" / "sources.json"))["base_dir"] == "../subs"
+    # a rerun does not clone again
+    assert init([str(root), "--clone"]) == bp
+    assert len(calls) == 1
 
 
 def test_clone_failure_is_reported(tmp_path, monkeypatch):
@@ -346,6 +469,20 @@ def test_testinstall_reports_postgres_as_the_first_failure_without_one(tmp_path,
     assert "max_workers" in lines[3]
 
 
+def test_testinstall_redis_down_is_a_warning_not_a_failure(tmp_path, monkeypatch, capsys):
+    root = tmp_path / "inst"
+    init([str(root)])
+    capsys.readouterr()
+    monkeypatch.delenv("LUX_BASEPATH", raising=False)
+    monkeypatch.setattr(_services, "probe_redis", lambda h, p, timeout=5: (_ for _ in ()).throw(ConnectionError("no redis")))
+    monkeypatch.setattr(Config, "get_idmap", lambda self: (_ for _ in ()).throw(ConnectionError("no idmap")))
+    with pytest.raises(SystemExit):
+        run_testinstall(cwd=root, monkeypatch=monkeypatch)
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[5] == "WARN  redis reachable: ConnectionError: no redis (not required)"
+    assert lines[6].startswith("FAIL  idmap reachable")           # it carried on past redis
+
+
 def test_testinstall_reports_an_unreachable_idmap_after_the_servers(tmp_path, monkeypatch, capsys):
     root = tmp_path / "inst"
     init([str(root)])
@@ -406,7 +543,7 @@ def test_testinstall_skip_workers(tmp_path, monkeypatch, capsys):
 def test_both_commands_are_listed_and_need_no_config():
     from lux_pipeline.cli.help import list_commands
     names = dict(list_commands())
-    assert names["initialize"].startswith("Create a new installation")
+    assert names["initialize"].startswith("Create or complete an installation")
     assert names["testinstall"].startswith("Check an installation step by step")
     assert initialize.CommandHandler.needs_configs is False
     assert testinstall.CommandHandler.needs_configs is False
