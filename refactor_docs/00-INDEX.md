@@ -47,6 +47,7 @@ you finish an item.
 | 32 | [Docs: install, README, rebuild](32-docs-install.md) | P2 | S | 31 | ☐ |
 | 33 | [Retire the legacy scripts](33-legacy-scripts-retirement.md) | P2 | S | 31, 32 | ☐ |
 | 39 | [`lux backup` and `lux restore`](39-backup-restore-commands.md) | P2 | L | 02, 05, 08, 09 | ☐ |
+| 40 | [`lux guess-dump-type`](40-guess-dump-type-command.md) | P2 | M | 05, 12 | ☐ |
 | 34 | [Optional: named `indexes` config block](34-opt-named-indexes-config.md) | P3 | M | 18, 19 | ☐ |
 | 35 | [Optional: sub‑config stores](35-opt-subconfig-stores.md) | P3 | S | 04 | ☐ |
 | 36 | [Optional: `lux viz`](36-opt-viz-command.md) | P3 | S | 05 | ☐ |
@@ -72,6 +73,7 @@ you finish an item.
                                                                  │
 27 interactive, 28 initialize/testinstall (need 05)              ▼
 39 backup/restore (needs 05, 08, 09) ─► 33 retires backup_tables.sh
+40 guess-dump-type (needs 05, 12) ─► 29 drafts the input_files blocks
 29 source loaders (needs 13), 30 source downloaders (needs 15) ─► 31 shell scripts ─► 32 docs ─► 33 retire scripts
 ```
 
