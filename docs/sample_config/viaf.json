@@ -15,6 +15,11 @@
 
     "inverseEquivDbPath": "id_to_viaf.sqlite",        
 	"reconcileDumpPath": "viaf/viaf-links.txt.gz",
-    "dumpFilePath": "viaf/viaf-clusters.xml.gz"
+    "dumpFilePath": "viaf/viaf-clusters.xml.gz",
 
+    "downloaderClass": "sources.oclc.downloader.ViafDownloader",
+    "downloadMdUrl": "https://viaf.org/api/download/files",
+    "downloadXPath": "queryResult/Monthly/clusterRdfXml",
+    "downloadUrlBase": "https://downloads.viaf.org/viaf/data/monthly/",
+    "dumps_dir": "viaf"
 }

@@ -1,0 +1,26 @@
+{
+    "name": "pleiades",
+    "type": "external",
+    "namespace": "https://pleiades.stoa.org/places/",
+    "matches": [
+        "pleiades.stoa.org"
+    ],
+    "fetch": "https://pleiades.stoa.org/places/{identifier}/json",
+    "wikidata_property": [
+        "P1584"
+    ],
+    "merge_order": 100,
+    "mapperClass": "sources.pleiades.mapper.PleiadesMapper",
+    "downloaderClass": "sources.pleiades.downloader.PleiadesDownloader",
+    "dumps_dir": "pleiades",
+    "input_files": {
+        "records": [
+            {
+                "url": "https://atlantides.org/downloads/pleiades/rdf/place-types.ttl"
+            },
+            {
+                "url": "https://atlantides.org/downloads/pleiades/json/pleiades-places-latest.json.gz"
+            }
+        ]
+    }
+}
