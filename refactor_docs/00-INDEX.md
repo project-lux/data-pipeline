@@ -38,7 +38,7 @@ you finish an item.
 | 34 | [Named `indexes` config block](34-named-indexes-config.md) | P1 | M | 18, 19 | ☑ |
 | 40 | [`lux guess-dump-type`](40-guess-dump-type-command.md) | P1 | M | 05, 12 | ☐ |
 | 29 | [Source loaders moved onto the DSL](29-source-loaders-dsl.md) | P1 | M | 12, 13 | ☐ |
-| 30 | [Source downloaders](30-source-downloaders.md) | P1 | S | 14, 15 | ☐ |
+| 30 | [Source downloaders](30-source-downloaders.md) | P1 | S | 14, 15 | ☑ |
 | 20 | [Reconcile phase as a module](20-reconcile-phase-module.md) | P1 | M | 01 | ☐ |
 | 21 | [`ReconcileManager` and `lux reconcile`](21-reconcile-command.md) | P1 | M | 07, 20 | ☐ |
 | 22 | [`lux identify`, `lux new-token`, `lux write-refs`](22-identify-and-token-commands.md) | P1 | S | 05, 20 | ☐ |
