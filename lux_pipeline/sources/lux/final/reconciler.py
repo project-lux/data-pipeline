@@ -5,7 +5,9 @@ class GlobalReconciler(LmdbReconciler):
 
     def __init__(self, config):
         super().__init__(config)
-        if self.id_index is None:
+        # the index opens on first use (LazyIndexes); only the configuration
+        # is checked here so a fresh instance can be built before the index is
+        if not config.get("inverseEquivDbPath"):
             print(f"Could not find global equivalents index?")
 
         self.diff_index = None
