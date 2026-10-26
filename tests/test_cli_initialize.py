@@ -138,16 +138,34 @@ def test_create_db_configures_the_database_and_an_empty_idmap(tmp_path, monkeypa
 def test_prompt_is_asked_at_a_tty_and_a_no_skips(tmp_path, monkeypatch, capsys, db_setup):
     monkeypatch.setattr(initialize.sys.stdin, "isatty", lambda: True, raising=False)
     asked = []
-    monkeypatch.setattr("builtins.input", lambda q: asked.append(q) or "n")
+    answers = iter(["", "n"])
+    monkeypatch.setattr("builtins.input", lambda q: asked.append(q) or next(answers))
     root = tmp_path / "a"
     init([str(root)])
-    assert asked == ["Create a Postgres database 'lux' for the pipeline and set up an empty idmap in it? [y/N] "]
+    assert asked == ["Name of the Postgres database for the pipeline [lux]: ",
+                     "Create a Postgres database 'lux' for the pipeline and set up an empty idmap in it? [y/N] "]
     assert db_setup == [] and json.load(open(root / "config_cache" / "map_idmap.json"))["storeClass"].endswith("redis.IdMap")
     assert "database: skipped" in capsys.readouterr().out
-    monkeypatch.setattr("builtins.input", lambda q: "yes")
-    init([str(tmp_path / "b"), "--dbname", "luxtest"])
-    assert db_setup == [(os.getenv("USER"), "luxtest")]
-    assert json.load(open(tmp_path / "b" / "config_cache" / "caches.json"))["dbname"] == "luxtest"
+    # a name typed at the prompt, then yes
+    asked.clear()
+    answers = iter(["mydb", "yes"])
+    init([str(tmp_path / "b")])
+    assert asked[0].endswith("[lux]: ") and "database 'mydb'" in asked[1]
+    assert db_setup == [(os.getenv("USER"), "mydb")]
+    assert json.load(open(tmp_path / "b" / "config_cache" / "caches.json"))["dbname"] == "mydb"
+    # --dbname given up front: no name prompt
+    asked.clear()
+    answers = iter(["yes"])
+    init([str(tmp_path / "c"), "--dbname", "luxtest"])
+    assert len(asked) == 1 and "database 'luxtest'" in asked[0]
+    assert db_setup[-1] == (os.getenv("USER"), "luxtest")
+    # a rerun on an installation whose database is configured defaults to that name
+    monkeypatch.setattr(_services, "postgres_database_status", lambda s, name, timeout=5: (True, True))
+    asked.clear()
+    answers = iter(["", "yes"])
+    init([str(tmp_path / "b")])
+    assert asked == ["Name of the Postgres database for the pipeline [mydb]: "]
+    assert "database: 'mydb' already configured" in capsys.readouterr().out
 
 
 def test_existing_database_is_adopted_and_no_create_db_never_asks(tmp_path, monkeypatch, capsys, db_setup):
@@ -262,7 +280,11 @@ def test_already_configured_database_asks_nothing(tmp_path, monkeypatch, capsys,
     init([str(root), "--create-db"])
     monkeypatch.setattr(_services, "postgres_database_status", lambda s, name, timeout=5: (True, True))
     monkeypatch.setattr(initialize.sys.stdin, "isatty", lambda: True, raising=False)
-    monkeypatch.setattr("builtins.input", lambda q: (_ for _ in ()).throw(AssertionError("asked")))
+
+    def only_the_name(q):
+        assert q.startswith("Name of the Postgres database"), f"asked: {q}"
+        return ""                                   # the default: the configured database
+    monkeypatch.setattr("builtins.input", only_the_name)
     capsys.readouterr()
     init([str(root)])
     assert "database: 'lux' already configured" in capsys.readouterr().out

@@ -29,8 +29,9 @@ files are fetched.
 
 Postgres and Redis are then probed with the installed settings and
 reported. When Postgres answers and the role may create databases, you
-are asked whether to create the ``lux`` database (``--dbname`` to choose
-another; ``--create-db`` answers yes without asking, for a script;
+are asked for the name of the database (default ``lux``, or the one
+already configured) and whether to create it (``--dbname`` to give the
+name up front; ``--create-db`` answers yes without asking, for a script;
 ``--no-create-db`` never asks): the cache defaults are pointed at it, the
 idmap record is switched to the Postgres store, a dated
 ``idmap_update_token.txt`` is written, and the idmap's empty tables are
@@ -153,6 +154,15 @@ def probe_services(cfgs):
     return out
 
 
+def ask_name(question, default):
+    """A name from the keyboard, `default` when empty or when no person
+    is there."""
+    if not sys.stdin.isatty():
+        return default
+    answer = input(f"{question} [{default}]: ").strip()
+    return answer or default
+
+
 def ask(question, assume=None):
     """``assume`` True/False decides without asking; otherwise ask when a
     person is at the keyboard, and answer no when not."""
@@ -163,12 +173,16 @@ def ask(question, assume=None):
     return input(f"{question} [y/N] ").strip().lower() in ("y", "yes")
 
 
-def setup_database(basepath, cfgs, name, assume=None, out=print):
+DEFAULT_DBNAME = "lux"
+
+
+def setup_database(basepath, cfgs, name=None, assume=None, out=print):
     """Create (or adopt) Postgres database `name` for this installation and
     configure an empty idmap in it, asking first; every part is skipped
-    when already done, so a rerun only completes and verifies."""
+    when already done, so a rerun only completes and verifies. With no
+    `name`, a person at the keyboard is asked for one (default ``lux``,
+    or the database already configured); a script gets ``lux``."""
     pg = _services.postgres_settings(cfgs.defaults.get("cache") or {})
-    exists, can_create = _services.postgres_database_status(pg, name)
 
     cache_fn, cache_rec = record_file(cfgs, lambda r: r.get("type") == "caches" or
                                       (r.get("type") == "default" and r.get("name") == "cache"))
@@ -179,6 +193,12 @@ def setup_database(basepath, cfgs, name, assume=None, out=print):
         raise ValueError("no cache defaults record (caches.json or default_cache.json) to point at the database")
     if map_fn is None:
         raise ValueError(f"no map record named {idmap_name!r} to configure")
+
+    if not name:
+        configured = cache_rec.get("dbname") if map_rec.get("storeClass") == POSTGRES_IDMAP else None
+        default = configured or DEFAULT_DBNAME
+        name = default if assume is not None else ask_name("Name of the Postgres database for the pipeline", default)
+    exists, can_create = _services.postgres_database_status(pg, name)
 
     todo = []
     if not exists:
@@ -259,8 +279,9 @@ class CommandHandler(BaseHandler):
     def add_args(self, ap):
         ap.add_argument("--no-schemas", action="store_true",
                         help="Do not fetch the Linked Art JSON schemas the validator reads")
-        ap.add_argument("--dbname", default="lux",
-                        help="The Postgres database to create or adopt for the pipeline (default lux)")
+        ap.add_argument("--dbname",
+                        help="The Postgres database to create or adopt for the pipeline "
+                             "(default: asked, lux; a script gets lux)")
         ap.add_argument("--create-db", action="store_true",
                         help="Create the database and the idmap without asking (for scripts)")
         ap.add_argument("--no-create-db", action="store_true",
