@@ -14,8 +14,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lux_pipeline.process.tasks._task_manager import (
-    MpEngine, NullEngine, TaskManager, WorkerFailed, attach_worker_log_handler,
-    make_engine, _run_worker,
+    LogStream, MpEngine, NullEngine, TaskManager, WorkerFailed,
+    attach_worker_log_handler, make_engine, _run_worker,
 )
 from lux_pipeline.progress import log_path, null_progress, read_status, status_path
 
@@ -44,6 +44,20 @@ class CountingManager(TaskManager):
         logger.debug("not at INFO")
         if self.out_dir:
             Path(self.out_dir, str(n)).write_text(str(n))
+        return n
+
+
+class PrintingManager(TaskManager):
+    """A worker that still print()s, like the legacy loaders and
+    PhaseTimer do; module-level so spawned workers can unpickle it."""
+
+    needs_configs = False
+
+    def _distributed(self, n, cfgs, progress):
+        print(f"10000 in 1.8s from worker {n}")
+        print("partial ", end="", file=sys.stderr)
+        print("line", file=sys.stderr)
+        print("no newline at the end", end="")
         return n
 
 
@@ -160,6 +174,62 @@ def test_run_worker_without_a_prefix_keeps_the_handlers(tmp_path):
     assert "counted to ten in worker 0" in stream.getvalue()
 
 
+def test_run_worker_captures_prints_into_the_log_when_asked(tmp_path, capsys):
+    prefix = str(tmp_path / "print-1")
+    before = (sys.stdout, sys.stderr)
+    assert _run_worker(PrintingManager(None, max_workers=1), 0, prefix, "INFO", True) == 0
+    assert (sys.stdout, sys.stderr) == before
+    log = Path(log_path(prefix, 0)).read_text()
+    assert "INFO     10000 in 1.8s from worker 0" in log
+    assert "WARNING  partial line" in log
+    # what was still buffered at the end is flushed, not lost
+    assert "INFO     no newline at the end" in log
+    assert capsys.readouterr() == ("", "")
+
+
+def test_run_worker_leaves_stdout_alone_by_default(tmp_path, capsys):
+    prefix = str(tmp_path / "print-2")
+    _run_worker(PrintingManager(None, max_workers=1), 0, prefix, "INFO")
+    out, err = capsys.readouterr()
+    assert "10000 in 1.8s from worker 0" in out and "partial line" in err
+    # nothing was logged either, so the (delayed) log file was never opened
+    assert not Path(log_path(prefix, 0)).exists()
+
+
+def test_run_worker_capture_needs_a_prefix(capsys):
+    _run_worker(PrintingManager(None, max_workers=1), 0, None, "INFO", True)
+    assert "10000 in 1.8s from worker 0" in capsys.readouterr().out
+
+
+def test_log_stream_lines_levels_and_blank_lines():
+    stream = io.StringIO()
+    h = logging.StreamHandler(stream)
+    h.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
+    logger.handlers[:] = [h]
+    logger.setLevel(logging.INFO)
+    ls = LogStream(logging.WARNING)
+    assert ls.writable() and not ls.isatty()
+    ls.write("one\n\n  two  \nthr")
+    ls.write("ee\n")
+    ls.flush()
+    ls.flush()   # nothing buffered: nothing emitted
+    assert stream.getvalue() == "WARNING one\nWARNING   two\nWARNING three\n"
+
+
+def test_log_stream_does_not_recurse_when_a_handler_fails(monkeypatch):
+    class FullDisk(io.StringIO):
+        def write(self, s):
+            raise OSError("disk full")
+    # StreamHandler.emit catches the error and reports it through handleError
+    logger.handlers[:] = [logging.StreamHandler(FullDisk())]
+    logger.setLevel(logging.INFO)
+    monkeypatch.setattr(logging, "raiseExceptions", True)
+    ls = LogStream()
+    monkeypatch.setattr(sys, "stderr", ls)   # where Handler.handleError reports
+    ls.write("hello\n")                      # would recurse without the guard
+    assert ls.buf == ""
+
+
 def test_attach_worker_log_handler_replaces_everything_and_clamps(tmp_path):
     logger.addHandler(logging.NullHandler())
     logger.addHandler(logging.NullHandler())
@@ -225,6 +295,20 @@ def test_mp_engine_raises_after_every_worker_finished(tmp_path):
     # the others still ran to completion
     assert (tmp_path / "0").exists() and (tmp_path / "2").exists()
     assert read_status(status_path(prefix, 1))["done"] is True
+
+
+def test_mp_engine_keeps_worker_prints_off_the_terminal(tmp_path, capfd):
+    """capfd captures at the file-descriptor level, which is what a spawned
+    worker inherits: the console view's region must not be written to."""
+    prefix = str(tmp_path / "print-3")
+    m = PrintingManager(None, max_workers=2)
+    assert m.process("mp", prefix, None) == [0, 1]
+    out, err = capfd.readouterr()
+    assert "10000 in" not in out and "partial line" not in err
+    for n in range(2):
+        log = Path(log_path(prefix, n)).read_text()
+        assert f"INFO     10000 in 1.8s from worker {n}" in log
+        assert "WARNING  partial line" in log
 
 
 def test_mp_engine_without_a_prefix_writes_no_files(tmp_path):

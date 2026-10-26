@@ -24,8 +24,10 @@ exists: ``process()`` takes an optional object with a ``refresh()`` method
 and calls it while waiting.
 """
 
+import io
 import logging
 import multiprocessing
+import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, wait as wait_futures
 
@@ -70,15 +72,67 @@ def attach_worker_log_handler(prefix, n, log_level="INFO"):
     return lg
 
 
-def _run_worker(manager, n, prefix, log_level="INFO"):
+class LogStream(io.TextIOBase):
+    """A stdout/stderr for a worker process: every complete line becomes a
+    log record at `level`. Legacy code still ``print``s its progress
+    (the source loaders, `PhaseTimer`); a spawned worker inherits the
+    driver's terminal, so those lines would land in the middle of the
+    console view and shift it. Through here they reach the worker's log
+    file with a time and level like everything else, and the view tails
+    them from there."""
+
+    def __init__(self, level=logging.INFO):
+        super().__init__()
+        self.level = level
+        self.buf = ""
+        # a handler that fails while emitting reports on sys.stderr, which
+        # may be this stream: drop rather than recurse
+        self._busy = False
+
+    def writable(self):
+        return True
+
+    def write(self, s):
+        if self._busy:
+            return len(s)
+        self.buf += s
+        while "\n" in self.buf:
+            line, self.buf = self.buf.split("\n", 1)
+            self._emit(line)
+        return len(s)
+
+    def flush(self):
+        if self.buf:
+            line, self.buf = self.buf, ""
+            self._emit(line)
+
+    def _emit(self, line):
+        if not line.strip():
+            return
+        self._busy = True
+        try:
+            logger.log(self.level, line.rstrip())
+        finally:
+            self._busy = False
+
+
+def _run_worker(manager, n, prefix, log_level="INFO", capture_output=False):
     """Everything one worker does, in order. Module-level so the spawn
-    context can pickle it."""
+    context can pickle it. `capture_output` (set by the engines that run
+    workers in other processes) sends the worker's stdout and stderr to
+    its log via `LogStream`; the null engine leaves them alone, since in
+    the driver's process the console view already handles them."""
     status = None
     progress = null_progress
+    saved = None
     if prefix:
         attach_worker_log_handler(prefix, n, log_level)
         status = StatusWriter(status_path(prefix, n), n)
         progress = status
+        if capture_output:
+            saved = (sys.stdout, sys.stderr)
+            sys.stdout = LogStream(logging.INFO)
+            sys.stderr = LogStream(logging.WARNING)
     try:
         cfgs = runtime.get_configs() if manager.needs_configs else None
         return manager._distributed(n, cfgs, progress)
@@ -86,6 +140,13 @@ def _run_worker(manager, n, prefix, log_level="INFO"):
         logger.error(f"worker {n} failed: {type(e).__name__}: {e}", exc_info=True)
         raise
     finally:
+        if saved is not None:
+            for stream in (sys.stdout, sys.stderr):
+                try:
+                    stream.flush()
+                except Exception:
+                    pass
+            sys.stdout, sys.stderr = saved
         if status is not None:
             status(done=True)
             status.flush()
@@ -240,7 +301,7 @@ class MpEngine(Engine):
         if prefix:
             logger.info(f"worker logs: {prefix}-w*.log")
         with ProcessPoolExecutor(max_workers=self.max_workers, mp_context=ctx) as ex:
-            futures = {ex.submit(_run_worker, self.manager, n, prefix, self.manager.log_level): n
+            futures = {ex.submit(_run_worker, self.manager, n, prefix, self.manager.log_level, True): n
                        for n in range(self.max_workers)}
             pending = set(futures)
             while pending:
@@ -273,7 +334,7 @@ class RayEngine(Engine):
         remote = ray.remote(_run_worker)
         if prefix:
             logger.info(f"worker logs: {prefix}-w*.log")
-        futures = {remote.remote(self.manager, n, prefix, self.manager.log_level): n
+        futures = {remote.remote(self.manager, n, prefix, self.manager.log_level, True): n
                    for n in range(self.max_workers)}
         pending = list(futures)
         results = [None] * self.max_workers
