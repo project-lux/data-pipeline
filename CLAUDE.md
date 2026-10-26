@@ -16,7 +16,7 @@ entry point is the `lux` console script (`lux help`).
 
 ## The current work: porting `rob_refactor` onto `main`
 
-`refactor_docs/` is a self-contained, ordered plan (40 items) for bringing the
+`refactor_docs/` is a self-contained, ordered plan (41 items) for bringing the
 useful parts of the `rob_refactor` / `rob_claude_refactor` branches onto
 `main` as one PR per item. Items 00–07 (layout, logging, progress protocol,
 runtime, config, packaging + `lux` entry, console view + `lux watch`, task

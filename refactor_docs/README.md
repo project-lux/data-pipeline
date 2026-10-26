@@ -62,6 +62,7 @@ why the port is tractable.
 | Process‑layer logic changes (merger, reidentifier, reference manager, reconciler, acquirer, fetcher, date utils) | **Do not port** | SUPERSEDED |
 | Source mappers | **Do not port** (`main` is newer for every one) | SUPERSEDED |
 | Backup / restore of any store (Postgres, Redis, LMDB, filesystem) | **New**: neither branch has it; `backup_tables.sh` and the test‑only `_export_state()` are the only precedents | 39 |
+| Sniff a dumps directory and print its `input_files` block | **New**: neither branch has it; `Loader.guess_fmt()` (item 12) guesses from file names only | 40 |
 
 ## Ground rules for every PR
 

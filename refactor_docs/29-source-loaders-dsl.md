@@ -1,6 +1,6 @@
 # 29. Source loaders moved onto the DSL
 
-**Priority:** P2 · **Size:** M · **Depends on:** 12, 13
+**Priority:** P2 · **Size:** M · **Depends on:** 12, 13 · **Helped by:** 40
 **Read from:** `rob_claude_refactor:lux_pipeline/sources/{bnf,ror,lc}/loader.py`, `rob_claude_refactor:lux_pipeline/sources/yale/{ycba,ypm,yuag,pmc,ipch}/loader.py`, `rob_refactor:lux_pipeline/sources/{bne,dnb}/loader.py`, `rob_refactor:lux_pipeline/sources/pleiades/*`; `main:pipeline/sources/libraries/dnb/loader.py`, `main:pipeline/sources/pleiades/mapper.py`
 
 ## Intent
@@ -34,6 +34,7 @@ note for the live instance.
 
 ## Steps
 
+0. Draft each source's `input_files` block with `lux guess-dump-type --source <src>` (item 40) and check it against the dump before pasting it in; the `--explain` output names the identifier key for `extract_identifier`.
 1. One source per commit inside the PR; run `lux load --source <src> --no-ui --max-records 1000` for each.
 2. Update `docs/sample_config/<src>.json`.
 3. Add a fixture‑based test per converted source using a 3‑record sample dump under `tests/loader_tests/sources/<src>/`.
