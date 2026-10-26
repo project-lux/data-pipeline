@@ -16,12 +16,15 @@ from lux_pipeline.config import importObject
 from lux_pipeline.process.tasks.download_task import DownloadManager
 from lux_pipeline.sources.oclc.downloader import ViafDownloader
 from lux_pipeline.sources.pleiades.downloader import PleiadesDownloader
-from lux_pipeline.sources.ror.downloader import RorDownloader, zenodo_filename
+from lux_pipeline.sources.ror.downloader import RorDownloader, sibling_path, zenodo_filename
 from lux_pipeline.sources.yale.library.downloader import S3Downloader
 
 ROOT = Path(__file__).parent.parent
-ZENODO = "https://zenodo.org/api/records/20512981/files/v2.8-2026-06-02-ror-data.zip/content"
-ZENODO_MD = {"hits": {"hits": [{"files": [{"links": {"self": ZENODO}}]}]}}
+ZENODO = "https://zenodo.org/api/records/23500708/files/v2.15-2026-10-20-ror-data.zip/content"
+MD5 = "md5:5522990688eb1b94811a8145e131b41e"
+# the concept record redirects to the current version; this is its shape
+ZENODO_MD = {"id": 23500708, "conceptrecid": "6347574",
+             "files": [{"key": "v2.15-2026-10-20-ror-data.zip", "checksum": MD5, "links": {"self": ZENODO}}]}
 VIAF_MD = {"queryResult": {"Monthly": {"clusterRdfXml": "viaf-20260401-clusters-rdf.xml.gz"}}}
 
 
@@ -45,25 +48,33 @@ def cfg(name, base_dumps="/dumps", **keys):
     return c
 
 
-ROR_KEYS = {"downloadMdUrl": "https://zenodo.org/api/records/14429114/versions?size=5",
-            "downloadXPath": "hits/hits[0]/files[0]/links/self", "dumps_dir": "ror"}
+ROR_KEYS = {"downloadMdUrl": "https://zenodo.org/api/records/6347574",
+            "downloadXPath": "files[0]/links/self", "dumps_dir": "ror"}
 
 
 # --- ror ---------------------------------------------------------------------
 
 
-def test_zenodo_filename():
-    assert zenodo_filename(ZENODO) == "v2.8-2026-06-02-ror-data.zip"
+def test_zenodo_filename_and_sibling_path():
+    assert zenodo_filename(ZENODO) == "v2.15-2026-10-20-ror-data.zip"
     assert zenodo_filename("https://x.org/files/a.zip") == "a.zip"
     assert zenodo_filename("https://x.org/files/a.zip/") == "a.zip"
+    assert sibling_path("files[0]/links/self", "checksum") == "files[0]/checksum"
+    assert sibling_path("hits.hits[0].files[0].links.self", "key") == "hits.hits[0].files[0].key"
 
 
-def test_ror_discovers_the_release_and_saves_it_under_the_zenodo_name(monkeypatch):
+def test_ror_discovers_the_release_with_its_name_and_checksum(monkeypatch):
     seen = canned(monkeypatch, RorDownloader, ZENODO_MD)
     dl = RorDownloader(cfg("ror", **ROR_KEYS))
-    assert dl.get_urls() == [{"url": ZENODO, "path": "/dumps/ror/v2.8-2026-06-02-ror-data.zip"}]
-    assert seen == [ROR_KEYS["downloadMdUrl"]]
+    assert dl.get_urls() == [{"url": ZENODO, "path": "/dumps/ror/v2.15-2026-10-20-ror-data.zip", "checksum": MD5}]
+    assert seen == [ROR_KEYS["downloadMdUrl"]]       # one request for url, name and checksum
     assert dl.get_urls("records") == dl.get_urls("all")
+
+
+def test_ror_falls_back_to_the_url_for_the_name_when_the_record_has_no_key(monkeypatch):
+    canned(monkeypatch, RorDownloader, {"files": [{"links": {"self": ZENODO}}]})
+    entry = RorDownloader(cfg("ror", **ROR_KEYS)).get_urls()[0]
+    assert entry["path"] == "/dumps/ror/v2.15-2026-10-20-ror-data.zip" and "checksum" not in entry
 
 
 def test_ror_uses_dumpFilePath_only_when_it_names_a_zip(monkeypatch):
@@ -72,7 +83,7 @@ def test_ror_uses_dumpFilePath_only_when_it_names_a_zip(monkeypatch):
     assert dl.get_urls()[0]["path"] == "/dumps/ror/ror-data.zip"
     # the live configuration names the extracted JSON: never overwritten
     dl = RorDownloader(cfg("ror", dumpFilePath="/dumps/ror/ror-data.json", **ROR_KEYS))
-    assert dl.get_urls()[0]["path"] == "/dumps/ror/v2.8-2026-06-02-ror-data.zip"
+    assert dl.get_urls()[0]["path"] == "/dumps/ror/v2.15-2026-10-20-ror-data.zip"
 
 
 def test_ror_export_type_skips_discovery_and_keeps_input_files(monkeypatch):
@@ -82,7 +93,7 @@ def test_ror_export_type_skips_discovery_and_keeps_input_files(monkeypatch):
     assert dl.get_urls("export") == [{"url": export["export"][0]["url"], "path": "/dumps/ror/ror.zip"}]
     assert seen == []
     all_urls = dl.get_urls("all")
-    assert [u["path"] for u in all_urls] == ["/dumps/ror/v2.8-2026-06-02-ror-data.zip", "/dumps/ror/ror.zip"]
+    assert [u["path"] for u in all_urls] == ["/dumps/ror/v2.15-2026-10-20-ror-data.zip", "/dumps/ror/ror.zip"]
 
 
 def test_ror_discovery_failure_is_logged_not_raised(monkeypatch, caplog):
@@ -159,7 +170,7 @@ def test_download_manager_lists_the_discovered_file(monkeypatch):
     m = DownloadManager(configs, 2, Namespace(type="records"))
     m.prepare_single("ror")
     assert [(w, s, d["path"]) for w, s, d in m.sources] == [
-        ("external", "ror", "/dumps/ror/v2.8-2026-06-02-ror-data.zip")]
+        ("external", "ror", "/dumps/ror/v2.15-2026-10-20-ror-data.zip")]
 
 
 @pytest.mark.parametrize("sample", ["ror.json", "viaf.json", "pleiades.json"])
