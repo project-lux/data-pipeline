@@ -614,8 +614,10 @@ class Loader(Sliced):
                 progress=null_progress):
         """Work out which files this loader reads, as ``my_files``:
         ``[{"path", "fmt"}]`` with the spec parsed. ``uses_dsl`` says
-        whether the config describes its files at all; when it does not,
-        the manager calls the legacy ``load()``."""
+        whether this loader reads them through the DSL: the class must not
+        override ``load()`` and the config must name files for `load_type`
+        (or give a ``dumpFileType``); otherwise the manager calls the
+        legacy ``load()``."""
         self._ensure_dsl()
         Sliced.prepare(self, my_slice, max_slice, progress)
         self.load_type = load_type
@@ -626,10 +628,16 @@ class Loader(Sliced):
 
         files = []
         ifs = self.config.get("input_files") or {}
-        self.uses_dsl = bool(ifs) or bool(self.config.get("dumpFileType"))
-        if ifs:
-            if load_type not in ifs:
-                logger.error(f"No configured file for load type {load_type!r} in source {self.name}")
+        # A loader class that still has its own load() is legacy whatever its
+        # config says: input_files may then describe what to download (item
+        # 30) without changing how the source loads. The DSL applies to the
+        # base Loader and to subclasses that dropped load() (item 29), when
+        # the config names files for this load type or gives a dumpFileType.
+        dsl_capable = type(self).load is Loader.load
+        self.uses_dsl = dsl_capable and (bool(ifs.get(load_type)) or bool(self.config.get("dumpFileType")))
+        if ifs and load_type not in ifs:
+            logger.debug(f"No input_files entry for load type {load_type!r} in source {self.name}")
+        if ifs and dsl_capable:
             for p in ifs.get(load_type, []):
                 path = p.get("path")
                 url = p.get("url")

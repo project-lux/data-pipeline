@@ -297,10 +297,50 @@ def test_dump_file_type_makes_a_legacy_path_a_dsl_source():
     assert list(ldr.out_cache) == ["1"]
 
 
-def test_unknown_load_type_loads_nothing_but_is_still_dsl(caplog):
+def test_load_type_without_an_entry_is_not_dsl_for_that_type(caplog):
     ldr = make_loader(MULTI, "lines/json")
     ldr.prepare(0, 1, load_type="export")
-    assert ldr.uses_dsl is True and ldr.my_files == []
+    assert ldr.uses_dsl is False and ldr.my_files == []
+    ldr.prepare(0, 1, load_type="records")
+    assert ldr.uses_dsl is True and len(ldr.my_files) == 1
+
+
+class LegacyWithDownloads(Loader):
+    """A source loader that keeps its own load() but whose config now
+    lists input_files for `lux download` (item 30)."""
+
+    def __init__(self, config):
+        self.in_path = config.get("dumpFilePath", "")
+        self.out_cache = config["datacache"]
+        self.config = config
+
+    def load(self):
+        self.out_cache["legacy"] = {"id": "legacy"}
+
+
+def test_a_loader_with_its_own_load_stays_legacy_whatever_input_files_says():
+    ldr = LegacyWithDownloads({"name": "geo", "datacache": {}, "all_configs": StubConfigs(BASE),
+                               "input_files": {"records": [{"url": "https://x.org/allCountries.zip",
+                                                            "path": "geonames/allCountries.zip"}],
+                                               "export": [{"url": "https://x.org/geo.zip", "type": "zip.bz2/json"}]}})
+    ldr.prepare(0, 1)
+    assert ldr.uses_dsl is False and ldr.my_files == []
+    ldr.prepare(0, 1, load_type="export")
+    assert ldr.uses_dsl is False and ldr.my_files == []
+    ldr.load()
+    assert list(ldr.out_cache) == ["legacy"]
+
+
+def test_base_loader_with_export_entries_only_is_dsl_for_export_not_records():
+    cfg = {"name": "aat", "all_configs": StubConfigs(BASE), "datacache": {},
+           "input_files": {"export": [{"url": "https://x.org/aat.zip", "path": "aat/aat.zip",
+                                       "type": "zip.bz2/json"}]}}
+    ldr = Loader(cfg)
+    ldr.prepare(0, 1, load_type="records")
+    assert ldr.uses_dsl is False and ldr.my_files == []
+    ldr.prepare(0, 1, load_type="export")
+    assert ldr.uses_dsl is True
+    assert ldr.my_files == [{"path": str(BASE / "aat" / "aat.zip"), "fmt": [["zip", "bz2"], ["json"]]}]
 
 
 class OldStyleLoader(Loader):
