@@ -48,6 +48,16 @@ path resolves against the configuration directory (the config cache's own
 README. `LUX_BASEPATH` points at `configs/system` so the bootstrap finds
 `config_cache/`.
 
+**Decision (landed with this item).** A relative `base_dir` resolves
+against the directory the configuration was read from (`Config.config_dir`,
+the `LUX_BASEPATH` directory), never the data `base_dir`; an absolute one is
+left alone; a store directory that does not exist is an error. The
+`pipeline-configs` records therefore need `"base_dir": "../subs"` in place
+of `"pipeline-configs/configs/subs"` — the one edit the repository needs for
+this item, applied when the repository is next touched. `tests/test_subconfig_stores.py`
+loads a copy of the repository with that edit when the checkout is beside
+this one.
+
 **Live config copies.** `config_cache/config_cache/` is an untracked copy of the
 build machine's configuration files (see README ground rule 5). In the same PR,
 apply this item's config changes there: any `"type": "config"` record the live instance is to use (none, until the build machine switches to the `pipeline-configs` checkout). Check the edited files still
