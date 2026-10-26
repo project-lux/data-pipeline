@@ -54,7 +54,7 @@ level in item 00b): `ethan/` (from `archives/`), `artic/`, `ashmol/`, `mds/`
 |---|---|---|
 | `system.json` (`"type": "system"`) | `base.json` (`"type": "base"`) | read `system` if present, else `base` |
 | `{"type":"default","name":"cache"\|"map"\|"ml"}` | `caches.json` (`"type":"caches"`) | `defaults["cache"]` falls back to `caches` |
-| `{"type":"config", …}` sub‑config stores | — | item 35 (optional) |
+| `{"type":"config", …}` sub‑config stores | — | item 35 |
 | `indexes_dir`, `temp_dir`, `max_workers` in base | `indexes_dir` exists; `temp_dir` exists; no `max_workers` | defaults added |
 | per‑source `downloaderClass`, `input_files`, `dumps_dir`, `dumpFileType` | — | consumed by items 12, 14; all optional |
-| per‑source `indexes: {name: {indexClass, path, type}}` | `reconcileDbPath`, `inverseEquivDbPath` | item 34 (optional); `main`'s keys stay primary |
+| per‑source `indexes: {name: {indexClass, path, type}}` | `reconcileDbPath`, `inverseEquivDbPath` | item 34; `main`'s keys stay primary |

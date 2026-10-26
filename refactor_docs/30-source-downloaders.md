@@ -1,6 +1,6 @@
 # 30. Source downloaders
 
-**Priority:** P2 · **Size:** S · **Depends on:** 14, 15
+**Priority:** P1 · **Size:** S · **Depends on:** 14, 15
 **Read from:** `rob_claude_refactor:lux_pipeline/sources/ror/downloader.py`, `rob_refactor:lux_pipeline/sources/{viaf,yale/library}/downloader.py`, `rob_refactor:lux_pipeline/sources/pleiades/downloader.py`
 
 ## Intent

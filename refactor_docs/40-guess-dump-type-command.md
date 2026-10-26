@@ -1,6 +1,6 @@
 # 40. `lux guess-dump-type`
 
-**Priority:** P2 · **Size:** M · **Depends on:** 05, 12 · **Unblocks:** 29 (drafts its `input_files` blocks)
+**Priority:** P1 · **Size:** M · **Depends on:** 05, 12 · **Unblocks:** 29 (drafts its `input_files` blocks)
 **Read from:** nothing to port. Neither branch has this. The precedents on
 `main` after item 12 are `Loader.guess_fmt()` (a spec from the file *name*,
 used for an `input_files` entry without `type`) and `Loader.process_fmt()`

@@ -1,6 +1,6 @@
-# 34. Optional: named `indexes` config block
+# 34. Named `indexes` config block
 
-**Priority:** P3 · **Size:** M · **Depends on:** 18, 19
+**Priority:** P1 · **Size:** M · **Depends on:** 18, 19 · **Unblocks:** the `pipeline-configs` repository
 **Read from:** `rob_refactor:lux_pipeline/config.py` (`instantiate()` — the `"indexes"` block), `rob_refactor:lux_pipeline/process/base/reconciler.py` (`LmdbReconciler.__init__`), `rob_refactor:lux_pipeline/sources/lux/final/{index_loader,reconciler}.py`, `rob_refactor:lux_pipeline/cli/{counts,clear}.py`
 
 ## Intent
@@ -22,12 +22,22 @@ Generalise the two hard‑wired index paths per source
 the block, with the two legacy keys still accepted (mapped to
 `reconcile_label` / `reconcile_id`).
 
-## Why optional
+## Why required
 
-Nothing in the live configuration uses it, the raw‑`lmdb` store on `main`
-opens by path already, and the refactor itself was inconsistent about the
-names (`reconcile_labels` vs `reconcile_label`). Do it when a source needs
-a third index.
+The `pipeline-configs` repository uses the block as the *only* index
+configuration for aat, ulan, lcnaf, viaf, wikidata and merged (lcsh has
+both forms). On `main` the reconcilers, index loaders, `lux counts` and
+`lux clear` read `reconcileDbPath` / `inverseEquivDbPath` only, and the
+identity resolver reads `differentDbPath` from `merged` — with the block
+alone those sources reconcile with no index and identify clusters without
+diff constraints, silently. Promoted from P3 on 2026‑10‑26 for that reason.
+
+The repository's names are `reconcile_labels`, `reconcile_ids`,
+`reconcile_id` and `differents` with `indexClass:
+storage.index.lmdb.LmdbIndex`; step 4 fixes the names and step 1 maps the
+class to `main`'s store. Note also that the repository's `system.json`
+`path_types` has no entries for the two legacy keys, so the block's own
+`indexes_dir` resolution is what makes its paths absolute.
 
 ## Steps
 
@@ -39,7 +49,10 @@ a third index.
    keys. Keep `main`'s loud‑failure retry.
 3. `counts`/`clear`: enumerate `indexes`.
 4. Fix the name mismatch: canonical names are `reconcile_label`,
-   `reconcile_id`, `equivalents`, `differents`.
+   `reconcile_id`, `equivalents`, `differents`; accept the plural
+   `reconcile_labels` / `reconcile_ids` the `pipeline-configs` repository
+   uses today, with a warning, or fix the repository in the same change.
+   `differentDbPath` on `merged` maps to `differents`.
 
 **Live config copies.** `config_cache/config_cache/` is an untracked copy of the
 build machine's configuration files (see README ground rule 5). In the same PR,
