@@ -4,14 +4,15 @@ import logging
 import sys
 
 from lux_pipeline.cli._handler import BaseHandler
+from lux_pipeline.config import INDEX_LABELS, source_indexes
 
 logger = logging.getLogger("lux_pipeline")
 
 GROUPS = ("internal", "external", "results")
 DEFAULT_CACHES = ("datacache", "recordcache", "reconciledRecordcache", "recordcache2")
-# the reconcile indexes are configured as paths on the source (item 34 may
-# give them names); key -> label used in the output
-INDEX_PATHS = {"reconcileDbPath": "name", "inverseEquivDbPath": "id"}
+# a source's indexes come from its named `indexes` block or the legacy path
+# keys (lux_pipeline.config.source_indexes); INDEX_LABELS gives the words
+# used in the output
 # below this a catalog estimate is replaced by an exact count
 EXACT_BELOW = 100_000
 
@@ -112,10 +113,8 @@ class CommandHandler(BaseHandler):
             srcs = [self._lookup(s) for s in _split(which)]
         out = []
         for group, cfg in srcs:
-            for key, label in INDEX_PATHS.items():
-                path = cfg.get(key)
-                if path:
-                    out.append((group, cfg["name"], label, path))
+            for name, path in source_indexes(cfg).items():
+                out.append((group, cfg["name"], INDEX_LABELS.get(name, name), path))
         return out
 
     # --- counting ----------------------------------------------------------

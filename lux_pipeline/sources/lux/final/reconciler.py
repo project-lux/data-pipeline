@@ -1,4 +1,5 @@
 
+from lux_pipeline.config import index_path
 from lux_pipeline.process.base.reconciler import LmdbReconciler, TabLmdb
 
 class GlobalReconciler(LmdbReconciler):
@@ -7,11 +8,11 @@ class GlobalReconciler(LmdbReconciler):
         super().__init__(config)
         # the index opens on first use (LazyIndexes); only the configuration
         # is checked here so a fresh instance can be built before the index is
-        if not config.get("inverseEquivDbPath"):
+        if not index_path(config, "reconcile_id"):
             print(f"Could not find global equivalents index?")
 
         self.diff_index = None
-        fn2 = config.get("differentDbPath", "")
+        fn2 = index_path(config, "differents", "")
         try:
             if fn2:
                 self.diff_index = TabLmdb.open(fn2, 'r', readahead=False, writemap=True)

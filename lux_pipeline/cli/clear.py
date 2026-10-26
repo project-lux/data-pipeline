@@ -28,6 +28,7 @@ import logging
 import sys
 
 from lux_pipeline.cli._handler import BaseHandler
+from lux_pipeline.config import source_indexes
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -35,7 +36,8 @@ GROUPS = ("internal", "external", "results")
 # the computed caches; datacache holds harvested data and must be named
 DEFAULT_CACHES = ("recordcache", "reconciledRecordcache", "recordcache2")
 REFS_MAPS = ("all_refs", "done_refs")
-INDEX_PATHS = ("reconcileDbPath", "inverseEquivDbPath")
+# a source's indexes come from its named `indexes` block or the legacy path
+# keys (lux_pipeline.config.source_indexes)
 
 
 def _split(value):
@@ -107,9 +109,8 @@ class CommandHandler(BaseHandler):
             return []
         out = []
         for cfg in self._sources_for(which):
-            for key in INDEX_PATHS:
-                if cfg.get(key):
-                    out.append((cfg["name"], cfg[key]))
+            for path in source_indexes(cfg).values():
+                out.append((cfg["name"], path))
         return out
 
     # --- confirmation ------------------------------------------------------
