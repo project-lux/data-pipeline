@@ -133,14 +133,33 @@ class CommandHandler(BaseHandler):
         return f"{len(self.cfgs.globals)} globals"
 
     def check_components(self):
+        """Build every source and MarkLogic store, as instantiate_all()
+        does, but carry on past a failure so one run names every source
+        that cannot be built, not just the first."""
         cfgs = self.cfgs
-        cfgs.instantiate_all()
+        failures = []
+        built = 0
+        for group in ("internal", "external", "results"):
+            for name in list(getattr(cfgs, group)):
+                try:
+                    cfgs.instantiate(name, group)
+                    built += 1
+                except Exception as e:
+                    failures.append(f"{name}: {type(e).__name__}: {e}")
+        for name in list(cfgs.marklogic_stores):
+            try:
+                cfgs.instantiate_ml(name)
+            except Exception as e:
+                failures.append(f"marklogic {name}: {type(e).__name__}: {e}")
+        if failures:
+            raise RuntimeError(f"{len(failures)} of {built + len(failures)} failed to build -- "
+                               + "; ".join(failures))
         for group in ("internal", "external"):
             for name, cfg in getattr(cfgs, group).items():
                 dc = cfg.get("datacache")
                 if dc is not None and hasattr(dc, "len_estimate"):
-                    return f"every source built; {name} datacache has ~{dc.len_estimate():,} records"
-        return "every source built"
+                    return f"{built} sources built; {name} datacache has ~{dc.len_estimate():,} records"
+        return f"{built} sources built"
 
     def check_directories(self):
         missing, unwritable = [], []

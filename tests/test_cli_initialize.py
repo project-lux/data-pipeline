@@ -513,19 +513,43 @@ def test_testinstall_all_ok_with_stubbed_databases_and_real_workers(tmp_path, mo
     monkeypatch.setattr(Config, "get_idmap", lambda self: FakeIdmap(a=1))
     monkeypatch.setattr(Config, "cache_globals", lambda self, idmap=None: setattr(self, "globals", {"g": 1}))
 
-    def fake_instantiate_all(self):
-        for cfg in self.external.values():
-            cfg["datacache"] = FakeCache()
+    def fake_instantiate(self, name, which=None):
+        cfg = getattr(self, which)[name]
+        cfg["datacache"] = FakeCache()
+        return cfg
 
-    monkeypatch.setattr(Config, "instantiate_all", fake_instantiate_all)
+    monkeypatch.setattr(Config, "instantiate", fake_instantiate)
+    monkeypatch.setattr(Config, "instantiate_ml", lambda self, name: None)
     assert run_testinstall(["--workers", "2"], cwd=root, monkeypatch=monkeypatch) is True
     lines = capsys.readouterr().out.splitlines()
     assert all(l.startswith("OK    ") for l in lines[:-1]) and lines[-1] == "All checks passed."
     assert lines[4].startswith("OK    postgres reachable") and lines[5].startswith("OK    redis reachable")
-    assert "1 entries" in lines[6] and "1 globals" in lines[7] and "~42 records" in lines[8]
+    assert "1 entries" in lines[6] and "1 globals" in lines[7] and "sources built; " in lines[8] and "~42 records" in lines[8]
     assert lines[10].startswith("OK    validator schemas present: 11 schemas")
     assert "2 workers spawned and reported" in lines[11]
     assert len(list((root / "tmp").glob("testinstall-*/spawn-w*.status"))) == 2
+
+
+def test_testinstall_names_every_source_that_fails_to_build(tmp_path, monkeypatch, capsys):
+    root = tmp_path / "inst"
+    init([str(root)])
+    capsys.readouterr()
+    monkeypatch.delenv("LUX_BASEPATH", raising=False)
+    monkeypatch.setattr(Config, "get_idmap", lambda self: {})
+    monkeypatch.setattr(Config, "cache_globals", lambda self, idmap=None: None)
+
+    def flaky(self, name, which=None):
+        if name in ("viaf", "wikidata"):
+            raise ModuleNotFoundError(f"No module named 'sources.{name}'")
+        return getattr(self, which)[name]
+
+    monkeypatch.setattr(Config, "instantiate", flaky)
+    monkeypatch.setattr(Config, "instantiate_ml", lambda self, name: None)
+    with pytest.raises(SystemExit):
+        run_testinstall(cwd=root, monkeypatch=monkeypatch)
+    line = [l for l in capsys.readouterr().out.splitlines() if l.startswith("FAIL")][0]
+    assert line.startswith("FAIL  source components build, caches reachable: RuntimeError: 2 of ")
+    assert "viaf: ModuleNotFoundError" in line and "wikidata: ModuleNotFoundError" in line
 
 
 def test_testinstall_skip_workers(tmp_path, monkeypatch, capsys):
@@ -535,7 +559,8 @@ def test_testinstall_skip_workers(tmp_path, monkeypatch, capsys):
     monkeypatch.delenv("LUX_BASEPATH", raising=False)
     monkeypatch.setattr(Config, "get_idmap", lambda self: {})
     monkeypatch.setattr(Config, "cache_globals", lambda self, idmap=None: None)
-    monkeypatch.setattr(Config, "instantiate_all", lambda self: None)
+    monkeypatch.setattr(Config, "instantiate", lambda self, name, which=None: getattr(self, which)[name])
+    monkeypatch.setattr(Config, "instantiate_ml", lambda self, name: None)
     assert run_testinstall(["--skip-workers"], cwd=root, monkeypatch=monkeypatch) is True
     assert "worker processes" not in capsys.readouterr().out
 
