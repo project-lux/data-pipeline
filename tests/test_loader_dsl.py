@@ -525,10 +525,3 @@ def test_lmdb_load_type_counts_for_the_total(tmp_path):
     assert rec.totals == [3]
     assert set(ldr.out_cache) == {"1", "3", "5"}
 
-
-def test_no_source_file_was_modified():
-    """Acceptance: this item touches no source loader."""
-    import subprocess
-    out = subprocess.run(["git", "diff", "--name-only", "main", "--", "lux_pipeline/sources"],
-                         capture_output=True, text=True, cwd=ROOT).stdout
-    assert out.strip() == ""

@@ -170,20 +170,68 @@ class Reconciler(object):
         return vals
 
 
+_UNOPENED = object()
+
+
+class LazyIndexes:
+    """``name_index`` / ``id_index`` opened on first use, not in ``__init__``.
+
+    Opening eagerly meant a source could not be instantiated at all while
+    its index did not exist yet -- which blocked `lux load-index`, the very
+    command that builds it, and every other command on a fresh machine --
+    and that every worker opened every index at start-up whether it
+    reconciled against it or not. A configured index that fails to open
+    must still be LOUD: swallowing it set the index to None,
+    should_reconcile() then returned False, and that worker silently
+    emitted zero assertions for its whole slice. So the first access
+    raises, with the same message as before. An unconfigured index is
+    ``None``. The attributes stay assignable (tests, subclasses).
+    """
+
+    def _init_indexes(self, config):
+        self._index_paths = {"name": config.get("reconcileDbPath", ""),
+                             "id": config.get("inverseEquivDbPath", "")}
+        self._indexes = {"name": _UNOPENED, "id": _UNOPENED}
+
+    def _ensure_index_state(self):
+        # an instance built without __init__ (tests use object.__new__) and
+        # then assigned an index
+        if not hasattr(self, "_indexes"):
+            self._init_indexes(getattr(self, "config", None) or {})
+
+    def _index(self, which):
+        self._ensure_index_state()
+        idx = self._indexes[which]
+        if idx is _UNOPENED:
+            idx = self._indexes[which] = self._open_index(self._index_paths[which], which)
+        return idx
+
+    @property
+    def name_index(self):
+        return self._index("name")
+
+    @name_index.setter
+    def name_index(self, value):
+        self._ensure_index_state()
+        self._indexes["name"] = value
+
+    @property
+    def id_index(self):
+        return self._index("id")
+
+    @id_index.setter
+    def id_index(self, value):
+        self._ensure_index_state()
+        self._indexes["id"] = value
+
+
 # Lightning Memory-Mapped DB Reconciler
 
 
-class LmdbReconciler(Reconciler):
+class LmdbReconciler(LazyIndexes, Reconciler):
     def __init__(self, config):
         Reconciler.__init__(self, config)
-
-        # A configured index that fails to open must be LOUD: swallowing it
-        # set the index to None, should_reconcile() then returned False, and
-        # that worker silently emitted zero assertions for its whole slice.
-        fn = config.get("reconcileDbPath", "")
-        fn2 = config.get("inverseEquivDbPath", "")
-        self.name_index = self._open_index(fn, "name")
-        self.id_index = self._open_index(fn2, "id")
+        self._init_indexes(config)
 
     def _open_index(self, fn, which):
         if not fn:
@@ -296,19 +344,15 @@ class LmdbReconciler(Reconciler):
 
 
 # Old SQLite Reconciler
-class SqliteReconciler(Reconciler):
+class SqliteReconciler(LazyIndexes, Reconciler):
     def __init__(self, config):
         Reconciler.__init__(self, config)
+        self._init_indexes(config)
 
+    def _open_index(self, fn, which):
         # Same rationale as LmdbReconciler: a silently-None index disables
         # reconciliation for the whole worker. Sqlite read-locks are the
         # known transient failure, so retry before giving up loudly.
-        fn = config.get("reconcileDbPath", "")
-        fn2 = config.get("inverseEquivDbPath", "")
-        self.name_index = self._open_index(fn, "name")
-        self.id_index = self._open_index(fn2, "id")
-
-    def _open_index(self, fn, which):
         if not fn:
             return None
         last_err = None
