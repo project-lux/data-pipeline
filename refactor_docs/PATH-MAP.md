@@ -12,7 +12,7 @@ are on today's `main` (before item 00).
 | `rob_refactor` (`lux_pipeline/sources/…`) | `main` after item 00 | `main` today | Note |
 |---|---|---|---|
 | `viaf/` | `oclc/` | `pipeline/sources/authorities/oclc/` | **directory name differs**: `main` keeps `oclc`; class names (`ViafLoader`, `ViafFetcher`, …) are the same |
-| `wikipedia/` | *(none)* | — | new source on `rob_refactor`; not ported (see SUPERSEDED) |
+| `wikipedia/` | same | — | new source on `rob_refactor`; ported 2026‑10‑26 (see SUPERSEDED) |
 | `bne/`, `bnf/`, `dnb/`, `japan/` | same | `libraries/<name>/` | `main` has no `bne/loader.py`, `bnf/loader.py` (item 29) |
 | `fast/`, `gbif/`, `getty/`, `homosaurus/`, `lc/`, `nomisma/` | same | `authorities/<name>/` | |
 | `geonames/`, `orcid/`, `ror/`, `wikidata/`, `wikimedia/`, `wof/` | same | `general/<name>/` | `main` has no `ror/downloader.py` (item 30); `orcid/loader.py` on `main` is a rewrite, keep it |

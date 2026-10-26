@@ -63,7 +63,7 @@ Specific files:
 |---|---|
 | `sources/viaf/*` as a directory name | `main`'s directory is `oclc/` (after item 00b); contents are the same classes. Item 30 adds the downloader there. Do not rename the directory. |
 | `sources/wikidata/loader.py`, `oclc/loader.py`, `orcid/loader.py`, `geonames/loader.py`, `lc/loader.py`, `yale/*/loader.py`, `ror/loader.py` on `rob_refactor` | Still old‑style `load()` loaders that read `self.in_path`, which the refactor's base `Loader` no longer sets — they are broken there. `main`'s versions work. Item 12 keeps `load()` support so they keep working; item 29 moves only the simple ones onto the DSL. |
-| `sources/wikipedia/*` | New source with no mapper logic of note (`extract_identifier` returns `title`) and no config on the live instance. Add later as its own feature if wanted. |
+| `sources/wikipedia/*` | Ported 2026‑10‑26 (Rob's request, for the `pipeline-configs` record): `WpLoader` keyed by `title` on the DSL, `WpMapper` producing nothing. No config on the live instance. |
 | `sources/lux/final/index_loader.py`, `lux/final/reconciler.py` | Depend on the `indexes` config block (item 34). `main`'s versions use the path‑based config and the raw lmdb store. |
 | `sources/lc/index_loader.py`, `wikidata/index_loader.py` | `main`'s inherit `LmdbIndexLoader` and are newer (`wd_equivs` sort). Item 18 keeps them working. |
 
