@@ -1,24 +1,18 @@
-from lux_pipeline.process.base.loader import Loader
-import ujson as json
-import os
-import time
+"""ROR's data release is one zip (from Zenodo, see ``downloader.py``)
+holding a JSON array of organisations and a CSV flattening of it. The
+DSL reads the zip with ``dumpFileType: zip/array/raw``: the zip step
+yields both members, this class drops the CSV, the array step walks the
+organisations and the raw step stores each under the last segment of
+its ``id`` (``https://ror.org/0xxxx`` -> ``0xxxx``). A configuration that
+points at the extracted JSON instead uses ``array/raw``.
+"""
+
+from lux_pipeline.process.base.loader import Loader, Pointer
 
 
 class RorLoader(Loader):
-    def load(self):
-        # Just load it all into memory
-        with open(self.in_path) as fh:
-            recs = json.load(fh)
-        x = 0
-        start = time.time()
-        for r in recs:
-            x += 1
-            ident = r["id"]
-            ident = ident.split("/")[-1]
-            self.out_cache[ident] = r
-            if not x % 10000:
-                t = time.time() - start
-                xps = x / t
-                ttls = self.total / xps
-                print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-        self.out_cache.commit()
+    def should_process_item(self, child):
+        # the v2 zip also holds v2.x-...-ror-data.csv
+        if isinstance(child, Pointer):
+            return child.get_name().lower().endswith(".json")
+        return True

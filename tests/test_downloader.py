@@ -211,6 +211,8 @@ def test_fetch_webpage_passes_verify_and_timeout(monkeypatch):
     assert dl.fetch_webpage("https://x.org/page") == "hello"
     assert seen["verify"] is False
     assert seen["timeout"] == BaseDownloader.timeout
+    assert seen["headers"] == {"User-Agent": dl_mod.USER_AGENT}
+    assert "lux-pipeline" in dl_mod.USER_AGENT
 
 
 def test_fetch_webpage_failure_is_none(monkeypatch, caplog):
@@ -274,6 +276,34 @@ def test_process_streams_to_part_then_renames(served, tmp_path):
     assert rec.advanced() == SIZE
     assert rec.descriptions()[0] == "src/big.bin"
     assert rec.calls[-1] == {"completed": SIZE}
+
+
+def test_process_verifies_a_checksum(served, tmp_path):
+    import hashlib
+    base_url, srv_dir = served
+    data = (srv_dir / "big.bin").read_bytes()
+    dl = make_downloader(str(tmp_path))
+    good = {"url": f"{base_url}/big.bin", "path": str(tmp_path / "a.bin"),
+            "checksum": "md5:" + hashlib.md5(data).hexdigest()}
+    assert dl.process(good) == 1
+    bare = dict(good, path=str(tmp_path / "b.bin"), checksum=hashlib.md5(data).hexdigest().upper())
+    assert dl.process(bare) == 1                       # bare hex is MD5, case-insensitive
+    sha = dict(good, path=str(tmp_path / "c.bin"), checksum="sha256:" + hashlib.sha256(data).hexdigest())
+    assert dl.process(sha) == 1
+    bad = dict(good, path=str(tmp_path / "d.bin"), checksum="md5:" + "0" * 32)
+    with pytest.raises(IOError, match="md5 checksum mismatch"):
+        dl.process(bad)
+    assert not (tmp_path / "d.bin").exists() and not (tmp_path / "d.bin.part").exists()
+
+
+def test_parse_checksum(caplog):
+    assert BaseDownloader.parse_checksum("md5:ABC") == ("md5", "abc")
+    assert BaseDownloader.parse_checksum("abc") == ("md5", "abc")
+    assert BaseDownloader.parse_checksum("SHA256:ff") == ("sha256", "ff")
+    assert BaseDownloader.parse_checksum("") is None and BaseDownloader.parse_checksum(None) is None
+    with caplog.at_level("WARNING", logger="lux_pipeline"):
+        assert BaseDownloader.parse_checksum("nope:ff") is None
+    assert "Unknown checksum algorithm 'nope'" in caplog.text
 
 
 def test_process_overwrite_false_keeps_existing(served, tmp_path, caplog):
@@ -352,7 +382,8 @@ def test_process_passes_verify_and_timeout_to_requests(monkeypatch, tmp_path):
     dl = make_downloader(str(tmp_path), download_verify_ssl=False)
     assert dl.process({"url": "https://x.org/x.bin", "path": str(target)}) == 1
     assert target.read_bytes() == b"abcdef"
-    assert seen == {"stream": True, "timeout": BaseDownloader.timeout, "verify": False}
+    assert seen == {"stream": True, "timeout": BaseDownloader.timeout, "verify": False,
+                    "headers": {"User-Agent": dl_mod.USER_AGENT}}
 
 
 # --- acceptance: the pleiades downloader imports --------------------------

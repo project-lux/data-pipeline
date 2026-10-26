@@ -1,17 +1,19 @@
-"""ROR publishes each data release on Zenodo. The record's JSON lists the
-versions newest first; the download URL is read from it with the
-configured JSON path and fetched into ``dumps_dir``.
+"""ROR publishes each data release on Zenodo under one concept record,
+whose API URL redirects to the current version
+(https://ror.readme.io/docs/zenodo). The file's download URL, name and
+MD5 are read from that record.
 
 Configuration keys (see ``docs/sample_config/ror.json``)::
 
     "downloaderClass": "sources.ror.downloader.RorDownloader",
-    "downloadMdUrl": "https://zenodo.org/api/records/14429114/versions?size=5&sort=version&allversions=true",
-    "downloadXPath": "hits/hits[0]/files[0]/links/self"
+    "downloadMdUrl": "https://zenodo.org/api/records/6347574",
+    "downloadXPath": "files[0]/links/self"
 
-which resolves to a URL such as
-``https://zenodo.org/api/records/20512981/files/v2.8-2026-06-02-ror-data.zip/content``.
-The file is saved as ``dumpFilePath`` when that names a ``.zip``, else
-under the Zenodo file name (the path segment before ``/content``) in
+which today resolves to a URL such as
+``https://zenodo.org/api/records/23500708/files/v2.15-2026-10-20-ror-data.zip/content``.
+The sibling ``key`` and ``checksum`` of the same ``files`` entry give the
+file name and the MD5 the base class verifies. The file is saved as
+``dumpFilePath`` when that names a ``.zip``, else under its own name in
 ``dumps_dir``; a ``dumpFilePath`` naming the extracted JSON, as the live
 configuration does until the loader reads the zip (item 29), is left
 alone. Any ``input_files`` entries (the published export) come from the
@@ -34,6 +36,16 @@ def zenodo_filename(url):
     return parts[-1]
 
 
+def sibling_path(xpath, field):
+    """The JSON path of `field` in the same ``files[]`` entry as `xpath`:
+    ``files[0]/links/self`` -> ``files[0]/checksum``."""
+    sep = "/" if "/" in xpath else "."
+    parts = xpath.split(sep)
+    while parts and parts[-1] in ("self", "links"):
+        parts.pop()
+    return sep.join([*parts, field])
+
+
 class RorDownloader(BaseDownloader):
     def get_urls(self, type="all"):
         urls = super().get_urls(type)
@@ -43,13 +55,17 @@ class RorDownloader(BaseDownloader):
         xpath = self.config.get("downloadXPath")
         if not (md_url and xpath):
             return urls
-        url = self.get_value_from_json(md_url, xpath)
+        doc = self.fetch_json(md_url)
+        url = self.json_value(doc, xpath, md_url) if doc else None
         if not url:
             logger.error(f"{self.name}: could not discover the current data release from {md_url}")
             return urls
+        # the same files[] entry carries the name and the checksum
+        name = self.json_value(doc, sibling_path(xpath, "key"), md_url) or zenodo_filename(url)
+        checksum = self.json_value(doc, sibling_path(xpath, "checksum"), md_url)
         dfp = self.config.get("dumpFilePath") or ""
-        if dfp.lower().endswith(".zip"):
-            path = self.resolve_path(dfp)
-        else:
-            path = self.resolve_path(zenodo_filename(url))
-        return [{"url": url, "path": path}, *urls]
+        path = self.resolve_path(dfp) if dfp.lower().endswith(".zip") else self.resolve_path(name)
+        entry = {"url": url, "path": path}
+        if checksum:
+            entry["checksum"] = checksum
+        return [entry, *urls]

@@ -40,9 +40,14 @@ Configuration keys, all per source and all optional:
 
 A file is streamed to ``<path>.part`` and renamed into place when the
 transfer completes, so an interrupted download never leaves a truncated
-file for the loader to find.
+file for the loader to find. A download entry may carry a ``checksum``
+(``"md5:<hex>"`` or ``"sha256:<hex>"``; a bare hex is MD5), which is
+verified over the stream before the rename. Every request sends a
+descriptive ``User-Agent`` (`USER_AGENT`): some hosts, Zenodo among
+them, may refuse the default library one.
 """
 
+import hashlib
 import json
 import logging
 import os
@@ -57,6 +62,8 @@ logger = logging.getLogger("lux_pipeline")
 
 _INDEX_RE = re.compile(r"\[(\d+)\]")
 
+USER_AGENT = "lux-pipeline/0.1 (+https://github.com/project-lux/data-pipeline)"
+
 
 class BaseDownloader(Sliced):
     """Provide URLs to the download manager and fetch them one at a time.
@@ -67,6 +74,7 @@ class BaseDownloader(Sliced):
 
     chunk_size = 64 * 1024
     timeout = (10, 60)
+    user_agent = USER_AGENT
 
     def __init__(self, config):
         self.config = config
@@ -121,38 +129,43 @@ class BaseDownloader(Sliced):
 
     # --- splash-page helpers ---------------------------------------------
 
+    def headers(self):
+        return {"User-Agent": self.user_agent}
+
     def fetch_webpage(self, url):
         """Return the text at ``url``, or ``None`` (logged) if the request fails."""
         try:
-            response = requests.get(url, timeout=self.timeout, verify=self.verify_ssl())
+            response = requests.get(url, timeout=self.timeout, verify=self.verify_ssl(),
+                                    headers=self.headers())
             response.raise_for_status()
             return response.text
         except requests.RequestException as e:
             logger.error(f"{self.name}: error fetching {url}: {e}")
             return None
 
-    def get_value_from_json(self, base_url, data_key):
-        """Fetch JSON from ``base_url`` and return the string at ``data_key``.
-
-        ``data_key`` is a dotted path with optional list indexes, e.g.
-        ``hits.hits[0].files[0].links.self``; slashes are accepted in place
-        of dots. Returns ``None`` (logged) when the path does not lead to a
-        string.
-        """
-        response = self.fetch_webpage(base_url)
+    def fetch_json(self, url):
+        """The parsed JSON at ``url`` (redirects followed), or ``None``
+        (logged) when the request fails; a non-JSON or empty body raises."""
+        response = self.fetch_webpage(url)
         if response is None:
             return None
         try:
-            page_data = json.loads(response)
+            data = json.loads(response)
         except ValueError as e:
-            raise ValueError(f"{self.name}: failed to parse JSON from {base_url}: {e}")
-        if not page_data:
-            raise ValueError(f"{self.name}: received empty JSON response from {base_url}")
+            raise ValueError(f"{self.name}: failed to parse JSON from {url}: {e}")
+        if not data:
+            raise ValueError(f"{self.name}: received empty JSON response from {url}")
+        return data
 
+    def json_value(self, data, data_key, base_url=""):
+        """The string at ``data_key`` in parsed ``data``, else ``None``
+        (logged). ``data_key`` is a dotted path with optional list indexes,
+        e.g. ``hits.hits[0].files[0].links.self``; slashes are accepted in
+        place of dots."""
         if "/" in data_key and "." not in data_key:
             data_key = data_key.replace("/", ".")
         try:
-            value = self._walk_json(page_data, data_key)
+            value = self._walk_json(data, data_key)
         except (IndexError, KeyError, TypeError) as e:
             logger.error(f"{self.name}: cannot follow JSON path {data_key!r} in {base_url}: {e!r}")
             return None
@@ -160,6 +173,14 @@ class BaseDownloader(Sliced):
             logger.error(f"{self.name}: JSON path {data_key!r} in {base_url} is not a string: {value!r}")
             return None
         return value
+
+    def get_value_from_json(self, base_url, data_key):
+        """Fetch JSON from ``base_url`` and return the string at ``data_key``
+        (see `json_value`), or ``None`` (logged)."""
+        data = self.fetch_json(base_url)
+        if data is None:
+            return None
+        return self.json_value(data, data_key, base_url)
 
     @staticmethod
     def _walk_json(data, data_key):
@@ -182,17 +203,34 @@ class BaseDownloader(Sliced):
 
     # --- fetching ----------------------------------------------------------
 
+    @staticmethod
+    def parse_checksum(value):
+        """``(algorithm, hex)`` from ``"md5:abc..."``, ``"sha256:..."`` or a
+        bare hex (MD5); ``None`` for an empty or unknown value."""
+        if not value or not isinstance(value, str):
+            return None
+        algo, _, digest = value.partition(":")
+        if not digest:
+            algo, digest = "md5", algo
+        algo = algo.lower()
+        if algo not in hashlib.algorithms_available:
+            logger.warning(f"Unknown checksum algorithm {algo!r}; not verifying")
+            return None
+        return algo, digest.strip().lower()
+
     def process(self, download, overwrite=True):
         """Stream ``download["url"]`` to ``download["path"]``.
 
         Returns 1 when a file was written and 0 when an existing file was
         kept because ``overwrite`` is false. Raises on any HTTP or transfer
-        error, after removing the partial file.
+        error, or a ``checksum`` mismatch, after removing the partial file.
         """
         url = download["url"]
         path = download["path"]
         filename = os.path.basename(path)
         label = f"{self.name}/{filename}" if self.name else filename
+        checksum = self.parse_checksum(download.get("checksum"))
+        hasher = hashlib.new(checksum[0]) if checksum else None
 
         if not overwrite and os.path.exists(path):
             logger.info(f"{label}: exists, not overwriting")
@@ -203,7 +241,8 @@ class BaseDownloader(Sliced):
         part = path + ".part"
         written = 0
         try:
-            with requests.get(url, stream=True, timeout=self.timeout, verify=self.verify_ssl()) as response:
+            with requests.get(url, stream=True, timeout=self.timeout, verify=self.verify_ssl(),
+                              headers=self.headers()) as response:
                 response.raise_for_status()
                 total = int(response.headers.get("content-length") or 0)
                 if total:
@@ -215,9 +254,14 @@ class BaseDownloader(Sliced):
                         if chunk:
                             size = fh.write(chunk)
                             written += size
+                            if hasher is not None:
+                                hasher.update(chunk)
                             self.progress(advance=size)
             if total and written != total:
                 raise IOError(f"{label}: short download, {written:,} of {total:,} bytes")
+            if hasher is not None and hasher.hexdigest() != checksum[1]:
+                raise IOError(f"{label}: {checksum[0]} checksum mismatch, got {hasher.hexdigest()} "
+                              f"expected {checksum[1]}")
         except BaseException:
             try:
                 os.remove(part)
