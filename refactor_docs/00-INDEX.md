@@ -28,7 +28,7 @@ you finish an item.
 | 11 | [Mapper hooks (`make_export_filename`, `extract_index_data`)](11-mapper-hooks.md) | P1 | S | 01 | ☑ |
 | 12 | [Loader micro‑DSL (`process/base/loader.py`) + tests](12-loader-dsl.md) | P1 | L | 02, 04, 11 | ☑ |
 | 13 | [`LoadManager` and `lux load`](13-load-command.md) | P1 | S | 07, 12 | ☑ |
-| 35 | [Sub‑config stores](35-subconfig-stores.md) | P1 | S | 04 | ☐ |
+| 35 | [Sub‑config stores](35-subconfig-stores.md) | P1 | S | 04 | ☑ |
 | 14 | [Downloader base class](14-downloader-base.md) | P1 | S | 02, 04 | ☑ |
 | 15 | [`DownloadManager` and `lux download`](15-download-command.md) | P1 | S | 07, 14 | ☐ |
 | 16 | [Harvester: protocol / driver split](16-harvester-protocols.md) | P1 | M | 02, 04 | ☑ |

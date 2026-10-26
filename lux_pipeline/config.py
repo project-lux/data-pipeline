@@ -79,6 +79,10 @@ class Config(object):
         self.globals_cfg = {}
         self.validator = None
         self.configcache = None
+        # {record key: record} for "type": "config" records: other caches
+        # whose records are more configuration (item 35). Loaded after the
+        # main directory, in key order; see load_subconfig_store()
+        self.subconfig_stores = {}
         # Flattened (match, source) pairs; built lazily on first split_uri()
         self._match_pairs = None
         # canonicalize() is a pure function of the URI (the fix_identifier
@@ -106,6 +110,10 @@ class Config(object):
             }
             configcache = FsCache(bootstrap)
             self.configcache = configcache
+        # The directory the configuration was read from: what a sub-config
+        # store's relative base_dir resolves against
+        self.config_dir = os.path.abspath(
+            basepath or getattr(configcache, "config", {}).get("base_dir") or os.getcwd())
 
         # Machine-specific settings live in a "system" record when the
         # instance has one, else in "base" (today's name). Checked with `in`
@@ -157,6 +165,20 @@ class Config(object):
             rec = configcache[k]["data"]
             self.handle_config_record(k, rec)
 
+        # Sub-config stores, after every record of the main directory so the
+        # defaults they may need are complete. A store may itself hold a
+        # "config" record; those are queued, each store loaded once
+        pending = sorted(self.subconfig_stores)
+        loaded = set()
+        while pending:
+            key = pending.pop(0)
+            if key in loaded:
+                continue
+            loaded.add(key)
+            self.load_subconfig_store(key)
+            pending.extend(sorted(k for k in self.subconfig_stores
+                                  if k not in loaded and k not in pending))
+
         # Today's single "caches" record is the cache default when the
         # instance has no explicit one
         if self.caches and not self.defaults["cache"]:
@@ -197,6 +219,8 @@ class Config(object):
             self.marklogic_stores[rec["name"]] = rec
         elif typ == "map":
             self.map_stores[rec["name"]] = rec
+        elif typ == "config":
+            self.subconfig_stores[k] = rec
         else:
             logger.critical(f"Unknown config type: {typ} in {k}")
 
@@ -441,6 +465,53 @@ class Config(object):
         clso = importObject(clss)
         cfg["store"] = clso(tmp_cfg)
         return cfg
+
+    def instantiate_config(self, key):
+        """Build the cache behind sub-config store `key` as its
+        ``datacache``. The store's ``base_dir``, when relative, is taken
+        from the directory this configuration was read from
+        (``config_dir``), so a checkout can point at a sibling directory
+        with ``"base_dir": "../subs"``; an absolute one is left alone. The
+        store class defaults to `FsCache` with ``tabletype`` ``cache``, so
+        ``{"name": "sources", "base_dir": "../subs"}`` reads
+        ``../subs/sources_cache/*.json``. A directory that does not exist
+        is an error (FsCache would otherwise create an empty one)."""
+        if not key or key not in self.subconfig_stores:
+            raise ValueError(f"No such sub-config store: {key}")
+        cfg = self.subconfig_stores[key]
+        if cfg.get("datacache") is not None:
+            return cfg
+        if "name" not in cfg:
+            raise ValueError(f"Sub-config store {key} has no 'name'")
+        bd = cfg.get("base_dir")
+        if bd is not None and not os.path.isabs(bd):
+            cfg["base_dir"] = os.path.normpath(os.path.join(self.config_dir, bd))
+        cfg.setdefault("tabletype", "cache")
+        cfg["all_configs"] = self
+        if cfg.get("base_dir") is not None:
+            directory = os.path.join(cfg["base_dir"], f"{cfg['name']}_{cfg['tabletype']}")
+            if not os.path.isdir(directory):
+                raise ValueError(f"Sub-config store {key} points at a directory that "
+                                 f"does not exist: {directory}")
+        cls = importObject(cfg.get("datacacheClass") or "storage.cache.filesystem.FsCache")
+        tmp_cfg = self.merge_configs(cfg, self.defaults["cache"])
+        cfg["datacache"] = cls(tmp_cfg)
+        return cfg
+
+    def load_subconfig_store(self, key):
+        """Read every record of sub-config store `key` through
+        `handle_config_record`, so its sources, maps, stores and defaults
+        land where the main directory's would. A record with the same key
+        as one already read replaces it (later wins). Returns the number of
+        records read."""
+        cache = self.instantiate_config(key)["datacache"]
+        n = 0
+        for k in cache.iter_keys():
+            rec = cache[k]["data"]
+            self.handle_config_record(k, rec)
+            n += 1
+        logger.info(f"Read {n} configuration records from sub-config store {key}")
+        return n
 
     def instantiate(self, key, which=None):
         # build the set of components for a configured source
