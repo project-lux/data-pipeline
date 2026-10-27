@@ -1,3 +1,4 @@
+import glob
 import logging
 import os
 import time
@@ -66,6 +67,38 @@ class ReferenceManager(object):
         out = {k: sorted(v) for (k, v) in self.metatypes_seen.items()}
         with open(fn, "w") as fh:
             fh.write(json.dumps(out))
+
+    def merge_metatypes(self):
+        """Merge the slices' ``metatypes-*.json`` -- written by
+        `write_metatypes` into the working directory -- into
+        ``<data_dir>/metatypes.json``, where the final mapper reads it, and
+        delete the slice files. merge-metatypes.py plus run-all.sh's ``rm``
+        and ``mv`` as a method: the files in sorted order, so a key's list
+        does not depend on filesystem order; the first file's lists are
+        kept and the others' entries appended when new. Returns the merged
+        map; an empty one when there are no slice files."""
+        files = sorted(glob.glob("metatypes-*.json"))
+        mt = {}
+        for f in files:
+            with open(f) as fh:
+                data = fh.read()
+            js = json.loads(data)
+            if not mt:
+                mt = js
+            else:
+                for k, v in js.items():
+                    if not k in mt:
+                        mt[k] = v
+                    else:
+                        for i in v:
+                            if not i in mt[k]:
+                                mt[k].append(i)
+        with open(os.path.join(self.configs.data_dir, "metatypes.json"), "w") as fh:
+            fh.write(json.dumps(mt))
+        for f in files:
+            os.remove(f)
+        logger.info(f"metatypes.json: {len(mt)} keys from {len(files)} slice file(s)")
+        return mt
 
     @staticmethod
     def _batched(itr, size):

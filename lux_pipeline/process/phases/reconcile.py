@@ -14,6 +14,7 @@ and resolved afterwards by run-identify.py -- but what gets logged is exactly
 what these loops produce, so the loops are the phase.
 """
 
+import datetime
 import logging
 import os
 
@@ -83,6 +84,38 @@ def select_sources(cfgs, names=(), all_internal=False, baseline=False, recids=()
     s_to_do.sort(key=lambda x: x[1])
     to_do = [x[0] for x in s_to_do]
     return to_do
+
+
+def new_update_token(cfgs, idmap):
+    """Mint the build token for a rebuild: ``__YYYYMMDD__`` for the first
+    build of the day, then ``__YYYYMMDDa__``, ``b``, ... -- the letter after
+    the one `idmap` holds when its token is today's.
+
+    Written to ``<data_dir>/idmap_update_token.txt``, where every idmap
+    reads it when built, and set on `idmap` itself: it was built before
+    this and would otherwise stamp the rest of this process's work -- the
+    identity resolution in the driver, a worker under the null engine --
+    with the old token. manage-data.py ``--new-token`` as a function
+    (``lux new-token``, item 22, calls it too). Returns the token.
+    """
+    now = datetime.datetime.now()
+    mm = f"0{now.month}" if now.month < 10 else now.month
+    dd = f"0{now.day}" if now.day < 10 else now.day
+    stok = f"__{now.year}{mm}{dd}"
+    if idmap.update_token.startswith(stok):
+        if idmap.update_token[-3].isalpha():
+            letter = chr(ord(idmap.update_token[-3]) + 1)
+        else:
+            letter = "a"
+        tok = f"{stok}{letter}__"
+    else:
+        tok = f"{stok}__"
+    fn = os.path.join(cfgs.data_dir, "idmap_update_token.txt")
+    with open(fn, "w") as fh:
+        fh.write(f"{tok}\n")
+    idmap.update_token = tok
+    logger.info(f"New update token: {tok}")
+    return tok
 
 
 def reconcile_slice(cfgs, idmap, networkmap, to_do, my_slice=-1, max_slice=-1,
