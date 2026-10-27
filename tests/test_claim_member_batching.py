@@ -7,8 +7,8 @@ survivor. What it does not have to do is spend a round trip per candidate:
 measured over a merge of 100.7M records, 1.2M calls at 28ms each -- the worst
 per-call cost in the phase by a factor of seven.
 
-run-merge.py is a script, not a module, so the function is rebuilt here
-against the same contract rather than imported.
+The function under test is the phase's own (`make_claim_member` in
+lux_pipeline/process/phases/merge.py), closed over a stub configuration.
 """
 
 import sys
@@ -17,6 +17,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
+
+from lux_pipeline.process.phases import merge as phase
 
 
 class Cache:
@@ -40,49 +42,28 @@ class Cache:
 
 NS = {"ycba": "https://ycba.example/", "ypm": "https://ypm.example/"}
 
-CLAIM_CHUNK = 100
+class Cfgs:
+    """The two configuration calls the claim makes, over these sources."""
 
+    def __init__(self, sources):
+        self.sources = sources
 
-def make_claim_member(sources):
-    """run-merge.py's claim_member, with its two module-level dependencies
-    (cfgs and internal_namespaces) passed in."""
-    internal_namespaces = tuple(NS[n] for n in sources)
-
-    def split_qua(uri):
+    def split_qua(self, uri):
         return uri.split("##qua")
 
-    def split_uri(uri):
+    def split_uri(self, uri):
         for name, ns in NS.items():
-            if uri.startswith(ns) and name in sources:
-                return (sources[name], uri[len(ns):])
+            if uri.startswith(ns) and name in self.sources:
+                return (self.sources[name], uri[len(ns):])
         raise ValueError(uri)
 
-    def claim_member(cluster, present=(), chunk_size=CLAIM_CHUNK):
-        cands = sorted(m for m in cluster
-                       if not m.startswith("__")
-                       and m.startswith(internal_namespaces))
-        for i in range(0, len(cands), chunk_size):
-            chunk = []
-            for cand in cands[i:i + chunk_size]:
-                try:
-                    (csrc, crecid) = split_uri(split_qua(cand)[0])
-                except Exception:
-                    continue
-                chunk.append((cand, csrc, crecid))
 
-            asked = {}
-            for cand, csrc, crecid in chunk:
-                if cand in present:
-                    return (cand, csrc)
-                name = csrc["name"]
-                if name not in asked:
-                    mine = [c for (_u, s, c) in chunk if s["name"] == name]
-                    asked[name] = csrc["recordcache"].has_multi(mine)
-                if crecid in asked[name]:
-                    return (cand, csrc)
-        return (None, None)
-
-    return claim_member
+def make_claim_member(sources, chunk_size=phase.CLAIM_CHUNK, cache_size=phase.CLAIM_CACHE_SIZE):
+    """The phase's claim_member over these sources: cached on `key` as in
+    the merge loop, uncached without one."""
+    internal_namespaces = tuple(NS[n] for n in sources)
+    return phase.make_claim_member(Cfgs(sources), internal_namespaces,
+                                   chunk_size=chunk_size, cache_size=cache_size)
 
 
 def sources(**present):
@@ -194,19 +175,19 @@ def test_an_unsplittable_member_is_skipped_not_fatal():
 
 def test_the_query_never_exceeds_one_chunk():
     srcs = sources(ycba=["a00000"])
-    claim = make_claim_member(srcs)
+    claim = make_claim_member(srcs, chunk_size=100)
     cluster = {uri("ycba", f"{i:06d}") for i in range(5000)}
     cluster.add(uri("ycba", "a00000"))
-    claim(cluster, chunk_size=100)
+    claim(cluster)
     assert max(len(c) for c in srcs["ycba"]["recordcache"].calls) <= 100
 
 
 def test_a_hit_in_the_first_chunk_stops_there():
     """5000 members, the smallest exists: one query, not fifty."""
     srcs = sources(ycba=["000000"])
-    claim = make_claim_member(srcs)
+    claim = make_claim_member(srcs, chunk_size=100)
     cluster = {uri("ycba", f"{i:06d}") for i in range(5000)}
-    (claimed, _) = claim(cluster, chunk_size=100)
+    (claimed, _) = claim(cluster)
     assert claimed == uri("ycba", "000000")
     assert len(srcs["ycba"]["recordcache"].calls) == 1
 
@@ -214,9 +195,9 @@ def test_a_hit_in_the_first_chunk_stops_there():
 def test_later_chunks_are_walked_when_earlier_ones_are_all_gone():
     """Correctness must not depend on the answer being near the front."""
     srcs = sources(ycba=["000250"])
-    claim = make_claim_member(srcs)
+    claim = make_claim_member(srcs, chunk_size=100)
     cluster = {uri("ycba", f"{i:06d}") for i in range(500)}
-    (claimed, _) = claim(cluster, chunk_size=100)
+    (claimed, _) = claim(cluster)
     assert claimed == uri("ycba", "000250")
     assert len(srcs["ycba"]["recordcache"].calls) == 3      # chunks 0,1,2
 
@@ -226,19 +207,18 @@ def test_chunking_does_not_change_the_winner():
     later one, so the chunk size must not be able to change the answer."""
     srcs = sources(ycba=["000137", "000298"])
     cluster = {uri("ycba", f"{i:06d}") for i in range(500)}
-    winners = {make_claim_member(sources(ycba=["000137", "000298"]))(
-        cluster, chunk_size=n)[0] for n in (1, 7, 100, 499, 500, 1000)}
+    winners = {make_claim_member(sources(ycba=["000137", "000298"]), chunk_size=n)(
+        cluster)[0] for n in (1, 7, 100, 499, 500, 1000)}
     assert winners == {uri("ycba", "000137")}
 
 
 def test_candidates_past_the_stopping_point_are_never_parsed():
     """A cluster of 88,447 would otherwise cost 88,447 split_uri calls per
     member, whatever the query size."""
-    parsed = []
     srcs = sources(ycba=["000000"])
-    claim = make_claim_member(srcs)
+    claim = make_claim_member(srcs, chunk_size=100)
     cluster = {uri("ycba", f"{i:06d}") for i in range(5000)}
-    (claimed, _) = claim(cluster, chunk_size=100)
+    (claimed, _) = claim(cluster)
     # the chunk that answered held 100 candidates; the other 4,900 were not
     # split, which the single query above already implies
     assert claimed == uri("ycba", "000000")
@@ -247,10 +227,10 @@ def test_candidates_past_the_stopping_point_are_never_parsed():
 
 def test_present_still_short_circuits_before_any_query():
     srcs = sources(ycba=[])
-    claim = make_claim_member(srcs)
+    claim = make_claim_member(srcs, chunk_size=100)
     mine = uri("ycba", "000000")
     cluster = {uri("ycba", f"{i:06d}") for i in range(5000)}
-    (claimed, _) = claim(cluster, present=(mine,), chunk_size=100)
+    (claimed, _) = claim(cluster, present=(mine,))
     assert claimed == mine
     assert srcs["ycba"]["recordcache"].calls == []
 
@@ -264,30 +244,6 @@ def test_present_still_short_circuits_before_any_query():
 # The answer is a pure function of the cluster's membership -- which is what
 # the YUID names -- so it can be cached on that. The premise is that
 # `present` cannot change the answer, which the first test here pins.
-
-import collections
-
-
-def memoised(claim, size=20000):
-    """run-merge.py's wrapper, with its own cache."""
-    cache = collections.OrderedDict()
-
-    def wrapper(cluster, present=(), key=None):
-        if key is None:
-            return claim(cluster, present)
-        hit = cache.get(key)
-        if hit is not None:
-            cache.move_to_end(key)
-            return hit
-        ans = claim(cluster, present)
-        cache[key] = ans
-        if len(cache) > size:
-            cache.popitem(last=False)
-        return ans
-
-    wrapper.cache = cache
-    return wrapper
-
 
 @pytest.mark.parametrize("existing", [
     ["a"], ["b"], ["a", "b"], ["b", "c"], ["a", "b", "c"],
@@ -306,7 +262,7 @@ def test_present_cannot_change_the_answer(existing):
 
 def test_a_repeat_key_is_answered_from_the_cache():
     srcs = sources(ycba=["a"])
-    claim = memoised(make_claim_member(srcs))
+    claim = make_claim_member(srcs)
     cluster = {uri("ycba", c) for c in "abcdef"}
     first = claim(cluster, key="YU")
     for _ in range(50):
@@ -316,14 +272,14 @@ def test_a_repeat_key_is_answered_from_the_cache():
 
 def test_different_clusters_are_not_confused():
     srcs = sources(ycba=["a", "z"])
-    claim = memoised(make_claim_member(srcs))
+    claim = make_claim_member(srcs)
     assert claim({uri("ycba", "a")}, key="Y1")[0] == uri("ycba", "a")
     assert claim({uri("ycba", "z")}, key="Y2")[0] == uri("ycba", "z")
 
 
 def test_without_a_key_nothing_is_cached():
     srcs = sources(ycba=["a"])
-    claim = memoised(make_claim_member(srcs))
+    claim = make_claim_member(srcs)
     cluster = {uri("ycba", "a"), uri("ycba", "b")}
     claim(cluster)
     claim(cluster)
@@ -333,7 +289,7 @@ def test_without_a_key_nothing_is_cached():
 
 def test_the_cache_is_bounded_and_evicts_the_least_recent():
     srcs = sources(ycba=["a"])
-    claim = memoised(make_claim_member(srcs), size=3)
+    claim = make_claim_member(srcs, cache_size=3)
     for i in range(10):
         claim({uri("ycba", "a")}, key=f"Y{i}")
     assert len(claim.cache) == 3
@@ -344,7 +300,7 @@ def test_a_none_answer_is_cached_too():
     """A cluster with no surviving internal member belongs to the reference
     pass. Re-deciding that for every member is the same waste."""
     srcs = sources(ycba=[])
-    claim = memoised(make_claim_member(srcs))
+    claim = make_claim_member(srcs)
     cluster = {uri("ycba", c) for c in "abc"}
     assert claim(cluster, key="YU") == (None, None)
     assert claim(cluster, key="YU") == (None, None)
@@ -355,6 +311,6 @@ def test_the_cached_answer_matches_the_uncached_one():
     srcs_a, srcs_b = sources(ycba=["m"], ypm=["b"]), sources(ycba=["m"], ypm=["b"])
     cluster = {uri("ycba", "m"), uri("ypm", "b"), uri("ycba", "z")}
     plain = make_claim_member(srcs_a)(cluster)
-    cached = memoised(make_claim_member(srcs_b))(cluster, key="YU")
+    cached = make_claim_member(srcs_b)(cluster, key="YU")
     assert plain[0] == cached[0]
     assert plain[1]["name"] == cached[1]["name"]
