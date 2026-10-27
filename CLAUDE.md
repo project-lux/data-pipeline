@@ -105,5 +105,6 @@ laptop (the validator reads its schemas on first use, not at construction).
 | `lux_pipeline/cli/_view.py`, `watch.py` | `BuildView` (the only Rich user) and `lux watch` |
 | `lux_pipeline/process/tasks/_task_manager.py` | `TaskManager`, `_run_worker`, null / mp / ray engines, `WorkerFailed` |
 | `lux_pipeline/process/timing.py` | `PhaseTimer` (takes `progress=`; its prints are intentionally kept) |
+| `lux_pipeline/process/phases/reconcile.py` | `select_sources`, `reconcile_slice`: `run-reconcile.py`'s body; the loops are moved verbatim, never edited |
 
 Worker status and log files follow `<log_dir>/<command>-<timestamp>-w<n>.status|.log`.

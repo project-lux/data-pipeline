@@ -81,6 +81,22 @@ def test_throttled_writer_only_writes_on_flush(tmp_path):
     assert read_status(path)["completed"] == 2
 
 
+def test_reset_starts_a_second_pass_from_zero(tmp_path):
+    """Reconcile's references pass starts after the records timer has
+    reported done and a total; reset clears both, and total=None cannot."""
+    path = str(tmp_path / "w.status")
+    sw = StatusWriter(path, worker=1, throttle=0)
+    sw(phase="reconcile", total=10, advance=10, done=True)
+    sw(total=None)
+    assert read_status(path)["total"] == 10
+    sw(reset=True, phase="reconcile-refs", description="references")
+    st = read_status(path)
+    assert (st["completed"], st["total"], st["done"]) == (0, None, False)
+    assert (st["phase"], st["description"]) == ("reconcile-refs", "references")
+    sw(advance=3)
+    assert read_status(path)["completed"] == 3
+
+
 def test_writer_leaves_no_temp_file_behind(tmp_path):
     path = status_path(str(tmp_path / "x"), 0)
     sw = StatusWriter(path, worker=0, throttle=0)

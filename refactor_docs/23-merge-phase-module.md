@@ -12,7 +12,7 @@ Same operation as item 20, for merge. Move `run-merge.py`'s body into
 def read_update_token(cfgs) -> str                  # idmap_update_token.txt validation
 def select_sources(cfgs, names=(), all_internal=False, only_refs=False) -> list[(name, cfg)]
 def merge_slice(cfgs, idmap, to_do, my_slice=-1, max_slice=-1, recids=(),
-                do_references=True, resume=False, progress=None, write_flag=True, profile=False) -> dict
+                do_references=True, resume=False, progress=None, write_flag=True) -> dict
 ```
 
 `claim_member` / `_claim_member` and their caches, `prefetched` batching,
@@ -32,7 +32,7 @@ must call this function.
 | Action | Path on `main` |
 |---|---|
 | Create | `lux_pipeline/process/phases/merge.py` |
-| Edit | `run-merge.py` → thin wrapper with today's CLI (`0 24 --all`, `--norefs`, `--resume`, `--recid`, `--onlyrefs`, `--profile`) |
+| Edit | `run-merge.py` → thin wrapper with today's CLI (`0 24 --all`, `--norefs`, `--resume`, `--recid`, `--onlyrefs`; `--profile` removed from argv and ignored, see item 41) |
 | Create | `tests/test_phase_merge_select.py` |
 
 ## What to do

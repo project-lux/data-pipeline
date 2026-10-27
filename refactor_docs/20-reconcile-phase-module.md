@@ -14,7 +14,7 @@ def select_sources(cfgs, names=(), all_internal=False, baseline=False, recids=()
     # the --all / --<src> / --baseline / --recid parsing, and the len_estimate() sort
 
 def reconcile_slice(cfgs, idmap, networkmap, to_do, my_slice=-1, max_slice=-1,
-                    do_references=True, progress=None, write_flag=True, profile=False) -> dict
+                    do_references=True, progress=None, write_flag=True) -> dict
     # everything from "set up environment" to the flag file; returns timer.summary()
 ```
 
@@ -58,8 +58,40 @@ runs; it changes where the code lives.
 4. The `PoolManager.get_instance().put_all("localsocket")` and flag‑file
    write stay inside `reconcile_slice`, the latter behind `write_flag`.
 5. `run-reconcile.py` keeps its exact CLI (`0 24 --all`, `--norefs`,
-   `--recid`, `--baseline`, `--profile`) and the `logging.basicConfig` so its
-   output is unchanged for `run-all.sh`.
+   `--recid`, `--baseline`) and the `logging.basicConfig` so its
+   output is unchanged for `run-all.sh`. `--profile` is dropped: the
+   wrapper removes the token and ignores it (item 41 gives profiling one
+   home in `PhaseTimer`); the phase function has no `profile` parameter.
+
+## Decisions (2026‑10‑27, before implementation)
+
+* **Logging stream.** The wrapper's `logging.basicConfig` gains
+  `stream=sys.stdout`, so the moved messages land where the `print`s did
+  (`reconcile_parallel.sh` and `updateExternal_parallel.sh` redirect stdout
+  only). `print` → `logger.info`, except the acquire failures (`warning`),
+  "Got internal reference" (`error`, still followed by the `raise`) and
+  "Not processing" (`debug`, still behind `cfgs.debug_reconciliation`).
+* **Selection errors.** `select_sources` raises `ValueError` for `--recid`
+  with more than one source (today: message and `exit 0`) and for no source
+  at all (today: `IndexError`); the wrapper prints the message and exits 1.
+  Unknown `--foo` tokens are still ignored by the wrapper, as today;
+  `select_sources` itself rejects an unknown name passed explicitly.
+* **`--baseline` quirks preserved:** the aat/wikidata list is not sorted
+  by `len_estimate()`, `--recid` is ignored, and the numeric slice arguments
+  are ignored (it always runs unsliced).
+* **Progress.** The total is a running total across sources (as
+  `Loader._add_total`), `len(recids)` for an explicit list, else
+  `len_estimate() // max(max_slice, 1)`. The references pass starts with
+  `progress(reset=True, description="references")`: `StatusWriter` gains a
+  `reset` keyword that zeroes `completed`, clears `total` and sets
+  `done=False` (the records timer's `finish()` has just reported
+  `done=True`; `total=None` cannot clear a total). Test in
+  `tests/test_progress.py`.
+* **Return value:** `{"records": <summary>, "references": <summary or None>}`.
+* **Tests:** also `tests/test_phase_reconcile_slice.py`, pinning the loop's
+  behaviour with stubs (call order per record, the `source` stamp, sliced /
+  unsliced / recid iteration, memory‑cache switching, every branch of the
+  references loop, `do_references=False`, the flag file, the tidy‑up).
 
 ## Acceptance criteria
 

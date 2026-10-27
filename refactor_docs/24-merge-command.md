@@ -23,7 +23,7 @@ item 31's orchestration. The merge driver has no tail.
 | Action | Path on `main` | Source |
 |---|---|---|
 | Create | `lux_pipeline/process/tasks/merge_task.py` | skeleton from `rob_refactor` |
-| Create | `lux_pipeline/cli/merge.py` | `rob_refactor:lux_pipeline/cli/merge.py` + `--resume`, `--profile` |
+| Create | `lux_pipeline/cli/merge.py` | `rob_refactor:lux_pipeline/cli/merge.py` + `--resume` (no `--profile` until item 41) |
 | Create | `tests/test_merge_task.py` | new |
 
 ## What to port

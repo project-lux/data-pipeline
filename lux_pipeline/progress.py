@@ -10,6 +10,7 @@ calls it as it goes::
     progress(phase="references")   # a worker that runs two phases says so
     progress(completed=n)          # set the count outright
     progress(done=True)            # on the way out
+    progress(reset=True)           # a second pass starts: from zero, no total, not done
 
 It never knows whether anything is listening. The default listener is
 `null_progress`, which costs one function call. The other listener this
@@ -49,7 +50,7 @@ __all__ = [
 
 # The contract every long-running component accepts: any callable taking
 # these keyword arguments, all optional --
-#   progress(advance=1 | total=n | completed=n | description=str | phase=str | done=bool)
+#   progress(advance=1 | total=n | completed=n | description=str | phase=str | done=bool | reset=bool)
 Progress = Callable[..., None]
 
 
@@ -97,7 +98,14 @@ class StatusWriter:
         self._last_write = float("-inf")
 
     def __call__(self, advance=0, total=None, completed=None, description=None,
-                 phase=None, done=None):
+                 phase=None, done=None, reset=False):
+        if reset:
+            # a second pass in the same worker (reconcile's references): the
+            # first pass's finish() reported done and a total that no longer
+            # applies, and total=None cannot clear one
+            self.completed = 0
+            self.total = None
+            self.done = False
         if advance:
             self.completed += advance
         if completed is not None:
