@@ -97,7 +97,7 @@ laptop (the validator reads its schemas on first use, not at construction).
 
 | Module | Role |
 |---|---|
-| `lux_pipeline/progress.py` | `null_progress`, `StatusWriter`, `read_status`, `status_path`/`log_path`, `Sliced` |
+| `lux_pipeline/progress.py` | `null_progress`, `StatusWriter`, `read_status`, `unfinished_workers`, `status_path`/`log_path`, `Sliced` |
 | `lux_pipeline/runtime.py` | `get_configs()` (cached per process), `reset_configs()`, `configure_logging()` |
 | `lux_pipeline/log.py` | the shared `logger` |
 | `lux_pipeline/config.py` | `importObject` with legacy-path shim; `Config` reading `system`/`base` and `default` records; `max_workers`, `temp_dir`, `indexes_dir` |
@@ -105,7 +105,9 @@ laptop (the validator reads its schemas on first use, not at construction).
 | `lux_pipeline/cli/_view.py`, `watch.py` | `BuildView` (the only Rich user) and `lux watch` |
 | `lux_pipeline/process/tasks/_task_manager.py` | `TaskManager`, `_run_worker`, null / mp / ray engines, `WorkerFailed` |
 | `lux_pipeline/process/timing.py` | `PhaseTimer` (takes `progress=`; its prints are intentionally kept) |
-| `lux_pipeline/process/phases/reconcile.py` | `select_sources`, `reconcile_slice`: `run-reconcile.py`'s body; the loops are moved verbatim, never edited; `new_update_token` (`manage-data.py --new-token`) |
+| `lux_pipeline/process/phases/reconcile.py` | `select_sources`, `reconcile_slice`: `run-reconcile.py`'s body; the loops are moved verbatim, never edited; `next_update_token` / `new_update_token(cfgs, idmap=None)` (`manage-data.py --new-token`; reads the file when no idmap); `write_refs` (`--write-refs`) |
+| `lux_pipeline/process/phases/identify.py` | `resolve_identity`, `report_lines`, `vacuum_idmap`: `run-identify.py`'s body, also `ReconcileManager.finish`'s first step |
+| `lux_pipeline/cli/identify.py`, `new_token.py`, `metatypes.py`, `write_refs.py` | the steps between reconcile and merge as `BaseHandler`s; all refuse while a build runs (`_handler.refuse_while_building`, `--force`); `new-token` has `needs_configs = False` and never builds the idmap |
 | `lux_pipeline/process/tasks/reconcile_task.py`, `cli/reconcile.py` | `ReconcileManager` and `lux reconcile`: workers call `reconcile_slice`; the driver tail (identify, `ReferenceManager.merge_metatypes`, write-refs) is skipped for `--no-finish`, `--my-worker`, `--recid`, `--baseline` |
 | `lux_pipeline/process/phases/merge.py` | `read_update_token`, `select_sources`, `make_claim_member`, `merge_slice`: `run-merge.py`'s body; the loops are moved verbatim, never edited |
 | `lux_pipeline/process/phases/export.py` | `export_slice` (`run-export.py`'s body, loop verbatim), `export_sources_slice` (`run-source-build.py`), `export_nt_slice` (`manage-data.py --nt`); the wrappers pass the old `/data-export/output/lux/nt` path |

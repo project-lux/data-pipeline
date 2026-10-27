@@ -33,6 +33,7 @@ Design rules:
   here by `status_path` / `log_path` so the UI can find the files.
 """
 
+import glob
 import json
 import os
 import time
@@ -165,6 +166,27 @@ def read_status(path):
     except (OSError, ValueError):
         return None
     return data if isinstance(data, dict) else None
+
+
+def unfinished_workers(log_dir):
+    """``[(path, status), ...]`` for every ``<log_dir>/*-w<n>.status`` whose
+    worker has not reported done, newest first; ``[]`` when `log_dir` is
+    unset or missing.
+
+    A worker that fails still reports done on the way out (`_run_worker`),
+    so these are workers still running -- or killed outright (SIGKILL, the
+    OOM killer), which no ``finally`` survives. ``status["updated"]`` tells
+    the two apart. A file that cannot be read is skipped.
+    """
+    if not log_dir or not os.path.isdir(log_dir):
+        return []
+    out = []
+    for fn in glob.glob(os.path.join(glob.escape(log_dir), "*-w*.status")):
+        st = read_status(fn)
+        if st is not None and not st.get("done"):
+            out.append((fn, st))
+    out.sort(key=lambda x: x[1].get("updated") or 0, reverse=True)
+    return out
 
 
 class Sliced:

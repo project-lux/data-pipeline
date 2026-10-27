@@ -16,6 +16,7 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 from lux_pipeline.cli.reconcile import CommandHandler
+from lux_pipeline.process.phases import identify as identify_phase
 from lux_pipeline.process.phases import reconcile as phase
 from lux_pipeline.process.reference_manager import ReferenceManager
 from lux_pipeline.process.tasks import _task_manager, reconcile_task
@@ -152,7 +153,7 @@ def harness(tmp_path, monkeypatch):
 
             Resolver, RefMgr = make_tail(self.log)
             monkeypatch.setattr(reconcile_task, "reconcile_slice", reconcile_slice)
-            monkeypatch.setattr(reconcile_task, "IdentityResolver", Resolver)
+            monkeypatch.setattr(identify_phase, "IdentityResolver", Resolver)
             monkeypatch.setattr(reconcile_task, "ReferenceManager", RefMgr)
 
         def manager(self, sources=("ycba", "ypm"), workers=4, **options):
