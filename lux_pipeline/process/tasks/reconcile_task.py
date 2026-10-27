@@ -23,6 +23,9 @@ reconcile and merge, in its order:
 3. `ReferenceManager.write_done_refs()` and clearing the done-refs queue
    (`manage-data.py --write-refs`).
 
+The same three steps are the commands `lux identify`, `lux metatypes` and
+`lux write-refs` (item 22), for a run that skipped them.
+
 It runs only when every worker succeeded, and not at all after a run that
 cannot have reconciled everything: ``--no-finish``, ``--my-worker`` (one
 slice of many), ``--recid`` or ``--baseline``. Identity resolved from a
@@ -31,10 +34,10 @@ of the evidence, and delete the YUIDs it no longer saw.
 """
 
 import logging
-import time
 
-from lux_pipeline.process.identity_resolver import IdentityResolver
-from lux_pipeline.process.phases.reconcile import new_update_token, reconcile_slice, select_sources
+from lux_pipeline.process.phases.identify import report_lines, resolve_identity, vacuum_idmap
+from lux_pipeline.process.phases.reconcile import (new_update_token, reconcile_slice, select_sources,
+                                                   write_refs)
 from lux_pipeline.process.reference_manager import ReferenceManager
 from ._task_manager import TaskManager
 
@@ -166,27 +169,20 @@ class ReconcileManager(TaskManager):
         idmap = cfgs.get_idmap()
 
         logger.info("Resolving the identity map from the assertions")
-        resolver = IdentityResolver(cfgs, idmap)
-        start = time.time()
-        stats = resolver.resolve_identity()
-        stats["seconds"] = round(time.time() - start, 1)
-        logger.info(f"nodes={stats.get('nodes')} pairs={stats.get('pairs')} "
-                    f"diff_pairs={stats.get('diff_pairs')} clusters={stats.get('clusters')}")
-        logger.info(f"conflicts={stats.get('conflicts')} (see identity_conflicts.jsonl)")
-        logger.info(f"identity resolved in {stats['seconds']}s")
+        stats = resolve_identity(cfgs, idmap)
+        for line in report_lines(stats):
+            logger.info(line)
         # The map has just been rewritten member by member and nothing else
         # vacuums it; merge is the phase that pays for the litter
-        optimize = getattr(idmap, "optimize", None)
-        if optimize is not None:
+        if hasattr(idmap, "optimize"):
             logger.info("Vacuuming the identity map")
-            optimize()
+        vacuum_idmap(idmap)
 
         ref_mgr = ReferenceManager(cfgs, idmap)
         logger.info("Merging metatypes")
         metatypes = ref_mgr.merge_metatypes()
         logger.info("Writing the referenced URIs to reference_uris.txt")
-        ref_mgr.write_done_refs()
-        ref_mgr.done_refs.clear()
+        write_refs(cfgs, idmap, ref_mgr)
         logger.info("Done, ready to merge")
 
         self.finish_stats = {"identify": stats, "metatypes": len(metatypes)}

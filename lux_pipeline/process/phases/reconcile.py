@@ -19,6 +19,7 @@ import logging
 import os
 
 from lux_pipeline.process.identity_resolver import IdentityResolver
+from lux_pipeline.process.phases.merge import read_update_token
 from lux_pipeline.process.reconciler import Reconciler
 from lux_pipeline.process.reference_manager import ReferenceManager
 from lux_pipeline.process.timing import PhaseTimer
@@ -86,36 +87,75 @@ def select_sources(cfgs, names=(), all_internal=False, baseline=False, recids=()
     return to_do
 
 
-def new_update_token(cfgs, idmap):
-    """Mint the build token for a rebuild: ``__YYYYMMDD__`` for the first
-    build of the day, then ``__YYYYMMDDa__``, ``b``, ... -- the letter after
-    the one `idmap` holds when its token is today's.
-
-    Written to ``<data_dir>/idmap_update_token.txt``, where every idmap
-    reads it when built, and set on `idmap` itself: it was built before
-    this and would otherwise stamp the rest of this process's work -- the
-    identity resolution in the driver, a worker under the null engine --
-    with the old token. manage-data.py ``--new-token`` as a function
-    (``lux new-token``, item 22, calls it too). Returns the token.
-    """
-    now = datetime.datetime.now()
+def next_update_token(current, now=None):
+    """The token after `current` (``None`` when there is none): ``__YYYYMMDD__``
+    for the first build of the day, then ``__YYYYMMDDa__``, ``b``, ... --
+    the letter after `current`'s when `current` is today's. `now` (a
+    ``datetime``) defaults to now. manage-data.py ``--new-token``'s rule."""
+    now = now or datetime.datetime.now()
+    current = current or ""
     mm = f"0{now.month}" if now.month < 10 else now.month
     dd = f"0{now.day}" if now.day < 10 else now.day
     stok = f"__{now.year}{mm}{dd}"
-    if idmap.update_token.startswith(stok):
-        if idmap.update_token[-3].isalpha():
-            letter = chr(ord(idmap.update_token[-3]) + 1)
+    if current.startswith(stok):
+        if current[-3].isalpha():
+            letter = chr(ord(current[-3]) + 1)
         else:
             letter = "a"
-        tok = f"{stok}{letter}__"
+        return f"{stok}{letter}__"
+    return f"{stok}__"
+
+
+def new_update_token(cfgs, idmap=None):
+    """Mint the build token for a rebuild (`next_update_token`) and write it
+    to ``<data_dir>/idmap_update_token.txt``, where every idmap reads it
+    when built. Returns the token.
+
+    The current token is `idmap`'s when one is given, and it is set on
+    `idmap` too: it was built before this and would otherwise stamp the
+    rest of this process's work -- the identity resolution in the driver, a
+    worker under the null engine -- with the old token. Without an idmap
+    (``lux new-token``, which must work when the file is missing or broken,
+    and the idmap cannot be built at all) it is read from the file, and a
+    missing or malformed file counts as no token: the first of today.
+
+    manage-data.py ``--new-token``, ``lux reconcile --new-token`` and
+    ``lux new-token`` all call this.
+    """
+    if idmap is not None:
+        current = idmap.update_token
     else:
-        tok = f"{stok}__"
+        try:
+            current = read_update_token(cfgs)
+        except (OSError, ValueError) as e:
+            logger.warning(f"No usable update token ({type(e).__name__}: {e}); "
+                           f"starting from today's first")
+            current = None
+    tok = next_update_token(current)
     fn = os.path.join(cfgs.data_dir, "idmap_update_token.txt")
     with open(fn, "w") as fh:
         fh.write(f"{tok}\n")
-    idmap.update_token = tok
+    if idmap is not None:
+        idmap.update_token = tok
     logger.info(f"New update token: {tok}")
     return tok
+
+
+def write_refs(cfgs, idmap, ref_mgr=None):
+    """Write the done-refs queue to ``reference_uris.txt`` and clear the
+    queue: manage-data.py ``--write-refs`` as a function. Needs identity to
+    have been resolved first, since each line carries its URI's YUID.
+
+    The file is written to the **working directory**, and merge
+    (`iter_done_refs`) reads it from there, so every phase of a build must
+    run from the same directory. `ref_mgr` is a `ReferenceManager` to use
+    instead of building one. Returns the file's absolute path.
+    """
+    if ref_mgr is None:
+        ref_mgr = ReferenceManager(cfgs, idmap)
+    ref_mgr.write_done_refs()
+    ref_mgr.done_refs.clear()
+    return os.path.abspath("reference_uris.txt")
 
 
 def reconcile_slice(cfgs, idmap, networkmap, to_do, my_slice=-1, max_slice=-1,

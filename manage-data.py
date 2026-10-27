@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 import logging
 logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
 from lux_pipeline.config import Config
+from lux_pipeline.process.phases.reconcile import new_update_token, write_refs
 from lux_pipeline.process.reference_manager import ReferenceManager
 from lux_pipeline.process.update_manager import UpdateManager
 
@@ -198,29 +199,13 @@ if "--validate" in sys.argv:
 ### WRITE NEW IDMAP TOKEN
 
 if "--new-token" in sys.argv:
-    now = datetime.datetime.now()
-    mm = f"0{now.month}" if now.month < 10 else now.month
-    dd = f"0{now.day}" if now.day < 10 else now.day
-    stok = f"__{now.year}{mm}{dd}"
-    if idmap.update_token.startswith(stok):
-        if idmap.update_token[-3].isalpha():
-            letter = chr(ord(idmap.update_token[-3]) + 1)
-        else:
-            letter = "a"
-        tok = f"{stok}{letter}__"
-    else:
-        tok = f"{stok}__"
-    fn = os.path.join(cfgs.data_dir, "idmap_update_token.txt")
-    with open(fn, "w") as fh:
-        fh.write(f"{tok}\n")
-    print(f"New update token: {tok}")
+    # logs "New update token: <token>", to stdout via basicConfig above
+    new_update_token(cfgs, idmap)
 
 
 ### EXPORT REFERENCE LIST
 if "--write-refs" in sys.argv:
-    ref_mgr = ReferenceManager(cfgs, idmap)
-    ref_mgr.write_done_refs()
-    done_refs.clear()
+    write_refs(cfgs, idmap)
 
 
 ### Quick places export

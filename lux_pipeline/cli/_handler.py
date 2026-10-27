@@ -13,9 +13,21 @@ until a command overrides `make_manager`, `process` only resolves the
 sources and reports them.
 """
 
+import logging
 import os
+import re
+import time
 from argparse import ArgumentParser
 from datetime import datetime
+
+from lux_pipeline.progress import unfinished_workers
+
+logger = logging.getLogger("lux_pipeline")
+
+# A worker that has not reported done but wrote its status this recently is
+# taken to be running; an older one was killed without reporting
+RUNNING_WINDOW = 3600
+_WORKER_RE = re.compile(r"^(?P<prefix>.*)-w(?P<n>\d+)\.status$")
 
 
 def default_prefix(cfgs, command):
@@ -24,6 +36,45 @@ def default_prefix(cfgs, command):
     log_dir = getattr(cfgs, "log_dir", None) or "."
     started = datetime.now().strftime("%Y-%m-%d-%H%M%S")
     return os.path.join(log_dir, f"{command or 'task'}-{started}")
+
+
+def refuse_while_building(cfgs, command, force=False, window=RUNNING_WINDOW, now=None):
+    """Raise ``RuntimeError`` when a ``lux`` build looks to be running:
+    some worker under ``<log_dir>`` has not reported done and updated its
+    status within `window` seconds. ``force`` turns the refusal into a
+    warning. Older unfinished workers are warned about (probably killed)
+    and do not block. Returns the running builds' prefixes.
+
+    For the steps that must not overlap a phase: identify rewrites the map
+    from whatever assertions exist, write-refs clears the queue the workers
+    fill, and a new token mid-build splits one build across two. Only
+    ``lux`` runs write status files: a legacy ``run-*.py`` /
+    ``*_parallel.sh`` run cannot be seen, nor one given a ``--prefix``
+    outside the log directory.
+    """
+    now = time.time() if now is None else now
+    running, stale = {}, {}
+    for fn, st in unfinished_workers(getattr(cfgs, "log_dir", None)):
+        m = _WORKER_RE.match(fn)
+        prefix = m.group("prefix") if m else fn
+        age = now - (st.get("updated") or 0)
+        group = running if age <= window else stale
+        group.setdefault(prefix, []).append(age)
+
+    def describe(builds):
+        return "; ".join(f"{p}: {len(ages)} worker(s) not done, last update "
+                         f"{int(min(ages) // 60)} min ago" for p, ages in builds.items())
+
+    if stale:
+        logger.warning(f"Unfinished workers with no update for over {window // 60} min, "
+                       f"probably killed: {describe(stale)}")
+    if running:
+        msg = f"a build is running ({describe(running)})"
+        if not force:
+            raise RuntimeError(f"{msg}; not running {command} during it. "
+                               f"Wait for it to finish, or pass --force")
+        logger.warning(f"{msg}; running {command} anyway (--force)")
+    return list(running)
 
 
 class BaseHandler:

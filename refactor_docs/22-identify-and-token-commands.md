@@ -1,4 +1,4 @@
-# 22. `lux identify`, `lux new-token`, `lux write-refs`
+# 22. `lux identify`, `lux new-token`, `lux write-refs` (and `lux metatypes`)
 
 **Priority:** P1 · **Size:** S · **Depends on:** 05, 20 · **Unblocks:** 31
 **Read from:** `main:run-identify.py` (whole), `main:manage-data.py` lines 198–222
@@ -56,7 +56,12 @@ installation sees.
 | Create | `lux_pipeline/cli/identify.py` |
 | Create | `lux_pipeline/cli/new_token.py` |
 | Create | `lux_pipeline/cli/write_refs.py` |
-| Edit | `run-identify.py` → call the same function (optional; it is 15 lines) |
+| Create | `lux_pipeline/cli/metatypes.py` (decision E below) |
+| Create | `lux_pipeline/process/phases/identify.py` |
+| Edit | `lux_pipeline/process/phases/reconcile.py` (`next_update_token`, `new_update_token(idmap=None)`, `write_refs`) |
+| Edit | `lux_pipeline/process/tasks/reconcile_task.py` (`finish` calls the phase functions) |
+| Edit | `lux_pipeline/progress.py` (`unfinished_workers`), `lux_pipeline/cli/_handler.py` (`refuse_while_building`) |
+| Edit | `run-identify.py`, `manage-data.py` (`--new-token`, `--write-refs`) → call the same functions |
 | Create | `tests/test_cli_small_commands.py` |
 
 ## What to port
@@ -80,6 +85,54 @@ Nothing from the refactor — these wrap `main` code:
 2. Tests with stubs: `new_token` increments the letter when the token
    already starts with today's date; `identify` passes `--no-vacuum`.
 
+## Decisions (2026‑10‑27, before implementation)
+
+* **A. `new-token` runs without the idmap.** `lux` loads its configuration
+  instantiated, which builds the Postgres idmap, which raises when
+  `idmap_update_token.txt` is missing or malformed -- so the command that
+  writes the file could not start without it. The handler sets
+  `needs_configs = False` and loads `get_configs(instantiate=False)`
+  itself. `new_update_token(cfgs, idmap=None)` reads the current token from
+  `idmap` when given (and sets it there, as item 21 needs), otherwise from
+  the file via `phases.merge.read_update_token`; a missing or malformed
+  file counts as no token, giving today's first. The rule itself is
+  `next_update_token(current, now)`, a pure function, unchanged from
+  `manage-data.py`, which now calls `new_update_token` too.
+* **B. All four commands refuse while a `lux` build is running.**
+  `refuse_while_building` (cli/_handler.py) looks for `<log_dir>/*-w*.status`
+  files not marked done (`progress.unfinished_workers`). A failed worker
+  still reports done, but a SIGKILLed or OOM-killed one never does, so only
+  workers updated within the last hour (`RUNNING_WINDOW`) block; older
+  ones are warned about as probably killed. `--force` runs anyway. Legacy
+  `run-*.py` / `*_parallel.sh` runs write no status files and cannot be
+  seen.
+* **C. Second-run guards.** `lux write-refs` with an empty done-refs queue
+  and a `reference_uris.txt` already in the working directory refuses:
+  it would replace the file merge reads with an empty one. `lux metatypes`
+  likewise refuses when there are no `metatypes-*.json` slice files and
+  `<data_dir>/metatypes.json` exists. `--force` overrides both. The legacy
+  scripts keep their behaviour.
+* **D. One function per step.** `phases/identify.py` holds
+  `resolve_identity(cfgs, idmap)` (returns the stats with `seconds`),
+  `report_lines(stats)` (run-identify.py's three lines) and
+  `vacuum_idmap(idmap)`; `phases.reconcile.write_refs(cfgs, idmap,
+  ref_mgr=None)` is `write_done_refs()` and clearing the queue. The
+  commands, `run-identify.py`, `manage-data.py --write-refs` and
+  `ReconcileManager.finish` all call them; no `timer.stage` block is
+  touched.
+* **E. A fourth command, `lux metatypes`** (`ReferenceManager.
+  merge_metatypes`), because `lux reconcile --no-finish` cannot otherwise
+  be followed by hand. The order is identify, metatypes, write-refs, as
+  `run-all.sh` and `finish` run them; write-refs needs identify first.
+* **F. Output.** `identify` prints run-identify.py's lines; `write-refs`
+  prints the absolute path it wrote. `new-token` and `metatypes` print
+  nothing of their own: the phase functions' log lines (to stdout, as
+  `%(message)s`) are the result, as in the legacy scripts. Refusals and
+  failures exit 1.
+
 ## Acceptance criteria
 
 * `lux identify` == `python run-identify.py`; `lux new-token` == `manage-data.py --new-token`.
+* `lux new-token` works with `idmap_update_token.txt` missing or malformed.
+* `lux reconcile --no-finish` followed by `lux identify`, `lux metatypes`
+  and `lux write-refs` leaves what the finishing steps leave.
