@@ -36,7 +36,7 @@ you finish an item.
 | 18 | [Index loader as a managed task](18-index-loader.md) | P1 | M | 02 | ☑ |
 | 19 | [`IndexLoadManager` and `lux load-index`](19-load-index-command.md) | P1 | S | 07, 18 | ☑ |
 | 34 | [Named `indexes` config block](34-named-indexes-config.md) | P1 | M | 18, 19 | ☑ |
-| 40 | [`lux guess-dump-type`](40-guess-dump-type-command.md) | P1 | M | 05, 12 | ☐ |
+| 40 | [`lux guess-dump-type`](40-guess-dump-type-command.md) | P1 | M | 05, 12 | ☑ |
 | 29 | [Source loaders moved onto the DSL](29-source-loaders-dsl.md) | P1 | M | 12, 13 | ☑ |
 | 30 | [Source downloaders](30-source-downloaders.md) | P1 | S | 14, 15 | ☑ |
 | 20 | [Reconcile phase as a module](20-reconcile-phase-module.md) | P1 | M | 01 | ☐ |
