@@ -43,7 +43,7 @@ you finish an item.
 | 21 | [`ReconcileManager` and `lux reconcile`](21-reconcile-command.md) | P1 | M | 07, 20 | ☑ |
 | 22 | [`lux identify`, `lux new-token`, `lux write-refs`](22-identify-and-token-commands.md) | P1 | S | 05, 20 | ☑ |
 | 23 | [Merge phase as a module](23-merge-phase-module.md) | P1 | M | 01 | ☑ |
-| 24 | [`MergeManager` and `lux merge`](24-merge-command.md) | P1 | M | 07, 23 | ☐ |
+| 24 | [`MergeManager` and `lux merge`](24-merge-command.md) | P1 | M | 07, 23 | ☑ |
 | 25 | [Export phase as a module](25-export-phase-module.md) | P1 | M | 01 | ☑ |
 | 26 | [`ExportManager` and `lux export`](26-export-command.md) | P1 | M | 07, 25 | ☐ |
 | 27 | [`lux interactive`](27-interactive-command.md) | P2 | S | 05 | ☑ |

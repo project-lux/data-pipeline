@@ -110,6 +110,7 @@ laptop (the validator reads its schemas on first use, not at construction).
 | `lux_pipeline/cli/identify.py`, `new_token.py`, `metatypes.py`, `write_refs.py` | the steps between reconcile and merge as `BaseHandler`s; all refuse while a build runs (`_handler.refuse_while_building`, `--force`); `new-token` has `needs_configs = False` and never builds the idmap |
 | `lux_pipeline/process/tasks/reconcile_task.py`, `cli/reconcile.py` | `ReconcileManager` and `lux reconcile`: workers call `reconcile_slice`; the driver tail (identify, `ReferenceManager.merge_metatypes`, write-refs) is skipped for `--no-finish`, `--my-worker`, `--recid`, `--baseline` |
 | `lux_pipeline/process/phases/merge.py` | `read_update_token`, `select_sources`, `make_claim_member`, `merge_slice`: `run-merge.py`'s body; the loops are moved verbatim, never edited |
+| `lux_pipeline/process/tasks/merge_task.py`, `cli/merge.py` | `MergeManager` and `lux merge`: workers call `merge_slice`; `--recid` is one unsliced worker with no references pass; `--only-refs`; the driver checks the token and `reference_uris.txt` (cwd) before any worker starts; no tail |
 | `lux_pipeline/process/phases/export.py` | `export_slice` (`run-export.py`'s body, loop verbatim), `export_sources_slice` (`run-source-build.py`), `export_nt_slice` (`manage-data.py --nt`); the wrappers pass the old `/data-export/output/lux/nt` path |
 
 Worker status and log files follow `<log_dir>/<command>-<timestamp>-w<n>.status|.log`.
