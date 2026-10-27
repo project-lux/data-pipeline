@@ -89,6 +89,68 @@ do it here.
    skips them with `no_finish=True`.
 4. Live, small: `lux reconcile --source aat --recid 300010001 --no-ui --no-finish`.
 
+## Decisions (2026‑10‑27, before implementation)
+
+* **`--source all` is every internal source**, as `run-reconcile.py
+  --all`; the external records are reached through references. The
+  handler overrides `resolve_sources` for `all`; `internal`, `external`
+  and named sources (external ones included) work as for every command;
+  the results group is rejected by `maybe_add`.
+* **Selection happens in the worker.** The manager stores names; each
+  worker runs the real `select_sources` against its own configuration
+  (which orders sources by datacache size) and calls `reconcile_slice`
+  with `my_slice=n, max_slice=max_workers`, so every record of every
+  selected datacache belongs to exactly one worker and every worker sees
+  the same source list. `--recid` with other than one source, and no
+  source at all, are rejected in the driver before any worker starts.
+* **Explicit record lists are one unsliced worker.** `reconcile_slice`
+  iterates a `--recid` list, or the baseline terms, in full wherever it
+  is given, so sharing them out would reconcile every record once per
+  worker. The manager forces `max_workers` to 1 (logged) and calls the
+  phase with `-1, -1`, as the script ran them: the idmap memory cache on,
+  no flag file, and the assertions in `assertions-single.tsv` rather
+  than over a slice's file from the last full build.
+* **`--new-token`.** `phases.reconcile.new_update_token(cfgs, idmap)` is
+  `manage-data.py --new-token`'s date stem and letter increment; it writes
+  the file **and sets `idmap.update_token`** on the instance it is given,
+  which is new and necessary: the driver's idmap was built before the
+  token changed and the identity resolution stamps every cluster with it,
+  and under the null engine the worker shares the driver's cached
+  configuration. Spawned workers read the new file. Called before the
+  engine starts.
+* **Tail order is `run-all.sh`'s**: identify (`resolve_identity`, then
+  `idmap.optimize()` where the idmap has it), then `merge_metatypes`,
+  then `write_done_refs` **and** clearing the done‑refs queue, as
+  `manage-data.py --write-refs` does (item 22 keeps both). The only real
+  constraint is identify before write‑refs, which resolves YUIDs through
+  the idmap. The tail runs only when every worker succeeded
+  (`WorkerFailed` is raised first).
+* **`merge_metatypes`** reads `metatypes-*.json` from the working
+  directory, sorted, as `merge-metatypes.py` does; writes
+  `<data_dir>/metatypes.json` (`data/files` on the build machine, where
+  `run-all.sh` moved it); deletes the slice files; returns the map.
+  `merge-metatypes.py` itself is untouched (item 33 retires it).
+* **When the tail is skipped:** `--no-finish`, and implied by
+  `--my-worker` (one slice of many), `--recid` and `--baseline` (it only
+  pre‑populates the global terms), each logged. Identity resolved from a
+  fraction of the assertions would rewrite the identity map from a
+  fraction of the evidence and delete the YUIDs it no longer saw.
+* **Output under the console view:** the tail runs inside
+  `manager.process()` after the engine returns, while the view is open;
+  Rich redirects stdout during the live display, so the resolver's
+  progress lines and its `PhaseTimer` summary land above the worker table.
+* **Results:** each worker returns the phase's summaries; the tail logs
+  the identify stats in `run-identify.py`'s form and keeps
+  `{"identify": stats, "metatypes": keys}` as `finish_stats`. The CLI
+  has `--recid`, `--no-refs` (alias `--norefs`), `--new-token`,
+  `--baseline`, `--no-finish`.
+* **Tests** in `tests/test_reconcile_task.py`: the worker calls, every
+  worker's own slice of the same sources, the selection rules, the record
+  list and baseline on one unsliced worker, the token before the workers
+  and seen by them, the tail in order and every skip, no tail after a
+  failed worker, `merge_metatypes` and `new_update_token` for real, the
+  command end to end on the null engine.
+
 ## Acceptance criteria
 
 * Tests pass; the legacy `run-reconcile.py` is untouched by this PR.

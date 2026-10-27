@@ -105,7 +105,8 @@ laptop (the validator reads its schemas on first use, not at construction).
 | `lux_pipeline/cli/_view.py`, `watch.py` | `BuildView` (the only Rich user) and `lux watch` |
 | `lux_pipeline/process/tasks/_task_manager.py` | `TaskManager`, `_run_worker`, null / mp / ray engines, `WorkerFailed` |
 | `lux_pipeline/process/timing.py` | `PhaseTimer` (takes `progress=`; its prints are intentionally kept) |
-| `lux_pipeline/process/phases/reconcile.py` | `select_sources`, `reconcile_slice`: `run-reconcile.py`'s body; the loops are moved verbatim, never edited |
+| `lux_pipeline/process/phases/reconcile.py` | `select_sources`, `reconcile_slice`: `run-reconcile.py`'s body; the loops are moved verbatim, never edited; `new_update_token` (`manage-data.py --new-token`) |
+| `lux_pipeline/process/tasks/reconcile_task.py`, `cli/reconcile.py` | `ReconcileManager` and `lux reconcile`: workers call `reconcile_slice`; the driver tail (identify, `ReferenceManager.merge_metatypes`, write-refs) is skipped for `--no-finish`, `--my-worker`, `--recid`, `--baseline` |
 | `lux_pipeline/process/phases/merge.py` | `read_update_token`, `select_sources`, `make_claim_member`, `merge_slice`: `run-merge.py`'s body; the loops are moved verbatim, never edited |
 | `lux_pipeline/process/phases/export.py` | `export_slice` (`run-export.py`'s body, loop verbatim), `export_sources_slice` (`run-source-build.py`), `export_nt_slice` (`manage-data.py --nt`); the wrappers pass the old `/data-export/output/lux/nt` path |
 
