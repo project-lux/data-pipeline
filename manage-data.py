@@ -6,7 +6,7 @@ import datetime
 import gzip
 from dotenv import load_dotenv
 import logging
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
 from lux_pipeline.config import Config
 from lux_pipeline.process.reference_manager import ReferenceManager
 from lux_pipeline.process.update_manager import UpdateManager
@@ -261,45 +261,12 @@ if "--nt" in sys.argv:
     else:
         my_slice = max_slice = -1
 
-    from lux_pipeline.sources.lux.qlever.mapper2 import QleverMapper
+    from lux_pipeline.process.phases.export import export_nt_slice
 
-    mpr = QleverMapper(cfgs.results["marklogic"])
-    rc = cfgs.results["merged"]["recordcache"]
-    # FIXME: this path should go to config
-    with gzip.open(f"/data-export/output/lux/nt/lux_{my_slice}.nt.gz", "wt", 1) as fh:
-        # Iterate whole records rather than keys-then-fetch-each-key: the rows
-        # arrive in the server-side cursor that found them, so this drops a
-        # round trip per record -- tens of millions of them. Nothing here
-        # writes back, so there is no reason to go and re-read each row.
-        #
-        # The jsonb -> dict parse already runs through ujson: postgres.py
-        # registers it as the global jsonb loads, so raw=True plus an explicit
-        # ujson.loads would be the same work in a different place. It only
-        # pays where the JSON is passed straight through unparsed, as in
-        # run-export.py, and the mapper needs the dict.
-        if my_slice == -1:
-            itr = rc.iter_records()
-        else:
-            itr = rc.iter_records_slice(my_slice, max_slice)
-
-        x = 0
-        start = time.time()
-        for rec in itr:
-            try:
-                res = mpr.transform(rec)
-            except Exception as e:
-                # One unmappable record used to end the whole slice's export
-                print(f"*** {rec.get('yuid', '?')} failed in the qlever mapper: {e}")
-                continue
-            # One write per record rather than one per triple: there are tens
-            # of triples each, and every write goes through gzip
-            if res:
-                fh.write("\n".join(res))
-                fh.write("\n")
-            x += 1
-            if not x % 100000:
-                print(f"{x} {time.time() - start}")
-                sys.stdout.flush()
+    # The loop is export_nt_slice (refactor_docs/25). This is where the
+    # script has always written; the phase function itself defaults to
+    # cfgs.exports_dir.
+    export_nt_slice(cfgs, my_slice, max_slice, out_dir="/data-export/output/lux/nt")
 
 
 ### CLEAN IDMAP
