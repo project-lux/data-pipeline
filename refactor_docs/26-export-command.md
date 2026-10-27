@@ -43,6 +43,21 @@ and `mapper.make_export_filename` (item 11).
   presence check only; `main`'s freshness check (`insert_time >=`) and
   `get_multi` chunking are required.
 
+## From item 25
+
+The three phase functions are `export_slice(cfgs, my_slice, max_slice, *,
+no_ml, gz, chunk_size, gzip_level, out_dir, progress, write_flag)`,
+`export_sources_slice(cfgs, my_slice, max_slice, sources, out_dir, nt_dir,
+gzip_level, progress)` and `export_nt_slice(cfgs, my_slice, max_slice,
+out_dir, gzip_level, progress)`; each returns `{"records": <PhaseTimer
+summary>, "written": n, "path"|"paths": ...}`. Their output directories
+default to `cfgs.exports_dir`, but on the build machine the N‑Triples have
+always gone to `/data-export/output/lux/nt/`, a sibling of `exports_dir`
+(`.../latest`), and the legacy wrappers still pass that path. `--type nt`
+and `--type sources` need a home for the NT files: an optional base key
+(`nt_dir`, say, falling back to `exports_dir`) added to the config copies
+and the pipeline‑configs repo, or `--out-dir` on the command. Decide here.
+
 ## Steps
 
 1. Manager: `_distributed(self, n, cfgs, progress)` dispatches on

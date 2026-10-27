@@ -1,80 +1,44 @@
+"""Build and export the aat / ulan / lcsh / tgn records: the legacy entry point.
+
+    python run-source-build.py 0 24     # slice 0 of 24
+    python run-source-build.py          # unsliced
+
+Each source's datacache is mapped into its recordcache and written out as
+JSONL and N-Triples, one file pair per slice. The work is
+lux_pipeline.process.phases.export.export_sources_slice; this script parses
+sys.argv as it always has and passes the directories it has always written
+to (the phase function itself defaults to cfgs.exports_dir).
+"""
 import os
 import sys
-import gzip
-import ujson as json
-import time
 from dotenv import load_dotenv
 import logging
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
 from lux_pipeline.config import Config
-from lux_pipeline.sources.lux.qlever.mapper2 import QleverMapper
+from lux_pipeline.process.phases.export import export_sources_slice
 
-load_dotenv()
-basepath = os.getenv("LUX_BASEPATH", "")
-cfgs = Config(basepath=basepath)
-idmap = cfgs.get_idmap()
-cfgs.cache_globals()
-cfgs.instantiate_all()
+OUT_DIR = "/data-export/output/lux/latest"
+NT_DIR = "/data-export/output/lux/nt"
 
-# --- process command line arguments ---
 
-my_slice = -1
-max_slice = -1
+def main():
+    load_dotenv()
+    basepath = os.getenv("LUX_BASEPATH", "")
+    cfgs = Config(basepath=basepath)
+    cfgs.get_idmap()
+    cfgs.cache_globals()
+    cfgs.instantiate_all()
 
-if len(sys.argv) > 2 and sys.argv[1].isnumeric() and sys.argv[2].isnumeric():
-    my_slice = int(sys.argv[1])
-    max_slice = int(sys.argv[2])
+    # --- process command line arguments ---
 
-if my_slice > -1:
-    # Running in parallel, will cause cross-process errors
-    idmap.disable_memory_cache()
-else:
-    # Running single, memory cache will remain accurate
-    idmap.enable_memory_cache()
+    my_slice = -1
+    max_slice = -1
+    if len(sys.argv) > 2 and sys.argv[1].isnumeric() and sys.argv[2].isnumeric():
+        my_slice = int(sys.argv[1])
+        max_slice = int(sys.argv[2])
 
-print("Starting...")
-print(f"Update token is: {idmap.update_token}")
-sys.stdout.flush()
+    export_sources_slice(cfgs, my_slice, max_slice, out_dir=OUT_DIR, nt_dir=NT_DIR)
 
-sources = ['aat', 'ulan', 'lcsh', 'tgn']
 
-x = 0
-with gzip.open(f"/data-export/output/lux/nt/sources_{my_slice}.nt.gz", "wt", 1) as fh,\
-     gzip.open(f"/data-export/output/lux/latest/sources_{my_slice}.jsonl.gz", "wt", 1) as fh2:
-    for source in sources:
-        src = cfgs.external[source]
-        print(f" *** {source} ***")
-        sys.stdout.flush()
-        in_db = src["datacache"]
-        out_db = src['recordcache']
-        mapper = src["mapper"]
-    
-        ql_mpr = QleverMapper(src)
-    
-        out_db.defer_commits(every=1000)
-        for rec in in_db.iter_records_slice(my_slice, max_slice):
-            rec2 = mapper.transform(rec, None)
-            if rec2 is not None:
-                idq = cfgs.make_qua(rec2['identifier'], rec2['data']['type'])
-                rec2['identifier'] = idq
-                out_db[idq] = rec2
-                out_db.checkpoint()
-
-                # Export JSON to JSONL files
-                jstr = json.dumps(rec2['data'])
-                fh2.write(jstr + "\n")
-
-                # Export NTriples
-                try:    
-                    res = ql_mpr.transform(rec2)
-                    if res:
-                        fh.write("\n".join(res))
-                        fh.write("\n")
-                except Exception as e:
-                    print(f"*** {rec2.get('yuid', '?')} failed in the qlever mapper: {e}")
-                    sys.stdout.flush()
-                x += 1
-                if not x % 100000:
-                    print(f"{x} {time.time() - start}")
-                    sys.stdout.flush()
-        out_db.flush()
+if __name__ == "__main__":
+    main()
