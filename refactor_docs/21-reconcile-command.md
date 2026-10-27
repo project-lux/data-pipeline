@@ -38,8 +38,8 @@ Each of the three is also exposed as its own command in item 22.
 From the refactor only: the manager skeleton (`maybe_add` → `(which, name, recids)`
 with `self.recids` read from `args.recid` in `__init__` — the `rob_claude_refactor`
 fix; `process()` calling the engine then the driver tail), the CLI handler
-(`--recid`, `--no-refs`, `--new-token`; add `--baseline`, `--no-finish`,
-`--profile`). The old `self.phase` / `super().process()` two‑pass structure
+(`--recid`, `--no-refs`, `--new-token`; add `--baseline`, `--no-finish`;
+no `--profile` until item 41). The old `self.phase` / `super().process()` two‑pass structure
 is dropped (see below).
 
 `--new-token`: `main`'s idmap classes do not have `make_update_token()`;

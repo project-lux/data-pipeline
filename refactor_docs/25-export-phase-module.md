@@ -9,7 +9,7 @@ Move `run-export.py` into `lux_pipeline/process/phases/export.py`:
 
 ```python
 def export_slice(cfgs, my_slice, max_slice, *, no_ml=False, gz=False, chunk=1000, gzip_level=9,
-                 out_dir=None, progress=None, write_flag=True, profile=False) -> dict
+                 out_dir=None, progress=None, write_flag=True) -> dict
 ```
 
 keeping the chunked `get_multi` freshness check, `defer_commits(every=500)`
@@ -26,7 +26,7 @@ def export_nt_slice(cfgs, my_slice, max_slice, out_dir=None, progress=None)   # 
 | Action | Path on `main` |
 |---|---|
 | Create | `lux_pipeline/process/phases/export.py` |
-| Edit | `run-export.py` → thin wrapper (`0 24`, `--gz`, `--no-ml`, `--profile`, env `LUX_EXPORT_CHUNK`/`LUX_EXPORT_GZIP`) |
+| Edit | `run-export.py` → thin wrapper (`0 24`, `--gz`, `--no-ml`, env `LUX_EXPORT_CHUNK`/`LUX_EXPORT_GZIP`; `--profile` removed from argv and ignored, see item 41) |
 | Edit | `run-source-build.py` → thin wrapper |
 | Create | `tests/test_phase_export.py` |
 
