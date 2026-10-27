@@ -39,6 +39,27 @@ class BaseHandler:
         """Add this command's own options to `ap` (an ArgumentParser)."""
         return None
 
+    def resolve_sources(self, args):
+        """The source names this run covers, from ``--source``.
+
+        ``all`` is every internal and external source; ``internal``,
+        ``external`` and ``results`` are that group; anything else is a
+        comma-separated list of names. An unknown name raises ``ValueError``
+        naming it.
+        """
+        cfgs = self.configs
+        which = args.source or self.default_source
+        if which == "all":
+            return [*cfgs.internal.keys(), *cfgs.external.keys()]
+        if which in ("internal", "external", "results"):
+            return list(getattr(cfgs, which).keys())
+        names = [s.strip() for s in which.split(",") if s.strip()]
+        known = set(cfgs.internal) | set(cfgs.external) | set(cfgs.results)
+        for n in names:
+            if n not in known:
+                raise ValueError(f"Unknown source: {n}")
+        return names
+
     def process(self, args, rest):
         # Always parse: a command may have options with defaults even when
         # nothing was passed on the command line
@@ -63,27 +84,6 @@ class CommandHandler(BaseHandler):
         """The console view for a build, or ``None`` for plain output."""
         from lux_pipeline.cli._view import BuildView
         return BuildView(prefix, workers, getattr(args, "log", "INFO"))
-
-    def resolve_sources(self, args):
-        """The source names this run covers, from ``--source``.
-
-        ``all`` is every internal and external source; ``internal``,
-        ``external`` and ``results`` are that group; anything else is a
-        comma-separated list of names. An unknown name raises ``ValueError``
-        naming it.
-        """
-        cfgs = self.configs
-        which = args.source or self.default_source
-        if which == "all":
-            return [*cfgs.internal.keys(), *cfgs.external.keys()]
-        if which in ("internal", "external", "results"):
-            return list(getattr(cfgs, which).keys())
-        names = [s.strip() for s in which.split(",") if s.strip()]
-        known = set(cfgs.internal) | set(cfgs.external) | set(cfgs.results)
-        for n in names:
-            if n not in known:
-                raise ValueError(f"Unknown source: {n}")
-        return names
 
     def process(self, args, rest):
         super().process(args, rest)

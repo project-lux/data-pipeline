@@ -56,6 +56,7 @@ import ujson as json
 from lxml import etree
 
 from lux_pipeline.progress import Sliced, null_progress
+from lux_pipeline.process.utils.sniff import sniff_spec
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -207,14 +208,18 @@ class Loader(Sliced):
         return spec
 
     def guess_fmt(self, path):
-        """A spec from the file name, for an entry without ``type``. Only
-        the common shapes; anything else must say what it is."""
-        if os.path.isdir(path):
-            for f in sorted(os.listdir(path)):
-                full = os.path.join(path, f)
-                if os.path.isfile(full):
-                    return [["dir"], *self.guess_fmt(full)]
-            raise ValueError(f"Cannot guess the type of empty directory {path}; set 'type'")
+        """A spec for an entry without ``type``, from the content of `path`
+        (lux_pipeline/process/utils/sniff.py, as `lux guess-dump-type`
+        prints it). The guess is logged so a build log shows every
+        assumption. A path that does not exist yet is guessed from its
+        name: only the common shapes."""
+        if os.path.exists(path):
+            found = sniff_spec(path)
+            if not found.placed:
+                raise ValueError(f"Cannot guess the type of {path} ({found.reason}); "
+                                 "set 'type' in input_files")
+            logger.info(f"{self.name}: guessed {found.spec} for {path}")
+            return self.process_fmt(found.spec)
         comp = None
         base = path
         if base.endswith(".gz"):
