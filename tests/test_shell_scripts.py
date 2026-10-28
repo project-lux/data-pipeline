@@ -1,4 +1,4 @@
-"""run-all.sh, the *_parallel.sh wrappers and scripts/wait-for-flags.sh,
+"""run-all2.sh, the *_parallel2.sh wrappers and scripts/wait-for-flags.sh,
 run for real against a stub `lux` (and `python`) on PATH that records its
 arguments and writes the status and log files a worker would."""
 
@@ -12,9 +12,9 @@ import pytest
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WAIT = os.path.join(REPO, "scripts", "wait-for-flags.sh")
-SCRIPTS = ["run-all.sh", "scripts/wait-for-flags.sh", "reconcile_parallel.sh", "merge_parallel.sh",
-           "export_parallel.sh", "nt_parallel.sh", "import_parallel.sh", "harvest_parallel.sh",
-           "updateExternal_parallel.sh"]
+SCRIPTS = ["run-all2.sh", "scripts/wait-for-flags.sh", "reconcile_parallel2.sh", "merge_parallel2.sh",
+           "export_parallel2.sh", "nt_parallel2.sh", "import_parallel2.sh", "harvest_parallel2.sh",
+           "updateExternal_parallel2.sh"]
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="bash scripts")
 
@@ -103,17 +103,17 @@ def test_scripts_parse(script):
 
 
 def test_run_all_calls_no_legacy_script():
-    with open(os.path.join(REPO, "run-all.sh")) as fh:
+    with open(os.path.join(REPO, "run-all2.sh")) as fh:
         code = [line for line in fh if not line.lstrip().startswith("#")]
     for line in code:
         assert not re.search(r"run-\w+\.py|manage-data\.py|merge-metatypes\.py", line), line
 
 
-# ------------------------------------------------------------- run-all.sh
+# ------------------------------------------------------------- run-all2.sh
 
 
 def test_run_all_null_engine(env, tmp_path):
-    r = run("run-all.sh", "--all", env=env, cwd=tmp_path)
+    r = run("run-all2.sh", "--all", env=env, cwd=tmp_path)
     assert r.returncode == 0, r.stdout + r.stderr
     seq = calls(env)
 
@@ -126,7 +126,7 @@ def test_run_all_null_engine(env, tmp_path):
     assert all("--source all --no-finish" in c for c in lux_calls(env, "reconcile"))
     assert all("--source all" in c for c in lux_calls(env, "merge"))
 
-    # the steps between the phases, in run-all.sh's order, each after the
+    # the steps between the phases, in run-all2.sh's order, each after the
     # whole of the phase before it
     order = [c.split()[1] if c.startswith("lux") else c for c in seq]
     last_reconcile = max(i for i, c in enumerate(order) if c == "reconcile")
@@ -140,14 +140,14 @@ def test_run_all_null_engine(env, tmp_path):
 
 @pytest.mark.parametrize("arg", ["--ycba", "ycba"])
 def test_run_all_source_with_or_without_dashes(env, tmp_path, arg):
-    r = run("run-all.sh", arg, env=env, cwd=tmp_path)
+    r = run("run-all2.sh", arg, env=env, cwd=tmp_path)
     assert r.returncode == 0, r.stdout + r.stderr
     assert all("--source ycba" in c for c in lux_calls(env, "reconcile") + lux_calls(env, "merge"))
 
 
 def test_run_all_mp_engine(env, tmp_path):
     env["ENGINE"] = "mp"
-    r = run("run-all.sh", "--all", env=env, cwd=tmp_path)
+    r = run("run-all2.sh", "--all", env=env, cwd=tmp_path)
     assert r.returncode == 0, r.stdout + r.stderr
     commands = [c.split()[1] for c in calls(env) if c.startswith("lux")]
     # reconcile's own tail runs identify, metatypes and write-refs
@@ -160,14 +160,14 @@ def test_run_all_mp_engine(env, tmp_path):
 
 def test_run_all_rejects_unknown_engine(env, tmp_path):
     env["ENGINE"] = "ray"
-    r = run("run-all.sh", "--all", env=env, cwd=tmp_path)
+    r = run("run-all2.sh", "--all", env=env, cwd=tmp_path)
     assert r.returncode == 1
     assert calls(env) == []
 
 
 def test_run_all_stops_on_a_worker_traceback(env, tmp_path):
     env["FAKE_FAIL"] = "merge:1"
-    r = run("run-all.sh", "--all", env=env, cwd=tmp_path)
+    r = run("run-all2.sh", "--all", env=env, cwd=tmp_path)
     assert r.returncode == 1
     assert "Error in merge!" in r.stdout
     # whichever the loop sees first: the worker log's Traceback, or the
@@ -180,7 +180,7 @@ def test_run_all_stops_on_a_worker_traceback(env, tmp_path):
 
 def test_run_all_stops_when_lux_fails_before_its_worker(env, tmp_path):
     env["FAKE_NOSTART"] = "reconcile"
-    r = run("run-all.sh", "--all", env=env, cwd=tmp_path)
+    r = run("run-all2.sh", "--all", env=env, cwd=tmp_path)
     assert r.returncode == 1
     assert "Error in reconcile!" in r.stdout
     assert "lux: could not load the pipeline configuration" in r.stdout
@@ -190,7 +190,7 @@ def test_run_all_stops_when_lux_fails_before_its_worker(env, tmp_path):
 @pytest.mark.parametrize("step", ["identify", "metatypes", "write-refs"])
 def test_run_all_stops_when_a_step_between_phases_fails(env, tmp_path, step):
     env["FAKE_NOSTART"] = step
-    r = run("run-all.sh", "--all", env=env, cwd=tmp_path)
+    r = run("run-all2.sh", "--all", env=env, cwd=tmp_path)
     assert r.returncode == 1
     assert f"Error in {step}!" in r.stdout
     assert lux_calls(env, "merge") == []
@@ -198,7 +198,7 @@ def test_run_all_stops_when_a_step_between_phases_fails(env, tmp_path, step):
 
 def test_run_all_mp_failure(env, tmp_path):
     env.update(ENGINE="mp", FAKE_FAIL="reconcile:0")
-    r = run("run-all.sh", "--all", env=env, cwd=tmp_path)
+    r = run("run-all2.sh", "--all", env=env, cwd=tmp_path)
     assert r.returncode == 1
     assert "Error in reconcile!" in r.stdout
     assert lux_calls(env, "merge") == []
@@ -278,19 +278,19 @@ def test_wait_usage(env, tmp_path):
     assert wait(env, tmp_path, "merge").returncode == 2
 
 
-# ------------------------------------------------------ *_parallel.sh
+# ------------------------------------------------------ *_parallel2.sh
 
 
 PARALLEL = [
     # script, argument, slices, expected command, stdout file of slice 0
-    ("reconcile_parallel.sh", "--all", 24, "lux reconcile --source all --no-finish", "reconcile_0.txt"),
-    ("updateExternal_parallel.sh", "--wikidata", 20, "lux reconcile --source wikidata --no-finish",
+    ("reconcile_parallel2.sh", "--all", 24, "lux reconcile --source all --no-finish", "reconcile_0.txt"),
+    ("updateExternal_parallel2.sh", "--wikidata", 20, "lux reconcile --source wikidata --no-finish",
      "update_ext_0.txt"),
-    ("merge_parallel.sh", "--all", 24, "lux merge --source all", "merge_0.txt"),
-    ("export_parallel.sh", None, 24, "lux export", "export_0.txt"),
-    ("nt_parallel.sh", None, 24, "lux export --type nt", "export_nt_0.txt"),
-    ("import_parallel.sh", "--wikidata", 24, "lux load --source wikidata", "load_wikidata_0.txt"),
-    ("harvest_parallel.sh", "--ycba", 50, "lux harvest --source ycba --pages", "harvest_0_ycba.txt"),
+    ("merge_parallel2.sh", "--all", 24, "lux merge --source all", "merge_0.txt"),
+    ("export_parallel2.sh", None, 24, "lux export", "export_0.txt"),
+    ("nt_parallel2.sh", None, 24, "lux export --type nt", "export_nt_0.txt"),
+    ("import_parallel2.sh", "--wikidata", 24, "lux load --source wikidata", "load_wikidata_0.txt"),
+    ("harvest_parallel2.sh", "--ycba", 50, "lux harvest --source ycba --pages", "harvest_0_ycba.txt"),
 ]
 
 
@@ -315,8 +315,8 @@ def test_parallel_wrappers(env, tmp_path, script, arg, slices, command, stdout0)
     assert os.path.exists(os.path.join(env["LOGS"], stdout0))
 
 
-@pytest.mark.parametrize("script", ["reconcile_parallel.sh", "merge_parallel.sh", "import_parallel.sh",
-                                    "harvest_parallel.sh", "updateExternal_parallel.sh"])
+@pytest.mark.parametrize("script", ["reconcile_parallel2.sh", "merge_parallel2.sh", "import_parallel2.sh",
+                                    "harvest_parallel2.sh", "updateExternal_parallel2.sh"])
 def test_parallel_wrappers_need_a_source(env, tmp_path, script):
     r = run(script, env=env, cwd=tmp_path)
     assert r.returncode == 0 and "Usage" in r.stdout

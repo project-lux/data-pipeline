@@ -61,6 +61,13 @@ The per‑slice stdout redirect stays for anything not routed to the logger.
 
 ## Decisions (2026-10-28, with Rob)
 
+* **New scripts beside the old ones, not rewrites.** `run-all2.sh` and
+  `reconcile_parallel2.sh`, `merge_parallel2.sh`, `export_parallel2.sh`,
+  `nt_parallel2.sh`, `import_parallel2.sh`, `harvest_parallel2.sh`,
+  `updateExternal_parallel2.sh` are the `lux` versions; `run-all.sh` and
+  the `*_parallel.sh` scripts are unchanged, so builds with both can be
+  compared on the build machine. Once they have been, the old ones are
+  removed (item 33) and the new ones can take their names.
 * **Failures are found in the logs.** A worker that raises logs the
   exception, with its `Traceback`, to `<PREFIX>-w<n>.log`, and then
   reports `"done": true` all the same (`_run_worker`'s `finally`), so the
@@ -71,7 +78,7 @@ The per‑slice stdout redirect stays for anything not routed to the logger.
   or log). No change to the Python. A slice killed outright (`kill -9`)
   leaves no trace and is waited for forever, as before.
 * Step 1 was already done: `lux metatypes` (item 22).
-* `run-all.sh` keeps `--all|--<source>` (the `--` is optional) and its
+* `run-all2.sh` keeps `--all|--<source>` (the `--` is optional) and its
   paths, now variables overridable from the environment (`LOGS`,
   `STATUS_FILE`, `EXPORTS`, `WORKERS`, `WAIT_INTERVAL`). On an error it
   exits 1 (was 0); the steps between the phases are checked too; the

@@ -13,6 +13,7 @@ run the pipeline.
 |---|---|
 | `git mv` to `scripts/legacy/` | `run-reconcile.py`, `run-merge.py`, `run-export.py`, `run-identify.py`, `run-harvest.py`, `run-load.py`, `run-source-build.py`, `manage-data.py`, `*_parallel.sh` (the old versions, if item 31 kept copies), `merge-metatypes.py` |
 | Leave at root | `run-all.sh`, `google-sames-diffs.py`, `load-csv-map2.py`, `post-build-portal.py`, `pg-tune.py`, `timing-report.py`, the `make_*_lmdb.py` distribution builders, one‑off `*.py` utilities |
+| Remove, then rename (item 31 decision) | the old `run-all.sh` and `*_parallel.sh` once builds with them and with `run-all2.sh` / `*_parallel2.sh` have been compared on the build machine (Rob deletes them); then `git mv` each `*2.sh` to the old name and update the names in `scripts/wait-for-flags.sh`, `tests/test_shell_scripts.py`, CLAUDE.md and the docs |
 | Delete | `load_parallel.sh` if `run-load.py` (MarkLogic load) is confirmed unused ("STOP. You probably want to use MLCP instead") |
 
 The thin wrappers created in items 20/23/25 still work from `scripts/legacy/`

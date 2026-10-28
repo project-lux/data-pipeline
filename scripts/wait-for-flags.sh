@@ -5,7 +5,7 @@
 #   scripts/wait-for-flags.sh <phase> <prefix> <count> [<stdout files glob>]
 #   scripts/wait-for-flags.sh merge ../data/logs/merge-2026-10-28-101500 24 '../data/logs/merge_*.txt'
 #
-# or, sourced (run-all.sh does), the function `wait_for_phase` with the
+# or, sourced (run-all2.sh does), the function `wait_for_phase` with the
 # same arguments. Returns 0 when every slice is done, 1 as soon as one has
 # failed (the other slices are left running, as before).
 #
@@ -16,7 +16,7 @@
 # configuration, say) writes neither file, only a `lux <command>: ...` line
 # on stderr, so the slices' stdout files are searched for that line too.
 #
-# With the prefix given as "-" this is the loop run-all.sh used to repeat
+# With the prefix given as "-" this is the loop run-all.sh repeats
 # for the legacy scripts: count <LOGS>/flags/<phase>_is_done-*.txt and
 # search the stdout files for a Traceback.
 #
