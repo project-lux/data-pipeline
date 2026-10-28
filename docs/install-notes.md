@@ -1,5 +1,8 @@
 # Installation notes
 
+**Superseded by [install.md](install.md)**, which covers installing with
+`lux`. These notes describe the older script-based setup.
+
 
 ## Running on Mac: 
 * Install postgres: I use https://postgresapp.com/ 

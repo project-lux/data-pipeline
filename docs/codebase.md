@@ -7,16 +7,22 @@ Ordered from Easiest to Most Diabolical to understand
 
 Data source specific code is in lux_pipeline/sources/, one directory per source (plus yale/ for Yale units and lux/ for LUX's own outputs).
 
-The rest of the code is divided among directories according to function: 
-* cache: store records
-* collector: follow links in records to collect more records
-* config: handle configuration files
-* harvester: harvest records from activitystreams
-* idmap: manage and store identifier alignment as a giant hash (internal id to external ids, external id to internal id)
-* marklogic: (should maybe be refactored) manage interactions with marklogic
-* merger: merge records that describe the same entity down to one record
-* reconciler: given a record, find other records that describe the same entity
-* validator: validate the JSON structure of a record
+The rest of the code is divided according to function:
+
+* config.py: read the configuration records and build the components they name
+* runtime.py, log.py, progress.py: the per-process configuration, logging, and the progress protocol (below)
+* cli/: the `lux` command, one module per command
+* process/: the work itself
+  * base/: the base classes the sources extend (acquirer, downloader, fetcher, harvester, index_loader, loader, mapper, reconciler)
+  * collector: follow links in records to collect more records
+  * reconciler: given a record, find other records that describe the same entity
+  * identity_resolver: resolve the identity map from the assertions reconcile logs
+  * merger, merge_batch: merge records that describe the same entity down to one record
+  * reidentifier: rewrite external URIs in a record to internal identifiers
+  * reference_manager: manage the references between records
+  * validator: validate the JSON structure of a record
+  * phases/, tasks/: the build phases and the managers that run them (below)
+* storage/: caches (Postgres, filesystem), the identity map (Postgres, Redis, in-memory), MarkLogic, and backup / restore
 
 The sources each contain:
 
@@ -91,3 +97,60 @@ Per-kind defaults for stores can be given as `{"type": "default", "name": "cache
 | "marklogic", ...}` records; keys in them are merged under every store config of that
 kind that does not set them itself. An instance without them keeps using the single
 `caches.json` record for its caches.
+
+
+### runtime.py, log.py, progress.py
+
+* `runtime.get_configs()` builds the process's `Config` once (from `LUX_BASEPATH`, read from the nearest `.env`), and `configure_logging()` sets up the shared `lux_pipeline` logger. Every worker process builds its own; connections are never shared between processes.
+* Library code logs through `logging.getLogger("lux_pipeline")` and never prints.
+* Components report progress through a `progress=` callable (`progress.null_progress` by default). A worker gets a `StatusWriter`, which rewrites `<log_dir>/<command>-<timestamp>-w<n>.status`; the worker's log goes to the matching `.log`. `lux watch` and the console view read those files, so no component knows whether, or how, it is being displayed.
+
+
+### cli/
+
+* `entry.py` is the `lux` script: it parses the global options (`--source`, `--max-workers`, `--my-worker`, `--engine`, `--no-ui`, `--prefix`, ...), finds the command module (`lux foo-bar` is `cli/foo_bar.py`; a dotted name is an extension module), loads the configuration and calls the module's `CommandHandler.process`. The exit status is non-zero on any failure.
+* `_handler.py`: `BaseHandler` for commands that do one thing in this process (`counts`, `clear`, `identify`, ...), and `CommandHandler` for the parallel phases, which resolves the sources, builds a manager from `process/tasks/` and runs it on an engine with the console view (`_view.py`, the only user of Rich) watching.
+* `help.py` lists every module with a `CommandHandler`, using the first line of its docstring.
+
+
+### process/tasks/
+
+* `_task_manager.py`: `TaskManager`, the base of every manager, and the engines. A manager's `_distributed(n, cfgs, progress)` is what worker `n` of `max_workers` does; the engine decides where it runs:
+  * `mp`: spawned processes (the default)
+  * `null`: this process; with `--my-worker i` it is slice `i` of `--max-workers`, for shell loops that start every slice under `nohup` (`run-all2.sh`, `*_parallel2.sh`)
+  * `ray`: Ray tasks
+* One manager per parallel command: `download_task`, `load_task`, `index_load_task`, `harvest_task`, `reconcile_task`, `merge_task`, `export_task`. Every record is processed by exactly one worker: sources are split by worker, or records by `seen % max_workers == n`.
+* A manager may do work in the driver before or after its workers: `ReconcileManager` runs identify, metatypes and write-refs once every worker has finished; `MergeManager` checks the update token and `reference_uris.txt` before any worker starts.
+
+
+### process/phases/
+
+The bodies of the build phases, moved out of the old `run-*.py` scripts unchanged so that `lux` and the legacy scripts run the same code: `reconcile.reconcile_slice`, `identify.resolve_identity`, `merge.merge_slice`, `export.export_slice` (and `export_nt_slice`, `export_sources_slice`, `export_external`). Each takes the configuration, the slice (`my_slice`, `max_slice`) and a `progress=` callable; reconcile and merge also take the sources chosen by their `select_sources`. The loops inside them are timed by `process/timing.PhaseTimer`.
+
+
+### The loader's input_files grammar
+
+A source config describes its dump files as `input_files`: a dict of load type (`records` by default) to a list of `{"path"|"url", "type"}` entries, where `type` is a small path language (from `process/base/loader.py`; `lux guess-dump-type` writes it for you):
+
+```
+    (container[.compression]/)*format[.compression]
+
+    containers:  dir dirs pair zip tar lines dict array arraylines xmls lmdb
+    formats:     json raw other
+    compression: gz bz2 z
+
+    dir         a directory of files
+    dirs, pair  a directory hierarchy of files (pair: two-character subdirs)
+    zip, tar    an archive of members
+    lines       a file where each line is a member
+    dict        a JSON file whose top level is an object; each value is a member
+    array       a JSON file whose top level is an array; each item is a member
+    arraylines  a JSON array written one record per line
+    xmls        an XML file; each child of the root is a member
+    lmdb        an LMDB distribution store (make_*_lmdb.py); each value is a member
+    json        a JSON record (a file, a member, or an already parsed item)
+    raw         an already parsed JSON item (from dict / array)
+    other       anything else, kept as text under {"data": ...}
+```
+
+For example `tar.gz/lines.bz2/json` is a gzipped tar whose members are bzip2'd JSON Lines files; a datacache export is `zip.bz2/json`; an LMDB store of zlib-compressed records is `lmdb/json.z`. Slicing happens at the format step, so N workers can read the same file; every worker must see the children in the same order, which is why directory listings are sorted. Sources that still override `load()` keep the legacy path.

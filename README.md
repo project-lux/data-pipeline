@@ -1,20 +1,30 @@
 # Data Transformation Pipeline Code
 
-## Installation and the `lux` command
+## Installation
+
+See [docs/install.md](docs/install.md): system packages, `pip install -e .`,
+`lux initialize`, `lux testinstall`, downloading and loading data.
+[docs/rebuild.md](docs/rebuild.md) describes a rebuild step by step and
+[docs/codebase.md](docs/codebase.md) is a tour of the code.
+
+## Running
+
+Everything runs through the `lux` command (`lux help` lists them all):
 
 ```
-pip install -e .            # installs the lux_pipeline package and the `lux` script
-echo "LUX_BASEPATH=/path/to/instance/config" > .env
-lux help                    # lists the available commands
-lux watch <prefix>          # attach to a running or finished build (or: lux watch --latest)
+lux download --source all --type records --max-workers 10   # fetch the sources' dump files
+lux load --source wikidata --max-workers 24                 # load a dump into its datacache
+lux reconcile --source all --max-workers 24                 # reconcile, then identify, metatypes, write-refs
+lux merge --source all --max-workers 24                     # one merged record per entity
+lux export --max-workers 24                                 # JSONL for MarkLogic
 ```
 
-`lux` is the new entry point being built up item by item; the legacy
-`run-*.py`, `manage-data.py` and `*_parallel.sh` scripts keep working until the
-port is complete. Workers write `<log_dir>/<command>-<timestamp>-w<n>.status`
-and `.log` files, which is what `lux watch` reads. See `docs/install-notes.md`
-for the surrounding setup (Postgres, Redis, directories) and
-`docs/codebase.md` for a tour of the code.
+`./run-all2.sh --all` runs a whole build. `lux counts` shows what is in the
+caches, maps and indexes, and `lux watch --latest` attaches to a running
+build from another terminal: every worker writes
+`<log_dir>/<command>-<timestamp>-w<n>.status` and `.log` files, which is
+what `lux watch` reads. The legacy `run-*.py`, `manage-data.py`,
+`run-all.sh` and `*_parallel.sh` scripts still work until they are retired.
 
 The ongoing port of the `rob_refactor` branch is planned and tracked in
 `refactor_docs/` (start with its `README.md` and `00-INDEX.md`); `CLAUDE.md`
@@ -30,11 +40,14 @@ describes the working conventions.
 ### Future ITS Owned Components:
 * Harvester: ActivityStreams based record harvester that stores to a Cache.
 * Cache:  Record cache for storing local copies of JSON data. Currently postgres or filesystem.
-* IdMap: Identifier Map that mints, manages and retrieves external/internal identifier sets. Currently redis or in-memory.
+* IdMap: Identifier Map that mints, manages and retrieves external/internal identifier sets. Currently Postgres, Redis or in-memory.
 
 ### Pipeline Components:
 
 * config: Configuration of the pipeline, as JSON records in a cache.
+* cli/: the `lux` command: one module per command (`lux help` lists them), the console view and `lux watch`.
+* process/tasks/: the managers that run a phase's workers on an engine (`mp`, `null`, `ray`), one per parallel command.
+* process/phases/: the body of each build phase (reconcile, identify, merge, export), shared by `lux` and the legacy scripts.
 * process/Collector: Recursively collects identifiers for a given record.
 * process/Reconciler: Reconcile records
 * process/Merger: Merges two Linked Art records representing the same entity together.
@@ -92,10 +105,8 @@ describes the working conventions.
 
 ### Fetching external source dump files
 
-Process:
-1. In the config file, look up `dumpFilePath` and `remoteDumpFile`
-2. Go to the directory where `dumpFilePath` exists and rename it with a date (e.g. latest-2022-07)
-3. execute `wget <url>` where `<url>` is the URL from `remoteDumpFile` (and probably validate it by hand online)
-4. For wikidata, as it's SO HUGE, instead do:  `nohup wget --quiet <url> &` to fetch it in the background so we can get on with our lives in the mean time.
-5. Done :) 
-
+`lux download --source <name>` fetches the files a source's configuration
+names (`remoteDumpFile` and `dumpFilePath`, or its `input_files` block)
+into place; `--source all --max-workers 10` fetches every source's, and
+`--no-overwrite` keeps what is already there. Wikidata's is huge: run it
+under `nohup` (or in `tmux`) and get on with life in the mean time.
