@@ -34,6 +34,8 @@ from contextlib import contextmanager
 import psycopg2
 import psycopg2.extras
 
+from lux_pipeline.progress import null_progress
+from lux_pipeline.storage.backup import LineReader, copy_text, pg_copy_in, pg_copy_out, pg_load, pg_size
 from lux_pipeline.storage.uricache import URICache
 
 logger = logging.getLogger("lux_pipeline")
@@ -1122,6 +1124,81 @@ class IdMap(object):
             cur.execute(f"TRUNCATE {self.table}, {self.yuid_table}")
         self.memory_cache.clear()
 
+    # --------------------------------------------------- backup and restore
+    # (lux_pipeline.storage.backup). Natively both tables are COPYed in one
+    # snapshot; the portable form is members plus the YUID registry, so the
+    # tokens and the minted YUIDs without members come through.
+
+    def _own_connection(self):
+        return psycopg2.connect(**self._conn_kw)
+
+    def backup(self, dest_dir, stem, progress=null_progress):
+        conn = self._own_connection()
+        try:
+            return pg_copy_out(conn, [self.table, self.yuid_table], dest_dir, stem, progress)
+        finally:
+            conn.close()
+
+    def restore(self, src_dir, entry, progress=null_progress):
+        """Both tables replaced in one transaction, indexes rebuilt as they
+        were. The update token file is not touched (refactor_docs/09)."""
+        conn = self._own_connection()
+        try:
+            n = pg_copy_in(conn, [self.table, self.yuid_table], src_dir, entry, progress)
+        finally:
+            conn.close()
+        self.memory_cache.clear()
+        return n
+
+    def backup_size(self):
+        conn = self._own_connection()
+        try:
+            return pg_size(conn, [self.table, self.yuid_table])
+        finally:
+            conn.close()
+
+    def iter_members(self):
+        """``(uri, yuid)`` for every member, full forms."""
+        with self._streaming(f"idmap_members_{id(self) & 0xffff:x}") as cur:
+            cur.execute(f"SELECT uri, yuid FROM {self.table}")
+            for uri, yuid in cur:
+                yield self._manage_key_out(uri), self._manage_value_out(yuid)
+
+    def iter_yuid_registry(self):
+        """``(yuid, token, minted)`` for every minted YUID, full form."""
+        with self._streaming(f"idmap_yuids_{id(self) & 0xffff:x}") as cur:
+            cur.execute(f"SELECT yuid, token, minted FROM {self.yuid_table}")
+            for yuid, token, minted in cur:
+                yield (self._manage_value_out(yuid), token,
+                       minted.isoformat() if minted is not None else None)
+
+    def load_portable(self, members, registry, progress=null_progress):
+        """Replace both tables from a portable backup, in one transaction
+        with the indexes rebuilt after the COPY; the member count."""
+        counts = {"members": 0}
+
+        def registry_lines():
+            for yuid, token, minted in registry:
+                yield (f"{copy_text(self._manage_value_in(yuid))}\t{copy_text(token)}\t"
+                       f"{copy_text(minted)}\n")
+
+        def member_lines():
+            for uri, yuid in members:
+                counts["members"] += 1
+                if not counts["members"] % 10000:
+                    progress(advance=10000)
+                yield f"{copy_text(self._manage_key_in(uri))}\t{copy_text(self._manage_value_in(yuid))}\n"
+
+        conn = self._own_connection()
+        try:
+            pg_load(conn, [(self.yuid_table, ["yuid", "token", "minted"], LineReader(registry_lines())),
+                           (self.table, ["uri", "yuid"], LineReader(member_lines()))])
+        finally:
+            conn.close()
+        progress(advance=counts["members"] % 10000)
+        self.memory_cache.clear()
+        return counts["members"]
+
     def _export_state(self):
         state = {}
         with self._streaming("idmap_export") as cur:
@@ -1500,6 +1577,32 @@ class ReferenceMap(object):
     def clear(self):
         with self.conn.cursor() as cur:
             cur.execute(f"TRUNCATE {self.table}")
+
+    # --- backup and restore (lux_pipeline.storage.backup) ---
+
+    def _own_connection(self):
+        return psycopg2.connect(**self._conn_kw)
+
+    def backup(self, dest_dir, stem, progress=null_progress):
+        conn = self._own_connection()
+        try:
+            return pg_copy_out(conn, [self.table], dest_dir, stem, progress)
+        finally:
+            conn.close()
+
+    def restore(self, src_dir, entry, progress=null_progress):
+        conn = self._own_connection()
+        try:
+            return pg_copy_in(conn, [self.table], src_dir, entry, progress)
+        finally:
+            conn.close()
+
+    def backup_size(self):
+        conn = self._own_connection()
+        try:
+            return pg_size(conn, [self.table])
+        finally:
+            conn.close()
 
     def commit(self):
         # autocommit: every write has already landed

@@ -8,6 +8,8 @@
 
 import uuid
 
+from lux_pipeline.progress import null_progress
+
 class IdMap(object):
 
     def __init__(self, config=None):
@@ -72,6 +74,40 @@ class IdMap(object):
                     value = value.replace(f"{k}:", v)
                     break
         return value
+
+    # --- backup and restore (lux_pipeline.storage.backup): portable only ---
+
+    def iter_members(self):
+        """``(uri, yuid)`` for every member."""
+        for k, v in list(self.data.items()):
+            if isinstance(v, bytes):
+                yield self._manage_key_out(k), self._manage_value_out(v)
+
+    def iter_yuid_registry(self):
+        """``(yuid, token, None)`` for every YUID; the token is the member
+        that looks like one (``__...__``), as in the Redis layout."""
+        for k, v in list(self.data.items()):
+            if isinstance(v, set):
+                tokens = [t for t in (self._manage_value_out(x) for x in v)
+                          if t.startswith("__") and t.endswith("__")]
+                yield self._manage_key_out(k), (max(tokens) if tokens else None), None
+
+    def load_portable(self, members, registry, progress=null_progress):
+        self.data = {}
+        self._restoring_data_state = True
+        try:
+            for yuid, token, _minted in registry:
+                self.data[self._manage_key_in(yuid)] = set()
+                if token:
+                    self._add(yuid, token)
+            n = 0
+            for uri, yuid in members:
+                self.set(uri, yuid)
+                n += 1
+        finally:
+            self._restoring_data_state = False
+        progress(advance=n)
+        return n
 
     # Mostly useful for testing, maybe in prod
     def _export_state(self):

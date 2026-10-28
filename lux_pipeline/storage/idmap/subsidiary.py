@@ -558,6 +558,12 @@ class IdMap(postgres.IdMap):
     # master's. get_multi() below is the one that knows to go and ask.
     supports_member_dump = False
 
+    def backup_refused(self):
+        """Not backed up or restored: the table is a partial view of the
+        master, and restoring one would hide the master's keys behind it."""
+        return (f"a subsidiary idmap holds only what has diverged from its master; "
+                f"back up the master map ('{self.master_name}') instead")
+
     def get_multi(self, keys, chunk=1000):
         keys = list(keys)
         out = super().get_multi(keys, chunk=chunk)
