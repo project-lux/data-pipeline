@@ -53,6 +53,43 @@ do it here.
    parameters under `run_single()`; assert `--recid` with two sources
    is rejected.
 
+## Decisions (2026‑10‑27, before implementation)
+
+* **A. Same shape as `ReconcileManager`.** `--source all` is every
+  internal source (`run-merge.py --all`); `internal`, `external` and named
+  sources work as for every command; the results group is rejected by
+  `maybe_add`. Each worker runs the real `select_sources` and calls
+  `merge_slice` with `my_slice=n, max_slice=max_workers`, so every worker
+  sees the same source list -- which both loops need: the records loop's
+  slice predicate, and the references loop's `claim_src["name"] in
+  todo_names` skip. `--recid` with other than one source, and no source,
+  are rejected in the driver. `--resume` and `--no-refs` (`--norefs`) pass
+  through.
+* **B. `--recid` is one unsliced worker and skips the references pass.**
+  `merge_slice` processes an explicit list in full wherever it is given
+  (one worker, `-1, -1`, as item 21). Unlike reconcile's, merge's
+  references pass reads the whole of `reference_uris.txt`, so `run-merge.py
+  --recid` rebuilt every referenced cluster in one process after the
+  chosen records; `lux merge --recid` does not (logged).
+* **C. `--only-refs` (`--onlyrefs`)**: the script's flag; no source, the
+  references pass only, sliced over the workers. With `--recid` or
+  `--no-refs` it would merge nothing and is rejected.
+* **D. Checked in the driver before any worker starts**: the update token
+  (`read_update_token`; missing or malformed raises), and
+  `reference_uris.txt` in the working directory whenever the references
+  pass runs (each worker would otherwise raise `FileNotFoundError` after
+  its whole records pass). A missing `<data_dir>/metatypes.json` is a
+  warning only: the final mapper carries on without metatypes.
+* **E. No in-progress guard** (item 22's `refuse_while_building`): 24
+  shell-orchestrated `lux merge --my-worker n` processes would each see the
+  others' unfinished status files and refuse. `lux reconcile` has none
+  either.
+* **F. Unchanged:** the `merge_is_done-<n>.txt` flags are written as the
+  phase does (`lux initialize` creates `logs/flags`); workers inherit the
+  driver's working directory under mp and under a local Ray cluster
+  (checked); no driver tail; `run-merge.py` and `merge_parallel.sh` are not
+  touched.
+
 ## Acceptance criteria
 
 * Tests pass; `run-merge.py` untouched by this PR.
