@@ -310,5 +310,6 @@ def test_pipeline_configs_index_blocks_resolve(tmp_path, caplog):
     merged = cfgs.results["merged"]
     assert merged["differentDbPath"].endswith("global_diffs.lmdb")
     assert merged["inverseEquivDbPath"].endswith("global_equivs.lmdb")
-    assert "update it to 'index reconcile_label'" in caplog.text
-    assert "update it to 'storage.idmap.lmdb.TabLmdb'" in caplog.text
+    # pipeline-configs#2 made every record canonical: no legacy index names
+    # or class paths left to warn about
+    assert "update it to" not in caplog.text
