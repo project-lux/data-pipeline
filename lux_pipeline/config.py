@@ -250,6 +250,12 @@ class Config(object):
             self.nt_dir = self.exports_dir
         elif not self.nt_dir.startswith("/"):
             self.nt_dir = os.path.join(self.base_dir, self.nt_dir)
+        # Where `lux backup` writes (`--dest` overrides). Optional; set it on
+        # a machine whose data_dir is on a small disk.
+        if not getattr(self, "backup_dir", None):
+            self.backup_dir = os.path.join(self.data_dir, "backups")
+        elif not self.backup_dir.startswith("/"):
+            self.backup_dir = os.path.join(self.base_dir, self.backup_dir)
         if hasattr(self, "log_dir") and not self.log_dir.startswith("/"):
             self.log_dir = os.path.join(self.base_dir, self.log_dir)
         if hasattr(self, "tests_dir") and not self.tests_dir.startswith("/"):

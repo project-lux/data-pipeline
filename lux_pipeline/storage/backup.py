@@ -252,10 +252,11 @@ def pg_columns(cur, table):
 
 
 def pg_size(conn, tables):
-    """Bytes the tables occupy on disk, indexes and TOAST included: the
-    upper bound on what their COPY files need before compression."""
+    """Bytes the tables' rows occupy on disk, TOAST included and indexes
+    not (COPY writes no index): about what their COPY files need before
+    compression."""
     with conn.cursor() as cur:
-        cur.execute("SELECT coalesce(sum(pg_total_relation_size(t::regclass)), 0) "
+        cur.execute("SELECT coalesce(sum(pg_table_size(t::regclass)), 0) "
                     "FROM unnest(%s::text[]) t", (list(tables),))
         return int(cur.fetchone()[0])
 

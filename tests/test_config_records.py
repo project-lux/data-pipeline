@@ -150,6 +150,17 @@ def test_nt_dir_is_optional_and_falls_back_to_exports_dir(tmp_path, value, expec
     assert cfgs.nt_dir == os.path.join(str(tmp_path), expected)
 
 
+@pytest.mark.parametrize("value, expected", [
+    (None, "data/files/backups"),
+    ("backups", "backups"),
+    ("/data/output/backup", "/data/output/backup"),
+])
+def test_backup_dir_is_optional_and_falls_back_under_data_dir(tmp_path, value, expected):
+    extra = {} if value is None else {"backup_dir": value}
+    cfgs = Config(basepath=todays_layout(tmp_path, **extra))
+    assert cfgs.backup_dir == os.path.join(str(tmp_path), expected)
+
+
 def test_unknown_record_type_is_logged_not_raised(tmp_path, caplog):
     bp = write_configs(tmp_path, {
         "base": base_record(tmp_path),

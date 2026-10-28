@@ -30,6 +30,8 @@ from ._handler import BaseHandler
 
 logger = logging.getLogger("lux_pipeline")
 
+# not backup_dir: `lux backup` creates it, and its default (under data_dir)
+# need not exist before the first backup
 DIR_KEYS = ("data_dir", "dumps_dir", "exports_dir", "nt_dir", "indexes_dir", "log_dir", "temp_dir",
             "tests_dir")
 
