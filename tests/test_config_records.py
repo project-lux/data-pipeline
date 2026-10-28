@@ -139,6 +139,17 @@ def test_indexes_dir_defaults_to_data_dir(tmp_path):
 # --- record handling ---------------------------------------------------------
 
 
+@pytest.mark.parametrize("value, expected", [
+    (None, "data/output"),
+    ("data/nt", "data/nt"),
+    ("/elsewhere/nt", "/elsewhere/nt"),
+])
+def test_nt_dir_is_optional_and_falls_back_to_exports_dir(tmp_path, value, expected):
+    extra = {} if value is None else {"nt_dir": value}
+    cfgs = Config(basepath=todays_layout(tmp_path, **extra))
+    assert cfgs.nt_dir == os.path.join(str(tmp_path), expected)
+
+
 def test_unknown_record_type_is_logged_not_raised(tmp_path, caplog):
     bp = write_configs(tmp_path, {
         "base": base_record(tmp_path),

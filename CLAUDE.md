@@ -112,5 +112,6 @@ laptop (the validator reads its schemas on first use, not at construction).
 | `lux_pipeline/process/phases/merge.py` | `read_update_token`, `select_sources`, `make_claim_member`, `merge_slice`: `run-merge.py`'s body; the loops are moved verbatim, never edited |
 | `lux_pipeline/process/tasks/merge_task.py`, `cli/merge.py` | `MergeManager` and `lux merge`: workers call `merge_slice`; `--recid` is one unsliced worker with no references pass; `--only-refs`; the driver checks the token and `reference_uris.txt` (cwd) before any worker starts; no tail |
 | `lux_pipeline/process/phases/export.py` | `export_slice` (`run-export.py`'s body, loop verbatim), `export_sources_slice` (`run-source-build.py`), `export_nt_slice` (`manage-data.py --nt`); the wrappers pass the old `/data-export/output/lux/nt` path |
+| `lux_pipeline/process/tasks/export_task.py`, `cli/export.py` | `ExportManager` and `lux export`: `--type` (`marklogic`, `merged`, `nt`, `sources`, `external`) dispatches to the phase functions (`external` is `export_external`, the datacache records a recordcache used, for `lux load --type export`; one worker per source); JSONL to `exports_dir`, N-Triples to the optional `nt_dir` (falls back to `exports_dir`), `--out-dir` overrides both; no tail |
 
 Worker status and log files follow `<log_dir>/<command>-<timestamp>-w<n>.status|.log`.

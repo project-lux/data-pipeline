@@ -30,7 +30,8 @@ from ._handler import BaseHandler
 
 logger = logging.getLogger("lux_pipeline")
 
-DIR_KEYS = ("data_dir", "dumps_dir", "exports_dir", "indexes_dir", "log_dir", "temp_dir", "tests_dir")
+DIR_KEYS = ("data_dir", "dumps_dir", "exports_dir", "nt_dir", "indexes_dir", "log_dir", "temp_dir",
+            "tests_dir")
 
 
 def schema_names(validator):
