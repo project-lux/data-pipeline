@@ -108,6 +108,14 @@ class Reconciler(object):
                     cr_equivs = set(
                         [x["id"] for x in record["data"].get("equivalent", [])]
                     )
+                    if self.debug:
+                        # the equivalents the collector's crawl found
+                        for k, v in self.collector.debug_graph.items():
+                            try:
+                                self.debug_graph[k].extend(v)
+                            except KeyError:
+                                self.debug_graph[k] = v
+                        self.collector.debug_graph = {}
         except Exception as e:
             logger.error(
                 f"ERROR: Reconciling broke for {record['source']}/{record['identifier']}: {e}"

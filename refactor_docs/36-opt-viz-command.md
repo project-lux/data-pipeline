@@ -32,3 +32,28 @@ Render the reconciliation debug graph between two records in the terminal
      Apply only the logging lines to `main`'s files; the logic changes in
      those commits are not ported (see `CLAUDE-REFACTOR-FIXES.md`).
 * Pure debugging aid; no tests beyond import.
+
+## Decisions (2026-10-28, with Rob)
+
+* **Option 1, the debug graph.** `main`'s Collector already fills its
+  `debug_graph`; the only missing piece was merging it into the
+  Reconciler's after `self.collector.collect(record)` in
+  `reconcile_uris()`, under `if self.debug` (a no-op with
+  `debug_reconciliation` off, as in a build). No log lines added.
+* `debug-reconcile.py` (the same graph drawn with matplotlib) is left for
+  item 33.
+* `viz` switches debug on in the Reconciler, its Collector and every source
+  reconciler for its own run (the source reconcilers read
+  `debug_reconciliation` when they are built, so `rob_refactor`'s
+  `reconciler.debug = True` alone recorded no index edges), and stops the
+  collector storing what it fetches.
+* Not copied from `rob_refactor:cli/viz.py`: the second URI typed with the
+  first URI's mapper; `chr(ord(x) + 1)` node labels (punctuation after ~40
+  nodes; now `<source>:<n>`); unreachable `raise` before `sys.exit`, bare
+  excepts; `_rich.get_layout` / `Live`. Written for netext 0.5's
+  `ConsoleGraph(nodes, edges)` API (the installed version; the networkx
+  graph argument was an older API). The key and the shortest path (dead
+  code behind `if False` in `rob_refactor`) are printed.
+* Tests (`tests/test_cli_viz.py`) cover the URI typing, the replay order,
+  labels, edges, the path, the command's refusals and the missing-extras
+  message, and the reconciler merge with debug on and off.
