@@ -54,7 +54,7 @@ class FakeCursor:
             self.result = list(self.conn.indexes.get(table, []))
         elif "FROM pg_constraint" in sql:
             self.result = list(self.conn.constraints.get(table, []))
-        elif "pg_total_relation_size" in sql:
+        elif "pg_table_size" in sql:
             self.result = [(4096 * len(params[0]),)]
         else:
             self.result = []
