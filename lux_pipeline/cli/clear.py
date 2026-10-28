@@ -27,21 +27,16 @@ current update run, and a cleared map is still part of that run.
 import logging
 import sys
 
+from lux_pipeline.cli import _targets as targets
 from lux_pipeline.cli._handler import BaseHandler
-from lux_pipeline.config import source_indexes
 
 logger = logging.getLogger("lux_pipeline")
 
-GROUPS = ("internal", "external", "results")
 # the computed caches; datacache holds harvested data and must be named
 DEFAULT_CACHES = ("recordcache", "reconciledRecordcache", "recordcache2")
 REFS_MAPS = ("all_refs", "done_refs")
 # a source's indexes come from its named `indexes` block or the legacy path
 # keys (lux_pipeline.config.source_indexes)
-
-
-def _split(value):
-    return [s.strip() for s in value.split(",") if s.strip()]
 
 
 class CommandHandler(BaseHandler):
@@ -59,24 +54,7 @@ class CommandHandler(BaseHandler):
         ap.add_argument("--force", action="store_true",
                         help="Do not ask for confirmation; required for --map idmap")
 
-    # --- lookups -----------------------------------------------------------
-
-    def _lookup(self, name):
-        for group in GROUPS:
-            cfg = getattr(self.configs, group)
-            if name in cfg:
-                return cfg[name]
-        raise ValueError(f"Unknown source: {name}")
-
-    def _all_sources(self):
-        return [c for g in GROUPS for c in getattr(self.configs, g).values()]
-
-    def _sources_for(self, which):
-        if which == "all":
-            return self._all_sources()
-        if which in GROUPS:
-            return list(getattr(self.configs, which).values())
-        return [self._lookup(s) for s in _split(which)]
+    # --- targets (lux_pipeline.cli._targets) --------------------------------
 
     def resolve_sources(self, args):
         """``(configs, wide)``: the sources whose caches to clear, and
@@ -84,20 +62,19 @@ class CommandHandler(BaseHandler):
         which = getattr(args, "source", None)
         if not which:
             return [], False
-        cfgs = self._sources_for(which)
-        return cfgs, which in ("all", *GROUPS) or len(cfgs) > 1
+        cfgs = [cfg for _, cfg in targets.sources(self.configs, which)]
+        return cfgs, which in ("all", *targets.GROUPS) or len(cfgs) > 1
 
     def resolve_caches(self, args):
         which = getattr(args, "cache", None)
-        return _split(which) if which else list(DEFAULT_CACHES)
+        return targets.split(which) if which else list(DEFAULT_CACHES)
 
     def resolve_maps(self, args):
-        names = _split(args.map) if getattr(args, "map", None) else []
+        names = (targets.maps(self.configs, args.map, allow_all=False)
+                 if getattr(args, "map", None) else [])
         if getattr(args, "refs", False):
-            names.extend(m for m in REFS_MAPS if m not in names)
-        for n in names:
-            if n not in self.configs.map_stores:
-                raise ValueError(f"Unknown map: {n}")
+            names.extend(m for m in targets.maps(self.configs, ",".join(REFS_MAPS))
+                         if m not in names)
         if "idmap" in names and not getattr(args, "force", False):
             raise ValueError("Refusing to clear idmap without --force")
         return names
@@ -107,11 +84,7 @@ class CommandHandler(BaseHandler):
         which = getattr(args, "index", None)
         if not which:
             return []
-        out = []
-        for cfg in self._sources_for(which):
-            for path in source_indexes(cfg).values():
-                out.append((cfg["name"], path))
-        return out
+        return [(source, path) for _, source, _, path in targets.indexes(self.configs, which)]
 
     # --- confirmation ------------------------------------------------------
 
@@ -135,10 +108,7 @@ class CommandHandler(BaseHandler):
 
     def clear_maps(self, maps):
         for m in maps:
-            cfg = self.configs.map_stores[m]
-            store = cfg.get("store")
-            if store is None:
-                store = self.configs.instantiate_map(m)["store"]
+            store = targets.map_store(self.configs, m)
             print(f"Clearing map {m}")
             store.clear()
 

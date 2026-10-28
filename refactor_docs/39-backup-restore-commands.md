@@ -204,6 +204,31 @@ reached through the store's own connection.
   Postgres migration; `snapshotPath` is not a backup setting and nothing
   reads it. Leave it alone; it is item 35's problem.
 
+## Decisions (2026-10-28, with Rob)
+
+* **Two PRs.** 39a: `cli/_targets.py` and the storage layer (`storage/backup.py`,
+  the native copies, the portable formats) with their tests. 39b: `lux backup`,
+  `lux restore` and `backup_dir`. The index box is ticked by 39b.
+* **The portable idmap is two files**, `<stem>.members.jsonl.gz`
+  (`{"k": uri, "v": yuid}`) and `<stem>.yuids.jsonl.gz`
+  (`{"yuid", "token", "minted"}`), format `idmap-jsonl`: a key -> value dump
+  would lose the `<table>_yuid` registry (update tokens, minted YUIDs with no
+  members). Supported by the Postgres and memory idmaps; the Redis idmap
+  refuses and points at `migrate-idmap.py` (no live instance uses it).
+* **Every Postgres restore** -- native or the portable idmap -- drops the
+  table's indexes and primary-key / unique constraints (read from the
+  catalog), TRUNCATEs, COPYs and recreates them exactly, all in one
+  transaction: `migrate-idmap.py`'s load speed with a rollback to the old
+  contents on any failure. `ensure_covering_indexes()` is therefore not
+  called: the indexes that were there are put back.
+* **`--verify` checks the files**: each file's rows (lines, or the copied
+  LMDB environment's entries) against the manifest, whose counts come from
+  the copy itself, and a sample of portable keys looked up in the store. It
+  never counts a live table (a full scan on a read-bound machine).
+* Backup and restore refuse while a build runs (`refuse_while_building`,
+  `--force`); `backup_dir` in the build machine's copies is
+  `/data/output/backup`, where `backup_tables.sh` writes.
+
 ## Steps
 
 1. `cli/_targets.py`: move the resolution helpers out of `counts.py` and

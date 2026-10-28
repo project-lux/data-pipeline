@@ -46,6 +46,11 @@ class FsCache(object):
     def flush(self):
         pass
 
+    def clear(self):
+        """Delete every record file (a restore empties the store first)."""
+        for fn in self._list():
+            os.remove(os.path.join(self.directory, fn))
+
     def has_item(self, key):
         # apply the same slash replacement as set()/get(); without it any
         # identifier containing '/' was reported absent

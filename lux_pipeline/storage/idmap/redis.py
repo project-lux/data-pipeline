@@ -156,6 +156,13 @@ class IdMap(RedisCache):
     # db 1 is test database
     # db 2 is network operation cache for redirects, errors
 
+    def backup_refused(self):
+        """No live instance keeps its idmap in Redis any more, and the
+        portable idmap format needs the YUID registry this layout keeps
+        as pseudo-members; migrate-idmap.py moves it to Postgres."""
+        return ("the Redis idmap is not backed up: move it to Postgres with "
+                "migrate-idmap.py, then back that up")
+
     def __init__(self, config):
         RedisCache.__init__(self, config)
         self.prefix_map_out = {

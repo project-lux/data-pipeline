@@ -3,12 +3,12 @@
 import logging
 import sys
 
+from lux_pipeline.cli import _targets as targets
 from lux_pipeline.cli._handler import BaseHandler
-from lux_pipeline.config import INDEX_LABELS, source_indexes
+from lux_pipeline.config import INDEX_LABELS
 
 logger = logging.getLogger("lux_pipeline")
 
-GROUPS = ("internal", "external", "results")
 DEFAULT_CACHES = ("datacache", "recordcache", "reconciledRecordcache", "recordcache2")
 # a source's indexes come from its named `indexes` block or the legacy path
 # keys (lux_pipeline.config.source_indexes); INDEX_LABELS gives the words
@@ -34,10 +34,6 @@ def _count(cache):
     return n, False
 
 
-def _split(value):
-    return [s.strip() for s in value.split(",") if s.strip()]
-
-
 class CommandHandler(BaseHandler):
     def add_args(self, ap):
         ap.add_argument("--cache", type=str,
@@ -51,19 +47,7 @@ class CommandHandler(BaseHandler):
         ap.add_argument("--table", action="store_true",
                         help="Render as tables (rich) instead of plain lines")
 
-    # --- lookups -----------------------------------------------------------
-
-    def _lookup(self, name):
-        """``(group, config)`` for a source name, or ``ValueError``."""
-        for group in GROUPS:
-            cfg = getattr(self.configs, group)
-            if name in cfg:
-                return group, cfg[name]
-        raise ValueError(f"Unknown source: {name}")
-
-    def _all_sources(self):
-        return [(g, c) for g in GROUPS
-                for c in getattr(self.configs, g).values()]
+    # --- targets (lux_pipeline.cli._targets) --------------------------------
 
     def resolve_sources(self, args):
         """``[(group, config)]`` for the caches to count.
@@ -75,47 +59,29 @@ class CommandHandler(BaseHandler):
         which = getattr(args, "source", None)
         if not which:
             others = getattr(args, "map", None) or getattr(args, "index", None)
-            return [] if others else self._all_sources()
-        if which == "all":
-            return self._all_sources()
-        if which in GROUPS:
-            return [(which, c) for c in getattr(self.configs, which).values()]
-        return [self._lookup(s) for s in _split(which)]
+            return [] if others else targets.all_sources(self.configs)
+        return targets.sources(self.configs, which)
 
     def resolve_caches(self, args):
         which = getattr(args, "cache", None)
         if not which or which == "all":
             return list(DEFAULT_CACHES)
-        return _split(which)
+        return targets.split(which)
 
     def resolve_maps(self, args):
         which = getattr(args, "map", None)
         if not which:
             return []
-        stores = self.configs.map_stores
-        if which == "all":
-            return list(stores.keys())
-        names = _split(which)
-        for n in names:
-            if n not in stores:
-                raise ValueError(f"Unknown map: {n}")
-        return names
+        return targets.maps(self.configs, which)
 
     def resolve_indexes(self, args):
-        """``[(source name, label, path)]`` for every configured index of the
-        requested sources."""
+        """``[(group, source name, label, path)]`` for every configured index
+        of the requested sources."""
         which = getattr(args, "index", None)
         if not which:
             return []
-        if which == "all":
-            srcs = self._all_sources()
-        else:
-            srcs = [self._lookup(s) for s in _split(which)]
-        out = []
-        for group, cfg in srcs:
-            for name, path in source_indexes(cfg).items():
-                out.append((group, cfg["name"], INDEX_LABELS.get(name, name), path))
-        return out
+        return [(group, source, INDEX_LABELS.get(name, name), path)
+                for group, source, name, path in targets.indexes(self.configs, which)]
 
     # --- counting ----------------------------------------------------------
 
@@ -139,11 +105,7 @@ class CommandHandler(BaseHandler):
         rows = []
         total = 0
         for m in maps:
-            cfg = self.configs.map_stores[m]
-            store = cfg.get("store")
-            if store is None:
-                store = self.configs.instantiate_map(m)["store"]
-            n = len(store)
+            n = len(targets.map_store(self.configs, m))
             rows.append((m, n))
             total += n
         return rows, total

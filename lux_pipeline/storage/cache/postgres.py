@@ -16,6 +16,9 @@ DEADLOCK_RETRIES = 5
 DEADLOCK_BACKOFF = 0.05
 from psycopg2.extras import Json, RealDictCursor
 
+from lux_pipeline.progress import null_progress
+from lux_pipeline.storage.backup import pg_copy_in, pg_copy_out, pg_size
+
 
 def _fmt_bytes(n):
     """GB for the tables this is really about, MB below that."""
@@ -1117,6 +1120,48 @@ class PooledCache(object):
     def commit(self):
         # Normally a no-op: we commit after every write unless deferring
         self.flush()
+
+    # --- backup (lux_pipeline.storage.backup) ---
+
+    def _own_connection(self):
+        """A connection of its own, outside the pool: a backup holds one
+        transaction for the whole table, and a restore one that truncates."""
+        c = self.config
+        if c["host"]:
+            return psycopg2.connect(host=c["host"], port=c["port"], user=c["user"],
+                                    password=c["password"], dbname=c["dbname"])
+        return psycopg2.connect(user=c["user"], dbname=c["dbname"])
+
+    def backup(self, dest_dir, stem, progress=null_progress):
+        """COPY the table out, gzipped (``pg-copy``)."""
+        self._read_barrier()
+        conn = self._own_connection()
+        try:
+            return pg_copy_out(conn, [self.name], dest_dir, stem, progress)
+        finally:
+            conn.close()
+
+    def restore(self, src_dir, entry, progress=null_progress):
+        """Replace the table's rows with a ``pg-copy`` backup, in one
+        transaction (lux_pipeline.storage.backup.pg_load)."""
+        self._read_barrier()
+        conn = self._own_connection()
+        try:
+            return pg_copy_in(conn, [self.name], src_dir, entry, progress)
+        finally:
+            conn.close()
+
+    def backup_size(self):
+        conn = self._own_connection()
+        try:
+            return pg_size(conn, [self.name])
+        finally:
+            conn.close()
+
+    def iter_items(self):
+        """``(key, record)`` for every row, from one server-side cursor."""
+        for rec in self.iter_records():
+            yield str(rec[self.key]), rec
 
     def start_bulk(self):
         if self.iterating_conn is None:

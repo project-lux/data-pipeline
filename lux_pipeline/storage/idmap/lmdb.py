@@ -38,10 +38,15 @@
 # code.
 
 import logging
+import os
+import shutil
 from pathlib import Path
 
 import lmdb
 import ujson as json
+
+from lux_pipeline.progress import null_progress
+from lux_pipeline.storage.backup import LMDB_COPY
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -385,6 +390,36 @@ class Lmdb(object):
         """
         db = self._main_db()
         self._write(lambda txn: txn.drop(db, delete=False))
+
+    # --- backup (lux_pipeline.storage.backup) ---
+
+    def backup(self, dest_dir, stem, progress=null_progress):
+        """LMDB's own hot copy, compacted, to ``<stem>.lmdb/`` in
+        `dest_dir`: consistent under concurrent readers, and needs free
+        space equal to the live data."""
+        rel = f"{stem}.lmdb"
+        target = os.path.join(dest_dir, rel)
+        os.makedirs(target, exist_ok=True)
+        self.env.copy(target, compact=True)
+        n = len(self)
+        progress(advance=n)
+        return {"format": LMDB_COPY, "files": [rel], "rows": n, "extra": {"path": self.env.path()}}
+
+    def restore(self, src_dir, entry, progress=null_progress):
+        """Replace this environment's files with the copy in `entry`. Closes
+        this instance: open the path again to use the restored index."""
+        path = self.env.path()
+        self.close()
+        remove_lmdb(path)
+        os.makedirs(path)
+        shutil.copyfile(os.path.join(src_dir, entry["files"][0], "data.mdb"),
+                        os.path.join(path, "data.mdb"))
+        progress(advance=entry["rows"])
+        return entry["rows"]
+
+    def backup_size(self):
+        """Bytes the copy needs at most: the data file."""
+        return os.path.getsize(os.path.join(self.env.path(), "data.mdb"))
 
     # --- lifecycle ---
 
