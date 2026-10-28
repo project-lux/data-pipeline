@@ -49,7 +49,7 @@ you finish an item.
 | 27 | [`lux interactive`](27-interactive-command.md) | P2 | S | 05 | ☑ |
 | 28 | [`lux initialize` and `lux testinstall`](28-initialize-testinstall-commands.md) | P2 | S | 05 | ☑ |
 | 31 | [Shell orchestration on the null engine](31-shell-scripts-null-engine.md) | P2 | M | 06, 13, 17, 21, 22, 24, 26 | ☐☑ |
-| 32 | [Docs: install, README, rebuild](32-docs-install.md) | P2 | S | 31 | ☐ |
+| 32 | [Docs: install, README, rebuild](32-docs-install.md) | P2 | S | 31 | ☐☑ |
 | 33 | [Retire the legacy scripts](33-legacy-scripts-retirement.md) | P2 | S | 31, 32 | ☐ |
 | 39 | [`lux backup` and `lux restore`](39-backup-restore-commands.md) | P2 | L | 02, 05, 08, 09 | ☑ |
 | 36 | [Optional: `lux viz`](36-opt-viz-command.md) | P3 | S | 05 | ☐ |
