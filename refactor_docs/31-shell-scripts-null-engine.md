@@ -59,6 +59,41 @@ The per‑slice stdout redirect stays for anything not routed to the logger.
 2. Rewrite the scripts; keep the old lines commented for one release.
 3. Run `ENGINE=null ./run-all.sh --all` and `ENGINE=mp ./run-all.sh --all` on a test instance; compare `lux counts` and a sample of merged records.
 
+## Decisions (2026-10-28, with Rob)
+
+* **New scripts beside the old ones, not rewrites.** `run-all2.sh` and
+  `reconcile_parallel2.sh`, `merge_parallel2.sh`, `export_parallel2.sh`,
+  `nt_parallel2.sh`, `import_parallel2.sh`, `harvest_parallel2.sh`,
+  `updateExternal_parallel2.sh` are the `lux` versions; `run-all.sh` and
+  the `*_parallel.sh` scripts are unchanged, so builds with both can be
+  compared on the build machine. Once they have been, the old ones are
+  removed (item 33) and the new ones can take their names.
+* **Failures are found in the logs.** A worker that raises logs the
+  exception, with its `Traceback`, to `<PREFIX>-w<n>.log`, and then
+  reports `"done": true` all the same (`_run_worker`'s `finally`), so the
+  status files only say when a slice stopped. `wait-for-flags.sh` waits for
+  `"done": true` in every status file and fails on a `Traceback` in any
+  worker log, or on a `lux <command>:` / `lux:` line in the slices' stdout
+  files (a `lux` that failed before its worker started writes no status
+  or log). No change to the Python. A slice killed outright (`kill -9`)
+  leaves no trace and is waited for forever, as before.
+* Step 1 was already done: `lux metatypes` (item 22).
+* `run-all2.sh` keeps `--all|--<source>` (the `--` is optional) and its
+  paths, now variables overridable from the environment (`LOGS`,
+  `STATUS_FILE`, `EXPORTS`, `WORKERS`, `WAIT_INTERVAL`). On an error it
+  exits 1 (was 0); the steps between the phases are checked too; the
+  fixed `sleep`s are gone (on the null engine it `wait`s for the slices to
+  exit before the next step). `post-build-portal.py` stays unchecked, as
+  before.
+* `load_parallel.sh` (`run-load.py`, the MarkLogic load) is left alone:
+  `lux` has no equivalent; item 33 decides.
+* The wrappers start their slices and return, printing the `lux watch`
+  and `scripts/wait-for-flags.sh` commands for the run. Their stdout files
+  now also get stderr; `harvest_parallel.sh`'s are `harvest_<n>_<source>.txt`.
+* Tests: `tests/test_shell_scripts.py` runs the scripts against a stub
+  `lux`. Step 3 (both engines on a test instance, compare counts) is Rob's,
+  on the build server.
+
 ## Acceptance criteria
 
 * Both engines complete a small build with identical counts.
