@@ -45,7 +45,7 @@ you finish an item.
 | 23 | [Merge phase as a module](23-merge-phase-module.md) | P1 | M | 01 | ☑ |
 | 24 | [`MergeManager` and `lux merge`](24-merge-command.md) | P1 | M | 07, 23 | ☑ |
 | 25 | [Export phase as a module](25-export-phase-module.md) | P1 | M | 01 | ☑ |
-| 26 | [`ExportManager` and `lux export`](26-export-command.md) | P1 | M | 07, 25 | ☐ |
+| 26 | [`ExportManager` and `lux export`](26-export-command.md) | P1 | M | 07, 25 | ☑ |
 | 27 | [`lux interactive`](27-interactive-command.md) | P2 | S | 05 | ☑ |
 | 28 | [`lux initialize` and `lux testinstall`](28-initialize-testinstall-commands.md) | P2 | S | 05 | ☑ |
 | 31 | [Shell orchestration on the null engine](31-shell-scripts-null-engine.md) | P2 | M | 06, 13, 17, 21, 22, 24, 26 | ☐ |

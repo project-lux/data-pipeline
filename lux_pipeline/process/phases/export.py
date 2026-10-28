@@ -8,8 +8,10 @@ records themselves. `export_sources_slice` is run-source-build.py: the
 aat / ulan / lcsh / tgn datacaches mapped into their recordcaches and
 written out as JSONL and N-Triples. `export_nt_slice` is manage-data.py's
 ``--nt``: the merged records as N-Triples for the QLever index. The legacy
-scripts parse argv and call these; the manager (item 26) calls them from
-each worker.
+scripts parse argv and call these; the manager (`ExportManager`, ``lux
+export``) calls them from each worker. `export_external` has no script: it
+writes the external records a build used in the form ``lux load --type
+export`` reads.
 
 The chunked loop in `export_slice` is run-export.py's, moved and not
 changed: nothing inside a ``with timer.stage(...)`` block may be edited
@@ -347,6 +349,88 @@ def export_nt_slice(cfgs, my_slice, max_slice, out_dir=None, gzip_level=1, progr
 
     logger.info(f"{written:,} records -> {fn}")
     return {"records": summary, "written": written, "path": fn}
+
+
+def export_external(cfgs, name, out_dir=None, chunk_size=CHUNK, gzip_level=1,
+                    progress=null_progress):
+    """The datacache records of external source `name` that its recordcache
+    was built from, to ``export_<name>.jsonl.gz`` in `out_dir`
+    (``cfgs.exports_dir``): one ``<identifier>\t{"data": ...}`` line per
+    record, the file `Loader.load_export2` -- ``lux load --type export`` --
+    reads from ``<dumps_dir>/harvested/``. Another instance can then load
+    just the external records a build used instead of whole dumps.
+
+    The recordcache holds one record per identifier and type
+    (``<identifier>##qua<type>``); each identifier is written once. A key
+    whose datacache record has gone is counted as `missing` and skipped.
+    The datacache is read `chunk_size` identifiers per query, and the JSON
+    text is passed through unparsed. An empty recordcache leaves no file.
+
+    Returns ``{"source": name, "written": n, "missing": n, "path": fn}``,
+    with ``path`` None when nothing was written.
+    """
+    src = cfgs.external[name]
+    rc = src["recordcache"]
+    dc = src["datacache"]
+
+    if out_dir is None:
+        out_dir = cfgs.exports_dir
+    os.makedirs(out_dir, exist_ok=True)
+    fn = os.path.join(out_dir, f"export_{name}.jsonl.gz")
+
+    progress(description=name, total=_estimate(rc))
+    seen = set()
+
+    def identifiers():
+        for key in rc.iter_keys():
+            progress(advance=1)
+            ident = cfgs.split_qua(key)[0]
+            if ident not in seen:
+                seen.add(ident)
+                yield ident
+
+    written = missing = 0
+    with gzip.open(fn, "wt", gzip_level, encoding="utf-8") as fh:
+        for chunk in in_batches(identifiers(), chunk_size):
+            got = _fetch_multi(dc, chunk)
+            for ident in chunk:
+                rec = got.get(ident)
+                if rec is None:
+                    missing += 1
+                    continue
+                data = rec["data"]
+                if not isinstance(data, str):
+                    data = dumps(data)
+                fh.write(f'{ident}\t{{"data":{data}}}\n')
+                written += 1
+
+    # force all postgres connections to close
+    poolman = PoolManager.get_instance()
+    poolman.put_all("localsocket")
+
+    if missing:
+        logger.warning(f"{name}: {missing:,} identifiers in the recordcache have no datacache record")
+    if not written:
+        os.remove(fn)
+        logger.info(f"{name}: nothing to export")
+        return {"source": name, "written": 0, "missing": missing, "path": None}
+    logger.info(f"{written:,} records -> {fn}")
+    return {"source": name, "written": written, "missing": missing, "path": fn}
+
+
+def _fetch_multi(cache, keys):
+    """``{key: record}`` for those of `keys` that `cache` holds, with the
+    data as JSON text where the backend can hand it over unparsed: one query
+    for Postgres, a lookup per key for anything else."""
+    get_multi = getattr(cache, "get_multi", None)
+    if get_multi is not None:
+        return get_multi(keys, raw=True)
+    got = {}
+    for k in keys:
+        rec = cache[k]
+        if rec is not None:
+            got[k] = rec
+    return got
 
 
 def _estimate(cache):

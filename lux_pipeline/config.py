@@ -243,6 +243,13 @@ class Config(object):
             self.data_dir = os.path.join(self.base_dir, self.data_dir)
         if not self.exports_dir.startswith("/"):
             self.exports_dir = os.path.join(self.base_dir, self.exports_dir)
+        # Where the N-Triples go (`lux export --type nt|sources`). Optional:
+        # on the build machine they have always gone to a sibling of
+        # exports_dir, elsewhere exports_dir itself will do.
+        if not getattr(self, "nt_dir", None):
+            self.nt_dir = self.exports_dir
+        elif not self.nt_dir.startswith("/"):
+            self.nt_dir = os.path.join(self.base_dir, self.nt_dir)
         if hasattr(self, "log_dir") and not self.log_dir.startswith("/"):
             self.log_dir = os.path.join(self.base_dir, self.log_dir)
         if hasattr(self, "tests_dir") and not self.tests_dir.startswith("/"):

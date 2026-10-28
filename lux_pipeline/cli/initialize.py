@@ -63,7 +63,8 @@ USER_AGENT = "lux-pipeline/0.1 (+https://github.com/project-lux/data-pipeline)"
 SAMPLES = Path(__file__).resolve().parent.parent.parent / "docs" / "sample_config"
 PIPELINE_CONFIGS_URL = "https://github.com/project-lux/pipeline-configs.git"
 POSTGRES_IDMAP = "storage.idmap.postgres.IdMap"
-DIR_KEYS = ("data_dir", "dumps_dir", "exports_dir", "indexes_dir", "log_dir", "temp_dir", "tests_dir")
+DIR_KEYS = ("data_dir", "dumps_dir", "exports_dir", "nt_dir", "indexes_dir", "log_dir", "temp_dir",
+            "tests_dir")
 
 
 def read_json(path):
