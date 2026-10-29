@@ -40,9 +40,9 @@ class MergeHandler(object):
     def _fetch_members(cache, idents):
         """A cluster's member rows by identifier, raw where the cache can.
 
-        get_multi() is a postgres cache method; FsCache and the in-memory
-        doubles only do single-key access, so this degrades to that rather
-        than requiring it. The raw path is an optimisation -- the fallback
+        get_multi() is part of the cache interface (one query on postgres,
+        a loop on FsCache); the in-memory doubles only do single-key access,
+        so this degrades to that rather than requiring it. The raw path is an optimisation -- the fallback
         returns parsed rows and _data_size handles both."""
         batch = getattr(cache, "get_multi", None)
         if batch is not None:

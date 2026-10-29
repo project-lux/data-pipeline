@@ -356,8 +356,11 @@ def test_cache_portable_round_trip_on_the_filesystem(tmp_path):
     entry = bk.backup(src, "cache", "aat", str(tmp_path / "bk"), cache="datacache")
     assert (entry["format"], entry["rows"], entry["cache"]) == (bk.JSONL, 3, "datacache")
     first = next(bk.read_jsonl(str(tmp_path / "bk" / entry["files"][0])))
+    # the file's time is the record's insert_time and record_time
+    t = src.metadata("300000/x", "record_time")["record_time"].isoformat()
     assert first == {"k": "300000/x", "v": {"data": {"id": "aat:0", "type": "Type"},
-                                            "identifier": "300000/x"}}
+                                            "identifier": "300000/x",
+                                            "insert_time": t, "record_time": t}}
 
     (tmp_path / "b").mkdir()
     dst = fs_cache(tmp_path / "b", "aat")
@@ -366,6 +369,8 @@ def test_cache_portable_round_trip_on_the_filesystem(tmp_path):
     assert bk.restore(dst, str(tmp_path / "bk"), entry, progress=lambda **kw: seen.append(kw)) == 3
     assert sorted(dst.iter_keys()) == ["300000/x", "300001/x", "300002/x"]
     assert dst["300002/x"]["data"] == {"id": "aat:2", "type": "Type"}
+    # restore puts record_time back
+    assert dst.metadata("300000/x", "record_time")["record_time"].isoformat() == t
     assert {"advance": 3} in seen and seen[-1] == {"done": True}
     assert bk.verify(dst, str(tmp_path / "bk"), entry) == []
 

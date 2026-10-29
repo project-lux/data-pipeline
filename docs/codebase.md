@@ -22,7 +22,7 @@ The rest of the code is divided according to function:
   * reference_manager: manage the references between records
   * validator: validate the JSON structure of a record
   * phases/, tasks/: the build phases and the managers that run them (below)
-* storage/: caches (Postgres, filesystem), the identity map (Postgres, Redis, in-memory), MarkLogic, and backup / restore
+* storage/: caches (Postgres, filesystem; `cache/abstract.py` is the interface they implement), the identity map (Postgres, Redis, in-memory), MarkLogic, and backup / restore
 
 The sources each contain:
 

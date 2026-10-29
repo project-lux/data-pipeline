@@ -52,10 +52,9 @@ def in_batches(it, n):
 def built_yuids(cache, yuids):
     """Which of these YUIDs the merged cache already holds.
 
-    has_multi() is the postgres batch check. A filesystem-backed merged
-    cache has neither that nor metadata() -- so --resume never worked
-    against one -- but it does have has_item(), so fall back to that rather
-    than require the batch method."""
+    has_multi() is the batch check every cache has (storage/cache/abstract);
+    a store without it -- the in-memory doubles -- still has has_item(), so
+    fall back to that rather than require the batch method."""
     batch = getattr(cache, "has_multi", None)
     if batch is not None:
         return set(batch(yuids))

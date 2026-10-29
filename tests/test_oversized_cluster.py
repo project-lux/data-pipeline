@@ -185,7 +185,7 @@ def test_members_are_fetched_in_one_batch_per_source():
 
 
 def test_a_cache_without_get_multi_still_works():
-    """FsCache has no batch method, and it is a configurable cache class."""
+    """A store with only single-key access (the in-memory doubles)."""
     out, cache, _, _ = run(50, cap=5, batched=False)
     assert len(out["_merged"]) == 5
     assert cache.item_calls == 50
