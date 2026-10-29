@@ -1,5 +1,8 @@
 
+import logging
 from lux_pipeline.process.base.fetcher import Fetcher
+
+logger = logging.getLogger("lux_pipeline")
 
 prefx = {
     "skos":"http://www.w3.org/2004/02/skos/core#",
@@ -42,7 +45,7 @@ def prefixify(js):
                     found = True
                     break
             if not found:
-                print(k, v)
+                logger.debug(f"{k} {v}")
     return njs
 
 class LcshFetcher(Fetcher):
