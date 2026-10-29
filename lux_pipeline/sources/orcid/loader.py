@@ -1,4 +1,5 @@
 
+import logging
 from lux_pipeline.process.base.loader import Loader
 import glob
 import gzip
@@ -7,6 +8,8 @@ import re
 import tarfile
 import time
 import ujson as json
+
+logger = logging.getLogger("lux_pipeline")
 
 # The 2025 dump has ~26.3M members. Only used for the progress ETA, and only
 # when the source config doesn't give a totalRecords.
@@ -140,9 +143,9 @@ class OrcidLoader(Loader):
         else:
             mine = [(n, fn) for n, fn in enumerate(shards) if n % maxSlice - slicen == 0]
         if not mine:
-            print(f"No shards for slice {slicen} of {maxSlice}: only {len(shards)} shards exist")
+            logger.warning(f"No shards for slice {slicen} of {maxSlice}: only {len(shards)} shards exist")
             return
-        print(f"Loading {len(mine)} of {len(shards)} orcid shards: {[n for n, fn in mine]}")
+        logger.info(f"Loading {len(mine)} of {len(shards)} orcid shards: {[n for n, fn in mine]}")
 
         x = 0
         start = time.time()
@@ -156,7 +159,7 @@ class OrcidLoader(Loader):
                     x += 1
                     if not x % 10000:
                         t = time.time() - start
-                        print(f"{x} in {t} = {x / t}/s (shard {n})")
+                        logger.info(f"{x} in {t} = {x / t}/s (shard {n})")
 
     def split(self, slicen=None, maxSlice=None):
         """Write the archive out as JSONL shards, ready to load.
@@ -183,7 +186,7 @@ class OrcidLoader(Loader):
         paths = {n: self.shard_path(n) for n in mine}
         handles = {n: gzip.open(f"{paths[n]}.tmp", "wt", GZIP_LEVEL) for n in mine}
         kept = {n: 0 for n in mine}
-        print(f"Writing {len(mine)} of {maxSlice} shards: {', '.join(paths[n] for n in mine)}")
+        logger.info(f"Writing {len(mine)} of {maxSlice} shards: {', '.join(paths[n] for n in mine)}")
 
         ttl = self.total if self.total > 0 else TOTAL_MEMBERS
         tf = tarfile.open(self.in_path, "r:gz")
@@ -220,8 +223,8 @@ class OrcidLoader(Loader):
                     t = time.time() - start
                     xps = x / t
                     ttls = ttl / xps
-                    print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-                    print(f"{done_x} with data / {mine_x} = {done_x/mine_x*100}%")
+                    logger.info(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
+                    logger.info(f"{done_x} with data / {mine_x} = {done_x/mine_x*100}%")
         finally:
             for fh in handles.values():
                 fh.close()
@@ -229,9 +232,9 @@ class OrcidLoader(Loader):
 
         for n, path in paths.items():
             os.rename(f"{path}.tmp", path)
-            print(f"Wrote {kept[n]} records to {path} "
+            logger.info(f"Wrote {kept[n]} records to {path} "
                   f"({os.path.getsize(path)/1e9:.1f}GB)")
-        print(f"{done_x} records from {mine_x} members in {time.time() - start}s")
+        logger.info(f"{done_x} records from {mine_x} members in {time.time() - start}s")
 
     def _load_dump(self, slicen, maxSlice):
         # This loads from annual summary dump file.
@@ -274,8 +277,8 @@ class OrcidLoader(Loader):
                 t = time.time() - start
                 xps = x/t
                 ttls = ttl / xps
-                print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
+                logger.info(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
                 # done_x is out of the members this worker owns, not the ones
                 # it walked past
-                print(f"{done_x} with data / {mine_x} = {done_x/mine_x*100}%")
+                logger.info(f"{done_x} with data / {mine_x} = {done_x/mine_x*100}%")
         tf.close()

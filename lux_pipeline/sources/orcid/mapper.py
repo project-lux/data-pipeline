@@ -1,7 +1,10 @@
+import logging
 from lux_pipeline.process.base.mapper import Mapper
 from lux_pipeline.process.utils.mapper_utils import make_datetime
 from cromulent import model, vocab
 from lxml import etree
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class OrcidMapper(Mapper):
@@ -57,7 +60,7 @@ class OrcidMapper(Mapper):
         except Exception as e:
             # Some records are garbage HTML?
             # Need to refresh from dump?
-            print(f"orcid {ident}: could not parse xml: {e}")
+            logger.warning(f"orcid {ident}: could not parse xml: {e}")
             return None
         return dom
 
@@ -120,7 +123,7 @@ class OrcidMapper(Mapper):
         # (an error/summary document, or a different namespace)
         recs = dom.xpath("/record:record", namespaces=self.nss)
         if not recs:
-            print(f"orcid {record.get('identifier', '?')}: xml has no record:record root; skipping")
+            logger.debug(f"orcid {record.get('identifier', '?')}: xml has no record:record root; skipping")
             return None
         rec = recs[0]
 
