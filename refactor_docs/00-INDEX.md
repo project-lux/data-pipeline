@@ -55,7 +55,7 @@ you finish an item.
 | 36 | [Optional: `lux viz`](36-opt-viz-command.md) | P3 | S | 05 | ☐☑ |
 | 37 | [Optional: logging sweep over `lux_pipeline/sources`](37-opt-source-logging-sweep.md) | P3 | L | 01 | ☑ |
 | 38 | [Optional: `AbstractCache` interface doc class](38-opt-abstract-cache-interface.md) | P3 | S | — | ☑ |
-| 41 | [Optional: function‑level profiling inside `PhaseTimer`](41-opt-profiling-in-phase-timer.md) | P3 | S | 20, 23, 25 | ☐ |
+| 41 | [Optional: function‑level profiling inside `PhaseTimer`](41-opt-profiling-in-phase-timer.md) | P3 | S | 20, 23, 25 | ☑ |
 
 ## Dependency picture
 

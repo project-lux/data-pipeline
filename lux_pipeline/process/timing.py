@@ -17,6 +17,15 @@ rather than eyeballed across 24 logs.
 Cost is a `perf_counter()` pair per stage. At six stages a record that is
 about a microsecond per record -- a couple of seconds across a million-record
 phase, or ~0.1% of a forty minute run.
+
+A fourth question needs a profiler: *which Python function* inside a stage.
+`PhaseTimer(profile=True)`, or ``LUX_PROFILE=1`` in the environment (what
+`lux reconcile|merge|export --profile` sets for its workers), runs cProfile
+from the timer's start to its finish and writes the stats as
+``profile-<phase>-<slice>.prof`` beside the timing JSON; ``timing-report.py
+--profile`` adds them up across slices. cProfile slows python-bound code
+down considerably, so the timing numbers of a profiled run are not
+comparable with an unprofiled one.
 """
 
 import atexit
@@ -43,6 +52,14 @@ class _NullStage:
 
 _NULL = _NullStage()
 _active = None
+# the PhaseTimer whose cProfile is running: python allows one profiler at a
+# time, so a new timer stops a previous one that never finished
+_profiling = None
+
+
+def profiling_requested():
+    """True when ``LUX_PROFILE`` is set to anything but 0/false/no."""
+    return os.getenv("LUX_PROFILE", "").strip().lower() not in ("", "0", "false", "no")
 
 
 def split_stages(stages):
@@ -115,7 +132,7 @@ class _Stage:
 class PhaseTimer:
     def __init__(self, phase, slice_n=-1, max_slice=-1, total=None,
                  report_every=None, out_dir=None, stream=None,
-                 progress=null_progress):
+                 progress=null_progress, profile=None):
         if report_every is None:
             report_every = float(os.getenv("LUX_TIMING_INTERVAL", 60))
         self.phase = phase
@@ -138,6 +155,8 @@ class PhaseTimer:
         self._last_count = 0
         self.marks = []
         self.complete = False
+        self._profiler = None
+        self.profile_file = None
         progress(phase=phase)
         if total is not None:
             progress(total=total)
@@ -148,10 +167,62 @@ class PhaseTimer:
         # you wanted, so the snapshot is refreshed on every progress report
         # and again on the way out. Only SIGKILL loses the last interval.
         atexit.register(self._at_exit)
+        if profile is None:
+            profile = profiling_requested()
+        if profile:
+            self._start_profile()
 
     def _at_exit(self):
+        self._stop_profile()
         if not self.complete and self.count:
             self.write()
+
+    # ------------------------------------------------------------- profiling
+
+    def _profile_path(self):
+        tag = self.slice_n if self.slice_n is not None and self.slice_n > -1 else "all"
+        return os.path.join(self.out_dir, f"profile-{self.phase}-{tag}.prof")
+
+    def _start_profile(self):
+        global _profiling
+        if not self.out_dir:
+            print(f"  (not profiling {self._tag()}: no directory to write the profile to)",
+                  file=self.stream)
+            return
+        if _profiling is not None:
+            _profiling._stop_profile()
+        import cProfile
+        prof = cProfile.Profile()
+        try:
+            prof.enable()
+        except ValueError as e:
+            # another profiler is already running in this process
+            print(f"  (not profiling {self._tag()}: {e})", file=self.stream)
+            return
+        self._profiler = prof
+        _profiling = self
+
+    def _stop_profile(self):
+        """Stop the profiler, if this timer runs one, and write its stats.
+        Like the timing JSON, a failure here never kills the phase."""
+        global _profiling
+        prof, self._profiler = self._profiler, None
+        if prof is None:
+            return None
+        if _profiling is self:
+            _profiling = None
+        try:
+            prof.disable()
+            os.makedirs(self.out_dir, exist_ok=True)
+            fn = self._profile_path()
+            tmp = f"{fn}.{os.getpid()}.tmp"
+            prof.dump_stats(tmp)
+            os.replace(tmp, fn)
+            self.profile_file = fn
+            return fn
+        except Exception as e:
+            print(f"  (could not write profile: {e})", file=self.stream)
+            return None
 
     # ------------------------------------------------------------- measuring
 
@@ -258,6 +329,8 @@ class PhaseTimer:
             # False means this is a snapshot of a phase still running (or one
             # that died); the numbers are real but partial
             "complete": self.complete,
+            # the cProfile stats beside this file, once written
+            "profile": os.path.basename(self.profile_file) if self.profile_file else None,
             "written_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         }
         try:
@@ -270,6 +343,8 @@ class PhaseTimer:
         return out
 
     def finish(self):
+        # before the summary, so the profile is the phase and not its report
+        self._stop_profile()
         self.complete = True
         self.progress(completed=self.count + self.skipped, done=True)
         s = self.summary()

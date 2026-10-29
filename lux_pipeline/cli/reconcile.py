@@ -18,6 +18,7 @@ finishing steps are skipped.
 from lux_pipeline.process.tasks.reconcile_task import ReconcileManager
 
 from ._handler import CommandHandler as CH
+from ._handler import add_profile_arg, enable_profiling
 
 
 class CommandHandler(CH):
@@ -33,6 +34,7 @@ class CommandHandler(CH):
                              "ignores --source and --recid, skips the finishing steps")
         ap.add_argument("--no-finish", "--no_finish", dest="no_finish", action="store_true",
                         help="Skip identify, metatypes and write-refs after the workers")
+        add_profile_arg(ap)
         self.extra_args = {"recid": "recid", "no_refs": "no_refs", "new_token": "new_token",
                            "baseline": "baseline", "no_finish": "no_finish"}
 
@@ -44,4 +46,5 @@ class CommandHandler(CH):
         return super().resolve_sources(args)
 
     def make_manager(self, wks, args):
+        enable_profiling(args)
         return ReconcileManager(self.configs, wks, args)

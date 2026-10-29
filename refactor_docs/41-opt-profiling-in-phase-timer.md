@@ -54,3 +54,29 @@ the idea, not the mechanics.
   not grow a parameter.
 * Tests: a `PhaseTimer(profile=True)` run writes a `.prof` the report can
   read; the report aggregates two slices.
+
+## Decisions (as done)
+
+* `PhaseTimer(..., profile=None)`: `None` reads `LUX_PROFILE` (anything but
+  empty / 0 / false / no is on). cProfile runs from the timer's start to the
+  top of `finish()`, so the profile is the phase and not its report, and is
+  written as `profile-<phase>-<slice|all>.prof` in `out_dir` (temp name +
+  rename). The timing JSON gains `"profile": <file name>` (None when off).
+* Python allows one profiler at a time: a new timer stops and writes a
+  previous one that never finished; another profiler already running (or
+  no `out_dir`) prints one line to the timer's stream and the phase carries
+  on unprofiled. A phase that dies writes its profile from the existing
+  atexit hook. Failures writing it never kill the phase.
+* `--profile` on `lux reconcile`, `merge`, `export` (`_handler.add_profile_arg`
+  / `enable_profiling`, called from `make_manager`) sets `LUX_PROFILE=1`
+  before the engine starts; mp workers and a local Ray inherit it, and the
+  Ray engine also forwards it in `runtime_env` for a cluster. The driver's
+  own timers (identify, in reconcile's tail) are profiled too.
+* The legacy `run-*.py` wrappers still drop `--profile`; `LUX_PROFILE=1`
+  works for them unchanged.
+* `timing-report.py --profile [N]` (default 20): adds each phase's slices up
+  with `pstats.Stats.add`, prints the top N by cumulative and by internal
+  time, and for every stage whose name (its last dotted part) is a profiled
+  function's name, the largest such function's top five callees with their
+  share. A stage is a `with` block the profiler cannot see, so this is a
+  name match, not an attribution.

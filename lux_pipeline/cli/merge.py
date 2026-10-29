@@ -19,6 +19,7 @@ workers start.
 from lux_pipeline.process.tasks.merge_task import MergeManager
 
 from ._handler import CommandHandler as CH
+from ._handler import add_profile_arg, enable_profiling
 
 
 class CommandHandler(CH):
@@ -31,6 +32,7 @@ class CommandHandler(CH):
                         help="Only the references pass; ignores --source")
         ap.add_argument("--resume", action="store_true",
                         help="Skip records and references the merged cache already holds")
+        add_profile_arg(ap)
         self.extra_args = {"recid": "recid", "no_refs": "no_refs", "only_refs": "only_refs",
                            "resume": "resume"}
 
@@ -42,4 +44,5 @@ class CommandHandler(CH):
         return super().resolve_sources(args)
 
     def make_manager(self, wks, args):
+        enable_profiling(args)
         return MergeManager(self.configs, wks, args)

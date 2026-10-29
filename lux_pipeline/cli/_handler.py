@@ -77,6 +77,22 @@ def refuse_while_building(cfgs, command, force=False, window=RUNNING_WINDOW, now
     return list(running)
 
 
+def add_profile_arg(ap):
+    """``--profile`` for the phase commands; see `enable_profiling`."""
+    ap.add_argument("--profile", action="store_true",
+                    help="Profile every worker with cProfile (as LUX_PROFILE=1): "
+                         "profile-<phase>-<slice>.prof beside the timing JSON in log_dir; "
+                         "read with timing-report.py --profile")
+
+
+def enable_profiling(args):
+    """``--profile`` sets ``LUX_PROFILE=1`` in this process, which the
+    workers it starts inherit, and every PhaseTimer reads it. The phase
+    functions take no parameter for it."""
+    if getattr(args, "profile", False):
+        os.environ["LUX_PROFILE"] = "1"
+
+
 class BaseHandler:
     # False for a command that does not need the pipeline configuration at
     # all (entry then passes cfgs=None without trying to load one)

@@ -4,6 +4,7 @@
 #   python timing-report.py --phase merge
 #   python timing-report.py --dir /path/to/logs
 #   python timing-report.py --compare old/ new/   # two runs side by side
+#   python timing-report.py --profile             # and the top functions (LUX_PROFILE=1 runs)
 #
 # Works on a running build as well as a finished one: PhaseTimer rewrites its
 # snapshot on every progress report, so a phase still in flight shows up with
@@ -13,6 +14,7 @@ import argparse
 import glob
 import json
 import os
+import pstats
 import sys
 from collections import defaultdict
 
@@ -141,6 +143,91 @@ def report(phase, s, stragglers=True):
               + ", ".join(f"{m[0]} at {m[1] / 60:.0f}m" for m in marks))
 
 
+# ------------------------------------------------------------- profiles
+
+
+def load_profiles(directory, phase=None):
+    """``{phase: [path, ...]}`` for the ``profile-<phase>-<slice>.prof``
+    files PhaseTimer writes when profiling."""
+    out = defaultdict(list)
+    for fn in sorted(glob.glob(os.path.join(directory, "profile-*.prof"))):
+        ph = os.path.basename(fn)[len("profile-"):-len(".prof")].rsplit("-", 1)[0]
+        if phase and ph != phase:
+            continue
+        out[ph].append(fn)
+    return out
+
+
+def combine(paths):
+    """One pstats.Stats for every slice's profile, or None if none load."""
+    stats = None
+    for fn in paths:
+        try:
+            if stats is None:
+                stats = pstats.Stats(fn)
+            else:
+                stats.add(fn)
+        except Exception as e:
+            print(f"  (skipping {os.path.basename(fn)}: {e})")
+    return stats
+
+
+def func_label(func):
+    """``name (dir/file.py:line)`` from a pstats key."""
+    filename, line, name = func
+    if filename == "~":
+        return name     # a builtin: "<method 'execute' ...>"
+    parts = filename.split(os.sep)
+    short = os.sep.join(parts[-2:]) if len(parts) > 1 else filename
+    return f"{name} ({short}:{line})"
+
+
+def top_functions(stats, key, n):
+    """``[(func, calls, tottime, cumtime), ...]``, the `n` largest by `key`
+    (``"cumtime"`` or ``"tottime"``)."""
+    rows = [(f, nc, tt, ct) for f, (cc, nc, tt, ct, _callers) in stats.stats.items()]
+    idx = 2 if key == "tottime" else 3
+    return sorted(rows, key=lambda r: -r[idx])[:n]
+
+
+def stage_functions(stats, stage):
+    """Profiled functions whose name is the stage's (its last dotted part:
+    ``acquire.map`` is ``map``), largest cumulative time first."""
+    name = stage.rsplit(".", 1)[-1]
+    found = [(f, st[3]) for f, st in stats.stats.items() if f[2] == name]
+    return [f for f, _ in sorted(found, key=lambda x: -x[1])]
+
+
+def profile_report(phase, paths, stages=(), n=20):
+    stats = combine(paths)
+    if stats is None:
+        return
+    print(f"\n=== {phase} profile  ({len(paths)} slice{'s' if len(paths) != 1 else ''}, "
+          f"{stats.total_calls:,} calls, {stats.total_tt / 3600:.2f} profiled cpu-hours)")
+    for key, title in (("cumtime", "cumulative (the function and all it calls)"),
+                       ("tottime", "internal (the function's own code)")):
+        print(f"\n  top {n} by {title}")
+        print(f"  {'calls':>12} {'own s':>10} {'cum s':>10} {'us/call':>9}  function")
+        for f, nc, tt, ct in top_functions(stats, key, n):
+            per = (ct if key == "cumtime" else tt) / nc * 1e6 if nc else 0
+            print(f"  {nc:>12,} {tt:>10,.1f} {ct:>10,.1f} {per:>9,.1f}  {func_label(f)}")
+
+    # a stage is a `with timer.stage(name)` block, which the profiler can't
+    # see; where a function has the stage's name, show what it spends on
+    matched = [(st, fs[0]) for st in stages if (fs := stage_functions(stats, st))]
+    if matched:
+        stats.calc_callees()
+        print(f"\n  stages matched to a function of the same name (the largest one):")
+        for st, f in matched:
+            ct = stats.stats[f][3]
+            print(f"\n  {st}: {func_label(f)}  {ct:,.1f}s cumulative")
+            callees = stats.all_callees.get(f, {})
+            rows = sorted(callees.items(), key=lambda kv: -kv[1][3])[:5]
+            for g, (cc, nc, tt, cct) in rows:
+                share = cct / ct * 100 if ct else 0
+                print(f"      {share:>5.1f}%  {cct:>10,.1f}s  {func_label(g)}")
+
+
 def compare(a_dir, b_dir, phase=None):
     a, b = load(a_dir, phase), load(b_dir, phase)
     for ph in sorted(set(a) | set(b)):
@@ -175,6 +262,9 @@ def main():
     ap.add_argument("--phase", default=None, help="just this phase")
     ap.add_argument("--compare", nargs=2, metavar=("BEFORE", "AFTER"),
                     help="two directories of timing json, side by side")
+    ap.add_argument("--profile", nargs="?", const=20, type=int, metavar="N",
+                    help="also the top N (default 20) functions from the profile-*.prof "
+                         "files a LUX_PROFILE=1 / --profile run leaves")
     args = ap.parse_args()
 
     if args.compare:
@@ -192,8 +282,14 @@ def main():
     if not phases:
         print("  no timing-*.json found -- has a phase run since timing was added?")
         sys.exit(1)
+    profiles = load_profiles(directory, args.phase) if args.profile else {}
+    if args.profile and not profiles:
+        print("  (no profile-*.prof found -- run the phase with --profile or LUX_PROFILE=1)")
     for ph in sorted(phases):
-        report(ph, summarise(phases[ph]))
+        s = summarise(phases[ph])
+        report(ph, s)
+        if ph in profiles:
+            profile_report(ph, profiles[ph], stages=list(s["stages"]), n=args.profile)
 
 
 if __name__ == "__main__":
