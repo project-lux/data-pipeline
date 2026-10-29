@@ -1,5 +1,8 @@
 
+import logging
 from lux_pipeline.process.base.fetcher import Fetcher
+
+logger = logging.getLogger("lux_pipeline")
 
 class WdFetcher(Fetcher):
 
@@ -74,7 +77,7 @@ class WdFetcher(Fetcher):
                 elif dvt == "globecoordinate":              
                     dvv = {'lat':dv['value']['latitude'], 'long':dv['value']['longitude'], 'alt':dv['value']['altitude']}
                 else:
-                    print(f"{js['id']} has {prop} with unknown datatype {dvt}: {dv}")
+                    logger.debug(f"{js['id']} has {prop} with unknown datatype {dvt}: {dv}")
                     continue
                 newvals.append(dvv)
             new[prop] = newvals

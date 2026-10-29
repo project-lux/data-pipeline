@@ -1,4 +1,5 @@
 
+import logging
 from lux_pipeline.process.base.loader import Loader
 from .fetcher import WdFetcher
 from .base import WdConfigManager
@@ -7,6 +8,8 @@ import gzip
 import bz2
 import time
 import os
+
+logger = logging.getLogger("lux_pipeline")
 
 class WdLoader(WdFetcher, WdConfigManager, Loader):
 
@@ -95,7 +98,7 @@ class WdLoader(WdFetcher, WdConfigManager, Loader):
                 try:
                     new = self.post_process_json(js, what)
                 except:
-                    print(f"Failed to process {l}")
+                    logger.error(f"Failed to process {l}")
                     raise
                     continue
                 self.out_cache.set(new, identifier=what)
@@ -114,4 +117,4 @@ class WdLoader(WdFetcher, WdConfigManager, Loader):
                     t = time.time() - start
                     xps = x/t
                     ttls = self.total / xps
-                    print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
+                    logger.info(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
