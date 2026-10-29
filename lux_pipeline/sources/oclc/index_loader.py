@@ -1,8 +1,11 @@
+import logging
 from lux_pipeline.process.base.index_loader import LmdbIndexLoader
 import glob
 import gzip
 import time
 import os
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class ViafIndexLoader(LmdbIndexLoader):
@@ -76,10 +79,10 @@ class ViafIndexLoader(LmdbIndexLoader):
                     durn = time.time() - start
                     nps = n / durn
                     ttld = total / nps
-                    print(f"Read: {n} / {total} in {durn} = {nps} ==> {ttld} secs")
+                    logger.info(f"Read: {n} / {total} in {durn} = {nps} ==> {ttld} secs")
 
         start = time.time()
         eqindex.update(updates)
         end = time.time()
         durn = end - start
-        print(f"Load: {durn} = {n/durn}/sec")
+        logger.info(f"Load: {durn} = {n/durn}/sec")

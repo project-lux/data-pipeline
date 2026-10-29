@@ -1,4 +1,7 @@
+import logging
 from lux_pipeline.process.base.reconciler import LmdbReconciler
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class ViafReconciler(LmdbReconciler):
@@ -57,7 +60,7 @@ class ViafReconciler(LmdbReconciler):
                             found = self.id_index[key]
                             ids[key] = found
                             if self.debug:
-                                print(f" VIAF Found: {eq} --> {found}")
+                                logger.debug(f" VIAF Found: {eq} --> {found}")
                                 try:
                                     self.debug_graph[eq].append(
                                         (f"{self.namespace}{found}", "uri")
@@ -74,10 +77,10 @@ class ViafReconciler(LmdbReconciler):
             if len(idss) == 1:
                 recommend = list(ids.values())[0]
                 if truth and truth != recommend:
-                    print(
+                    logger.warning(
                         f"VIAF: Record suggests {truth} and reconciler suggests {recommend} for {rec['id']}"
                     )
-                    print(
+                    logger.warning(
                         "NOT making recommendation; but FIXME: add to log for manual check"
                     )
                     return None
@@ -94,16 +97,16 @@ class ViafReconciler(LmdbReconciler):
                     except Exception:
                         ivtd[v] = [k]
                 if self.debug:
-                    print(f"Record {rec['id']} matches multiple VIAF ids: {ivtd}")
+                    logger.debug(f"Record {rec['id']} matches multiple VIAF ids: {ivtd}")
 
                 if truth and truth in ivtd:
                     # Just believe it
-                    print(
+                    logger.info(
                         f"VIAF value in record {truth} and in reconciler; not overriding"
                     )
                     return None
                 elif truth:
-                    print(
+                    logger.warning(
                         f"VIAF value in record {truth} but NOT found from reconciliation!"
                     )
                     return None
@@ -118,7 +121,7 @@ class ViafReconciler(LmdbReconciler):
                     counts = [(k, len(v)) for (k, v) in ivtd.items()]
                     counts.sort(key=lambda x: x[1], reverse=True)
                     if self.debug:
-                        print(f"viaf id counts: {counts}")
+                        logger.debug(f"viaf id counts: {counts}")
                     if counts[0][1] >= (2 * counts[1][1]):
                         return f"{self.namespace}{counts[0][0]}"
                 return None
