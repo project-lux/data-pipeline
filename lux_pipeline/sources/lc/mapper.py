@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import sys
@@ -7,6 +8,8 @@ from cromulent import model, vocab
 
 from lux_pipeline.process.base.mapper import Mapper
 from lux_pipeline.process.utils.mapper_utils import make_datetime, test_birth_death
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class LcMapper(Mapper):
@@ -84,7 +87,7 @@ class LcMapper(Mapper):
             reconrec = reconciler.reconcile(rec, reconcileType="name")
         else:
             # Handle invalid rectype
-            print(f"Warning: Unrecognized rectype '{rectype}'")
+            logger.warning(f"Warning: Unrecognized rectype '{rectype}'")
             reconrec = None
 
         return reconrec
@@ -201,8 +204,8 @@ class LcMapper(Mapper):
         if type(prefs) == dict:
             prefs = [prefs]
         if not prefs:
-            print(f"Uhoh, no preflabels in {new['@id']}!")
-            print(json.dumps(new, indent=2))
+            logger.debug(f"Uhoh, no preflabels in {new['@id']}!")
+            logger.debug(json.dumps(new, indent=2))
             return {}
         top._label = prefs[0]["@value"]
         for p in prefs:
@@ -235,7 +238,7 @@ class LcMapper(Mapper):
                     nm.language = self.process_langs[a["@language"]]
                 top.identified_by = nm
             else:
-                print(f"Can't find the alternate label in: {a}")
+                logger.debug(f"Can't find the alternate label in: {a}")
 
         ###  Descriptions
         # skos:note
@@ -497,7 +500,7 @@ class LcshMapper(LcMapper):
                                             ref = self.lcnaf_mapper.get_reference(ident)
                                     cre.influenced_by = ref
                             else:
-                                print(f"Unknown form of component: {c}")
+                                logger.debug(f"Unknown form of component: {c}")
                         if add_comps:
                             top.created_by = cre
 
@@ -733,7 +736,7 @@ class LcnafMapper(LcMapper):
                         src, ident = self.config["all_configs"].split_uri(bpid)
                         where = src["mapper"].get_reference(ident)
                     except:
-                        print(f"Failed to split URI: {bpid}")
+                        logger.warning(f"Failed to split URI: {bpid}")
                         where = None
                 if where and where.__class__ == model.Place:
                     if not hasattr(top, "born"):
@@ -808,9 +811,9 @@ class LcnafMapper(LcMapper):
                         src, ident = self.config["all_configs"].split_uri(dpid)
                         where = src["mapper"].get_reference(ident)
                     except:
-                        print(f"In record: {top.id}")
-                        print(f"Failed to split deathPlace URI: {dpid}")
-                        print(f"txt is: {txt}")
+                        logger.warning(f"In record: {top.id}")
+                        logger.warning(f"Failed to split deathPlace URI: {dpid}")
+                        logger.warning(f"txt is: {txt}")
                         where = None
                 if where and where.__class__ == model.Place:
                     if not hasattr(top, "died"):
@@ -977,7 +980,7 @@ class LcnafMapper(LcMapper):
                             top.carried_out_by = frec
 
         if "madsrdf:hasCorporateParentAuthority" in rwo:
-            print(f"got parent: {rwo['madsrdf:hasCorporateParentAuthority']}")
+            logger.debug(f"got parent: {rwo['madsrdf:hasCorporateParentAuthority']}")
             pass
 
         if "madsrdf:establishDate" in rwo:

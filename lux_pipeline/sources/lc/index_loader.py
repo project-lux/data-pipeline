@@ -1,4 +1,7 @@
+import logging
 from lux_pipeline.process.base.index_loader import LmdbIndexLoader
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class LCIndexLoader(LmdbIndexLoader):
@@ -53,7 +56,7 @@ class LCIndexLoader(LmdbIndexLoader):
             elif type(p) is dict:
                 val = p["@value"]
             else:
-                print(f"Got weird prefLabel {p} in {rec.get('@id', '???')}")
+                logger.warning(f"Got weird prefLabel {p} in {rec.get('@id', '???')}")
                 continue
             vals[val] = 1
         return vals
