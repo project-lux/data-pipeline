@@ -1,5 +1,8 @@
+import logging
 from lux_pipeline.process.base.mapper import Mapper
 from lux_pipeline.process.utils.mapper_utils import validate_timespans
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class YpmMapper(Mapper):
@@ -19,7 +22,7 @@ class YpmMapper(Mapper):
         # as an unattributed KeyError printed as just `'type'`.
         rectype_in_data = data.get("type")
         if not rectype_in_data:
-            print(f"ypm {rec.get('identifier', '?')}: record has no type; skipping")
+            logger.debug(f"ypm {rec.get('identifier', '?')}: record has no type; skipping")
             return None
 
         if rectype_in_data == "Type" and "classified_as" in data:

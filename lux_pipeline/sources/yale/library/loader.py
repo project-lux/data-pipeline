@@ -1,4 +1,5 @@
 
+import logging
 import os
 import requests
 import shutil
@@ -9,6 +10,8 @@ import ujson as json
 import sys
 
 from lux_pipeline.process.base.loader import Loader
+
+logger = logging.getLogger("lux_pipeline")
 
 class YulLoader(Loader):
 
@@ -65,30 +68,29 @@ class YulLoader(Loader):
                     if what and what in self.out_cache:
                         done_x += 1
                         if not done_x % 10000:
-                            print(f"Skipping past {done_x} {time.time() - start}")
+                            logger.info(f"Skipping past {done_x} {time.time() - start}")
                         continue
                     # Cache assumes JSON as input, so need to parse it
                     x += 1
                     try:
                         js = json.loads(l)
                     except:
-                        print(f"Failed to parse JSON in {what}")                        
+                        logger.error(f"Failed to parse JSON in {what}")                        
                         continue
                     try:
                         new = self.post_process_json(js)
                     except:
-                        print(f"Failed to process {l}")
+                        logger.error(f"Failed to process {l}")
                         continue
                     if not what:
                         what = self.get_identifier_json(new)
                         if not what:
-                            print(l)
+                            logger.error(l)
                             raise NotImplementedError(f"is get_identifier_raw or _json implemented for {self.__class__.__name__}?")
                     self.out_cache[what] = new
                     if not x % 10000:
                         t = time.time() - start
                         xps = x/t
                         ttls = (self.total / (maxSlice+1)) / xps
-                        print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-                        sys.stdout.flush()
+                        logger.info(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
         self.out_cache.commit()

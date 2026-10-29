@@ -1,5 +1,8 @@
+import logging
 import json
 from lux_pipeline.process.base.index_loader import LmdbIndexLoader, TabLmdb
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class YulIndexLoader(LmdbIndexLoader):
@@ -46,7 +49,7 @@ class YulIndexLoader(LmdbIndexLoader):
         headings_index = self.load_index()
 
         if headings_index is None:
-            print(f"{self.name} has no indexes configured")
+            logger.warning(f"{self.name} has no indexes configured")
             return None
 
         updates = {}
