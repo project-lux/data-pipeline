@@ -434,8 +434,8 @@ def _fetch_multi(cache, keys):
 
 
 def _estimate(cache):
-    """How many records `cache` holds, for the progress total; ``0`` for a
-    backend without the Postgres estimate (progress is advisory, and a
-    filesystem cache would have to scan to answer)."""
+    """How many records `cache` holds, for the progress total: Postgres
+    estimates, FsCache counts its files; ``0`` for a store without
+    len_estimate (progress is advisory)."""
     est = getattr(cache, "len_estimate", None)
     return est() if est is not None else 0

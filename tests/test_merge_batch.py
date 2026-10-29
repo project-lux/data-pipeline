@@ -231,7 +231,7 @@ def test_only_the_unresolved_keys_are_asked_for_singly():
 
 
 def test_a_merged_cache_without_has_multi_still_works():
-    """FsCache has neither has_multi nor metadata."""
+    """A store with only has_item() (the in-memory doubles)."""
     out, _, merged, _ = setup(4, built={"y1"}, merged_batched=False)
     assert [o[5] for o in out] == [False, True, False, False]
     assert len(merged.items) == 4

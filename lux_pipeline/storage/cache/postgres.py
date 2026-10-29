@@ -17,6 +17,7 @@ DEADLOCK_BACKOFF = 0.05
 from psycopg2.extras import Json, RealDictCursor
 
 from lux_pipeline.progress import null_progress
+from lux_pipeline.storage.cache.abstract import AbstractCache
 from lux_pipeline.storage.backup import pg_copy_in, pg_copy_out, pg_size
 
 
@@ -216,7 +217,7 @@ class PoolManager(object):
         self.put_conn(self.pool, close=True, itr=True)
 
 
-class PooledCache(object):
+class PooledCache(AbstractCache):
     # per-instance once _array_cast fills it; None here so an instance made
     # without __init__ still works, and so it is never shared between tables
     _col_types = None
@@ -978,22 +979,9 @@ class PooledCache(object):
         refresh_time=None,
         change=None,
     ):
-        if not identifier and not yuid:
-            raise ValueError("Must give YUID or Identifier or both")
-        if not type(data) == dict:
-            raise ValueError("Data must be a dict()")
-        else:
-            jdata = Json(data, dumps=_dumps)
-        if yuid is not None and not type(yuid) == str:
-            yuid = str(yuid)
-
-        insert_time = datetime.datetime.now()
-        if record_time is None:
-            record_time = insert_time
-        if refresh_time is None:
-            refresh_time = "9999-12-31T00:00:00Z"
-        if format is None:
-            format = "JSON-LD"
+        yuid, insert_time, record_time, refresh_time, format = self._prepare_write_params(
+            data, identifier, yuid, format, record_time, refresh_time)
+        jdata = Json(data, dumps=_dumps)
 
         qnames = ["data", "identifier", "yuid", "insert_time", "record_time", "refresh_time", "valid", "change"]
         qvals = (jdata, identifier, yuid, insert_time, record_time, refresh_time, valid, change)
@@ -1406,43 +1394,6 @@ class PooledCache(object):
         after = self.bloat()
         logger.info(f"{_fmt_bytes(after['total'])} after {time.time() - start:.0f}s "
               f"({_fmt_bytes(before['total'] - after['total'])} returned)")
-
-    ### Behave like a dict
-    def __getitem__(self, what):
-        return self.get(what)
-
-    def __setitem__(self, what, value):
-        if "data" in value:
-            # given a full record; DO NOT MUTATE IT
-            d = value["data"]
-            params = {}
-            if "identifier" in value and what != value["identifier"]:
-                raise ValueError("Record's identifier value and key given to set are different")
-            for v in ["identifier", "yuid", "format", "valid", "change", "record_time"]:
-                if v in value:
-                    params[v] = value[v]
-            return self.set(d, **params)
-        else:
-            # given only the json
-            if self.key == "identifier":
-                return self.set(value, identifier=what)
-            elif self.key == "yuid":
-                return self.set(value, yuid=what)
-
-    def __delitem__(self, what):
-        return self.delete(what)
-
-    def __contains__(self, what):
-        return self.has_item(what)
-
-    def __len__(self):
-        return self.len()
-
-    def __bool__(self):
-        # Don't let it go through to len
-        # and warn that the code shouldn't do this
-        logger.error(f"*** code somewhere is asking for a cache as a boolean value and shouldn't ***")
-        return True
 
 
 class DataCache(PooledCache):
