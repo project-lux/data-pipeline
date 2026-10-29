@@ -1,8 +1,11 @@
+import logging
 from lux_pipeline.process.base.mapper import Mapper
 from cromulent import model, vocab
 from lux_pipeline.process.utils.mapper_utils import make_datetime, test_birth_death, get_wikidata_qid
 from lxml import etree
 import re
+
+logger = logging.getLogger("lux_pipeline")
 
 class FastMapper(Mapper):
     """
@@ -694,7 +697,7 @@ class FastMapper(Mapper):
         try:
             root = etree.fromstring(record["data"]['xml'])
         except Exception as e:
-            print(f"Error parsing XML: {e}")
+            logger.warning(f"Error parsing XML: {e}")
             return None  # Return None if XML parsing fails
 
         identifier = record["identifier"]
