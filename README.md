@@ -19,16 +19,42 @@ lux merge --source all --max-workers 24                     # one merged record 
 lux export --max-workers 24                                 # JSONL for MarkLogic
 ```
 
-`./run-all2.sh --all` runs a whole build. `lux counts` shows what is in the
-caches, maps and indexes, and `lux watch --latest` attaches to a running
-build from another terminal: every worker writes
-`<log_dir>/<command>-<timestamp>-w<n>.status` and `.log` files, which is
-what `lux watch` reads. The legacy `run-*.py`, `manage-data.py`,
-`run-all.sh` and `*_parallel.sh` scripts still work until they are retired.
+`./run-all2.sh --all` runs a whole build (`ENGINE=mp` for one `lux` per
+phase instead of one per slice); the legacy `run-all.sh` beside it is kept
+until the two have been compared on the build machine.
 
-The ongoing port of the `rob_refactor` branch is planned and tracked in
-`refactor_docs/` (start with its `README.md` and `00-INDEX.md`); `CLAUDE.md`
-describes the working conventions.
+Every worker writes `<log_dir>/<command>-<timestamp>-w<n>.status` and
+`.log` files; `lux watch --latest` reads them to attach to a running (or
+finished) build from another terminal. `--log DEBUG` (or `--debug`) turns
+up the logging, and `--no-ui` gives plain output instead of the console
+view. Other commands worth knowing:
+
+```
+lux list                                     # the configured sources, maps and indexes
+lux counts --source all                      # what is in the caches, maps and indexes
+lux harvest --source aat                     # pull a source's change feed into its caches
+lux load-index --source wikidata             # build a source's reconciliation indexes
+lux backup --map idmap                       # back up a store, whatever its backend
+lux backup --all                             # every cache, map and index (not MarkLogic)
+lux restore <backup-dir> --map idmap --force # put it back
+lux clear --map idmap --force                # empty a cache, map or index
+lux viz --recid <from>,<to>                  # draw how reconcile joined two records
+lux merge --source all --profile             # cProfile each slice; `python timing-report.py --profile`
+```
+
+`lux <command> --help` lists a command's options. Backups go to
+`backup_dir` (default `<data_dir>/backups`), each with a `manifest.json`
+written last; `lux restore` refuses one without it. `lux viz` needs the
+optional extras (`pip install -e '.[ui-extras]'`). The steps between
+reconcile and merge (`identify`, `metatypes`, `write-refs`, `new-token`)
+are commands of their own too, and refuse to run while a build is running
+unless given `--force`.
+
+The legacy `run-*.py`, `manage-data.py`, `run-all.sh` and `*_parallel.sh`
+scripts still work; retiring them is the last item (33) of the port of the
+`rob_refactor` branch, which is planned and tracked in `refactor_docs/`
+(start with its `README.md` and `00-INDEX.md`). `CLAUDE.md` describes the
+working conventions.
 
 ## Architecture
 
@@ -46,8 +72,10 @@ describes the working conventions.
 
 * config: Configuration of the pipeline, as JSON records in a cache.
 * cli/: the `lux` command: one module per command (`lux help` lists them), the console view and `lux watch`.
+* progress, runtime, log: the worker status protocol (`.status` files, `null_progress`), configuration loading and logging setup. Library code logs to the `lux_pipeline` logger and never prints.
 * process/tasks/: the managers that run a phase's workers on an engine (`mp`, `null`, `ray`), one per parallel command.
 * process/phases/: the body of each build phase (reconcile, identify, merge, export), shared by `lux` and the legacy scripts.
+* process/timing: `PhaseTimer`, the per-stage timings (and, with `--profile`, cProfile output) that `timing-report.py` reads.
 * process/Collector: Recursively collects identifiers for a given record.
 * process/Reconciler: Reconcile records
 * process/Merger: Merges two Linked Art records representing the same entity together.
@@ -63,45 +91,49 @@ describes the working conventions.
 * sources/\*/Loader: Load a dump of the data into the data cache.
 * sources/\*/IndexLoader: Create an inverted index to reconcile records against this dataset.
 * storage/MarkLogic: Marklogic storage of data
-* storage/Cache: Data caches (Postgresql, file system)
-* storage/Idmap: Key/value store API (Redis, file system, in-memory)
+* storage/cache: Data caches (Postgresql, file system, Redis); `abstract.AbstractCache` is the API they share.
+* storage/idmap: Identifier maps and key/value stores (Postgresql, Redis, LMDB, file system, in-memory, and the subsidiary idmap).
+* storage/backup: `lux backup` / `lux restore`: native copies (Postgres COPY, LMDB hot copy) or portable gzipped JSON Lines.
 
 
 ## External Sources: Implementation Status
 
-| Source          | Fetch | Map | Name Reconcile | Load | IdxLoad |
-| --------------- | ----- | --- | -------------- | ---- | ------- |
-| AAT             |   ✅  |  ✅ |    ✅         | N/A | -       | 
-| DNB             |   ✅  |  ✅ |     -         |  ✅ | -       | 
-| FAST            |   ✅  |  -  |     -          |  -   | -      | 
-| Geonames        |   ✅  |  ✅ |     -          | ✅  | -      | 
-| LCNAF           |   ✅  |  ✅ |     ✅        |  ✅ | -       | 
-| LCSH            |   ✅  |  ✅ |     ✅        |  ✅ | ✅      | 
-| TGN             |   ✅  |  ✅ |     -         | N/A  | -       | 
-| ULAN            |   ✅  |  ✅ |     ✅        | N/A  | -       | 
-| VIAF            |   ✅  |  ✅ |     -         |  ✅  | -       | 
-| Who's on First  |   ✅  |  ✅ |     -         | N/A  | -       | 
-| Wikidata        |   ✅  |  ✅ |     -         |  ✅  | ✅     | 
-| Japan NL        |   ✅  |  ✅ |     -         | N/A  | -       |
-| BNF             |   ✅  |  ✅ |     -         | N/A  | -       |
-| GBIF            |   ✅  |  ✅ |     -         | N/A  | -       |
-| ORCID           |   ✅  |  ✅ |     -         | N/A  | -       |
-| ROR             |   ✅  |  ✅ |     -         | N/A  | -       |
-| Wikimedia API   |   ✅  |  ✅ |     -         | N/A  | -       |
-| DNB             |   ✅  |  ✅ |     -         | N/A  | -       |
-| BNE             |   ✅  |  ✅ |     -         | N/A  | -       |
-| Nomenclature    |   -   |  -  |     -          | -    | -      |
-| Getty Museum    |   -   |  -  |     -          | -    | -      |
-| Homosaurus      |   -   |  -  |     -          | -    | -      |
-| Nomisma         |   -   |  -  |     -          | -    | -      |
-| SNAC            |   -   |  -  |     -          | -    | -      |
+| Source          | Fetch | Map | Reconcile | Load | Index |
+| --------------- | ----- | --- | --------- | ---- | ----- |
+| AAT             |  ✅   | ✅  |    ✅     | N/A  |  ✅   |
+| TGN             |  ✅   | ✅  |     -     | N/A  |   -   |
+| ULAN            |  ✅   | ✅  |    ✅     | N/A  |  ✅   |
+| LCNAF           |  ✅   | ✅  |    ✅     |  ✅  |  ✅   |
+| LCSH            |  ✅   | ✅  |    ✅     |  ✅  |  ✅   |
+| LCDGT           |  ✅   | ✅  |     -     |  -   |   -   |
+| VIAF            |  ✅   | ✅  |    ✅     |  ✅  |  ✅   |
+| FAST            |   -   | ✅  |     -     |  ✅  |   -   |
+| Wikidata        |  ✅   | ✅  |    ✅     |  ✅  |  ✅   |
+| Wikimedia API   |  ✅   | ✅  |     -     | N/A  |   -   |
+| Wikipedia       |   -   | N/A |     -     |  ✅  |   -   |
+| Geonames        |  ✅   | ✅  |     -     |  ✅  |   -   |
+| Who's on First  |  ✅   | ✅  |     -     | N/A  |   -   |
+| Pleiades        |   -   | ✅  |     -     |  ✅  |   -   |
+| DNB             |  ✅   | ✅  |     -     |  ✅  |   -   |
+| BNF             |  ✅   | ✅  |     -     |  ✅  |   -   |
+| BNE             |  ✅   | ✅  |     -     |  ✅  |   -   |
+| Japan NL        |  ✅   | ✅  |     -     |  ✅  |   -   |
+| GBIF            |  ✅   | ✅  |     -     | N/A  |   -   |
+| ORCID           |  ✅   | ✅  |     -     |  ✅  |   -   |
+| ROR             |  ✅   | ✅  |     -     |  ✅  |   -   |
+| Homosaurus      |  ✅   | ✅  |     -     |  -   |   -   |
+| Nomisma         |  ✅   | ✅  |     -     |  -   |   -   |
+| SNAC            |  ✅   | ✅  |     -     |  -   |   -   |
+| Getty Museum    |  ✅   |  -  |     -     | N/A  |   -   |
 
 
 ✅ = Done ; - = Not started ; N/A = Can't/Won't be done
 
-* AAT, TGN, ULAN: Dump files are NTriples based. More effort to reconstruct than it would be worth. Instead we can use IIIF Change Discovery to synchronize.
+* AAT, TGN, ULAN: Dump files are NTriples based. More effort to reconstruct than it would be worth. Instead we use IIIF Change Discovery (`lux harvest`) to synchronize. Getty Museum is harvested the same way (ActivityStreams).
 * WOF: Dump file is a 33Gb sqlite db... we just use it as the cache directly
-* FAST: Not implemented yet (needs to process MARC/XML)
+* Wikipedia: article texts are loaded for lookup only; the mapper produces no records.
+* Index: the reconciliation indexes built by `lux load-index` (LMDB).
+* Besides the Yale units (`sources/yale/`), `sources/` also holds loaders and mappers for other record sources: Ashmolean (`ashmol`), Europeana / MDS (`mds`), `ethan`, and an Art Institute of Chicago experiment (`artic`).
 
 ### Fetching external source dump files
 
