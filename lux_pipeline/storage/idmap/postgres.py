@@ -32,6 +32,7 @@ import uuid
 from contextlib import contextmanager
 
 import psycopg2
+import psycopg2.errors
 import psycopg2.extras
 
 from lux_pipeline.progress import null_progress
@@ -73,9 +74,13 @@ def _connect_kwargs(config, configs):
 
     Deliberately not from the map's own config: instantiate_map() passes
     map_*.json, whose host/port are redis's, so reading them here would point
-    at redis' port. The caches config is the postgres the pipeline already
-    talks to. pgHost/pgPort/pgUser/pgDbname override per map."""
-    db = dict(getattr(configs, "caches", {}) or {})
+    at redis' port. The cache defaults are the postgres the pipeline already
+    talks to: the "default"/"cache" record, which Config fills from the
+    single "caches" record when an instance has only that. Reading `caches`
+    alone sent the maps to $USER's database whenever the defaults were in
+    default_cache.json. pgHost/pgPort/pgUser/pgDbname override per map."""
+    defaults = getattr(configs, "defaults", None) or {}
+    db = dict(defaults.get("cache") or getattr(configs, "caches", {}) or {})
     kw = {"user": config.get("pgUser") or db.get("user") or os.getenv("USER"),
           "dbname": config.get("pgDbname") or db.get("dbname") or os.getenv("USER"),
           "keepalives": 1, "keepalives_idle": 30}
@@ -301,6 +306,16 @@ class IdMap(object):
                 self._hot.execute(f"PREPARE {stmt} AS "
                                   + sql.format(t=self.table, y=self.yuid_table))
                 self._stmt[name] = stmt
+            except (psycopg2.errors.UndefinedTable, psycopg2.errors.UndefinedColumn) as e:
+                # The plain-SQL fallback would fail the same way: a table of
+                # this name that is not an idmap (CREATE TABLE IF NOT EXISTS
+                # left it alone), or the wrong database
+                where = f"{self._conn_kw.get('dbname')}@{self._conn_kw.get('host', 'local socket')}"
+                raise ValueError(
+                    f"idmap: table {self.table!r} in database {where} is not an idmap "
+                    f"(needs columns uri, yuid): {str(e).strip().splitlines()[0]}. "
+                    f"Point the cache defaults at the pipeline's database, or set "
+                    f"tableName on the map record") from e
             except psycopg2.Error as e:
                 # Not fatal: the callers fall back to plain SQL, just slower
                 logger.error(f"idmap: could not prepare {name}: {str(e).strip()[:80]}")
