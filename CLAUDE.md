@@ -104,7 +104,7 @@ laptop (the validator reads its schemas on first use, not at construction).
 | `lux_pipeline/cli/entry.py`, `_handler.py`, `help.py` | `lux` dispatcher, `BaseHandler` / `CommandHandler` (`needs_configs`, `resolve_sources`, `make_manager`, `make_view`) |
 | `lux_pipeline/cli/_view.py`, `watch.py` | `BuildView` (the only Rich user) and `lux watch` |
 | `lux_pipeline/process/tasks/_task_manager.py` | `TaskManager`, `_run_worker`, null / mp / ray engines, `WorkerFailed` |
-| `lux_pipeline/process/timing.py` | `PhaseTimer` (takes `progress=`; its prints are intentionally kept) |
+| `lux_pipeline/process/timing.py` | `PhaseTimer` (takes `progress=`; its prints are intentionally kept). Item 41: `profile=` / `LUX_PROFILE=1` (set by `--profile` on reconcile, merge, export) runs cProfile and writes `profile-<phase>-<slice>.prof` beside the timing JSON; `timing-report.py --profile` aggregates them |
 | `lux_pipeline/process/phases/reconcile.py` | `select_sources`, `reconcile_slice`: `run-reconcile.py`'s body; the loops are moved verbatim, never edited; `next_update_token` / `new_update_token(cfgs, idmap=None)` (`manage-data.py --new-token`; reads the file when no idmap); `write_refs` (`--write-refs`) |
 | `lux_pipeline/process/phases/identify.py` | `resolve_identity`, `report_lines`, `vacuum_idmap`: `run-identify.py`'s body, also `ReconcileManager.finish`'s first step |
 | `lux_pipeline/cli/identify.py`, `new_token.py`, `metatypes.py`, `write_refs.py` | the steps between reconcile and merge as `BaseHandler`s; all refuse while a build runs (`_handler.refuse_while_building`, `--force`); `new-token` has `needs_configs = False` and never builds the idmap |

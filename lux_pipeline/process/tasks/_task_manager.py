@@ -27,6 +27,7 @@ and calls it while waiting.
 import io
 import logging
 import multiprocessing
+import os
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, wait as wait_futures
@@ -332,6 +333,9 @@ class RayEngine(Engine):
     def run(self, prefix, view):
         ray = self.ray
         remote = ray.remote(_run_worker)
+        if os.getenv("LUX_PROFILE"):
+            # a local ray's workers inherit it; a cluster's don't
+            remote = remote.options(runtime_env={"env_vars": {"LUX_PROFILE": os.environ["LUX_PROFILE"]}})
         if prefix:
             logger.info(f"worker logs: {prefix}-w*.log")
         futures = {remote.remote(self.manager, n, prefix, self.manager.log_level, True): n

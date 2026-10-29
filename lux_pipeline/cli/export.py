@@ -20,6 +20,7 @@ from lux_pipeline.process.tasks.export_task import (ALIASES, EXPORT_TYPES, MERGE
                                                     normalize_type)
 
 from ._handler import CommandHandler as CH
+from ._handler import add_profile_arg, enable_profiling
 
 
 class CommandHandler(CH):
@@ -40,6 +41,7 @@ class CommandHandler(CH):
                              "1 for the others)")
         ap.add_argument("--out-dir", dest="out_dir", default=None,
                         help="Write every file here instead of exports_dir / nt_dir")
+        add_profile_arg(ap)
         self.extra_args = {"export_type": "export_type", "gz": "gz", "chunk": "chunk",
                            "gzip_level": "gzip_level", "out_dir": "out_dir"}
 
@@ -65,4 +67,5 @@ class CommandHandler(CH):
         return super().resolve_sources(args)
 
     def make_manager(self, wks, args):
+        enable_profiling(args)
         return ExportManager(self.configs, wks, args)
