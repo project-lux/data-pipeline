@@ -25,6 +25,7 @@ If qlever-index is on the PATH, the last test also builds a real index from
 the mapper output.
 """
 
+import logging
 import math
 import re
 import shutil
@@ -473,7 +474,8 @@ def test_pad_datetime(value, end, expected):
     assert pad_datetime(value, end) == expected
 
 
-def test_partial_dates_are_padded_and_logged(mapper, capsys):
+def test_partial_dates_are_padded_and_logged(mapper, caplog):
+    caplog.set_level(logging.DEBUG, logger="lux_pipeline")
     lines = mapper.transform({"data": _record("Person", {
         "born": {"timespan": {"begin_of_the_begin": "1815",
                               "end_of_the_end": "1815-12-10"}},
@@ -487,7 +489,7 @@ def test_partial_dates_are_padded_and_logged(mapper, capsys):
     assert f'<{me}> <{ns}startOfAgentEnding> "1852-11-27T00:00:00"{dt} .' in lines
     assert f'<{me}> <{ns}endOfAgentEnding> "1852-12-31T23:59:59"{dt} .' in lines
     # one line per padded value, naming the record; complete dates aren't logged
-    assert capsys.readouterr().out.splitlines() == [
+    assert [r.getMessage() for r in caplog.records if "padded" in r.getMessage()] == [
         f"*** padded begin date '1815' to 1815-01-01T00:00:00 in {me} ***",
         f"*** padded end date '1815-12-10' to 1815-12-10T23:59:59 in {me} ***",
         f"*** padded end date '1852' to 1852-12-31T23:59:59 in {me} ***",

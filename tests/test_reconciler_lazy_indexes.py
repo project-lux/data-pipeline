@@ -72,7 +72,7 @@ def test_sqlite_reconciler_is_lazy_too(tmp_path):
         r.id_index
 
 
-def test_global_reconciler_builds_before_its_indexes_exist(tmp_path, capsys):
+def test_global_reconciler_builds_before_its_indexes_exist(tmp_path, caplog):
     cfg = config(tmp_path, id_path=str(tmp_path / "global_equivs.lmdb"),
                  differentDbPath=str(tmp_path / "global_diffs.lmdb"))
     cfg["name"] = "merged"
@@ -82,4 +82,4 @@ def test_global_reconciler_builds_before_its_indexes_exist(tmp_path, capsys):
         r.id_index
     cfg = config(tmp_path)
     GlobalReconciler(cfg)
-    assert "Could not find global equivalents index" in capsys.readouterr().out
+    assert "Could not find global equivalents index" in caplog.text

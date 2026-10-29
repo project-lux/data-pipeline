@@ -1,6 +1,9 @@
 
+import logging
 from lux_pipeline.config import index_path
 from lux_pipeline.process.base.reconciler import LmdbReconciler, TabLmdb
+
+logger = logging.getLogger("lux_pipeline")
 
 class GlobalReconciler(LmdbReconciler):
 
@@ -9,7 +12,7 @@ class GlobalReconciler(LmdbReconciler):
         # the index opens on first use (LazyIndexes); only the configuration
         # is checked here so a fresh instance can be built before the index is
         if not index_path(config, "reconcile_id"):
-            print(f"Could not find global equivalents index?")
+            logger.warning(f"Could not find global equivalents index?")
 
         self.diff_index = None
         fn2 = index_path(config, "differents", "")
@@ -17,9 +20,9 @@ class GlobalReconciler(LmdbReconciler):
             if fn2:
                 self.diff_index = TabLmdb.open(fn2, 'r', readahead=False, writemap=True)
             else:
-                print(f"No differentDbPath in merged for global differents index?")
+                logger.warning(f"No differentDbPath in merged for global differents index?")
         except:
-            print(f"No differentDbPath in merged for global differents index?")
+            logger.warning(f"No differentDbPath in merged for global differents index?")
 
     def reconcile(self, record, reconcileType="uri"):
 
@@ -36,7 +39,7 @@ class GlobalReconciler(LmdbReconciler):
                 if 'id' in record['data']:
                     ids.append(record['data']['id'])
                 else:
-                    print(f"No id in {record}")
+                    logger.warning(f"No id in {record}")
                     return []
             except:
                 ids = None

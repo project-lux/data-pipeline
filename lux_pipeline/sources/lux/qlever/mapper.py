@@ -1,6 +1,9 @@
+import logging
 from rdflib import URIRef, Literal
 from lux_pipeline.process.base.mapper import Mapper
 from bs4 import BeautifulSoup
+
+logger = logging.getLogger("lux_pipeline")
 
 examples = """
 PREFIX lux: <https://lux.collections.yale.edu/ns/>
@@ -232,8 +235,8 @@ class QleverMapper(Mapper):
         try:
             uri_me = URIRef(me).n3()
         except Exception as e:
-            print(f"Failed to build URI from {me}")
-            print(e)
+            logger.warning(f"Failed to build URI from {me}")
+            logger.warning(e)
             return None
 
         for k, v in node.items():
@@ -286,10 +289,10 @@ class QleverMapper(Mapper):
                             else:
                                 pred = f"{self.skosns}narrower"
                         else:
-                            print(f"Saw {mytype} as class for node with {k} property")
+                            logger.debug(f"Saw {mytype} as class for node with {k} property")
                             pred = f"{self.luxns}{k}"
                     else:
-                        print(f"Saw {node} with {k} but no type?")
+                        logger.debug(f"Saw {node} with {k} but no type?")
                         pred = f"{self.luxns}{k}"
                 elif k == "member_of":
                     if v and type(v) == list and type(v[0]) == dict and "type" in v[0]:
@@ -299,15 +302,15 @@ class QleverMapper(Mapper):
                         elif objtype == "Group":
                             pred = f"{self.crmns}P107i_is_current_or_former_member_of"
                         else:
-                            print(f"Saw {objtype} as class of object of 'member_of'")
+                            logger.debug(f"Saw {objtype} as class of object of 'member_of'")
                             pred = f"{self.lans}member_of"
                     elif "type" in node and node["type"] in ["Person", "Group"]:
                         pred = f"{self.crmns}P107i_is_current_or_former_member_of"
                     else:
-                        print(f"Saw {v} as value for member_of")
+                        logger.debug(f"Saw {v} as value for member_of")
                         pred = f"{self.lans}member_of"
                 else:
-                    print(f"Failed to process property: {k} in {me}")
+                    logger.warning(f"Failed to process property: {k} in {me}")
                     continue
 
             t = {"subject": me, "predicate": pred}
@@ -326,8 +329,8 @@ class QleverMapper(Mapper):
                         nvalue = Literal(value).n3()
                         t["value"] = nvalue
                     except Exception as e:
-                        print(f"Failed to process literal {v} in {me}")
-                        print(e)
+                        logger.warning(f"Failed to process literal {v} in {me}")
+                        logger.warning(e)
                         continue
                     if k == "content":
                         conf["recordText"].append(value)
@@ -350,13 +353,13 @@ class QleverMapper(Mapper):
                 elif k == "assigned_property":
                     po = self.prop_map.get(v, None)
                     if pos is None:
-                        print(f"Could not calculate expansion of {v} in {k}")
+                        logger.warning(f"Could not calculate expansion of {v} in {k}")
                     else:
                         t["object"] = pos
                         conf["triples"].append(self.triple_pattern.format(**t))
                     continue
                 else:
-                    print(f"Unhandled literal value type: {k} / {pred}")
+                    logger.debug(f"Unhandled literal value type: {k} / {pred}")
                     continue
                 conf["triples"].append(self.literal_pattern.format(**t))
             elif type(v) == list:
@@ -367,7 +370,7 @@ class QleverMapper(Mapper):
                             t["object"] = obj
                             conf["triples"].append(self.triple_pattern.format(**t))
                     else:
-                        print(f"found non dict in a list :( {node}")
+                        logger.debug(f"found non dict in a list :( {node}")
             elif type(v) == dict:
                 obj = self.walk_for_triples(v, conf, ignore)
                 if obj is not None:
@@ -405,7 +408,7 @@ class QleverMapper(Mapper):
         elif which == "Set":
             pfx = "set"
         else:
-            print(f"Failed to find a prefix for {which}")
+            logger.warning(f"Failed to find a prefix for {which}")
             pfx = "other"
         return pfx
 
@@ -448,7 +451,7 @@ class QleverMapper(Mapper):
                 t = {"subject": me, "predicate": f"{self.luxns}recordText", "value": nvalue, "datatype": ""}
                 triples.append(self.literal_pattern.format(**t))
             except Exception as e:
-                print(f"Failed to build full record text for {me}: {e}")
+                logger.warning(f"Failed to build full record text for {me}: {e}")
 
         shortcuts = {
             "produced_by": "Production",
@@ -559,8 +562,8 @@ class QleverMapper(Mapper):
                         nvalue = Literal(value).n3()
                         t["value"] = nvalue
                     except Exception as e:
-                        print(f"Failed to process literal {v} in {data['identifier']}")
-                        print(e)
+                        logger.warning(f"Failed to process literal {v} in {data['identifier']}")
+                        logger.warning(e)
                         continue
                     triples.append(self.literal_pattern.format(**t))
 

@@ -1,3 +1,4 @@
+import logging
 import csv
 import os
 import unicodedata
@@ -8,6 +9,8 @@ import yaml
 from lux_pipeline.config import index_path
 from lux_pipeline.process.base.index_loader import LmdbIndexLoader, TabLmdb
 from lux_pipeline.storage.idmap.lmdb import JsonLmdb
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class LlmNameIndexLoader(LmdbIndexLoader):
@@ -43,12 +46,12 @@ class LlmNameIndexLoader(LmdbIndexLoader):
                     huge_dict[key] = val
                 if name:
                     if len(name) > 498:
-                        print(f"Name too long: {name}")
+                        logger.warning(f"Name too long: {name}")
                     else:
                         name_dict[name] = val
                 x += 1
                 if not x % 100000:
-                    print(f"Processed {x} parsed_names, {len(bad)} skipped due to nulls")
+                    logger.info(f"Processed {x} parsed_names, {len(bad)} skipped due to nulls")
         huge_dict = dict(sorted(huge_dict.items()))
         name_dict = dict(sorted(name_dict.items()))
 
@@ -83,7 +86,7 @@ class GlobalIndexLoader(LmdbIndexLoader):
         elif which == "diffs":
             diffindex.clear()
         else:
-            print(f"Unknown index to clear {which}; should be equivs or diffs")
+            logger.error(f"Unknown index to clear {which}; should be equivs or diffs")
 
     def set(self, idx, key, vals):
         if type(vals) != list:
@@ -105,13 +108,13 @@ class GlobalIndexLoader(LmdbIndexLoader):
         (diffindex, eqindex) = self.get_storage()
 
         if diffindex is None and eqindex is None:
-            print(f"{self.name} has no indexes configured")
+            logger.warning(f"{self.name} has no indexes configured")
             return None
         elif not os.path.exists(filename):
-            print(f"{filename} does not exist to load")
+            logger.error(f"{filename} does not exist to load")
             return None
         elif not which in ["equivs", "diffs"]:
-            print(f"{which} is not equivs or diffs")
+            logger.error(f"{which} is not equivs or diffs")
             return None
 
         # Don't clear, as we'll call this multiple times
@@ -138,9 +141,9 @@ class GlobalIndexLoader(LmdbIndexLoader):
                     b2 = self.configs.canonicalize(b)
 
                 if a2 is None:
-                    print(f"Got None for {a}")
+                    logger.warning(f"Got None for {a}")
                 elif b2 is None:
-                    print(f"Got None for {b}")
+                    logger.warning(f"Got None for {b}")
                 else:
                     # NOTE: This doesn't have class
                     try:
