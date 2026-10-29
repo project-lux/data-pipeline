@@ -6,6 +6,11 @@
 # XXX FIXME - this is a terrible hack
 
 
+import logging
+
+logger = logging.getLogger("lux_pipeline")
+
+
 class JapanDereferencer(object):
 
     def __init__(self, config):
@@ -25,7 +30,7 @@ class JapanDereferencer(object):
             dk = self.configs.split_qua(key)[0]
             rec = wd_dc[dk]
             if 'P349' in rec['data']:
-                print(dk)
+                logger.debug(dk)
                 # Try and fetch from na first
                 for ident in rec['data']['P349']:
                     uri = f"http://id.ndl.go.jp/auth/ndlna/{ident}.json"

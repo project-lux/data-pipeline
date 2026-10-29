@@ -1,8 +1,11 @@
 
 # Base fetcher does the right thing so far
 
+import logging
 from lux_pipeline.process.base.fetcher import Fetcher
 from SPARQLWrapper import SPARQLWrapper, JSON
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class JapanFetcher(Fetcher):
@@ -50,7 +53,7 @@ class JapanSparqlFetcher(object):
             ret = sparql.queryAndConvert()
             return ret['results']['bindings']
         except Exception as e:
-            print(f"Japan fetcher: {e}")
+            logger.error(f"Japan fetcher: {e}")
             return None
 
     def fetch_records(self, query, auth="ndlna"):
