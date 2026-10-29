@@ -1,6 +1,9 @@
 
+import logging
 import requests
 from lux_pipeline.process.base.fetcher import Fetcher
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class BnfXmlFetcher(Fetcher):
@@ -32,7 +35,7 @@ class BnfXmlFetcher(Fetcher):
         except:
             # Failed to open network, resolve DNS, or similar
             # FIXME: log
-            print(f"Failed to get response from {url}")
+            logger.error(f"Failed to get response from {url}")
             self.networkmap[url] = 0
             return None
         if resp.status_code == 200:
@@ -43,7 +46,7 @@ class BnfXmlFetcher(Fetcher):
 
         else:
             # URL returned fail status
-            print(f"Got failure {resp.status_code} from {url}")
+            logger.error(f"Got failure {resp.status_code} from {url}")
             self.networkmap[url] = resp.status_code
             return None
 
@@ -81,13 +84,13 @@ class BnfFetcher(Fetcher):
             return None
 
         try:
-            print(f"Fetching {url}")
+            logger.debug(f"Fetching {url}")
             resp = requests.get(url, headers=self.headers, 
                 allow_redirects=self.allow_redirects, timeout=self.timeout)
         except:
             # Failed to open network, resolve DNS, or similar
             # FIXME: log
-            print(f"Failed to get response from {url}")
+            logger.error(f"Failed to get response from {url}")
             self.networkmap[url] = 0
             return None
         if resp.status_code == 200:
@@ -107,7 +110,7 @@ class BnfFetcher(Fetcher):
         else:
             # URL returned fail status
             # FIXME: log
-            print(f"Got failure {resp.status_code} from {url}")
+            logger.error(f"Got failure {resp.status_code} from {url}")
             self.networkmap[url] = resp.status_code
             return None
 
