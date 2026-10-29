@@ -1,6 +1,9 @@
+import logging
 from lux_pipeline.process.base.mapper import Mapper
 from cromulent import model, vocab
 from lxml import etree
+
+logger = logging.getLogger("lux_pipeline")
 
 #<rdf:RDF>
 #  <gn:Feature>
@@ -96,7 +99,7 @@ class GnMapper(Mapper):
                 # random aname
                 name = anames.values()[0][0]
             else:
-                print(f"No name found for {ident}")
+                logger.debug(f"No name found for {ident}")
 
         top = model.Place(ident=ident,label=name)
 

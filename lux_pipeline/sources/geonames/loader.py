@@ -1,7 +1,10 @@
+import logging
 from lux_pipeline.process.base.loader import Loader
 import os
 from cromulent import model, vocab
 import time
+
+logger = logging.getLogger("lux_pipeline")
 
 # The zip file has a CSV, but the names don't have languages :(
 # Maybe useful for reconciliation though (see LCNAF)
@@ -75,4 +78,4 @@ class GnLoader(Loader):
                         t = time.time() - start
                         xps = x/t
                         ttls = self.total / xps
-                        print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
+                        logger.info(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
