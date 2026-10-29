@@ -1,6 +1,11 @@
 # Process configs needed for multiple classes
 
 
+import logging
+
+logger = logging.getLogger("lux_pipeline")
+
+
 class WdConfigManager(object):
     def __init__(self, config):
         self.config = config
@@ -73,11 +78,11 @@ class WdConfigManager(object):
                 elif type(val) == list:
                     pass
                 else:
-                    print(f"unknown identifier value type: {val}")
+                    logger.debug(f"unknown identifier value type: {val}")
                     continue
                 for i in val:
                     if type(i) != str:
-                        print(f"Unknown identifier item value type: {i}")
+                        logger.debug(f"Unknown identifier item value type: {i}")
                     else:
                         sames.append((f"{pref}:{i}", recid))
 

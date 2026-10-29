@@ -1,3 +1,4 @@
+import logging
 from .base import WdConfigManager
 from lux_pipeline.process.base.mapper import Mapper
 from lux_pipeline.process.utils.mapper_utils import make_datetime
@@ -5,6 +6,8 @@ from cromulent import model, vocab
 from shapely.geometry import Polygon
 import datetime
 import math
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class WdMapper(Mapper, WdConfigManager):
@@ -387,7 +390,7 @@ class WdMapper(Mapper, WdConfigManager):
                 elif x[0] == "n":
                     u = f"http://id.loc.gov/authorities/names/{x}"
                 else:
-                    print(f"   --- unknown LC type: {x} in {data['id']}")
+                    logger.debug(f"   --- unknown LC type: {x} in {data['id']}")
                     continue
                 sames.append(u)
 
@@ -1187,11 +1190,11 @@ class WdMapper(Mapper, WdConfigManager):
 
     def process_digitalobject(self, data, top):
         # FIXME: Not sure what to do with this, or what would cause it?
-        print(f"WD Mapper found a top level digital object")
+        logger.debug(f"WD Mapper found a top level digital object")
         self.process_linguisticobject(data, top)
 
     def process_set(self, data, top):
-        print(f"WD Mapper was given a Set")
+        logger.debug(f"WD Mapper was given a Set")
 
     def transform(self, record, rectype=None, reference=False):
         # Take native wikidata json and produce linked art

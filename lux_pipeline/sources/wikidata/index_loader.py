@@ -1,4 +1,5 @@
 
+import logging
 import os
 import sys
 import ujson as json
@@ -8,6 +9,8 @@ from .loader import WdLoader
 from .fetcher import WdFetcher
 from .base import WdConfigManager
 from lux_pipeline.process.base.index_loader import LmdbIndexLoader
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class WdFileIndexLoader(LmdbIndexLoader):
@@ -21,18 +24,18 @@ class WdFileIndexLoader(LmdbIndexLoader):
 		files = [x for x in os.listdir(self.configs.temp_dir) if x.startswith('wd_equivs_')]
 		updates = {}
 		lines = []
-		print("Reading...")
+		logger.info("Reading...")
 		for fn in files:
 			with open(os.path.join(self.configs.temp_dir, fn)) as efh:
 				lines.extend(efh.readlines())
 
-		print("Sorting...")
+		logger.info("Sorting...")
 		lines.sort()
 
-		print("Making dict")
+		logger.info("Making dict")
 		for l in lines:
 			(x,y) = l.strip().rsplit(',', 1)
 			updates[x] = y
 
-		print("Writing index")
+		logger.info("Writing index")
 		eqindex.update(updates)

@@ -1,6 +1,9 @@
 
+import logging
 from .base import WdConfigManager
 from lux_pipeline.process.base.reconciler import LmdbReconciler
+
+logger = logging.getLogger("lux_pipeline")
 
 class WdReconciler(LmdbReconciler, WdConfigManager):
 
@@ -74,7 +77,7 @@ class WdReconciler(LmdbReconciler, WdConfigManager):
                             found = self.id_index[key]
                             ids[key] = found
                             if self.debug:
-                                print(f"  ---- WD Found: {eq} --> {found}")
+                                logger.debug(f"  ---- WD Found: {eq} --> {found}")
                                 try:
                                     self.debug_graph[eq].append((f"{self.namespace}{found}", 'uri'))
                                 except:
@@ -87,8 +90,8 @@ class WdReconciler(LmdbReconciler, WdConfigManager):
             if len(idss) == 1:
                 recommend = list(ids.values())[0]
                 if truth and truth != recommend:
-                    print(f"WD: Record suggests {truth} and reconciler suggests {recommend} for {rec['id']}")
-                    print("NOT making recommendation; but FIXME: add to log for manual check")                
+                    logger.warning(f"WD: Record suggests {truth} and reconciler suggests {recommend} for {rec['id']}")
+                    logger.warning("NOT making recommendation; but FIXME: add to log for manual check")                
                     return None
                 return f"{self.namespace}{recommend}"
             elif not ids:
@@ -102,14 +105,14 @@ class WdReconciler(LmdbReconciler, WdConfigManager):
                         ivtd[v].append(k)
                     except:
                         ivtd[v] = [k]
-                if self.debug: print(f"Record {rec['id']} matches multiple wikidata ids: {ivtd}")                        
+                if self.debug: logger.debug(f"Record {rec['id']} matches multiple wikidata ids: {ivtd}")                        
 
                 if truth and truth in ivtd:
                     # Just believe it
-                    print(f"Wikidata value in record {truth} and in reconciler; not overriding, FIXME: add to log for manual check")
+                    logger.info(f"Wikidata value in record {truth} and in reconciler; not overriding, FIXME: add to log for manual check")
                     return None
                 elif truth:
-                    print(f"Wikidata value in record {truth} but NOT found from reconciliation! FIXME: add to log for manual check")
+                    logger.warning(f"Wikidata value in record {truth} but NOT found from reconciliation! FIXME: add to log for manual check")
                     return None
                 elif len(ids) > 2:
                     # Need at least three opinions for any sort of decision
@@ -124,7 +127,7 @@ class WdReconciler(LmdbReconciler, WdConfigManager):
                     # See if there's just a clear 2:1 or better majority?
                     counts = [(k, len(v)) for (k,v) in ivtd.items()]
                     counts.sort(key=lambda x: x[1], reverse=True)
-                    if self.debug: print(f"id counts: {counts}")
+                    if self.debug: logger.debug(f"id counts: {counts}")
                     if counts[0][1] >= (2*counts[1][1]):
                         return f"{self.namespace}{counts[0][0]}"
                 else:
