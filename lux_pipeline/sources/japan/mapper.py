@@ -1,6 +1,9 @@
+import logging
 from lux_pipeline.process.base.mapper import Mapper
 from lux_pipeline.process.utils.mapper_utils import make_datetime
 from cromulent import model, vocab
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class GenericJapanMapper(Mapper):
@@ -42,7 +45,7 @@ class GenericJapanMapper(Mapper):
         else:
             topcls = getattr(model, rectype)
             if topcls != guess:
-                print(f"Data in {rec['uri']} is guessed as a {guess} but calling function wants a {rectype}")
+                logger.debug(f"Data in {rec['uri']} is guessed as a {guess} but calling function wants a {rectype}")
 
         top = topcls(ident=rec['uri'])
         return (top, topcls)
@@ -71,7 +74,7 @@ class GenericJapanMapper(Mapper):
         if preflbl:
             top.identified_by = vocab.PrimaryName(content=preflbl)
         else:
-            print(f"No primary name in {rec['uri']}?!")
+            logger.debug(f"No primary name in {rec['uri']}?!")
 
         altLbls = rec.get('altLabel', [])
         if type(altLbls) != list:
