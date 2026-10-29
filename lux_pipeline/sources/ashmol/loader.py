@@ -1,4 +1,5 @@
 
+import logging
 import os
 import time
 import gzip
@@ -7,6 +8,8 @@ import json
 import zipfile
 
 from lux_pipeline.process.base.loader import Loader
+
+logger = logging.getLogger("lux_pipeline")
 
 class AshmolLoader(Loader):
 
@@ -84,7 +87,7 @@ class AshmolLoader(Loader):
                 if not self.force_reload and what and what in self.out_cache:
                     done_x += 1
                     if not done_x % 10000:
-                        print(f"Skipping past {done_x} {time.time() - start}")
+                        logger.info(f"Skipping past {done_x} {time.time() - start}")
                     continue
                 # Cache assumes JSON as input, so need to parse it
                 try:
@@ -94,7 +97,7 @@ class AshmolLoader(Loader):
                     try:
                         js = json.loads(l)
                     except Exception as e:
-                        print(f"REALLY Broken record {ident} in {f}: {e}")
+                        logger.error(f"REALLY Broken record {ident} in {f}: {e}")
                         continue   
                 x += 1
                 self.out_cache[what] = js
@@ -102,6 +105,6 @@ class AshmolLoader(Loader):
                     t = time.time() - start
                     xps = x/t
                     ttls = 4000000 / xps
-                    print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
+                    logger.info(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
             tf.close()
         self.out_cache.commit()
