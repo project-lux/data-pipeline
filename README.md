@@ -19,9 +19,24 @@ lux merge --source all --max-workers 24                     # one merged record 
 lux export --max-workers 24                                 # JSONL for MarkLogic
 ```
 
-`./run-all2.sh --all` runs a whole build (`ENGINE=mp` for one `lux` per
-phase instead of one per slice); the legacy `run-all.sh` beside it is kept
-until the two have been compared on the build machine.
+`lux build` runs a whole build, the phases of `run-all.sh` in its order,
+each as its own `lux` (or script) process, stopping at the first failure:
+
+```
+lux build --clear --max-workers 24     # clear caches and refs, new token, then build
+lux build --from merge                 # pick up again at a phase
+lux build --skip google,portal         # leave phases out
+lux build --dry-run                    # print the steps, run nothing
+```
+
+The phases are `clear` (only with `--clear`), `google` (the same/different
+sheet), `reconcile` (with identify, metatypes, write-refs), `merge`, `portal`
+(`post-build-portal.py`) and `export`. Run it from the repository: like the
+shell script, it writes `metatypes-*.json` and `reference_uris.txt` in the
+working directory. `./run-all2.sh --all` is the same build as shell
+(`ENGINE=mp` for one `lux` per phase instead of one per slice); the legacy
+`run-all.sh` beside it is kept until the two have been compared on the
+build machine.
 
 Every worker writes `<log_dir>/<command>-<timestamp>-w<n>.status` and
 `.log` files; `lux watch --latest` reads them to attach to a running (or
