@@ -56,6 +56,7 @@ you finish an item.
 | 37 | [Optional: logging sweep over `lux_pipeline/sources`](37-opt-source-logging-sweep.md) | P3 | L | 01 | ☑ |
 | 38 | [Optional: `AbstractCache` interface doc class](38-opt-abstract-cache-interface.md) | P3 | S | — | ☑ |
 | 41 | [Optional: function‑level profiling inside `PhaseTimer`](41-opt-profiling-in-phase-timer.md) | P3 | S | 20, 23, 25 | ☑ |
+| 42 | [Build roles: internal / external as a build configuration (two PRs)](42-build-roles.md) | P2 | L | 20, 23, 35, 39; after 33 | ☐ |
 
 ## Dependency picture
 
@@ -80,6 +81,7 @@ you finish an item.
 29 source loaders (needs 13), 30 source downloaders (needs 15) ─► 31 shell scripts ─► 32 docs ─► 33 retire scripts
 27 interactive, 28 initialize/testinstall (need 05)              ▲
 39 backup/restore (needs 05, 08, 09) ─► 33 retires backup_tables.sh
+33 ─► 42 build roles (needs 20, 23, 35, 39): 42a role-free storage, 42b build records
 ```
 
 Items at the same depth are independent of each other and can be done in
