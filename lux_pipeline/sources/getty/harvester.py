@@ -1,6 +1,9 @@
+import logging
 from lux_pipeline.process.base.harvester import ASHarvester, ASProtocol
 import ujson as json
 import sys
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class GettyProtocol(ASProtocol):
@@ -41,7 +44,6 @@ class GettyHarvester2(ASHarvester):
         self.uris = []
 
     def process_items(self, items): 
-        sys.stdout.write('x');sys.stdout.flush()
         for item in items:
             try:
                 what = item['object']['id']  

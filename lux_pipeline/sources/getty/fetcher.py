@@ -1,7 +1,10 @@
+import logging
 from lux_pipeline.process.base.fetcher import Fetcher
 import requests
 import ujson as json
 import os
+
+logger = logging.getLogger("lux_pipeline")
 
 ### 2024-04 RS: Not sure this is necessary now that Getty has made linked art the default serialization
 ### for the vocabs
@@ -49,7 +52,7 @@ class GettyFetcher(Fetcher):
 
         # Should have dealt with -agent and -place upstream!
         if not identifier.isnumeric():
-            print(f"Getty fetcher got bad identifier: {identifier}")
+            logger.warning(f"Getty fetcher got bad identifier: {identifier}")
             return None
 
         f = f"{self.name}/{identifier}"
@@ -67,12 +70,12 @@ class GettyFetcher(Fetcher):
                 return None
 
             try:
-                print(f"Fetching {newurl}")
+                logger.debug(f"Fetching {newurl}")
                 resp = self.session.get(newurl)
             except Exception as e:
                 # FIXME: Log network failure
                 self.networkmap[newurl] = 0
-                print(e)
+                logger.error(e)
                 return None
             if resp.status_code == 200:
                 data = json.loads(resp.text)
@@ -80,9 +83,9 @@ class GettyFetcher(Fetcher):
                     try:
                         newid = data[0]["http://purl.org/dc/terms/isReplacedBy"][0]["@id"]
                         newid = newid.replace(f"http://vocab.getty.edu/{self.name}/", "")
-                        print(f"Got new id for {identifier}: {newid}")
+                        logger.debug(f"Got new id for {identifier}: {newid}")
                     except:
-                        print("got nuttin")
+                        logger.debug("got nuttin")
                         return None
                     res = Fetcher.fetch(self, newid)
                     old = self.make_fetch_uri(identifier)
