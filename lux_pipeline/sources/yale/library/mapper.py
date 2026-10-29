@@ -122,7 +122,7 @@ class YulMapper(Mapper):
                     if type(vi) == dict:
                         self.walk_multi(vi)
                     else:
-                        print(f"found non dict in a list :( {node}")
+                        logger.debug(f"found non dict in a list :( {node}")
             elif type(v) == dict:
                 self.walk_multi(v)
 
@@ -273,7 +273,7 @@ class YulMapper(Mapper):
                     try:
                         data[key].remove(d)
                     except:
-                        print(f"Failed to remove {d} from {data[key]}")
+                        logger.warning(f"Failed to remove {d} from {data[key]}")
                 if not data[key]:
                     del data[key]
                 if aps:

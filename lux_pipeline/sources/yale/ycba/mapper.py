@@ -1,8 +1,11 @@
+import logging
 import ujson as json
 from shapely.geometry import shape
 
 from lux_pipeline.process.base.mapper import Mapper
 from lux_pipeline.process.utils.mapper_utils import validate_timespans
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class YcbaMapper(Mapper):
@@ -39,7 +42,7 @@ class YcbaMapper(Mapper):
                         rtb["content"] = rtb["content"][0]
                 else:
                     # uhoh
-                    print(f"Statement in YCBA {data['id']} is missing content")
+                    logger.debug(f"Statement in YCBA {data['id']} is missing content")
 
         # 2022-08-19
         # straight up delete all ycba_term entries before they make a mess
