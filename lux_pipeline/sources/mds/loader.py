@@ -1,4 +1,5 @@
 
+import logging
 import os
 import time
 import gzip
@@ -6,6 +7,8 @@ import sys
 import ujson as json
 
 from lux_pipeline.process.base.loader import Loader
+
+logger = logging.getLogger("lux_pipeline")
 
 class IdTabJsonLoader(Loader):
 
@@ -56,7 +59,7 @@ class IdTabJsonLoader(Loader):
                     try:
                         new = json.loads(jstr)
                     except:
-                        print(f"Failed to parse JSON in {what}")                        
+                        logger.error(f"Failed to parse JSON in {what}")                        
                         raise
 
                     self.out_cache[what] = new
@@ -64,8 +67,7 @@ class IdTabJsonLoader(Loader):
                         t = time.time() - start
                         xps = x/t
                         ttls = (self.total / (maxSlice+1)) / xps
-                        print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-                        sys.stdout.flush()
+                        logger.info(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
         self.out_cache.commit()
 
 class MdsLoader(Loader):
@@ -125,16 +127,16 @@ class MdsLoader(Loader):
                     try:
                         js = json.loads(l)
                     except:
-                        print(f"Failed to parse JSON in {what}")                        
+                        logger.error(f"Failed to parse JSON in {what}")                        
                         continue
                     try:
                         new = self.post_process_json(js)
                     except:
-                        print(f"Failed to process {l}")
+                        logger.error(f"Failed to process {l}")
                         continue
                     what = self.get_identifier_json(new)
                     if not what:
-                        print(l)
+                        logger.error(l)
                         raise NotImplementedError(f"is get_identifier_raw or _json implemented for {self.__class__.__name__}?")
                     elif what in self.out_cache:
                         # print(f"{what} from {f} already in cache??")
@@ -145,6 +147,5 @@ class MdsLoader(Loader):
                         t = time.time() - start
                         xps = x/t
                         ttls = (self.total / (maxSlice+1)) / xps
-                        print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-                        sys.stdout.flush()
+                        logger.info(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
         self.out_cache.commit()
