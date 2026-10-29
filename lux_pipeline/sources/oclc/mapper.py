@@ -1,8 +1,11 @@
+import logging
 from lux_pipeline.process.base.mapper import Mapper
 from cromulent import model, vocab
 from lux_pipeline.process.utils.mapper_utils import make_datetime, test_birth_death
 from lxml import etree
 import re
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class ViafMapper(Mapper):
@@ -125,7 +128,7 @@ class ViafMapper(Mapper):
         topCls = self.guess_type(rec, nameType)
         if not topCls:
             if nameType != "UniformTitleWork":
-                print(f"VIAF mapper saw nameType {nameType} but cannot process")
+                logger.debug(f"VIAF mapper saw nameType {nameType} but cannot process")
             return None
 
         ident = record["identifier"]
@@ -150,7 +153,7 @@ class ViafMapper(Mapper):
                     rec.identified_by = model.Name(content=val)
         if not hasattr(rec, "identified_by"):
             # No names, skip
-            print("No names")
+            logger.debug("No names")
             return None
         if not primary:
             primary = rec.identified_by[0]
@@ -269,7 +272,7 @@ class ViafMapper(Mapper):
                     elif g == "b":
                         rec.classified_as = vocab.instances["male"]
                     elif not g in ["u", "x"]:
-                        print(f"Unknown gender: {g} in {what}")
+                        logger.debug(f"Unknown gender: {g} in {what}")
 
                 nat_list = top.xpath("./viaf:nationalityOfEntity/viaf:data/viaf:text/text()", namespaces=nss)
                 for nat in nat_list:

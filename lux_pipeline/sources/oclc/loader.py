@@ -1,3 +1,4 @@
+import logging
 from lux_pipeline.process.base.loader import Loader
 import gzip
 import zipfile
@@ -5,6 +6,8 @@ from lxml import etree
 import time
 import re
 import os
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class ViafLoader(Loader):
@@ -80,6 +83,6 @@ class ViafLoader(Loader):
                     t = time.time() - start
                     xps = x / t
                     ttls = self.total / xps
-                    print(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
+                    logger.info(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
 
         self.out_cache.commit()

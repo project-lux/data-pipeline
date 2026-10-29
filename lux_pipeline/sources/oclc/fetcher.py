@@ -1,5 +1,8 @@
+import logging
 from lux_pipeline.process.base.fetcher import Fetcher
 import requests
+
+logger = logging.getLogger("lux_pipeline")
 
 class ViafFetcher(Fetcher):
 
@@ -10,12 +13,12 @@ class ViafFetcher(Fetcher):
 
         url = self.make_fetch_uri(identifier)
         try:
-            print(f"Fetching {url}")
+            logger.debug(f"Fetching {url}")
             resp = self.session.get(url, allow_redirects=False)
         except:
             # Failed to open network, resolve DNS, or similar
             # FIXME: log
-            print(f"Failed to get response from {url}")
+            logger.error(f"Failed to get response from {url}")
             self.networkmap[url] = 0
             return None
         if resp.status_code == 200:
@@ -63,7 +66,7 @@ class ViafFetcher(Fetcher):
         else:
             # URL returned fail status
             # FIXME: log
-            print(f"Got failure {resp.status_code} from {url}")
+            logger.error(f"Got failure {resp.status_code} from {url}")
             self.networkmap[url] = resp.status_code
             return None
         return {'data': data, 'identifier': identifier, 'source': self.name}
