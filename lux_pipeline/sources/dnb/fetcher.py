@@ -1,6 +1,9 @@
 
+import logging
 import requests
 from lux_pipeline.process.base.fetcher import Fetcher
+
+logger = logging.getLogger("lux_pipeline")
 
 class DnbFetcher(Fetcher):
     def validate_identifier(self, identifier):
@@ -22,7 +25,7 @@ class DnbFetcher(Fetcher):
 
             # FIXME: This should also be more robust
             try:
-                print(f"Fetching {newurl}")
+                logger.debug(f"Fetching {newurl}")
                 resp = requests.get(newurl)
             except:
                 # FIXME: Log network failure
