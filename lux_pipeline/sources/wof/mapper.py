@@ -1,8 +1,11 @@
+import logging
 from lux_pipeline.process.base.mapper import Mapper
 from cromulent import model, vocab
 from shapely.geometry import Polygon
 import json
 import numpy as np
+
+logger = logging.getLogger("lux_pipeline")
 
 
 def _vec2d_dist(p1, p2):
@@ -231,15 +234,15 @@ class WofMapper(Mapper):
             # somehow can be a point?
             if len(coords) == 1 and len(coords[0]) == 2 and type(coords[0][1]) == float:
                 # This will fall out at the area stage anyway
-                print(f"point? {coords}")
-                print(f"From: {geom['coordinates']}")
+                logger.debug(f"point? {coords}")
+                logger.debug(f"From: {geom['coordinates']}")
                 coords = []
 
             if coords:
                 try:
                     rounded = [[round(x[0], 5), round(x[1], 5)] for x in coords[0]]
                 except:
-                    print(f"FAILED: {coords}")
+                    logger.warning(f"FAILED: {coords}")
                     raise
                 remove_idx = []
                 for x in range(len(coords) - 1):
