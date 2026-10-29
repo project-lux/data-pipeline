@@ -1,6 +1,9 @@
+import logging
 from lux_pipeline.process.base.loader import Loader
 import zipfile
 from lxml import etree
+
+logger = logging.getLogger("lux_pipeline")
 
 class FastLoader(Loader):
     """
@@ -62,7 +65,7 @@ class FastLoader(Loader):
                     if not fn.endswith(".marcxml"):
                         continue
 
-                    print(f"Processing file: {fn}")
+                    logger.info(f"Processing file: {fn}")
                     with fh.open(fn) as f:
                         try:
                             tree = etree.parse(f)
@@ -89,16 +92,16 @@ class FastLoader(Loader):
                                     self.out_cache[ident] = {"xml": etree.tostring(record, encoding="unicode")}
                                     records_processed += 1
                                 else:
-                                    print(f"FAST record in {fn} is missing an identifier.")
+                                    logger.warning(f"FAST record in {fn} is missing an identifier.")
 
                         except etree.XMLSyntaxError as e:
-                            print(f"Error parsing XML in {fn}: {e}")
+                            logger.error(f"Error parsing XML in {fn}: {e}")
 
             if records_processed > 0:
                 self.out_cache.commit()
-                print(f"Successfully loaded {records_processed} records into cache.")
+                logger.info(f"Successfully loaded {records_processed} records into cache.")
             else:
-                print("No valid records were processed.")
+                logger.warning("No valid records were processed.")
 
         except (zipfile.BadZipFile, FileNotFoundError) as e:
-            print(f"Failed to open ZIP file {self.in_path}: {e}")
+            logger.error(f"Failed to open ZIP file {self.in_path}: {e}")
