@@ -1,3 +1,4 @@
+import logging
 import math
 import re
 import unicodedata
@@ -9,6 +10,8 @@ import lxml.html
 from shapely.wkt import loads
 
 from lux_pipeline.process.base.mapper import Mapper
+
+logger = logging.getLogger("lux_pipeline")
 
 """
 Create a mapper that produces completely artificial triples.
@@ -244,7 +247,7 @@ class QleverMapper(Mapper):
             return dt
         dt = pad_datetime(value, end)
         if dt:
-            print(f"*** padded {'end' if end else 'begin'} date {value!r} to {dt} in {me} ***")
+            logger.debug(f"*** padded {'end' if end else 'begin'} date {value!r} to {dt} in {me} ***")
         return dt
 
     def get_prefix(self, which):
@@ -255,7 +258,7 @@ class QleverMapper(Mapper):
         except (KeyError, TypeError):
             # TypeError: `which` is still an unhashable dict, i.e. a node with
             # no type at all
-            print(f"Failed to find a prefix for {which}")
+            logger.warning(f"Failed to find a prefix for {which}")
             return "other"
 
     def transform(self, record, rectype=None, reference=False):
@@ -422,7 +425,7 @@ class QleverMapper(Mapper):
             pcls = f"{pfx_title}{dtyp}"
             for val in vals:
                 if type(val) is not dict:
-                    print(f"*** string not dict: {dprop} in {me} ***")
+                    logger.debug(f"*** string not dict: {dprop} in {me} ***")
                     continue
                 check = [val]
                 check.extend(val.get("part", []))

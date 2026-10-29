@@ -1,3 +1,4 @@
+import logging
 import os
 from urllib.parse import quote, urlparse, urlunparse
 
@@ -7,6 +8,8 @@ from lux_pipeline.process.base.mapper import Mapper
 from lux_pipeline.process.reidentifier import Reidentifier
 from lux_pipeline.process.utils.mapper_utils import test_birth_death
 from lux_pipeline.storage.idmap.lmdb import JsonLmdb
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class Cleaner(Mapper):
@@ -39,7 +42,7 @@ class Cleaner(Mapper):
                 fn, "r", readahead=False, writemap=True
             )
         else:
-            print("Couldn't find LLM yuid->name lmdb")
+            logger.warning("Couldn't find LLM yuid->name lmdb")
             self.llm_person_names = None
 
     def get_commons_license(self, img):
@@ -108,7 +111,7 @@ class Cleaner(Mapper):
                         try:
                             do = self.get_commons_license(fn)
                         except:
-                            print(
+                            logger.warning(
                                 f"Failed to get WM license for {data.get('id', '????')}"
                             )
                             do = None
@@ -263,7 +266,7 @@ class Cleaner(Mapper):
                 death = str(pname.get("death_year", ""))
 
                 if not last or not first:
-                    print(f"Missing either last or first name for {my_uuid}")
+                    logger.debug(f"Missing either last or first name for {my_uuid}")
                 else:
                     try:
                         middle = " ".join(pname.get("middle_names", [])).strip()
@@ -384,7 +387,7 @@ class Cleaner(Mapper):
                 for nm in nms:
                     cxns = [x.get("id", None) for x in nm.get("classified_as", [])]
                     if None in cxns:
-                        print(f" ---> {data['id']} has {nm['classified_as']} name cxns")
+                        logger.debug(f" ---> {data['id']} has {nm['classified_as']} name cxns")
                     if primary in cxns and alternateName in cxns:
                         if primaryNameVals:
                             # make it alternate
@@ -586,7 +589,7 @@ class Cleaner(Mapper):
             )
         ):
             # Uh oh :(
-            print(f"record with no names: {data}")
+            logger.debug(f"record with no names: {data}")
             data["identified_by"] = [
                 {
                     "type": "Name",
@@ -634,7 +637,7 @@ class Cleaner(Mapper):
         replacement = []
         for c in data.get(prop, []):
             if type(c) != dict:
-                print(f"Bad data shape {c} in {prop}")
+                logger.debug(f"Bad data shape {c} in {prop}")
                 continue
             c_id = c.get("id", "")
             if c_id:
@@ -803,7 +806,7 @@ class Cleaner(Mapper):
         ### Check names are sane
         okay = self.process_names(data)
         if not okay:
-            print(f"Final mapper failed to find sane names in {data['id']}, dropping")
+            logger.warning(f"Final mapper failed to find sane names in {data['id']}, dropping")
             return None
         self.process_images(data)
         self.check_for_metatypes(data)

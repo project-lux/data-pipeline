@@ -1,3 +1,4 @@
+import logging
 import datetime
 import re
 from ctypes import c_int32
@@ -8,6 +9,8 @@ import numpy as np
 import ujson as json
 
 from lux_pipeline.process.base.mapper import Mapper
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class MlMapper(Mapper):
@@ -94,7 +97,7 @@ class MlMapper(Mapper):
         if not top and "id" in node:
             nid = node["id"]
             if nid is None:
-                print(f"ID is None?? {node}")
+                logger.debug(f"ID is None?? {node}")
             elif nid.startswith(self.configs.internal_uri):
                 # record node['id']
                 if nid not in seen_all:
@@ -118,7 +121,7 @@ class MlMapper(Mapper):
                         secs = np.datetime64(val).astype("<M8[s]").astype(np.int64)
                         node[f"_seconds_since_epoch_{p}"] = int(secs)
                     except:
-                        print(f"Could not get seconds for {val}")
+                        logger.warning(f"Could not get seconds for {val}")
 
         for k, v in node.items():
             # `type(v) in [list, dict]` rebuilt the list on every key of
@@ -134,7 +137,7 @@ class MlMapper(Mapper):
                     if type(vi) is dict:
                         self._walk_node_ref(vi, refs, all_refs, False, ignore, seen, seen_all)
                     else:
-                        print(f"found non dict in a list :( {node}")
+                        logger.debug(f"found non dict in a list :( {node}")
             else:
                 self._walk_node_ref(v, refs, all_refs, False, ignore, seen, seen_all)
             ignore = ignore_now
@@ -193,7 +196,7 @@ class MlMapper(Mapper):
         else:
             # Things that don't fall into the above categories
             # Probably due to bugs
-            print(f"Failed to find a prefix for {typ}")
+            logger.warning(f"Failed to find a prefix for {typ}")
             prefix = "other"
             # facets["uiType"] = "Other"
 
@@ -283,7 +286,7 @@ class MlMapper(Mapper):
                 t = {"subject": me, "predicate": f"{rdfns}type", "object": a}
                 ml["triples"].append({"triple": t})
         else:
-            print(f"Unknown type in {me}: {data['type']}")
+            logger.debug(f"Unknown type in {me}: {data['type']}")
 
         shortcuts = {
             "produced_by": "Production",
@@ -873,6 +876,6 @@ class MlMapper(Mapper):
                 coords = self.fix_polygon_coords(coords)
                 ml["indexedProperties"]["defined_by_polygon"] = coords
             else:
-                print(f"Unknown place coordinate value: {coords}")
+                logger.debug(f"Unknown place coordinate value: {coords}")
 
         return ml
