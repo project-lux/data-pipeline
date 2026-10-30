@@ -525,3 +525,80 @@ def test_lmdb_load_type_counts_for_the_total(tmp_path):
     assert rec.totals == [3]
     assert set(ldr.out_cache) == {"1", "3", "5"}
 
+
+
+# --- prepare(path=..., path_type=...): lux load --file / --file-type ------------
+
+
+def test_file_override_keeps_the_configured_type():
+    # configured: one jsonl.gz; the override is another file of that shape
+    ldr = make_loader(BASE / "missing.jsonl.gz", "lines.gz/json")
+    ldr.prepare(0, 1, path=str(BASE / "lines/records.jsonl.gz"))
+    assert ldr.my_files == [{"path": str(BASE / "lines/records.jsonl.gz"),
+                             "fmt": [["lines", "gz"], ["json"]]}]
+    ldr.process()
+    assert len(ldr.out_cache) == 1
+
+
+def test_file_type_overrides_the_configured_type():
+    ldr = make_loader(BASE / "missing.jsonl.gz", "lines.gz/json")
+    ldr.prepare(0, 1, path=str(BASE / "zip_json/records.zip"), path_type="zip/json")
+    ldr.process()
+    assert list(ldr.out_cache) == ["record"]
+
+
+def test_file_override_guesses_without_a_single_configured_type():
+    cfg = {"name": "t", "all_configs": StubConfigs(BASE), "datacache": {},
+           "input_files": {"records": [{"path": "a.jsonl"}, {"path": "b.jsonl"}]}}
+    ldr = Loader(cfg)
+    ldr.prepare(0, 1, path=str(BASE / "lines/records.jsonl"))
+    assert [f["path"] for f in ldr.my_files] == [str(BASE / "lines/records.jsonl")]
+    ldr.process()
+    assert len(ldr.out_cache) == 1
+
+
+def test_file_override_for_a_legacy_loader_replaces_in_path():
+    class Legacy(Loader):
+        def __init__(self, config):
+            self.config = config
+            self.in_path = config["dumpFilePath"]
+
+        def load(self):
+            return self.in_path
+
+    ldr = Legacy({"name": "old", "dumpFilePath": "/configured.gz", "all_configs": StubConfigs(BASE)})
+    ldr.prepare(0, 1, path="/elsewhere.gz")
+    assert ldr.uses_dsl is False and ldr.load() == "/elsewhere.gz"
+    with pytest.raises(ValueError, match="reads its file its own way"):
+        ldr.prepare(0, 1, path="/elsewhere.gz", path_type="lines.gz/json")
+    with pytest.raises(ValueError, match="no configured lmdb file"):
+        ldr.prepare(0, 1, load_type="lmdb", path="/elsewhere.lmdb")
+
+
+def test_file_override_with_a_type_puts_a_plain_dump_loader_on_the_dsl():
+    # base Loader, dumpFilePath and no type: load() would read in_path; a
+    # type sends it through the DSL instead
+    cfg = {"name": "plain", "dumpFilePath": "/configured.jsonl.gz", "datacache": {},
+           "all_configs": StubConfigs(BASE)}
+    ldr = Loader(cfg)
+    ldr.prepare(0, 1, path=str(BASE / "lines/records.jsonl"), path_type="lines/json")
+    assert ldr.uses_dsl is True
+    ldr.process()
+    assert len(ldr.out_cache) == 1
+
+
+def test_file_override_for_an_export(tmp_path):
+    fn = tmp_path / "export_test.jsonl.gz"
+    with gzip.open(fn, "wt") as fh:
+        fh.write('r1\t{"data": {"id": "1"}}\n')
+    cache = DeferringCache()
+    cache.flush = lambda: None
+    ldr = make_loader(BASE / "lines/records.jsonl", "lines/json", cache=cache)
+    ldr.prepare(0, 1, load_type="export", path=str(fn))
+    # no export file configured: main's export loader reads it
+    assert ldr.my_files == [] and ldr.export_path == str(fn)
+    ldr.load_export2()
+    assert list(cache) == ["r1"]
+    # the next run without an override goes back to the default path
+    ldr.prepare(0, 1, load_type="export")
+    assert ldr.export_path is None

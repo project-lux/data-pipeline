@@ -34,6 +34,9 @@ format step (``seen % max_slice == my_slice``), so N workers can read the
 same file and every worker must see the children in the same order --
 which is why directory listings are sorted.
 
+``prepare(path=..., path_type=...)`` (``lux load --file`` / ``--file-type``)
+replaces the configured file for one run: see `Loader.override_file`.
+
 The legacy entry points (``load()``, ``load_export()``, ``load_export2()``
 and the ``get_identifier_*`` / ``filter_line`` hooks) are kept at the
 bottom for the sources that still override them; ``uses_dsl`` tells the
@@ -631,12 +634,55 @@ class Loader(Sliced):
                 if self.max_records > 0 and self.handled >= self.max_records:
                     raise _StopLoad()
 
+    def configured_type(self, load_type):
+        """The spec the config gives its file for `load_type`, when it
+        configures exactly one: an ``input_files`` entry's ``type``, or
+        ``dumpFileType`` for records. ``None`` otherwise."""
+        entries = (self.config.get("input_files") or {}).get(load_type) or []
+        if len(entries) == 1:
+            return entries[0].get("type")
+        if not entries and load_type == "records":
+            return self.config.get("dumpFileType")
+        return None
+
+    def override_file(self, path, path_type, load_type):
+        """Read `path` instead of the configured file. A loader whose
+        config describes its files (``uses_dsl``) reads it with
+        `path_type`, else the configured file's type, else a type guessed
+        from the content; for ``export`` without either (main's export
+        format) and for a legacy ``load()`` loader the path replaces
+        ``export_path`` / ``in_path``, which those read. A legacy loader
+        decides for itself how to read a file, so `path_type` is refused
+        for one."""
+        if load_type == "export" and not path_type and not self.configured_type("export"):
+            self.export_path = path
+            self.my_files = []
+            logger.info(f"{self.name}: loading the export from {path}")
+            return
+        if not self.uses_dsl and not path_type:
+            if load_type != "records":
+                raise ValueError(f"{self.name} has no configured {load_type} file to replace; "
+                                 f"give --file-type to read {path} with the loader DSL")
+            self.in_path = path
+            logger.info(f"{self.name}: loading {path} instead of {self.config.get('dumpFilePath')}")
+            return
+        if not self.uses_dsl and type(self).load is not Loader.load:
+            raise ValueError(f"{self.name}'s loader reads its file its own way; "
+                             f"--file-type does not apply to it")
+        fmt = path_type or self.configured_type(load_type)
+        fmtspec = self.process_fmt(fmt) if fmt else self.guess_fmt(path)
+        self.uses_dsl = True
+        self.my_files = [{"path": path, "fmt": fmtspec}]
+        logger.info(f"{self.name}: loading {path}"
+                    + (f" as {fmt}" if fmt else " (type guessed)") + " instead of the configured file")
+
     def prepare(self, my_slice=-1, max_slice=-1, load_type="records", max_records=-1,
-                progress=null_progress):
+                progress=null_progress, path=None, path_type=None):
         """Work out which files this loader reads, as ``my_files``:
         ``[{"path", "fmt"}]`` with the spec parsed. ``uses_dsl`` says
         whether the config describes its files at all; when it does not,
-        the manager calls the legacy ``load()``."""
+        the manager calls the legacy ``load()``. `path` (and `path_type`)
+        replace the configured file: see `override_file`."""
         self._ensure_dsl()
         Sliced.prepare(self, my_slice, max_slice, progress)
         self.load_type = load_type
@@ -648,6 +694,13 @@ class Loader(Sliced):
         files = []
         ifs = self.config.get("input_files") or {}
         self.uses_dsl = bool(ifs) or bool(self.config.get("dumpFileType"))
+        self.export_path = None
+        if path is not None:
+            self.override_file(path, path_type, load_type)
+            if load_type == "lmdb" and self.my_files:
+                self.total = self.lmdb_count_entries(self.my_files[0]["path"])
+            self.increment_total = self.total < 0
+            return self
         if ifs:
             if load_type not in ifs:
                 logger.error(f"No configured file for load type {load_type!r} in source {self.name}")
@@ -797,7 +850,7 @@ class Loader(Sliced):
 
     def load_export2(self):
         where = self.config["all_configs"].dumps_dir +"/harvested"
-        fn = os.path.join(where, f"export_{self.config['name']}.jsonl.gz")
+        fn = getattr(self, "export_path", None) or os.path.join(where, f"export_{self.config['name']}.jsonl.gz")
         if not os.path.exists(fn):
             logger.error(fn)
             return None

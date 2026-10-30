@@ -45,8 +45,9 @@ class FakeLoader(Loader):
         self.my_files = []
 
     def prepare(self, my_slice=-1, max_slice=-1, load_type="records", max_records=-1,
-                progress=null_progress):
+                progress=null_progress, path=None, path_type=None):
         self.calls.append(("prepare", my_slice, max_slice, load_type, max_records, progress))
+        self.path_args = (path, path_type)
         self.uses_dsl = self.dsl
         if self.dsl and (load_type == "records" or self.export_files):
             self.my_files = [{"path": f"{self.name}.{load_type}", "fmt": [["json"]]}]
@@ -363,3 +364,37 @@ def test_real_loader_signatures():
     from lux_pipeline.sources.wikidata.loader import WdLoader
     assert accepts_slices(WdLoader.__new__(WdLoader).load)
     assert not accepts_slices(RorLoader.__new__(RorLoader).load)
+
+
+# --- --file / --file-type ----------------------------------------------------
+
+
+def test_file_reaches_prepare(tmp_path):
+    cfgs = StubConfigs(ror=FakeLoader("ror", dsl=True))
+    m = manager(cfgs, ["ror"], workers=2, file="/dumps/ror.zip", file_type="zip/json")
+    m.run_single()
+    assert cfgs.loader("ror").path_args == ("/dumps/ror.zip", "zip/json")
+
+
+def test_file_needs_exactly_one_source():
+    cfgs = StubConfigs(ror=FakeLoader("ror", dsl=True), ycba=FakeLoader("ycba"))
+    m = manager(cfgs, ["ror", "ycba"], file="/dumps/x.zip")
+    with pytest.raises(ValueError, match="exactly one --source.*ror, ycba"):
+        m.process("null")
+    assert cfgs.loader("ror").calls == [] and cfgs.loader("ycba").calls == []
+
+
+def test_file_type_needs_file():
+    with pytest.raises(ValueError, match="--file-type needs --file"):
+        manager(StubConfigs(), [], file_type="zip/json")
+
+
+def test_command_file(tmp_path, stub_runtime):
+    dump = tmp_path / "ror.zip"
+    dump.write_text("")
+    cfgs = stub_runtime(StubConfigs(ror=FakeLoader("ror", dsl=True)))
+    m = run_command(cfgs, ["--file", str(dump), "--file-type", "zip/json"], tmp_path, source="ror")
+    assert (m.file, m.file_type) == (str(dump), "zip/json")
+    assert cfgs.loader("ror").path_args == (str(dump), "zip/json")
+    with pytest.raises(SystemExit):
+        run_command(cfgs, ["--file", str(tmp_path / "missing.zip")], tmp_path, source="ror")
