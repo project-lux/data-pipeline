@@ -21,8 +21,8 @@ then one of
   stream);
 * ``get_record_list()`` then ``harvest_from_list()`` — two-phase: write
   ``all_<name>_uris.txt`` / ``deleted_<name>_uris.txt`` to ``temp_dir``
-  from the feed, then fetch the listed records with every worker taking
-  its share of the lines;
+  from the feed, then, with every worker taking its share of the lines,
+  apply the deletes as ``process()`` does and fetch the listed records;
 * ``harvest_pages(my_slice, max_slice)`` — fetch every ``max_slice``-th
   page into the page cache (today's ``harvest_parallel.sh --pages``).
 
@@ -37,6 +37,9 @@ Configuration keys read here, all per source:
 ``harvest_overwrite``          replace cached records (default true)
 ``start_page``                 begin at this page rather than the last
                                (ignored when the feed is overridden)
+``fetch``                      the record URL template; without one the
+                               records are fetched from ``<namespace><identifier>``
+                               (`HarvestProtocol.default_fetcher`)
 ``activitystreams_cache_source``  name of the external source whose
                                datacache stores fetched pages; may also be
                                set on the base configuration
@@ -54,6 +57,7 @@ and `UpdateManager` / ``run-harvest.py`` keep reading ``last_harvest``,
 import datetime
 import logging
 import os
+from types import SimpleNamespace
 
 import requests
 import ujson as json
@@ -124,9 +128,27 @@ class HarvestProtocol:
             return {}
         return what
 
+    def default_fetcher(self):
+        """A plain `Fetcher` of ``<namespace><identifier>``, for a source
+        configured without a ``fetch`` template: the record URLs a feed's
+        items name. ``None`` without a namespace."""
+        if not self.namespace:
+            return None
+        from lux_pipeline.process.base.fetcher import Fetcher
+        configs = self.config.get("all_configs")
+        if configs is None or not hasattr(configs, "allow_network"):
+            configs = SimpleNamespace(allow_network=getattr(configs, "allow_network", False))
+        logger.info(f"{self.prefix}: no fetch template configured; fetching records from "
+                    f"{self.namespace}{{identifier}}")
+        fetcher = Fetcher({"name": self.prefix, "fetch": f"{self.namespace}{{identifier}}",
+                           "all_configs": configs})
+        # one connection pool for the feed and its records
+        fetcher.session = self.session
+        return fetcher
+
     def prepare(self, last_harvest=None):
         """Reset per-walk state. Called at the start of every ``crawl()``."""
-        self.fetcher = self.config.get("fetcher", self.fetcher)
+        self.fetcher = self.config.get("fetcher") or self.fetcher or self.default_fetcher()
         if self.fetcher is not None:
             self.fetcher.enabled = True
         self.seen = {}
@@ -587,32 +609,14 @@ class ASHarvester(Sliced):
                 fh.write(f"{r}\t{deleted[r]}\n")
         return records, deleted
 
-    def harvest_from_list(self, my_slice=None, max_slice=None):
-        """Phase 2: fetch this worker's share of ``all_<name>_uris.txt``. Returns the count stored."""
-        if my_slice is None:
-            my_slice = self.my_slice
-        if max_slice is None:
-            max_slice = self.max_slice
-        fetcher = self.protocol.fetcher
-        if fetcher is None:
-            logger.error(f"No fetcher for {self.name}? Can't harvest from list")
-            return 0
-        fetcher.enabled = True
-        storage = self.config.get("datacache")
-        if storage is None:
-            logger.error(f"No datacache for {self.name}? Can't harvest")
-            return 0
-        fn = self._list_path("all")
-        if not os.path.exists(fn):
-            logger.warning(f"No uri/change list to harvest for {self.name}. Run get_record_list()")
-            return 0
-
-        stored = 0
+    def _my_lines(self, fn, my_slice, max_slice, description):
+        """This worker's share of a phase-1 list: ``(identifier, changeTime)``
+        for every `max_slice`-th line, reporting progress."""
         with open(fn, "r") as fh:
             ttl = count_lines(fh)
             if ttl > 0 and max_slice > 1:
                 ttl = ttl // max_slice
-            self.progress(total=ttl if ttl > 0 else None, completed=0, description=f"{self.name}/list")
+            self.progress(total=ttl if ttl > 0 else None, completed=0, description=description)
             for x, line in enumerate(fh):
                 if max_slice is not None and max_slice > 1 and x % max_slice != my_slice:
                     continue
@@ -621,25 +625,76 @@ class ASHarvester(Sliced):
                     (ident, dt) = line.strip().split("\t")
                 except ValueError:
                     continue
-                try:
-                    tm = storage.metadata(ident, "insert_time")["insert_time"]
-                except TypeError:
-                    # NoneType is not subscriptable
-                    tm = None
-                if tm is not None and tm.isoformat() > dt:
-                    # inserted after the change, no need to fetch
-                    continue
-                try:
-                    itjs = fetcher.fetch(ident)
-                except Exception as e:
-                    logger.warning(f"Failed to fetch {ident}: {e}")
-                    continue
-                if itjs is None:
-                    logger.warning(f"Got None for {ident}")
-                    continue
-                storage[ident] = itjs
-                stored += 1
-        return stored
+                yield ident, dt
+
+    def delete_from_list(self, my_slice=None, max_slice=None):
+        """Phase 2: apply this worker's share of ``deleted_<name>_uris.txt``
+        through `UpdateManager`, exactly as ``process()`` applies a delete
+        (datacache, recordcache and idmap entries go, the follow-up is
+        recorded in ``pending_deletes.jsonl``). Returns the count applied."""
+        if my_slice is None:
+            my_slice = self.my_slice
+        if max_slice is None:
+            max_slice = self.max_slice
+        fn = self._list_path("deleted")
+        if not os.path.exists(fn):
+            logger.warning(f"No delete list for {self.name}. Run get_record_list()")
+            return 0
+        applied = 0
+        for ident, dt in self._my_lines(fn, my_slice, max_slice, f"{self.name}/deletes"):
+            self.process_change("delete", ident, {}, dt)
+            applied += 1
+        if applied:
+            logger.info(f"{self.name}: applied {applied} delete(s)")
+        return applied
+
+    def harvest_from_list(self, my_slice=None, max_slice=None):
+        """Phase 2: apply this worker's share of the deletes, then fetch its
+        share of ``all_<name>_uris.txt``. Returns the count of records
+        deleted and stored."""
+        if my_slice is None:
+            my_slice = self.my_slice
+        if max_slice is None:
+            max_slice = self.max_slice
+        storage = self.config.get("datacache")
+        if storage is None:
+            logger.error(f"No datacache for {self.name}? Can't harvest")
+            return 0
+        deleted = self.delete_from_list(my_slice, max_slice)
+
+        fetcher = self.protocol.fetcher or self.protocol.default_fetcher()
+        if fetcher is None:
+            logger.error(f"No fetcher for {self.name}, and no namespace to fetch records "
+                         f"from? Can't harvest from list")
+            return deleted
+        self.protocol.fetcher = fetcher
+        fetcher.enabled = True
+        fn = self._list_path("all")
+        if not os.path.exists(fn):
+            logger.warning(f"No uri/change list to harvest for {self.name}. Run get_record_list()")
+            return deleted
+
+        stored = 0
+        for ident, dt in self._my_lines(fn, my_slice, max_slice, f"{self.name}/list"):
+            try:
+                tm = storage.metadata(ident, "insert_time")["insert_time"]
+            except TypeError:
+                # NoneType is not subscriptable
+                tm = None
+            if tm is not None and tm.isoformat() > dt:
+                # inserted after the change, no need to fetch
+                continue
+            try:
+                itjs = fetcher.fetch(ident)
+            except Exception as e:
+                logger.warning(f"Failed to fetch {ident}: {e}")
+                continue
+            if itjs is None:
+                logger.warning(f"Got None for {ident}")
+                continue
+            storage[ident] = itjs
+            stored += 1
+        return deleted + stored
 
 
 class PmhHarvester(ASHarvester):

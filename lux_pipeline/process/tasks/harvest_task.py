@@ -11,7 +11,8 @@ Three ways of running, chosen from the options:
   phase 1 runs ``get_record_list()`` once per source, one worker each
   (``max_workers`` is lowered to the number of sources for that phase);
   phase 2 runs ``harvest_from_list(n, max_workers)`` in every worker for
-  every source, each taking its share of the listed records.
+  every source, each applying its share of the listed deletes (as single
+  mode applies them) and fetching its share of the listed records.
 * **pages** (``--pages``): every worker runs ``harvest_pages(n,
   max_workers)`` for every source, fetching every ``max_workers``-th feed
   page into the page cache. Today's ``harvest_parallel.sh --pages``.
@@ -180,10 +181,10 @@ class HarvestManager(TaskManager):
         if not mine:
             logger.debug(f"worker {n}: nothing to harvest")
             return counts
-        # one idmap per worker, shared by its drivers; only process() applies
-        # changes through the UpdateManager, the other entry points do not
-        # need it (a driver fetches its own lazily if it ever does)
-        idmap = cfgs.get_idmap() if self.mode == "single" else None
+        # one idmap per worker, shared by its drivers; process() and phase 2
+        # apply deletes through the UpdateManager, the other entry points do
+        # not need it (a driver fetches its own lazily if it ever does)
+        idmap = cfgs.get_idmap() if self.mode == "single" or self.phase == 2 else None
         label = {1: "list", 2: "fetch"}.get(self.phase, "pages" if self.pages else "harvest")
         for which, src in mine:
             h = getattr(cfgs, which)[src]["harvester"]
