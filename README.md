@@ -19,9 +19,31 @@ lux merge --source all --max-workers 24                     # one merged record 
 lux export --max-workers 24                                 # JSONL for MarkLogic
 ```
 
-`./run-all2.sh --all` runs a whole build (`ENGINE=mp` for one `lux` per
-phase instead of one per slice); the legacy `run-all.sh` beside it is kept
-until the two have been compared on the build machine.
+`lux build` runs a whole build, the phases of `run-all.sh` in its order,
+each as its own `lux` process, stopping at the first failure:
+
+```
+lux build --clear --max-workers 24     # clear caches and refs, new token, then build
+lux build --from merge                 # pick up again at a phase
+lux build --skip sheets,portal         # leave phases out
+lux build --dry-run                    # print the steps, run nothing
+```
+
+The phases are `clear` (only with `--clear`), `sheets`, `reconcile` (with
+identify, metatypes, write-refs), `merge`, `portal` and `export`, and each
+is a command of its own: `lux sheets` reads the curators' spreadsheet and
+loads its same-as / different-from pairs and fixes (`--fetch-only`,
+`--load-only`). By default that is the Google Sheet (`pip install -e
+'.[google]'`); `--file` reads the same tabs from an `.xlsx` workbook
+(`.[xlsx]`) or a directory of `<tab name>.csv` files instead. And `lux portal` tags
+the merged records the YPM portal needs. A full `lux reconcile`, `merge`
+or `export` first removes what an earlier run left (metatypes slice files,
+done flags, old export slices); one `--my-worker` slice never does. Run
+`lux build` from the repository: like the shell script, it writes
+`metatypes-*.json` and `reference_uris.txt` in the working directory. `./run-all2.sh --all` is the same build as shell
+(`ENGINE=mp` for one `lux` per phase instead of one per slice); the legacy
+`run-all.sh` beside it is kept until the two have been compared on the
+build machine.
 
 Every worker writes `<log_dir>/<command>-<timestamp>-w<n>.status` and
 `.log` files; `lux watch --latest` reads them to attach to a running (or

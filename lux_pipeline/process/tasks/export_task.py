@@ -33,7 +33,7 @@ import os
 from lux_pipeline.process.phases.export import (CHUNK, GZIP_LEVEL, SOURCES, export_external,
                                                 export_nt_slice, export_slice,
                                                 export_sources_slice)
-from ._task_manager import TaskManager
+from ._task_manager import TaskManager, flags_pattern, remove_stale
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -148,10 +148,25 @@ class ExportManager(TaskManager):
 
     # ----------------------------------------------------------- driver
 
+    def clear_stale(self):
+        """Before a marklogic / merged run over every slice: that type's
+        ``export_full_*`` / ``export_merged_*`` files in the directory this
+        run writes to (an earlier run with more workers leaves its higher
+        slices behind, and the load would read them) and the done flags
+        (run-all.sh's ``rm``). A single slice leaves them."""
+        if self.my_slice > -1 or self.export_type not in ("marklogic", "merged"):
+            return 0
+        out_dir = self.out_dir or self.configs.exports_dir
+        stem = "export_merged" if self.export_type == "merged" else "export_full"
+        return remove_stale(os.path.join(out_dir, f"{stem}_*.jsonl"),
+                            os.path.join(out_dir, f"{stem}_*.jsonl.gz"),
+                            flags_pattern(self.configs, "export"))
+
     def process(self, engine="mp", prefix=None, view=None):
-        """Check the run, then run every worker. Returns the workers'
-        results."""
+        """Check the run, clear what an earlier run left, then run every
+        worker. Returns the workers' results."""
         self.check()
+        self.clear_stale()
         return super().process(engine, prefix, view)
 
 

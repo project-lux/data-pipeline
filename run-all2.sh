@@ -35,7 +35,7 @@
 #   manage-data.py --clear-all --new-token
 #                         lux clear --source all --force && lux clear --refs --force && lux new-token
 #   google-sames-diffs.py, load-csv-map2.py --same/--different
-#                         unchanged
+#                         lux sheets
 #   run-reconcile.py i 24 --all
 #                         lux reconcile --source all --my-worker i --max-workers 24 --no-ui --no-finish
 #   run-identify.py       lux identify
@@ -46,7 +46,7 @@
 #   run-merge.py i 24 --all
 #                         lux merge --source all --my-worker i --max-workers 24 --no-ui
 #   post-build-portal.py --no-tqdm
-#                         unchanged
+#                         lux portal
 #   run-export.py i 24    lux export --my-worker i --max-workers 24 --no-ui
 #   manage-data.py i 24 --load --wikidata
 #                         lux load --source wikidata --my-worker i --max-workers 24 --no-ui
@@ -118,10 +118,9 @@ echo "    lux clear --source all --force && lux clear --refs --force && lux new-
 echo "Did you check the flags for which units to run?"
 echo ""
 
-# Always update from google sheet
-python ./google-sames-diffs.py
-python ./load-csv-map2.py --same ../data/files/sameAs/google.csv
-python ./load-csv-map2.py --different ../data/files/differentFrom/google.csv
+# Always update from the curators' spreadsheet (the Google Sheet)
+# was: google-sames-diffs.py and load-csv-map2.py --same / --different
+lux sheets || fail sheets
 echo "reloaded same/diffs from Google Sheet"
 
 rm -f $LOGS/* 2> /dev/null
@@ -168,8 +167,9 @@ rm -f $LOGS/flags/merge_is_done-*txt
 run_phase merge merge --source $SOURCE
 rm -f $LOGS/flags/merge_is_done-*.txt
 
-# Now run post-build-portal to tag YPM records
-python ./post-build-portal.py --no-tqdm
+# Now tag the records the YPM portal needs
+# was: python ./post-build-portal.py --no-tqdm
+lux portal > $LOGS/portal.txt 2>&1 || fail portal
 
 
 ### Export Phase

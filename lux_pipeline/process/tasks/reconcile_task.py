@@ -39,7 +39,7 @@ from lux_pipeline.process.phases.identify import report_lines, resolve_identity,
 from lux_pipeline.process.phases.reconcile import (new_update_token, reconcile_slice, select_sources,
                                                    write_refs)
 from lux_pipeline.process.reference_manager import ReferenceManager
-from ._task_manager import TaskManager
+from ._task_manager import TaskManager, flags_pattern, remove_stale
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -144,11 +144,23 @@ class ReconcileManager(TaskManager):
             return "--baseline only pre-populates the global terms"
         return None
 
+    def clear_stale(self):
+        """Before a run over every slice: the ``metatypes-*.json`` slice
+        files in the working directory, which the finish (or ``lux
+        metatypes``) would merge into this build's, and the phase's done
+        flags (run-all.sh's ``rm``). A single slice, ``--recid`` or
+        ``--baseline`` run leaves them: they may be another run's."""
+        if self.my_slice > -1 or self.recids or self.baseline:
+            return 0
+        return remove_stale("metatypes-*.json", flags_pattern(self.configs, "reconcile"))
+
     def process(self, engine="mp", prefix=None, view=None):
-        """Check the selection, mint the token if asked, run every worker,
-        then finish the phase unless this run cannot have reconciled
-        everything. Returns the workers' results."""
+        """Check the selection, mint the token if asked, clear what an
+        earlier run left, run every worker, then finish the phase unless
+        this run cannot have reconciled everything. Returns the workers'
+        results."""
         self.check()
+        self.clear_stale()
         if self.new_token:
             new_update_token(self.configs, self.configs.get_idmap())
         self.results = super().process(engine, prefix, view)

@@ -24,6 +24,7 @@ exists: ``process()`` takes an optional object with a ``refresh()`` method
 and calls it while waiting.
 """
 
+import glob
 import io
 import logging
 import multiprocessing
@@ -39,6 +40,30 @@ logger = logging.getLogger("lux_pipeline")
 
 ENGINES = ("mp", "ray", "null")
 REFRESH_INTERVAL = 0.5
+
+
+def remove_stale(*patterns):
+    """Delete the files matching `patterns` (globs): what an earlier run
+    of a phase left that this run would otherwise trip over. A driver
+    calls it before its workers start, and only for a run over every
+    slice, never from one ``--my-worker`` slice of many. Returns how many
+    went."""
+    removed = 0
+    patterns = [p for p in patterns if p]
+    for pattern in patterns:
+        for fn in glob.glob(pattern):
+            os.remove(fn)
+            removed += 1
+    if removed:
+        logger.info(f"removed {removed} file(s) left by an earlier run: {', '.join(patterns)}")
+    return removed
+
+
+def flags_pattern(cfgs, phase):
+    """The ``<log_dir>/flags/<phase>_is_done-<n>.txt`` files the workers
+    write for the legacy shell orchestration; ``None`` without a log_dir."""
+    log_dir = getattr(cfgs, "log_dir", None)
+    return os.path.join(log_dir, "flags", f"{phase}_is_done-*.txt") if log_dir else None
 
 
 # --------------------------------------------------------------- worker side

@@ -106,7 +106,7 @@ def test_run_all_calls_no_legacy_script():
     with open(os.path.join(REPO, "run-all2.sh")) as fh:
         code = [line for line in fh if not line.lstrip().startswith("#")]
     for line in code:
-        assert not re.search(r"run-\w+\.py|manage-data\.py|merge-metatypes\.py", line), line
+        assert not re.search(r"run-\w+\.py|manage-data\.py|merge-metatypes\.py|google-sames-diffs\.py|load-csv-map2\.py|post-build-portal\.py", line), line
 
 
 # ------------------------------------------------------------- run-all2.sh
@@ -133,8 +133,10 @@ def test_run_all_null_engine(env, tmp_path):
     assert order[last_reconcile + 1:last_reconcile + 4] == ["identify", "metatypes", "write-refs"]
     first_merge = order.index("merge")
     assert first_merge == last_reconcile + 4
-    assert "python ./post-build-portal.py --no-tqdm" in seq
-    assert seq.index("python ./post-build-portal.py --no-tqdm") < order.index("export")
+    assert order[0] == "sheets"
+    assert order.index("portal") > max(i for i, c in enumerate(order) if c == "merge")
+    assert order.index("portal") < order.index("export")
+    assert not any(c.startswith("python") for c in seq), "no legacy script is run"
     assert "[Success] Build was successful" in open(env["STATUS_FILE"]).read()
 
 
@@ -151,9 +153,9 @@ def test_run_all_mp_engine(env, tmp_path):
     assert r.returncode == 0, r.stdout + r.stderr
     commands = [c.split()[1] for c in calls(env) if c.startswith("lux")]
     # reconcile's own tail runs identify, metatypes and write-refs
-    assert commands == ["reconcile", "merge", "export"]
+    assert commands == ["sheets", "reconcile", "merge", "portal", "export"]
     for c in calls(env):
-        if c.startswith("lux"):
+        if c.split()[1] in ("reconcile", "merge", "export"):
             assert "--my-worker" not in c and "--max-workers 3 --no-ui --prefix" in c
     assert "--no-finish" not in lux_calls(env, "reconcile")[0]
 
@@ -194,6 +196,15 @@ def test_run_all_stops_when_a_step_between_phases_fails(env, tmp_path, step):
     assert r.returncode == 1
     assert f"Error in {step}!" in r.stdout
     assert lux_calls(env, "merge") == []
+
+
+@pytest.mark.parametrize("step,not_run", [("sheets", "reconcile"), ("portal", "export")])
+def test_run_all_stops_when_sheets_or_portal_fails(env, tmp_path, step, not_run):
+    env["FAKE_NOSTART"] = step
+    r = run("run-all2.sh", "--all", env=env, cwd=tmp_path)
+    assert r.returncode == 1
+    assert f"Error in {step}!" in r.stdout
+    assert lux_calls(env, not_run) == []
 
 
 def test_run_all_mp_failure(env, tmp_path):
