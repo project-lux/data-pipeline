@@ -211,14 +211,15 @@ def test_two_phase_lists_once_per_source_then_fetches_in_every_worker(stub_runti
     assert results == [{"sources": 1, "records": 3, "failed": 0},
                        {"sources": 2, "records": 6, "failed": 0}]
     assert m.results == results and m.max_workers == 4
+    # phase 2 applies deletes through the UpdateManager, so it gets the idmap
     assert cfgs.h("ycba").calls == [("prepare", 0, 2, null_progress, None, None), ("list",),
-                                    ("prepare", 0, 4, null_progress, None, None), ("fetch", 0, 4)]
-    assert cfgs.h("ypm").calls == [("prepare", 0, 4, null_progress, None, None), ("fetch", 0, 4)]
+                                    ("prepare", 0, 4, null_progress, None, IDMAP), ("fetch", 0, 4)]
+    assert cfgs.h("ypm").calls == [("prepare", 0, 4, null_progress, None, IDMAP), ("fetch", 0, 4)]
     # phase 1 hid the two spare workers, phase 2 showed them again
     assert view.visible == [(2, False), (3, False), (2, True), (3, True)]
     assert "Phase 1: listing records from 2 source(s) with 2 worker(s)" in caplog.text
     assert "Phase 2: fetching listed records with 4 worker(s)" in caplog.text
-    assert cfgs.idmap_calls == 0
+    assert cfgs.idmap_calls == 1  # once per phase-2 worker, none in phase 1
 
 
 def test_phase_2_worker_takes_its_share_of_every_source():

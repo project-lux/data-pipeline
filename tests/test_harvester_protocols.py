@@ -33,10 +33,11 @@ class FakeSession:
         self.requested = []
         self.headers = {}
 
-    def get(self, uri):
+    def get(self, uri, **kw):
         self.requested.append(uri)
         body = self.pages[uri]
-        return SimpleNamespace(text=body if isinstance(body, str) else json.dumps(body))
+        return SimpleNamespace(text=body if isinstance(body, str) else json.dumps(body),
+                               status_code=200, headers={"content-type": "application/json"})
 
 
 class Recorder:
@@ -101,6 +102,11 @@ def record(ident):
     return {"id": f"{NS}{ident}", "type": "Person", "_label": ident}
 
 
+def fetched(data, ident, source="src"):
+    """What a `Fetcher` (the default one too) returns for a record."""
+    return {"data": data, "source": source, "identifier": ident}
+
+
 def as_pages():
     return {
         COLL: {"id": COLL, "first": {"id": P1}, "last": {"id": P2}},
@@ -145,11 +151,12 @@ def make_as(pages=None, progress=None, **keys):
 def test_as_walks_pages_newest_first_and_yields_tuples():
     proto = make_as()
     got = list(proto.crawl())
+    # no fetch template: the default fetcher gets <namespace><identifier>
     assert got == [
-        ("create", "c", record("c"), T4),
+        ("create", "c", fetched(record("c"), "c"), T4),
         ("delete", "b", {}, ""),
-        ("update", "a", record("a"), T2),
-        ("update", "d", record("d"), T1),
+        ("update", "a", fetched(record("a"), "a"), T2),
+        ("update", "d", fetched(record("d"), "d"), T1),
     ]
     # collection, last page, items, then the prev page
     assert proto.session.requested[:2] == [COLL, P2]
@@ -190,7 +197,7 @@ def test_as_unknown_type_is_update_and_https_is_smushed_to_namespace():
     pages[P2]["orderedItems"] = [{"type": "Frobnicate", "endTime": T2, "object": {"id": "https://example.org/data/a"}}]
     pages[P1]["orderedItems"] = []
     proto = make_as(pages)
-    assert list(proto.crawl()) == [("update", "a", record("a"), T2)]
+    assert list(proto.crawl()) == [("update", "a", fetched(record("a"), "a"), T2)]
     assert f"{NS}a" in proto.session.requested
 
 
@@ -210,14 +217,14 @@ def test_as_refresh_marker_stops(caplog):
 
 def test_as_skips_newer_cached_record_and_empty_fetch(caplog):
     pages = as_pages()
-    pages[f"{NS}c"] = {}
+    del pages[f"{NS}c"]  # the fetch fails
     cache = DictCache()
     cache.insert_times["a"] = SimpleNamespace(isoformat=lambda: "2026-01-01T00:00:00")
     proto = make_as(pages, datacache=cache)
     got = [g[1] for g in proto.crawl()]
     assert got == ["b", "d"]
     assert f"{NS}a" not in proto.session.requested
-    assert "got {} from c" in caplog.text
+    assert "got None from c" in caplog.text
 
 
 def test_as_uses_fetcher_when_configured():
@@ -349,7 +356,8 @@ def test_getty_rewrites_vocab_uris_and_filters_other_vocabularies():
     proto.session = FakeSession(pages)
     proto.progress = rec
     got = list(proto.crawl())
-    assert got == [("update", "300404670", {"id": f"{gns}300404670", "type": "Type"}, T2)]
+    assert got == [("update", "300404670",
+                    fetched({"id": f"{gns}300404670", "type": "Type"}, "300404670", "aat"), T2)]
     assert rec.advanced() == 2  # one filtered out, one processed
 
 
@@ -565,6 +573,83 @@ def test_harvest_from_list_takes_this_workers_share(tmp_path):
     assert ASHarvester(cfg).harvest_from_list(0, 1) == 0
     assert ASHarvester(make_config(make_configs(tmp_path), fetcher=fetcher)).harvest_from_list(0, 1) == 0
     assert ASHarvester(make_config(make_configs(tmp_path), datacache=storage)).harvest_from_list(0, 1) == 0
+
+
+def phase2_source(tmp_path, fetcher=None, **keys):
+    """A source with "b" in its datacache, recordcache and idmap, and
+    phase-1 lists: a, c to fetch; b and x (never harvested) deleted."""
+    datacache = DictCache()
+    datacache["b"] = {"id": f"{NS}b", "type": "Person"}
+    recordcache = DictCache()
+    recordcache["b"] = {"id": "yuid-b"}
+    idmap = {f"{NS}b##quaPerson": "urn:yuid:1", "urn:yuid:1": [f"{NS}b##quaPerson"]}
+    cfgs = make_configs(tmp_path, get_idmap=lambda: idmap)
+    cfg = make_config(cfgs, datacache=datacache, recordcache=recordcache, **keys)
+    if fetcher is not None:
+        cfg["fetcher"] = fetcher
+    cfgs.internal["src"] = cfg
+    (tmp_path / "all_src_uris.txt").write_text(f"a\t{T2}\nc\t{T4}\n")
+    (tmp_path / "deleted_src_uris.txt").write_text(f"b\t{T3}\nx\t{T1}\n")
+    return cfg, datacache, recordcache, idmap
+
+
+def test_harvest_from_list_applies_the_deletes_like_process(tmp_path):
+    cfg, datacache, recordcache, idmap = phase2_source(tmp_path, RecordFetcher())
+    rec = Recorder()
+    h = ASHarvester(cfg).prepare(0, 1, progress=rec, idmap=idmap)
+    assert h.harvest_from_list() == 4  # two deletes (one a no-op), two stored
+    assert sorted(datacache) == ["a", "c"]
+    assert "b" not in recordcache and f"{NS}b##quaPerson" not in idmap
+    entries = [json.loads(l) for l in (tmp_path / "pending_deletes.jsonl").read_text().splitlines()]
+    assert [(e["identifier"], e["action"], e["changeTime"]) for e in entries] == [
+        ("b", "delete-merged", T3)]
+    assert rec.descriptions() == ["src/deletes", "src/list"]
+
+
+def test_each_worker_applies_its_share_of_the_deletes(tmp_path):
+    cfg, datacache, recordcache, idmap = phase2_source(tmp_path, RecordFetcher())
+    # worker 1 of 2 takes the second line: x, which was never harvested
+    assert ASHarvester(cfg).prepare(1, 2, idmap=idmap).delete_from_list() == 1
+    assert "b" in datacache
+    assert ASHarvester(cfg).prepare(0, 2, idmap=idmap).delete_from_list() == 1
+    assert "b" not in datacache
+
+
+def test_no_delete_list_is_a_warning(tmp_path, caplog):
+    cfg, datacache, _, idmap = phase2_source(tmp_path, RecordFetcher())
+    os.remove(tmp_path / "deleted_src_uris.txt")
+    assert ASHarvester(cfg).prepare(0, 1, idmap=idmap).harvest_from_list() == 2
+    assert "b" in datacache
+    assert "No delete list for src" in caplog.text
+
+
+def test_without_a_fetch_template_phase_2_fetches_namespace_urls(tmp_path, caplog):
+    cfg, datacache, _, idmap = phase2_source(tmp_path)
+    h = ASHarvester(cfg).prepare(0, 1, idmap=idmap)
+    h.protocol.session = FakeSession(as_pages())
+    with caplog.at_level("INFO", logger="lux_pipeline"):
+        assert h.harvest_from_list() == 4
+    assert h.protocol.session.requested == [f"{NS}a", f"{NS}c"]
+    assert datacache["c"]["data"] == fetched(record("c"), "c")
+    assert f"fetching records from {NS}{{identifier}}" in caplog.text
+
+
+def test_without_a_fetch_template_process_stores_records(tmp_path):
+    # the old fallback yielded the bare JSON, which UpdateManager could not store
+    datacache, recordcache = DictCache(), DictCache()
+    cfg = make_config(make_configs(tmp_path), datacache=datacache, recordcache=recordcache)
+    h = ASHarvester(cfg).prepare(idmap={})
+    h.protocol.session = FakeSession(as_pages())
+    assert h.process() == 4
+    assert [s[0] for s in datacache.sets] == ["c", "a", "d"]
+    assert datacache["c"]["data"] == record("c")
+
+
+def test_without_a_namespace_there_is_no_default_fetcher(tmp_path, caplog):
+    cfg, datacache, _, idmap = phase2_source(tmp_path, namespace="")
+    assert ASHarvester(cfg).prepare(0, 1, idmap=idmap).harvest_from_list() == 2  # the deletes
+    assert sorted(datacache) == []
+    assert "no namespace to fetch records from" in caplog.text
 
 
 # --- count_lines ----------------------------------------------------------------
