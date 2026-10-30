@@ -1,7 +1,7 @@
 """`lux build`: the phases run-all.sh runs, in its order, each as its own
 process. The plan from --clear / --from / --to / --skip, the global options
-each step is given, the housekeeping run-all.sh did with rm, stopping at
-the first failure and the status-file lines -- with the steps stubbed, so
+each step is given (every one a lux command), stopping at the first
+failure and the status-file lines -- with the steps stubbed, so
 nothing is started."""
 
 import os
@@ -38,7 +38,7 @@ def parse(argv):
 
 def make(tmp_path, results=None):
     """A handler whose steps are recorded rather than run; `results` maps a
-    command or script name to its exit status."""
+    command name to its exit status."""
     hdlr = build.CommandHandler(Cfgs(tmp_path))
     hdlr.ran = []
 
@@ -51,9 +51,8 @@ def make(tmp_path, results=None):
 
 
 def name_of(argv):
-    if argv[1] == "-m":
-        return argv[3]
-    return os.path.basename(argv[1])
+    assert argv[1:3] == ["-m", "lux_pipeline.cli.entry"], "every step is a lux command"
+    return argv[3]
 
 
 def run(hdlr, argv):
@@ -68,19 +67,13 @@ def test_default_plan_is_run_all_order(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     hdlr = make(tmp_path)
     run(hdlr, [])
-    assert [name_of(a) for a in hdlr.ran] == [
-        "google-sames-diffs.py", "load-csv-map2.py", "load-csv-map2.py",
-        "reconcile", "merge", "post-build-portal.py", "export"]
+    assert [name_of(a) for a in hdlr.ran] == ["google", "reconcile", "merge", "portal", "export"]
     reconcile = next(a for a in hdlr.ran if name_of(a) == "reconcile")
     assert reconcile[4:6] == ["--source", "all"]
     # reconcile runs its finishing steps: identify, metatypes, write-refs
     assert "--no-finish" not in reconcile
     export = next(a for a in hdlr.ran if name_of(a) == "export")
     assert "--source" not in export
-    same = hdlr.ran[1]
-    assert same[2:] == ["--same", os.path.join(hdlr.configs.data_dir, "sameAs", "google.csv")]
-    assert all(os.path.exists(a[1]) for a in hdlr.ran if a[1] != "-m"), \
-        "the legacy scripts are found in the repository"
 
 
 def test_clear_runs_first(tmp_path, monkeypatch):
@@ -125,7 +118,7 @@ def test_global_options_go_to_the_phases(tmp_path, monkeypatch):
     hdlr = make(tmp_path)
     run(hdlr, ["--clear", "--source", "ycba,aat", "--max-workers", "8", "--engine", "ray",
                "--no-ui", "--prefix", "/logs/b1", "--log", "DEBUG", "--profile",
-               "--skip", "google,portal"])
+               "--skip", "google"])
     by = {}
     for a in hdlr.ran:
         by.setdefault(name_of(a), a)
@@ -141,23 +134,11 @@ def test_global_options_go_to_the_phases(tmp_path, monkeypatch):
     # the one-shot steps take no worker options
     assert "--max-workers" not in by["clear"] and "--prefix" not in by["new-token"]
     assert by["clear"][by["clear"].index("--log") + 1] == "DEBUG"
+    # portal runs its own pool: the worker count, nothing else
+    assert by["portal"][4:] == ["--log", "DEBUG", "--max-workers", "8"]
 
 
 # --- housekeeping, failure, status -------------------------------------------
-
-
-def test_removes_stale_slice_files(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    hdlr = make(tmp_path)
-    (tmp_path / "metatypes-3.json").write_text("{}")
-    (tmp_path / "metatypes.json").write_text("{}")
-    exports = Path(hdlr.configs.exports_dir)
-    for fn in ("export_full_0.jsonl", "export_full_23.jsonl.gz", "export_merged_0.jsonl", "keep.txt"):
-        (exports / fn).write_text("")
-    run(hdlr, ["--skip", "google,portal"])
-    assert not (tmp_path / "metatypes-3.json").exists()
-    assert (tmp_path / "metatypes.json").exists()
-    assert sorted(os.listdir(exports)) == ["export_merged_0.jsonl", "keep.txt"]
 
 
 def test_failure_stops_and_is_recorded(tmp_path, monkeypatch):
@@ -178,15 +159,13 @@ def test_success_is_recorded_in_given_status_file(tmp_path, monkeypatch):
     assert status.read_text().strip().endswith("[Success] Build was successful")
 
 
-def test_dry_run_runs_and_removes_nothing(tmp_path, monkeypatch, capsys):
+def test_dry_run_runs_nothing(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     hdlr = make(tmp_path)
-    (tmp_path / "metatypes-0.json").write_text("{}")
     run(hdlr, ["--dry-run", "--clear"])
     out = capsys.readouterr().out
     assert hdlr.ran == []
-    assert (tmp_path / "metatypes-0.json").exists()
-    assert "[clear]" in out and "new-token" in out and "[export] remove export_full_" in out
+    assert "[clear]" in out and "new-token" in out and "[portal]" in out
     assert not Path(hdlr.configs.log_dir, "pipeline_process_status.txt").exists()
 
 

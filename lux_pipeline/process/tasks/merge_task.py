@@ -31,7 +31,7 @@ import logging
 import os
 
 from lux_pipeline.process.phases.merge import merge_slice, read_update_token, select_sources
-from ._task_manager import TaskManager
+from ._task_manager import TaskManager, flags_pattern, remove_stale
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -149,9 +149,18 @@ class MergeManager(TaskManager):
 
     # ----------------------------------------------------------- driver
 
+    def clear_stale(self):
+        """Before a run over every slice: the phase's done flags
+        (run-all.sh's ``rm``). A single slice or ``--recid`` run leaves
+        them."""
+        if self.my_slice > -1 or self.recids:
+            return 0
+        return remove_stale(flags_pattern(self.configs, "merge"))
+
     def process(self, engine="mp", prefix=None, view=None):
-        """Check the run, then run every worker. Returns the workers'
-        results."""
+        """Check the run, clear what an earlier run left, then run every
+        worker. Returns the workers' results."""
         self.check()
+        self.clear_stale()
         self.results = super().process(engine, prefix, view)
         return self.results

@@ -1,4 +1,4 @@
-"""Run a whole build: reconcile, merge, post-build-portal, export.
+"""Run a whole build: google, reconcile, merge, portal, export.
 
     lux build                                  # run-all.sh --all, phase by phase
     lux build --clear                          # clear the caches and refs, new token, then build
@@ -12,23 +12,23 @@ phases, in order:
 
     clear      only with --clear: lux clear --source all --force,
                lux clear --refs --force, lux new-token
-    google     google-sames-diffs.py, then load-csv-map2.py --same / --different
-               on <data_dir>/sameAs|differentFrom/google.csv
+    google     lux google: fetch the curators' sheet, load its same/different pairs
     reconcile  lux reconcile --source <S> (and so identify, metatypes, write-refs)
     merge      lux merge --source <S>
-    portal     post-build-portal.py --no-tqdm
-    export     lux export, after removing the export_full_*.jsonl files in exports_dir
+    portal     lux portal: tag the records the YPM portal needs
+    export     lux export
 
-Each step is a separate ``lux`` (or script) process, so each phase loads a
-fresh configuration and gets its own status/log prefix for ``lux watch``;
-``--prefix P`` gives them ``P-<phase>``. The first step to fail stops the
+Each step is a separate ``lux`` process, so each phase loads a fresh
+configuration and gets its own status/log prefix for ``lux watch``;
+``--prefix P`` gives them ``P-<phase>``. Each phase's command removes what
+an earlier build left behind (metatypes slice files, done flags, old
+export slices) before its workers start. The first step to fail stops the
 build. Run it from the repository, as the shell script: the
 ``metatypes-*.json`` files and ``reference_uris.txt`` are written in the
 working directory. Success and failure are appended, as by run-all.sh, to
 ``--status-file`` (default ``<log_dir>/pipeline_process_status.txt``).
 """
 
-import glob
 import logging
 import os
 import shlex
@@ -43,9 +43,6 @@ from ._handler import BaseHandler, refuse_while_building
 logger = logging.getLogger("lux_pipeline")
 
 PHASES = ("clear", "google", "reconcile", "merge", "portal", "export")
-# the repository root, where the legacy scripts live (the package is
-# installed editable)
-REPO_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 class CommandHandler(BaseHandler):
@@ -95,13 +92,19 @@ class CommandHandler(BaseHandler):
         return out
 
     def lux(self, args, command, *opts, phase=None, workers=True):
-        """argv for one ``lux`` step, with the global options passed on."""
+        """argv for one ``lux`` step, with the global options passed on:
+        all of them to a phase run by workers, only the log level to a
+        one-shot step, and to ``portal`` (its own process pool) the
+        worker count too."""
         argv = [sys.executable, "-m", "lux_pipeline.cli.entry", command, *opts]
         if args.log:
             argv += ["--log", args.log]
         if args.debug:
             argv.append("--debug")
-        if workers:
+        if workers == "count":
+            if args.max_workers > 0:
+                argv += ["--max-workers", str(args.max_workers)]
+        elif workers:
             if args.max_workers > 0:
                 argv += ["--max-workers", str(args.max_workers)]
             if args.max_records > -1:
@@ -116,60 +119,26 @@ class CommandHandler(BaseHandler):
                 argv.append("--profile")
         return argv
 
-    def script(self, name, *opts):
-        return [sys.executable, os.path.join(REPO_DIR, name), *opts]
-
-    def steps(self, args, cfgs):
-        """``[(phase, argv or callable, description)]`` for the whole run."""
+    def steps(self, args):
+        """``[(phase, argv)]`` for the whole run."""
         source = args.source or "all"
-        data_dir = getattr(cfgs, "data_dir", None) or "."
         out = []
         for phase in self.phases(args):
             if phase == "clear":
                 out += [
-                    (phase, self.lux(args, "clear", "--source", "all", "--force", workers=False), None),
-                    (phase, self.lux(args, "clear", "--refs", "--force", workers=False), None),
-                    (phase, self.lux(args, "new-token", workers=False), None),
+                    (phase, self.lux(args, "clear", "--source", "all", "--force", workers=False)),
+                    (phase, self.lux(args, "clear", "--refs", "--force", workers=False)),
+                    (phase, self.lux(args, "new-token", workers=False)),
                 ]
             elif phase == "google":
-                out += [
-                    (phase, self.script("google-sames-diffs.py"), None),
-                    (phase, self.script("load-csv-map2.py", "--same",
-                                        os.path.join(data_dir, "sameAs", "google.csv")), None),
-                    (phase, self.script("load-csv-map2.py", "--different",
-                                        os.path.join(data_dir, "differentFrom", "google.csv")), None),
-                ]
-            elif phase == "reconcile":
-                out += [
-                    (phase, self.remove_metatypes, "remove metatypes-*.json in the working directory"),
-                    (phase, self.lux(args, "reconcile", "--source", source), None),
-                ]
-            elif phase == "merge":
-                out.append((phase, self.lux(args, "merge", "--source", source), None))
+                out.append((phase, self.lux(args, "google", workers=False)))
+            elif phase in ("reconcile", "merge"):
+                out.append((phase, self.lux(args, phase, "--source", source)))
             elif phase == "portal":
-                out.append((phase, self.script("post-build-portal.py", "--no-tqdm"), None))
+                out.append((phase, self.lux(args, "portal", workers="count")))
             elif phase == "export":
-                exports = getattr(cfgs, "exports_dir", None)
-                out += [
-                    (phase, lambda: self.remove_exports(exports),
-                     f"remove export_full_*.jsonl* in {exports}"),
-                    (phase, self.lux(args, "export"), None),
-                ]
+                out.append((phase, self.lux(args, "export")))
         return out
-
-    # --- the housekeeping run-all.sh does with rm --------------------------
-
-    def remove_metatypes(self):
-        # slice files left by an earlier run would be merged into this one's
-        for fn in glob.glob("metatypes-*.json"):
-            os.remove(fn)
-
-    def remove_exports(self, exports_dir):
-        # a run with fewer workers leaves the earlier run's higher slices behind
-        if not exports_dir:
-            return
-        for fn in glob.glob(os.path.join(exports_dir, "export_full_*.jsonl*")):
-            os.remove(fn)
 
     # --- running -----------------------------------------------------------
 
@@ -197,26 +166,22 @@ class CommandHandler(BaseHandler):
             for n in (s.strip() for s in args.source.split(",")):
                 if n and n not in known:
                     raise ValueError(f"Unknown source: {n}")
-        steps = self.steps(args, cfgs)
+        steps = self.steps(args)
         status_file = args.status_file
         if status_file is None and getattr(cfgs, "log_dir", None):
             status_file = os.path.join(cfgs.log_dir, "pipeline_process_status.txt")
 
         if args.dry_run:
-            for phase, step, desc in steps:
-                print(f"[{phase}] {desc or shlex.join(step)}")
+            for phase, step in steps:
+                print(f"[{phase}] {shlex.join(step)}")
             return steps
 
         refuse_while_building(cfgs, "build", args.force)
         current = None
-        for phase, step, desc in steps:
+        for phase, step in steps:
             if phase != current:
                 current = phase
                 print(f"=== {phase} ===", flush=True)
-            if callable(step):
-                logger.info(desc)
-                step()
-                continue
             logger.info(f"running: {shlex.join(step)}")
             code = self.run_step(step)
             if code != 0:

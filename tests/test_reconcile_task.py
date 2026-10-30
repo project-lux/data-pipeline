@@ -121,6 +121,12 @@ def make_tail(log, stats=None):
     return Resolver, RefMgr
 
 
+@pytest.fixture(autouse=True)
+def _in_tmp(tmp_path, monkeypatch):
+    # a full run removes metatypes-*.json from the working directory
+    monkeypatch.chdir(tmp_path)
+
+
 @pytest.fixture
 def harness(tmp_path, monkeypatch):
     """A configuration, `reconcile_slice` and the tail replaced by
@@ -525,3 +531,39 @@ def test_command_is_listed_by_help():
     from lux_pipeline.cli.help import list_commands
     assert ("reconcile", "Reconcile the sources' records and the references they lead to.") \
         in list_commands()
+
+
+# --- what an earlier run left ------------------------------------------------
+
+
+def stale_files(tmp_path, cfgs):
+    cfgs.log_dir = str(tmp_path / "logs")
+    flags = tmp_path / "logs" / "flags"
+    flags.mkdir(parents=True)
+    for fn in ("metatypes-0.json", "metatypes-single.json", "metatypes.json"):
+        (tmp_path / fn).write_text("{}")
+    (flags / "reconcile_is_done-3.txt").write_text("1")
+    (flags / "merge_is_done-3.txt").write_text("1")
+    return flags
+
+
+def test_a_full_run_clears_what_an_earlier_one_left(harness, tmp_path):
+    h = harness
+    flags = stale_files(tmp_path, h.configure())
+    m = h.manager(workers=2)
+    removed = []
+    m.finish = lambda: removed.append(sorted(p.name for p in tmp_path.glob("metatypes*")))
+    m.process("null")
+    # the slice files went before the workers started; metatypes.json is the merged one
+    assert removed == [["metatypes.json"]]
+    assert sorted(p.name for p in flags.iterdir()) == ["merge_is_done-3.txt"]
+
+
+@pytest.mark.parametrize("options", [dict(my_worker=1), dict(recid="a,b"), dict(baseline=True)])
+def test_a_partial_run_leaves_them(harness, tmp_path, options):
+    h = harness
+    flags = stale_files(tmp_path, h.configure())
+    m = h.manager(sources=("ycba",), workers=1 if "my_worker" not in options else 2, **options)
+    assert m.clear_stale() == 0
+    assert len(list(tmp_path.glob("metatypes-*.json"))) == 2
+    assert len(list(flags.iterdir())) == 2

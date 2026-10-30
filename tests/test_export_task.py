@@ -433,3 +433,52 @@ def test_command_is_listed_by_help():
     from lux_pipeline.cli.help import list_commands
     assert ("export", "Export the build's records: MarkLogic JSONL, merged JSONL, N-Triples, "
                       "sources.") in list_commands()
+
+
+# --- what an earlier run left ------------------------------------------------
+
+
+def earlier_export(cfgs, out_dir=None):
+    out = Path(out_dir or cfgs.exports_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    for fn in ("export_full_0.jsonl", "export_full_30.jsonl.gz", "export_merged_0.jsonl",
+               "export_aat.jsonl.gz", "notes.txt"):
+        (out / fn).write_text("")
+    flags = Path(cfgs.log_dir) / "flags"
+    flags.mkdir(exist_ok=True)
+    (flags / "export_is_done-30.txt").write_text("1")
+    return out
+
+
+@pytest.mark.parametrize("export_type,left", [
+    ("marklogic", ["export_aat.jsonl.gz", "export_merged_0.jsonl", "notes.txt"]),
+    ("merged", ["export_aat.jsonl.gz", "export_full_0.jsonl", "export_full_30.jsonl.gz",
+                "notes.txt"]),
+])
+def test_a_full_run_clears_its_type_earlier_slices(harness, export_type, left):
+    h = harness
+    cfgs = h.configure()
+    out = earlier_export(cfgs)
+    m = h.manager(workers=2, export_type=export_type)
+    m.process("null")
+    assert sorted(p.name for p in out.iterdir()) == left
+    assert not (Path(cfgs.log_dir) / "flags" / "export_is_done-30.txt").exists()
+
+
+def test_out_dir_is_where_it_clears(harness, tmp_path):
+    h = harness
+    cfgs = h.configure()
+    exports = earlier_export(cfgs)
+    other = earlier_export(cfgs, tmp_path / "elsewhere")
+    h.manager(workers=2, out_dir=str(other)).clear_stale()
+    assert (exports / "export_full_0.jsonl").exists()
+    assert not (other / "export_full_0.jsonl").exists()
+
+
+@pytest.mark.parametrize("options", [dict(my_worker=1), dict(export_type="nt")])
+def test_one_slice_or_another_type_leaves_them(harness, options):
+    h = harness
+    cfgs = h.configure()
+    out = earlier_export(cfgs)
+    assert h.manager(workers=2, **options).clear_stale() == 0
+    assert len(list(out.iterdir())) == 5

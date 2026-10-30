@@ -361,3 +361,21 @@ def test_command_is_listed_by_help():
     from lux_pipeline.cli.help import list_commands
     assert ("merge", "Merge the sources' records into one record per identity, then the "
                      "references.") in list_commands()
+
+
+# --- what an earlier run left ------------------------------------------------
+
+
+@pytest.mark.parametrize("options,cleared", [({}, True), ({"my_worker": 1}, False),
+                                             ({"recid": "a"}, False)])
+def test_done_flags_are_cleared_by_a_full_run(harness, options, cleared):
+    h = harness
+    cfgs = h.configure()
+    flags = Path(cfgs.log_dir) / "flags"
+    flags.mkdir()
+    for fn in ("merge_is_done-0.txt", "export_is_done-0.txt"):
+        (flags / fn).write_text("1")
+    m = h.manager(sources=["ycba"], workers=1 if "recid" in options else 2, **options)
+    m.clear_stale()
+    assert (flags / "merge_is_done-0.txt").exists() is not cleared
+    assert (flags / "export_is_done-0.txt").exists()

@@ -20,7 +20,7 @@ lux export --max-workers 24                                 # JSONL for MarkLogi
 ```
 
 `lux build` runs a whole build, the phases of `run-all.sh` in its order,
-each as its own `lux` (or script) process, stopping at the first failure:
+each as its own `lux` process, stopping at the first failure:
 
 ```
 lux build --clear --max-workers 24     # clear caches and refs, new token, then build
@@ -29,11 +29,16 @@ lux build --skip google,portal         # leave phases out
 lux build --dry-run                    # print the steps, run nothing
 ```
 
-The phases are `clear` (only with `--clear`), `google` (the same/different
-sheet), `reconcile` (with identify, metatypes, write-refs), `merge`, `portal`
-(`post-build-portal.py`) and `export`. Run it from the repository: like the
-shell script, it writes `metatypes-*.json` and `reference_uris.txt` in the
-working directory. `./run-all2.sh --all` is the same build as shell
+The phases are `clear` (only with `--clear`), `google`, `reconcile` (with
+identify, metatypes, write-refs), `merge`, `portal` and `export`, and each
+is a command of its own: `lux google` fetches the curators' Google Sheet
+and loads its same-as / different-from pairs (`--fetch-only`,
+`--load-only`; needs `pip install -e '.[google]'`), and `lux portal` tags
+the merged records the YPM portal needs. A full `lux reconcile`, `merge`
+or `export` first removes what an earlier run left (metatypes slice files,
+done flags, old export slices); one `--my-worker` slice never does. Run
+`lux build` from the repository: like the shell script, it writes
+`metatypes-*.json` and `reference_uris.txt` in the working directory. `./run-all2.sh --all` is the same build as shell
 (`ENGINE=mp` for one `lux` per phase instead of one per slice); the legacy
 `run-all.sh` beside it is kept until the two have been compared on the
 build machine.
