@@ -15,6 +15,10 @@ per source in `_distributed`):
 
 ``--clear`` empties each source's datacache in the driver before any worker
 starts, which is what `manage-data.py --load` did for the simple sources.
+
+``--file`` (and ``--file-type``) replace the one selected source's
+configured file for the run; `Loader.override_file` says how each kind of
+loader takes it.
 """
 
 import inspect
@@ -43,13 +47,16 @@ def accepts_slices(fn):
 class LoadManager(TaskManager):
     """Options, read from `args` in ``__init__``: ``type`` (one of
     `LOAD_TYPES`), ``overwrite`` (``--no-overwrite`` clears it),
-    ``clear`` and the common ``max_records``."""
+    ``clear``, ``file`` / ``file_type`` (a file to load instead of the
+    configured one; one source only) and the common ``max_records``."""
 
     def __init__(self, configs, max_workers=0, args=None):
         super().__init__(configs, max_workers, args)
         self.load_type = "records"
         self.overwrite = True
         self.clear = False
+        self.file = None
+        self.file_type = None
         if args is not None:
             lt = getattr(args, "type", None)
             if lt is not None:
@@ -59,6 +66,10 @@ class LoadManager(TaskManager):
                 self.load_type = lt
             self.overwrite = bool(getattr(args, "overwrite", True))
             self.clear = bool(getattr(args, "clear", False))
+            self.file = getattr(args, "file", None) or None
+            self.file_type = getattr(args, "file_type", None) or None
+            if self.file_type and not self.file:
+                raise ValueError("--file-type needs --file")
 
     # ----------------------------------------------------------- sources
 
@@ -84,6 +95,10 @@ class LoadManager(TaskManager):
         return cleared
 
     def process(self, engine="mp", prefix=None, view=None):
+        if self.file and len(self.sources) != 1:
+            names = ", ".join(name for _, name in self.sources)
+            raise ValueError(f"--file replaces one source's file; select exactly one --source "
+                             f"(got {len(self.sources)}: {names})")
         if self.clear:
             self.clear_datacaches()
         return super().process(engine, prefix, view)
@@ -94,7 +109,7 @@ class LoadManager(TaskManager):
         """Run loader `ldr` for worker `n`; the name of the entry point
         used, or ``None`` when this worker had nothing to do."""
         ldr.prepare(n, self.max_workers, self.load_type, self.max_records,
-                    progress=progress)
+                    progress=progress, path=self.file, path_type=self.file_type)
         if self.load_type == "export" and not (ldr.uses_dsl and ldr.my_files):
             if n != 0:
                 return None
