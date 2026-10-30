@@ -37,6 +37,7 @@ ray = ["ray"]
 dev = ["pytest", "coverage", "fakeredis"]
 ui-extras = ["gnureadline", "netext", "networkx"]
 google = ["google-api-python-client", "google-auth-oauthlib"]
+xlsx = ["openpyxl"]
 
 [project.scripts]
 lux = "lux_pipeline.cli.entry:main"

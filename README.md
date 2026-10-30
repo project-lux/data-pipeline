@@ -31,9 +31,11 @@ lux build --dry-run                    # print the steps, run nothing
 
 The phases are `clear` (only with `--clear`), `google`, `reconcile` (with
 identify, metatypes, write-refs), `merge`, `portal` and `export`, and each
-is a command of its own: `lux google` fetches the curators' Google Sheet
-and loads its same-as / different-from pairs (`--fetch-only`,
-`--load-only`; needs `pip install -e '.[google]'`), and `lux portal` tags
+is a command of its own: `lux google` reads the curators' spreadsheet and
+loads its same-as / different-from pairs and fixes (`--fetch-only`,
+`--load-only`). By default that is the Google Sheet (`pip install -e
+'.[google]'`); `--file` reads the same tabs from an `.xlsx` workbook
+(`.[xlsx]`) or a directory of `<tab name>.csv` files instead. And `lux portal` tags
 the merged records the YPM portal needs. A full `lux reconcile`, `merge`
 or `export` first removes what an earlier run left (metatypes slice files,
 done flags, old export slices); one `--my-worker` slice never does. Run
