@@ -11,7 +11,7 @@ import importlib
 import logging
 import multiprocessing
 import sys
-from argparse import ArgumentParser
+from argparse import ArgumentParser, RawDescriptionHelpFormatter
 
 from lux_pipeline import runtime
 
@@ -24,8 +24,12 @@ NO_CONFIG_COMMANDS = ("initialize", "testinstall", "help")
 
 
 def build_parser():
-    ap = ArgumentParser(prog="lux", description="The LUX data pipeline.")
-    ap.add_argument("command", help="Command to run; 'lux help' lists them")
+    # --help is ours to handle: argparse's would print these global options
+    # and exit before the command's own options were ever added
+    ap = ArgumentParser(prog="lux", description="The LUX data pipeline.", add_help=False)
+    ap.add_argument("-h", "--help", action="store_true",
+                    help="Show the options of the command (or, alone, these)")
+    ap.add_argument("command", nargs="?", help="Command to run; 'lux help' lists them")
     ap.add_argument("--log", help="Log level: DEBUG, INFO, WARNING, ERROR (default INFO)")
     ap.add_argument("--debug", action="store_true", help="Log at DEBUG and re-raise errors")
     ap.add_argument("--source", help="Sources to process: all, internal, external, results, or names separated by commas")
@@ -75,9 +79,37 @@ def resolve_command(name):
     return mod, None
 
 
+def command_help(name):
+    """The help for command `name`: its docstring, its own options and
+    the global options, or ``(None, message)`` for an unknown command.
+    Built without a configuration, so it works before an installation
+    exists and loads nothing."""
+    mod, err = resolve_command(name)
+    if mod is None:
+        return None, err
+    from lux_pipeline.cli.help import GLOBAL_OPTIONS
+    ap = ArgumentParser(prog=f"lux {name}", description=(mod.__doc__ or "").strip(),
+                        formatter_class=RawDescriptionHelpFormatter, add_help=False,
+                        epilog=GLOBAL_OPTIONS)
+    mod.CommandHandler(None).add_args(ap)
+    return ap.format_help(), None
+
+
 def run(argv=None):
     """Everything `main` does, returning the exit status instead of exiting."""
-    args, rest = build_parser().parse_known_args(argv)
+    ap = build_parser()
+    args, rest = ap.parse_known_args(argv)
+    if args.help:
+        if not args.command:
+            ap.print_help()
+            return 0
+        text, err = command_help(args.command)
+        if text is None:
+            return _fail(f"lux: {err}", 2)
+        print(text)
+        return 0
+    if not args.command:
+        return _fail("lux: no command given. See 'lux help' for the list.", 2)
 
     # Logging first, so everything after (including config loading) is heard
     if args.debug and not args.log:

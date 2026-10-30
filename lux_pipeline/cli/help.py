@@ -1,4 +1,8 @@
-"""List the available lux commands."""
+"""List the available lux commands, or show one command's options.
+
+    lux help              # every command
+    lux help harvest      # harvest's options (as lux harvest --help)
+"""
 
 import ast
 import logging
@@ -47,8 +51,21 @@ def list_commands():
 
 
 class CommandHandler(BaseHandler):
+    # lists modules and builds parsers: never needs the configuration
+    needs_configs = False
+
+    def add_args(self, ap):
+        ap.add_argument("topic", nargs="?", help="A command whose options to show")
+
     def process(self, args, rest):
         super().process(args, rest)
+        if getattr(args, "topic", None):
+            from lux_pipeline.cli.entry import command_help
+            text, err = command_help(args.topic)
+            if text is None:
+                raise ValueError(err)
+            print(text)
+            return
         logger.debug("listing the command modules in lux_pipeline.cli")
         print("Usage: lux <command> [options]\n")
         print("Commands:")
@@ -56,4 +73,4 @@ class CommandHandler(BaseHandler):
             print(f"  {name:<18} {doc}")
         print()
         print(GLOBAL_OPTIONS)
-        print("\nA command's own options are listed by: lux <command> --help")
+        print("\nA command's own options are listed by: lux <command> --help (or lux help <command>)")

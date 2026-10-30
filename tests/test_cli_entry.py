@@ -75,6 +75,41 @@ def run(argv, monkeypatch):
 # --- help --------------------------------------------------------------------
 
 
+@pytest.mark.parametrize("argv", [["harvest", "--help"], ["--help", "harvest"], ["-h", "harvest"],
+                                  ["harvest", "--source", "ycba", "-h"], ["help", "harvest"]])
+def test_a_commands_help_lists_its_own_options(argv, monkeypatch, capsys):
+    # no configuration is loaded (the fixture makes loading one fail)
+    assert run(argv, monkeypatch) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("usage: lux harvest")
+    assert "--two-phase" in out and "Harvest each source's change feed" in out
+    assert "Global options" in out and "--max-workers N" in out
+
+
+def test_help_alone_is_the_global_options(monkeypatch, capsys):
+    assert run(["--help"], monkeypatch) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("usage: lux") and "--max-workers" in out and "--two-phase" not in out
+
+
+def test_every_command_has_a_help(monkeypatch, capsys):
+    for name, _ in list_commands():
+        text, err = entry.command_help(name)
+        assert err is None and text.startswith(f"usage: lux {name}"), name
+
+
+def test_help_for_an_unknown_command(monkeypatch, capsys):
+    assert run(["nonesuch", "--help"], monkeypatch) == 2
+    assert "Unknown command 'nonesuch'" in capsys.readouterr().err
+    assert run(["help", "nonesuch"], monkeypatch) == 1
+
+
+def test_no_command_is_an_error(monkeypatch, capsys):
+    assert run([], monkeypatch) == 2
+    assert "no command given" in capsys.readouterr().err
+
+
+
 def test_help_runs_without_a_config_and_lists_help(monkeypatch, capsys):
     assert run(["help"], monkeypatch) == 0
     out = capsys.readouterr().out
