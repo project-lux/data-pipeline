@@ -618,3 +618,41 @@ def test_update_manager_entry_points_drive_the_new_harvester(tmp_path):
     datacache.sets.clear()
     mgr.harvest_from_list(cfg, 0, 1)
     assert sorted(datacache) == ["a", "c", "d"]
+
+
+# --- set_endpoint (lux harvest --endpoint) ------------------------------------
+
+
+def test_as_set_endpoint_walks_only_that_collection_ignoring_start_page():
+    other = "https://other.org/as/collection.json"
+    proto = make_as(start_page="https://example.org/as/page/1")
+    proto.set_endpoint(other)
+    assert proto.collections == [other]
+    proto.prepare()
+    assert proto.page is None
+    pages = as_pages()
+    pages[other] = pages[COLL]  # the same stream, served from the other URL
+    proto.session = FakeSession(pages)
+    got = list(proto.crawl())
+    assert proto.session.requested[0] == other
+    assert COLL not in proto.session.requested
+    assert [ident for _, ident, _, _ in got] == ["c", "b", "a", "d"]
+
+
+def test_pmh_set_endpoint():
+    proto = PmhProtocol({"name": "p", "pmhEndpoint": "https://a.org/oai"})
+    proto.set_endpoint("https://b.org/oai")
+    assert proto.make_pmh_uri("ListIdentifiers").startswith("https://b.org/oai?verb=ListIdentifiers")
+
+
+def test_driver_set_endpoint_reaches_the_protocol(caplog):
+    h = ASHarvester(make_config())
+    with caplog.at_level("INFO", logger="lux_pipeline"):
+        h.set_endpoint("https://other.org/as/collection.json")
+    assert h.protocol.collections == ["https://other.org/as/collection.json"]
+    assert "instead of the configured feed" in caplog.text
+
+
+def test_a_protocol_without_a_feed_url_says_so():
+    with pytest.raises(NotImplementedError, match="cannot take a feed URL"):
+        HarvestProtocol({"name": "x"}).set_endpoint("https://x.org")

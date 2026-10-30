@@ -61,6 +61,9 @@ class FakeHarvester:
         self.calls.append(("fetch", my_slice, max_slice))
         return self.records
 
+    def set_endpoint(self, url):
+        self.calls.append(("endpoint", url))
+
     def harvest_pages(self, my_slice, max_slice):
         self._hit("pages")
         self.calls.append(("pages", my_slice, max_slice))
@@ -322,3 +325,45 @@ def test_command_rejects_bad_until_and_bad_phase(tmp_path):
 def test_command_is_listed_by_help():
     from lux_pipeline.cli.help import list_commands
     assert ("harvest", "Harvest each source's change feed into its caches.") in list_commands()
+
+
+# --- --endpoint ----------------------------------------------------------------
+
+FEED = "https://media.art.yale.edu/discovery/lux-full/collection.json"
+
+
+@pytest.mark.parametrize("options,expected", [
+    ({}, ["endpoint", "prepare", "process"]),
+    ({"two_phase": True}, ["endpoint", "prepare", "list", "endpoint", "prepare", "fetch"]),
+    ({"pages": True}, ["endpoint", "prepare", "pages"]),
+])
+def test_endpoint_is_set_before_every_entry_point(stub_runtime, options, expected):
+    cfgs = stub_runtime(StubConfigs(yuag=FakeHarvester("yuag")))
+    m = manager(cfgs, ["yuag"], workers=1, endpoint=FEED, **options)
+    m.process("null")
+    h = cfgs.h("yuag")
+    assert h.names() == expected
+    assert all(c[1] == FEED for c in h.calls if c[0] == "endpoint")
+
+
+def test_endpoint_gives_a_feed_to_a_source_without_one():
+    cfgs = StubConfigs(lcnaf=("nofeed", FakeHarvester("lcnaf")), aat=None)
+    assert manager(cfgs, ["lcnaf", "aat"], endpoint=FEED).sources == [("external", "lcnaf")]
+
+
+def test_endpoint_needs_exactly_one_source(stub_runtime):
+    cfgs = stub_runtime(StubConfigs(ycba=FakeHarvester("ycba"), yuag=FakeHarvester("yuag")))
+    m = manager(cfgs, ["ycba", "yuag"], endpoint=FEED)
+    with pytest.raises(ValueError, match="exactly one --source.*ycba, yuag"):
+        m.process("null")
+    assert cfgs.h("ycba").calls == [] and cfgs.h("yuag").calls == []
+
+
+def test_command_endpoint(tmp_path, stub_runtime):
+    cfgs = stub_runtime(StubConfigs(yuag=FakeHarvester("yuag")))
+    m = run_command(cfgs, ["--two-phase", "--endpoint", FEED], tmp_path, source="yuag", workers=2)
+    assert m.endpoint == FEED
+    assert ("endpoint", FEED) in cfgs.h("yuag").calls
+    with pytest.raises(SystemExit):
+        run_command(cfgs, ["--endpoint", "media.art.yale.edu/collection.json"], tmp_path,
+                    source="yuag")

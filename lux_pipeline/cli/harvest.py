@@ -4,10 +4,13 @@
     lux harvest --source all --two-phase --max-workers 12   # list in phase 1, fetch records in parallel in phase 2
     lux harvest --source ypm --until 2025-01-01T00:00:00
     lux harvest --source ycba --pages --max-workers 24      # fetch feed pages into the page cache
+    lux harvest --source yuag --two-phase --endpoint https://media.art.yale.edu/discovery/lux-full/collection.json
 
 Replaces `run-harvest.py` and `harvest_parallel.sh`. `--phase 1` or
 `--phase 2` runs one half of a two-phase harvest, for a shell loop on the
-null engine. A source that fails is logged and the rest still run; the
+null engine. `--endpoint` walks the given ActivityStreams collection (or
+OAI-PMH endpoint, for a PMH source) instead of the one source's configured
+feed. A source that fails is logged and the rest still run; the
 command exits non-zero at the end if any failed.
 """
 
@@ -19,6 +22,12 @@ from lux_pipeline.process.tasks.harvest_task import HarvestManager
 from ._handler import CommandHandler as CH
 
 logger = logging.getLogger("lux_pipeline")
+
+
+def feed_url(value):
+    if not value.startswith(("http://", "https://")):
+        raise ValueError(f"not an http(s) URL: {value!r}")
+    return value
 
 
 def iso8601(value):
@@ -43,8 +52,11 @@ class CommandHandler(CH):
                         help="Walk the feed back to this ISO 8601 time instead of the last harvest")
         ap.add_argument("--no-overwrite", dest="overwrite", action="store_false",
                         help="Keep records already in the datacache")
+        ap.add_argument("--endpoint", type=feed_url,
+                        help="Harvest this ActivityStreams collection (or OAI-PMH endpoint, for "
+                             "a PMH source) instead of the configured feed; one --source only")
         self.extra_args = {"two_phase": "two_phase", "phase": "phase", "pages": "pages",
-                           "until": "until", "overwrite": "overwrite"}
+                           "until": "until", "overwrite": "overwrite", "endpoint": "endpoint"}
 
     def make_manager(self, wks, args):
         return HarvestManager(self.configs, wks, args)
