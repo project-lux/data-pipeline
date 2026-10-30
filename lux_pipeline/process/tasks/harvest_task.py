@@ -16,6 +16,10 @@ Three ways of running, chosen from the options:
   max_workers)`` for every source, fetching every ``max_workers``-th feed
   page into the page cache. Today's ``harvest_parallel.sh --pages``.
 
+``--endpoint URL`` replaces the one selected source's configured feed for
+the run (its ActivityStreams collection, or its OAI-PMH endpoint), in
+every mode.
+
 A source that fails is logged and counted, the worker carries on with
 its next source, and ``{"sources", "records", "failed"}`` is the
 worker's result so the command can exit non-zero at the end.
@@ -33,13 +37,15 @@ MODES = ("single", "two-phase", "pages")
 class HarvestManager(TaskManager):
     """Options, read from `args` in ``__init__``: ``two_phase``, ``phase``
     (1 or 2; implies two-phase), ``pages``, ``until`` (ISO 8601: walk the
-    feed back to this time) and ``overwrite`` (``--no-overwrite`` keeps
-    cached records)."""
+    feed back to this time), ``overwrite`` (``--no-overwrite`` keeps
+    cached records) and ``endpoint`` (the feed URL to walk instead of the
+    configured one; needs exactly one source)."""
 
     def __init__(self, configs, max_workers=0, args=None):
         super().__init__(configs, max_workers, args)
         self.until = None
         self.overwrite = True
+        self.endpoint = None
         self.phases = ()        # () single; (1,), (2,) or (1, 2) two-phase
         self.pages = False
         self.phase = 0          # the phase a worker is running
@@ -47,6 +53,7 @@ class HarvestManager(TaskManager):
         if args is not None:
             self.until = getattr(args, "until", None) or None
             self.overwrite = bool(getattr(args, "overwrite", True))
+            self.endpoint = getattr(args, "endpoint", None) or None
             self.pages = bool(getattr(args, "pages", False))
             phase = getattr(args, "phase", None)
             if phase is not None:
@@ -76,10 +83,10 @@ class HarvestManager(TaskManager):
 
     def maybe_add(self, which, cfg):
         """A source with a harvester and a feed: ``activitystreams`` or
-        ``pmhEndpoint``."""
+        ``pmhEndpoint``, or ``--endpoint`` giving one."""
         if cfg.get("harvester") is None:
             return
-        if not (cfg.get("activitystreams") or cfg.get("pmhEndpoint")):
+        if not (self.endpoint or cfg.get("activitystreams") or cfg.get("pmhEndpoint")):
             return
         if (which, cfg["name"]) not in self.sources:
             self.sources.append((which, cfg["name"]))
@@ -97,6 +104,10 @@ class HarvestManager(TaskManager):
         if not self.sources:
             raise RuntimeError("nothing to harvest: none of the selected sources has a "
                                "harvester with an activitystreams or pmhEndpoint feed")
+        if self.endpoint and len(self.sources) != 1:
+            names = ", ".join(name for _, name in self.sources)
+            raise ValueError(f"--endpoint replaces one source's feed; select exactly one "
+                             f"--source (got {len(self.sources)}: {names})")
         if not self.phases:
             self.phase = 0
             self.results = super().process(engine, prefix, view)
@@ -149,6 +160,8 @@ class HarvestManager(TaskManager):
     def _run_one(self, h, n, idmap, progress):
         """Run one driver for worker `n`; the number of records it
         reported."""
+        if self.endpoint:
+            h.set_endpoint(self.endpoint)
         h.prepare(n, self.max_workers, progress=progress, until=self.until, idmap=idmap)
         if not self.overwrite:
             h.protocol.overwrite = False

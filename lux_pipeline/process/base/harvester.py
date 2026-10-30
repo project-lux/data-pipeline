@@ -36,9 +36,14 @@ Configuration keys read here, all per source:
 ``harvest_from``               ignore changes newer than this
 ``harvest_overwrite``          replace cached records (default true)
 ``start_page``                 begin at this page rather than the last
+                               (ignored when the feed is overridden)
 ``activitystreams_cache_source``  name of the external source whose
                                datacache stores fetched pages; may also be
                                set on the base configuration
+
+``set_endpoint(url)`` (``lux harvest --endpoint``) replaces the configured
+feed for a run: the one ActivityStreams collection to walk, or the
+OAI-PMH endpoint, whichever protocol the source uses.
 
 The legacy names `Harvester`, `ASHarvester`, `PmhHarvester` stay
 importable: ``harvesterClass`` values in existing configs are unchanged,
@@ -135,6 +140,10 @@ class HarvestProtocol:
     def crawl(self, last_harvest=None, refsonly=False):
         raise NotImplementedError()
 
+    def set_endpoint(self, url):
+        """Walk `url` instead of the configured feed."""
+        raise NotImplementedError(f"{type(self).__name__} cannot take a feed URL")
+
     def harvest_pages(self, my_slice, max_slice):
         raise NotImplementedError(f"{type(self).__name__} has no pages to harvest in parallel")
 
@@ -150,6 +159,9 @@ class PmhProtocol(HarvestProtocol):
         self.finished = False
         # https://photoarchive.paul-mellon-centre.ac.uk/apis/oai/pmh/v2
         # https://snd.gu.se/oai-pmh
+
+    def set_endpoint(self, url):
+        self.endpoint = url
 
     def make_pmh_uri(self, verb, token=None):
         if token is None:
@@ -206,12 +218,21 @@ class ASProtocol(HarvestProtocol):
         self.collection_index = 0
         self.page = config.get("start_page", None)
         self.cache_okay = False
+        self.endpoint_override = False
+
+    def set_endpoint(self, url):
+        """Walk the one collection `url`; a configured ``start_page``
+        belongs to the configured feed, so it is no longer used."""
+        self.collections = [url]
+        self.collection_index = 0
+        self.endpoint_override = True
+        self.page = None
 
     def prepare(self, last_harvest=None):
         super().prepare(last_harvest)
         # a new walk starts from the configured page (or the collection's
         # last page), whatever the previous walk left behind
-        self.page = self.config.get("start_page", None)
+        self.page = None if self.endpoint_override else self.config.get("start_page", None)
         self.cache_okay = False
 
     def fetch_collection(self, uri):
@@ -482,6 +503,11 @@ class ASHarvester(Sliced):
 
     def crawl(self, last_harvest=None, refsonly=False):
         return self.protocol.crawl(last_harvest=last_harvest, refsonly=refsonly)
+
+    def set_endpoint(self, url):
+        """Harvest from `url` instead of the configured feed."""
+        logger.info(f"{self.name}: harvesting from {url} instead of the configured feed")
+        self.protocol.set_endpoint(url)
 
     def harvest_pages(self, my_slice, max_slice):
         return self.protocol.harvest_pages(my_slice, max_slice)
