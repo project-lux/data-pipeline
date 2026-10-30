@@ -373,3 +373,32 @@ def test_entry_without_type_loads_through_the_sniffer(tmp_path):
     assert ldr.my_files[0]["fmt"] == [["dict"], ["raw"]]
     ldr.process()
     assert sorted(ldr.out_cache) == ["1", "2"]
+
+
+# --- identifier<TAB>JSON lines (lux export --type external) -----------------
+
+
+@pytest.mark.parametrize("gz,spec", [(False, "lines/tabjson"), (True, "lines.gz/tabjson")])
+def test_tab_prefixed_json_lines(tmp_path, gz, spec):
+    fn = tmp_path / ("export_aat.jsonl" + (".gz" if gz else ""))
+    body = '300025962\t{"data": {"id": "1"}}\n300025963\t{"data": {"id": "2"}}\n'
+    fn.write_bytes(gzip.compress(body.encode()) if gz else body.encode())
+    found = sniff.sniff_spec(str(fn))
+    assert found.spec == spec
+    assert sorted(load_with(fn, spec)) == ["300025962", "300025963"]
+
+
+def test_a_tab_prefixed_first_line_longer_than_the_sample(tmp_path, monkeypatch):
+    monkeypatch.setattr(sniff, "SAMPLE_BYTES", 64)
+    fn = tmp_path / "big.jsonl"
+    fn.write_text('k\t{"id": "' + "x" * 200 + '"}\n')
+    found = sniff.sniff_spec(str(fn))
+    assert found.spec == "lines/tabjson"
+    assert any("longer than the sample" in n for n in found.notes)
+
+
+@pytest.mark.parametrize("line", ['a b\t{"id": 1}', 'a\tb\tc', '\t{"id": 1}', 'a\t{not json'])
+def test_other_tab_lines_are_not_tabjson(tmp_path, line):
+    fn = tmp_path / "x.txt"
+    fn.write_text(line + "\n" + line + "\n")
+    assert sniff.sniff_spec(str(fn)).spec != "lines/tabjson"

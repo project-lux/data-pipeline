@@ -7,7 +7,7 @@ entries, where ``type`` is a small path language::
     (container[.compression]/)*format[.compression]
 
     containers:  dir dirs pair zip tar lines dict array arraylines xmls lmdb
-    formats:     json raw other
+    formats:     json raw other tabjson
     compression: gz bz2 z
 
     dir         a directory of files
@@ -20,12 +20,16 @@ entries, where ``type`` is a small path language::
     xmls        an XML file; each child of the root is a member
     lmdb        an LMDB distribution store (make_*_lmdb.py); each value is a member
     json        a JSON record (a file, a member, or an already parsed item)
+    tabjson     ``<identifier><TAB><JSON record>``, as a line of
+                ``lux export --type external``; a record of only ``{"data": ...}``
+                is unwrapped
     raw         an already parsed JSON item (from dict / array)
     other       anything else, kept as text under ``{"data": ...}``
 
 For example ``tar.gz/lines.bz2/json`` is a gzipped tar whose members are
 bzip2'd JSON Lines files; a datacache export is ``zip.bz2/json``; an LMDB
-store of zlib-compressed records is ``lmdb/json.z``.
+store of zlib-compressed records is ``lmdb/json.z``; an external export
+(``lux export --type external``) is ``lines.gz/tabjson``.
 
 Loading walks the spec: each container step yields children (paths,
 archive members, lines, JSON items) to the next step; the format step
@@ -65,7 +69,7 @@ logger = logging.getLogger("lux_pipeline")
 
 CONTAINERS = ("dir", "dirs", "pair", "zip", "tar", "lines", "dict", "array",
               "arraylines", "graph", "xmls", "lmdb")
-FORMATS = ("json", "raw", "other")
+FORMATS = ("json", "raw", "other", "tabjson")
 COMPRESSIONS = ("gz", "bz2", "z")
 
 # files above this are not read through to count their lines for progress
@@ -175,6 +179,7 @@ class Loader(Sliced):
             "xmls": self.iterate_xmls,
             "lmdb": self.iterate_lmdb,
             "json": self.make_json,
+            "tabjson": self.make_tabjson,
             "raw": self.make_raw,
             "other": self.make_other,
         }
@@ -487,6 +492,26 @@ class Loader(Sliced):
                 raise ValueError(f"Could not get an identifier in {self.name} while in {parent}/{path}")
         return {"identifier": ident, "data": data}
 
+    def make_tabjson(self, path, comp, parent):
+        """``<identifier><TAB><JSON>``: the identifier is the text before
+        the first tab, the record the JSON after it. ``{"data": record}``
+        (what the external export writes) is unwrapped."""
+        with self.file_opener(path, comp) as fh:
+            line = fh.read()
+        if isinstance(line, bytes):
+            line = line.decode("utf-8")
+        ident, sep, text = line.strip().partition("\t")
+        if not sep or not ident:
+            raise ValueError(f"No <identifier><TAB> prefix in {self.name} while in {parent}: "
+                             f"{line[:80]!r}")
+        data = json.loads(text)
+        if isinstance(data, dict) and list(data) == ["data"]:
+            data = data["data"]
+        data = self._post_process_json(data, ident)
+        if data is None:
+            return None
+        return {"identifier": ident, "data": data}
+
     def make_other(self, path, comp, parent):
         ident = self.make_identifier(path)
         with self.file_opener(path, comp) as fh:
@@ -645,36 +670,56 @@ class Loader(Sliced):
             return self.config.get("dumpFileType")
         return None
 
+    def sniffed_type(self, path):
+        """The spec `path`'s content says it has (`sniff_spec`, as `lux
+        guess-dump-type` prints it), or ``None`` when it cannot be placed."""
+        try:
+            found = sniff_spec(path)
+        except Exception as e:
+            logger.debug(f"{self.name}: could not sniff {path}: {e}")
+            return None
+        return found.spec if found.placed else None
+
     def override_file(self, path, path_type, load_type):
         """Read `path` instead of the configured file. A loader whose
         config describes its files (``uses_dsl``) reads it with
-        `path_type`, else the configured file's type, else a type guessed
-        from the content; for ``export`` without either (main's export
-        format) and for a legacy ``load()`` loader the path replaces
-        ``export_path`` / ``in_path``, which those read. A legacy loader
-        decides for itself how to read a file, so `path_type` is refused
-        for one."""
-        if load_type == "export" and not path_type and not self.configured_type("export"):
+        `path_type`, else the type its content shows, else the configured
+        file's type: the replacement need not be the shape the config
+        describes (an ``identifier<TAB>json`` export for a source whose
+        configured export is a zip, say). For ``export`` with none of
+        those (main's export format) and for a legacy ``load()`` loader
+        the path replaces ``export_path`` / ``in_path``, which those read.
+        A legacy loader decides for itself how to read a file, so
+        `path_type` is refused for one."""
+        sniffed = None if path_type else self.sniffed_type(path)
+        if (load_type == "export" and not path_type and not sniffed
+                and not self.configured_type("export")):
             self.export_path = path
             self.my_files = []
             logger.info(f"{self.name}: loading the export from {path}")
             return
-        if not self.uses_dsl and not path_type:
-            if load_type != "records":
-                raise ValueError(f"{self.name} has no configured {load_type} file to replace; "
-                                 f"give --file-type to read {path} with the loader DSL")
-            self.in_path = path
-            logger.info(f"{self.name}: loading {path} instead of {self.config.get('dumpFilePath')}")
-            return
-        if not self.uses_dsl and type(self).load is not Loader.load:
-            raise ValueError(f"{self.name}'s loader reads its file its own way; "
-                             f"--file-type does not apply to it")
-        fmt = path_type or self.configured_type(load_type)
-        fmtspec = self.process_fmt(fmt) if fmt else self.guess_fmt(path)
+        if not self.uses_dsl and load_type == "records":
+            # a legacy loader reads its records its own way, from in_path;
+            # only a base Loader can be put on the DSL with a type
+            if path_type and type(self).load is not Loader.load:
+                raise ValueError(f"{self.name}'s loader reads its file its own way; "
+                                 f"--file-type does not apply to it")
+            if not path_type:
+                self.in_path = path
+                logger.info(f"{self.name}: loading {path} instead of "
+                            f"{self.config.get('dumpFilePath')}")
+                return
+        if path_type:
+            fmt, why = path_type, "given"
+        elif sniffed:
+            fmt, why = sniffed, "from its content"
+        else:
+            fmt, why = self.configured_type(load_type), "configured"
+        if not fmt:
+            raise ValueError(f"Cannot tell the type of {path}; give --file-type")
         self.uses_dsl = True
-        self.my_files = [{"path": path, "fmt": fmtspec}]
-        logger.info(f"{self.name}: loading {path}"
-                    + (f" as {fmt}" if fmt else " (type guessed)") + " instead of the configured file")
+        self.my_files = [{"path": path, "fmt": self.process_fmt(fmt)}]
+        logger.info(f"{self.name}: loading {path} as {fmt} ({why}) instead of the configured file")
 
     def prepare(self, my_slice=-1, max_slice=-1, load_type="records", max_records=-1,
                 progress=null_progress, path=None, path_type=None):

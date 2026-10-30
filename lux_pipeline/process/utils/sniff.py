@@ -90,6 +90,16 @@ def _is_ntriples(line):
     return s.endswith(" .") and (s.startswith("<") or s.startswith("_:"))
 
 
+def _tabjson_line(line, complete=True):
+    """``<identifier><TAB><JSON object>``, as the external export writes:
+    the identifier has no whitespace and the rest parses -- or, for a
+    first line longer than the sample (`complete` false), starts like one."""
+    ident, sep, rest = line.strip().partition("\t")
+    if not sep or not ident or any(c.isspace() for c in ident) or not rest.startswith("{"):
+        return False
+    return _parse_object(rest) is not None or not complete
+
+
 def _is_delimited(line):
     return ("\t" in line or "," in line) and not any(c in line for c in "{[<")
 
@@ -368,6 +378,12 @@ def _sniff_stream(found, opener, size, nested):
     if not stripped:
         raise Unplaceable("empty file" if not comp else f"empty after {comp} inflation")
     first_line = stripped.split("\n", 1)[0]
+    if _tabjson_line(first_line, complete="\n" in stripped):
+        found.evidence["keys"] = "identifier<TAB>JSON lines"
+        if "\n" not in stripped:
+            found.notes.append("the first line is longer than the sample; verify")
+        found.spec = _with_compression("lines/tabjson", comp)
+        return found
     for rule, what in TEXT_RULES:
         if rule(first_line):
             raise Unplaceable(what)

@@ -571,7 +571,7 @@ def test_file_override_for_a_legacy_loader_replaces_in_path():
     assert ldr.uses_dsl is False and ldr.load() == "/elsewhere.gz"
     with pytest.raises(ValueError, match="reads its file its own way"):
         ldr.prepare(0, 1, path="/elsewhere.gz", path_type="lines.gz/json")
-    with pytest.raises(ValueError, match="no configured lmdb file"):
+    with pytest.raises(ValueError, match="give --file-type"):
         ldr.prepare(0, 1, load_type="lmdb", path="/elsewhere.lmdb")
 
 
@@ -587,18 +587,99 @@ def test_file_override_with_a_type_puts_a_plain_dump_loader_on_the_dsl():
     assert len(ldr.out_cache) == 1
 
 
-def test_file_override_for_an_export(tmp_path):
+def write_tab_export(fn, rows, gz=True):
+    opener = gzip.open if gz else open
+    with opener(fn, "wt") as fh:
+        for line in rows:
+            fh.write(line + "\n")
+
+
+def test_file_override_for_an_export_goes_through_the_dsl(tmp_path):
     fn = tmp_path / "export_test.jsonl.gz"
-    with gzip.open(fn, "wt") as fh:
-        fh.write('r1\t{"data": {"id": "1"}}\n')
+    write_tab_export(fn, ['r1\t{"data": {"id": "1"}}', 'r2\t{"data": {"id": "2"}}'])
+    ldr = make_loader(BASE / "lines/records.jsonl", "lines/json")
+    ldr.prepare(0, 1, load_type="export", path=str(fn))
+    # no export file configured, but its content says what it is
+    assert ldr.my_files == [{"path": str(fn), "fmt": [["lines", "gz"], ["tabjson"]]}]
+    ldr.process()
+    assert ldr.out_cache == {"r1": {"id": "1"}, "r2": {"id": "2"}}
+
+
+def test_file_override_with_unknown_content_and_no_export_configured_uses_load_export2(tmp_path):
+    fn = tmp_path / "export_test.bin"
+    fn.write_bytes(b"\x00\x01 not anything")
     cache = DeferringCache()
-    cache.flush = lambda: None
     ldr = make_loader(BASE / "lines/records.jsonl", "lines/json", cache=cache)
     ldr.prepare(0, 1, load_type="export", path=str(fn))
-    # no export file configured: main's export loader reads it
     assert ldr.my_files == [] and ldr.export_path == str(fn)
-    ldr.load_export2()
-    assert list(cache) == ["r1"]
     # the next run without an override goes back to the default path
     ldr.prepare(0, 1, load_type="export")
     assert ldr.export_path is None
+
+
+def test_file_override_content_beats_the_configured_type(tmp_path):
+    # aat: its configured export is a zip of bz2 json; the file given is a
+    # tab-prefixed export, which must not be opened as a zip
+    fn = tmp_path / "export_aat.jsonl.gz"
+    write_tab_export(fn, ['300025962\t{"id": "http://vocab.getty.edu/aat/300025962"}'])
+    cfg = {"name": "aat", "all_configs": StubConfigs(BASE), "datacache": {},
+           "input_files": {"export": [{"path": "aat/aat.zip", "type": "zip.bz2/json"}]}}
+    ldr = Loader(cfg)
+    ldr.prepare(0, 1, load_type="export", path=str(fn))
+    assert ldr.my_files[0]["fmt"] == [["lines", "gz"], ["tabjson"]]
+    ldr.process()
+    assert ldr.out_cache == {"300025962": {"id": "http://vocab.getty.edu/aat/300025962"}}
+
+
+def test_file_override_falls_back_to_the_configured_type_when_content_is_unknown(tmp_path):
+    fn = tmp_path / "odd.dat"
+    fn.write_bytes(b"\x00\x01 not anything")
+    ldr = make_loader(BASE / "missing.jsonl.gz", "lines.gz/json")
+    ldr.prepare(0, 1, path=str(fn))
+    assert ldr.my_files[0]["fmt"] == [["lines", "gz"], ["json"]]
+
+
+# --- tabjson -----------------------------------------------------------------
+
+
+def test_tabjson_takes_the_identifier_from_the_prefix(tmp_path):
+    fn = tmp_path / "ids.jsonl"
+    write_tab_export(fn, ['a1\t{"id": "http://x.org/other"}',
+                          'a2\t{"data": {"id": "http://x.org/2"}}',
+                          'a3\t{"data": {"id": "3"}, "extra": 1}'], gz=False)
+    ldr, _ = load(fn, "lines/tabjson")
+    # the prefix wins over the record's id; a bare {"data": ...} is unwrapped
+    assert ldr.out_cache == {"a1": {"id": "http://x.org/other"}, "a2": {"id": "http://x.org/2"},
+                             "a3": {"data": {"id": "3"}, "extra": 1}}
+
+
+def test_tabjson_is_sliced_like_any_format(tmp_path):
+    fn = tmp_path / "ids.jsonl.gz"
+    write_tab_export(fn, [f'r{i}\t{{"id": "{i}"}}' for i in range(5)])
+    got = []
+    for n in range(2):
+        ldr, _ = load(fn, "lines.gz/tabjson", my_slice=n, max_slice=2)
+        got.append(sorted(ldr.out_cache))
+    # the same split as every format: together exactly once
+    assert sorted(got[0] + got[1]) == [f"r{i}" for i in range(5)]
+    assert not set(got[0]) & set(got[1]) and got[0] and got[1]
+
+
+def test_tabjson_post_processes_with_the_identifier(tmp_path):
+    class Upper(Loader):
+        def post_process_json(self, data, identifier):
+            return {**data, "seen_as": identifier}
+
+    fn = tmp_path / "ids.jsonl"
+    write_tab_export(fn, ['k\t{"id": "1"}'], gz=False)
+    ldr, _ = load(fn, "lines/tabjson", cls=Upper)
+    assert ldr.out_cache == {"k": {"id": "1", "seen_as": "k"}}
+
+
+def test_tabjson_line_without_a_prefix_fails_the_file(tmp_path):
+    fn = tmp_path / "ids.jsonl"
+    write_tab_export(fn, ['{"id": "1"}'], gz=False)
+    ldr = make_loader(fn, "lines/tabjson")
+    ldr.prepare(0, 1)
+    with pytest.raises(RuntimeError, match="1 file\\(s\\) failed"):
+        ldr.process()
