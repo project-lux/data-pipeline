@@ -35,7 +35,7 @@
 #   manage-data.py --clear-all --new-token
 #                         lux clear --source all --force && lux clear --refs --force && lux new-token
 #   google-sames-diffs.py, load-csv-map2.py --same/--different
-#                         lux google
+#                         lux sheets
 #   run-reconcile.py i 24 --all
 #                         lux reconcile --source all --my-worker i --max-workers 24 --no-ui --no-finish
 #   run-identify.py       lux identify
@@ -118,9 +118,9 @@ echo "    lux clear --source all --force && lux clear --refs --force && lux new-
 echo "Did you check the flags for which units to run?"
 echo ""
 
-# Always update from google sheet
+# Always update from the curators' spreadsheet (the Google Sheet)
 # was: google-sames-diffs.py and load-csv-map2.py --same / --different
-lux google || fail google
+lux sheets || fail sheets
 echo "reloaded same/diffs from Google Sheet"
 
 rm -f $LOGS/* 2> /dev/null

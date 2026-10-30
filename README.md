@@ -25,13 +25,13 @@ each as its own `lux` process, stopping at the first failure:
 ```
 lux build --clear --max-workers 24     # clear caches and refs, new token, then build
 lux build --from merge                 # pick up again at a phase
-lux build --skip google,portal         # leave phases out
+lux build --skip sheets,portal         # leave phases out
 lux build --dry-run                    # print the steps, run nothing
 ```
 
-The phases are `clear` (only with `--clear`), `google`, `reconcile` (with
+The phases are `clear` (only with `--clear`), `sheets`, `reconcile` (with
 identify, metatypes, write-refs), `merge`, `portal` and `export`, and each
-is a command of its own: `lux google` reads the curators' spreadsheet and
+is a command of its own: `lux sheets` reads the curators' spreadsheet and
 loads its same-as / different-from pairs and fixes (`--fetch-only`,
 `--load-only`). By default that is the Google Sheet (`pip install -e
 '.[google]'`); `--file` reads the same tabs from an `.xlsx` workbook

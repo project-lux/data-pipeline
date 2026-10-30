@@ -133,7 +133,7 @@ def test_run_all_null_engine(env, tmp_path):
     assert order[last_reconcile + 1:last_reconcile + 4] == ["identify", "metatypes", "write-refs"]
     first_merge = order.index("merge")
     assert first_merge == last_reconcile + 4
-    assert order[0] == "google"
+    assert order[0] == "sheets"
     assert order.index("portal") > max(i for i, c in enumerate(order) if c == "merge")
     assert order.index("portal") < order.index("export")
     assert not any(c.startswith("python") for c in seq), "no legacy script is run"
@@ -153,7 +153,7 @@ def test_run_all_mp_engine(env, tmp_path):
     assert r.returncode == 0, r.stdout + r.stderr
     commands = [c.split()[1] for c in calls(env) if c.startswith("lux")]
     # reconcile's own tail runs identify, metatypes and write-refs
-    assert commands == ["google", "reconcile", "merge", "portal", "export"]
+    assert commands == ["sheets", "reconcile", "merge", "portal", "export"]
     for c in calls(env):
         if c.split()[1] in ("reconcile", "merge", "export"):
             assert "--my-worker" not in c and "--max-workers 3 --no-ui --prefix" in c
@@ -198,8 +198,8 @@ def test_run_all_stops_when_a_step_between_phases_fails(env, tmp_path, step):
     assert lux_calls(env, "merge") == []
 
 
-@pytest.mark.parametrize("step,not_run", [("google", "reconcile"), ("portal", "export")])
-def test_run_all_stops_when_google_or_portal_fails(env, tmp_path, step, not_run):
+@pytest.mark.parametrize("step,not_run", [("sheets", "reconcile"), ("portal", "export")])
+def test_run_all_stops_when_sheets_or_portal_fails(env, tmp_path, step, not_run):
     env["FAKE_NOSTART"] = step
     r = run("run-all2.sh", "--all", env=env, cwd=tmp_path)
     assert r.returncode == 1

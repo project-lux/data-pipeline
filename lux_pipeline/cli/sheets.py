@@ -1,14 +1,14 @@
 """Read the curators' spreadsheet and load its same-as / different-from pairs.
 
-    lux google                          # the Google Sheet: fetch, then load into the merged indexes
-    lux google --fetch-only             # write the CSVs and xpath_fixes.json, load nothing
-    lux google --load-only              # load the CSVs already in data_dir
-    lux google --file curation.xlsx     # the same tabs from an Excel workbook
-    lux google --file exported/         # or from a directory of <tab name>.csv files
+    lux sheets                          # the Google Sheet: fetch, then load into the merged indexes
+    lux sheets --fetch-only             # write the CSVs and xpath_fixes.json, load nothing
+    lux sheets --load-only              # load the CSVs already in data_dir
+    lux sheets --file curation.xlsx     # the same tabs from an Excel workbook
+    lux sheets --file exported/         # or from a directory of <tab name>.csv files
 
 Replaces `google-sames-diffs.py` and the two `load-csv-map2.py --same /
 --different .../google.csv` calls of `run-all.sh`; `lux build` runs it as
-its `google` phase. Writes ``<data_dir>/sameAs/google.csv``,
+its `sheets` phase. Writes ``<data_dir>/sameAs/google.csv``,
 ``<data_dir>/differentFrom/google.csv`` and ``<data_dir>/xpath_fixes.json``;
 see `lux_pipeline.process.sheets` for the tabs and the formats. The Google
 Sheet needs ``pip install -e '.[google]'``, a workbook ``.[xlsx]``.
@@ -37,7 +37,7 @@ class CommandHandler(BaseHandler):
     def process(self, args, rest):
         super().process(args, rest)
         importer = sheets.sheet_import(self.configs, args.file)
-        refuse_while_building(self.configs, "google", args.force)
+        refuse_while_building(self.configs, "sheets", args.force)
         counts = loaded = None
         if not args.load_only:
             counts = importer.fetch()

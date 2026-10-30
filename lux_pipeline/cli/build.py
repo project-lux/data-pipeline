@@ -1,10 +1,10 @@
-"""Run a whole build: google, reconcile, merge, portal, export.
+"""Run a whole build: sheets, reconcile, merge, portal, export.
 
     lux build                                  # run-all.sh --all, phase by phase
     lux build --clear                          # clear the caches and refs, new token, then build
     lux build --max-workers 24 --no-ui         # global options go to every phase
     lux build --from merge                     # pick up again at a phase
-    lux build --skip google,portal             # leave phases out
+    lux build --skip sheets,portal             # leave phases out
     lux build --dry-run                        # print the steps, run nothing
 
 `run-all.sh` (and `run-all2.sh` with ``ENGINE=mp``) as one command. The
@@ -12,7 +12,7 @@ phases, in order:
 
     clear      only with --clear: lux clear --source all --force,
                lux clear --refs --force, lux new-token
-    google     lux google: fetch the curators' sheet, load its same/different pairs
+    sheets     lux sheets: read the curators' spreadsheet, load its same/different pairs
     reconcile  lux reconcile --source <S> (and so identify, metatypes, write-refs)
     merge      lux merge --source <S>
     portal     lux portal: tag the records the YPM portal needs
@@ -42,7 +42,7 @@ from ._handler import BaseHandler, refuse_while_building
 
 logger = logging.getLogger("lux_pipeline")
 
-PHASES = ("clear", "google", "reconcile", "merge", "portal", "export")
+PHASES = ("clear", "sheets", "reconcile", "merge", "portal", "export")
 
 
 class CommandHandler(BaseHandler):
@@ -130,8 +130,8 @@ class CommandHandler(BaseHandler):
                     (phase, self.lux(args, "clear", "--refs", "--force", workers=False)),
                     (phase, self.lux(args, "new-token", workers=False)),
                 ]
-            elif phase == "google":
-                out.append((phase, self.lux(args, "google", workers=False)))
+            elif phase == "sheets":
+                out.append((phase, self.lux(args, "sheets", workers=False)))
             elif phase in ("reconcile", "merge"):
                 out.append((phase, self.lux(args, phase, "--source", source)))
             elif phase == "portal":

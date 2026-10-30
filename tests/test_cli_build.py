@@ -67,7 +67,7 @@ def test_default_plan_is_run_all_order(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     hdlr = make(tmp_path)
     run(hdlr, [])
-    assert [name_of(a) for a in hdlr.ran] == ["google", "reconcile", "merge", "portal", "export"]
+    assert [name_of(a) for a in hdlr.ran] == ["sheets", "reconcile", "merge", "portal", "export"]
     reconcile = next(a for a in hdlr.ran if name_of(a) == "reconcile")
     assert reconcile[4:6] == ["--source", "all"]
     # reconcile runs its finishing steps: identify, metatypes, write-refs
@@ -79,7 +79,7 @@ def test_default_plan_is_run_all_order(tmp_path, monkeypatch):
 def test_clear_runs_first(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     hdlr = make(tmp_path)
-    run(hdlr, ["--clear", "--to", "reconcile", "--skip", "google"])
+    run(hdlr, ["--clear", "--to", "reconcile", "--skip", "sheets"])
     assert [a[3:] for a in hdlr.ran[:3]] == [
         ["clear", "--source", "all", "--force"], ["clear", "--refs", "--force"], ["new-token"]]
     assert [name_of(a) for a in hdlr.ran[3:]] == ["reconcile"]
@@ -87,9 +87,9 @@ def test_clear_runs_first(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize("argv,phases", [
     (["--from", "merge"], ["merge", "portal", "export"]),
-    (["--to", "reconcile"], ["google", "reconcile"]),
+    (["--to", "reconcile"], ["sheets", "reconcile"]),
     (["--from", "merge", "--to", "merge"], ["merge"]),
-    (["--skip", "google,portal"], ["reconcile", "merge", "export"]),
+    (["--skip", "sheets,portal"], ["reconcile", "merge", "export"]),
     (["--clear"], list(build.PHASES)),
 ])
 def test_phase_selection(tmp_path, argv, phases):
@@ -118,7 +118,7 @@ def test_global_options_go_to_the_phases(tmp_path, monkeypatch):
     hdlr = make(tmp_path)
     run(hdlr, ["--clear", "--source", "ycba,aat", "--max-workers", "8", "--engine", "ray",
                "--no-ui", "--prefix", "/logs/b1", "--log", "DEBUG", "--profile",
-               "--skip", "google"])
+               "--skip", "sheets"])
     by = {}
     for a in hdlr.ran:
         by.setdefault(name_of(a), a)
@@ -145,7 +145,7 @@ def test_failure_stops_and_is_recorded(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     hdlr = make(tmp_path, {"merge": 3})
     with pytest.raises(RuntimeError, match=r"build stopped in merge: .* exited with 3"):
-        run(hdlr, ["--skip", "google"])
+        run(hdlr, ["--skip", "sheets"])
     assert [name_of(a) for a in hdlr.ran] == ["reconcile", "merge"]
     status = Path(hdlr.configs.log_dir, "pipeline_process_status.txt").read_text()
     assert status.strip().endswith("[Error] Error in merge")
@@ -155,7 +155,7 @@ def test_success_is_recorded_in_given_status_file(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     hdlr = make(tmp_path)
     status = tmp_path / "status.txt"
-    run(hdlr, ["--skip", "google", "--status-file", str(status)])
+    run(hdlr, ["--skip", "sheets", "--status-file", str(status)])
     assert status.read_text().strip().endswith("[Success] Build was successful")
 
 

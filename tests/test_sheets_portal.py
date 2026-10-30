@@ -1,4 +1,4 @@
-"""`lux google` and `lux portal`: google-sames-diffs.py / load-csv-map2.py
+"""`lux sheets` and `lux portal`: google-sames-diffs.py / load-csv-map2.py
 and post-build-portal.py as commands. The spreadsheet process against an
 in-memory format, then each format: Google through a stub of the Sheets
 API, xlsx through a stub of openpyxl, and a real CSV directory. The caches
@@ -17,7 +17,7 @@ import pytest
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-from lux_pipeline.cli import google as google_cli
+from lux_pipeline.cli import sheets as sheets_cli
 from lux_pipeline.cli import portal as portal_cli
 from lux_pipeline.process import sheets
 from lux_pipeline.process.phases import portal
@@ -298,7 +298,7 @@ def test_sheet_import_defaults_to_google(tmp_path):
 
 @pytest.mark.parametrize("opts,fetched,loaded", [
     ([], True, True), (["--fetch-only"], True, False), (["--load-only"], False, True)])
-def test_google_command(tmp_path, monkeypatch, opts, fetched, loaded):
+def test_sheets_command(tmp_path, monkeypatch, opts, fetched, loaded):
     calls = []
 
     class Recorder(Memory):
@@ -312,16 +312,16 @@ def test_google_command(tmp_path, monkeypatch, opts, fetched, loaded):
 
     monkeypatch.setattr(sheets, "sheet_import",
                         lambda cfgs, path: calls.append(path) or Recorder(cfgs, {}))
-    monkeypatch.setattr(google_cli, "refuse_while_building", lambda *a: calls.append("guard"))
-    hdlr = google_cli.CommandHandler(Cfgs(tmp_path))
-    hdlr.process(Namespace(command="google"), opts + ["--file", "x.xlsx"])
+    monkeypatch.setattr(sheets_cli, "refuse_while_building", lambda *a: calls.append("guard"))
+    hdlr = sheets_cli.CommandHandler(Cfgs(tmp_path))
+    hdlr.process(Namespace(command="sheets"), opts + ["--file", "x.xlsx"])
     assert calls == ["x.xlsx", "guard"] + ["fetch"] * fetched + ["load"] * loaded
 
 
-def test_google_command_only_options_exclusive(tmp_path):
-    hdlr = google_cli.CommandHandler(Cfgs(tmp_path))
+def test_sheets_command_only_options_exclusive(tmp_path):
+    hdlr = sheets_cli.CommandHandler(Cfgs(tmp_path))
     with pytest.raises(SystemExit):
-        hdlr.process(Namespace(command="google"), ["--fetch-only", "--load-only"])
+        hdlr.process(Namespace(command="sheets"), ["--fetch-only", "--load-only"])
 
 
 # --- portal ------------------------------------------------------------------
