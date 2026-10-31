@@ -1,96 +1,52 @@
+"""The library (ILS and ArchivesSpace) dump: a directory of JSON Lines
+files, synced from S3 into ``dumps_dir`` outside the pipeline. The config
+describes it as::
+
+    "input_files": {"records": [
+        {"path": "yul", "type": "dir/lines.gz/json", "slice": "files"}
+    ]}
+
+Sliced by file: each worker reads its own share of the files rather than
+every worker decompressing all of them. Files without ``jsonl`` in their
+name are not records and are skipped. A config without ``input_files``
+gets that entry, from ``dumpFilePath``."""
 
 import logging
 import os
-import requests
-import shutil
-import time
-import gzip
-import zipfile
-import ujson as json
-import sys
 
 from lux_pipeline.process.base.loader import Loader
+from lux_pipeline.progress import null_progress
 
 logger = logging.getLogger("lux_pipeline")
 
+NAMESPACE = "https://linked-art.library.yale.edu/node/"
+DEFAULT_ENTRY = {"type": "dir/lines.gz/json", "slice": "files"}
+
+
 class YulLoader(Loader):
 
-    def __init__(self, config):
-        self.in_path = config['dumpFilePath']
-        self.out_cache = config['datacache']
-        self.total = config.get('totalRecords', -1)
+    def prepare(self, my_slice=-1, max_slice=-1, load_type="records", max_records=-1,
+                progress=null_progress, path=None, path_type=None):
+        if not self.config.get("input_files") and self.config.get("dumpFilePath"):
+            self.config = dict(self.config, input_files={
+                "records": [dict(DEFAULT_ENTRY, path=self.config["dumpFilePath"])]})
+        return super().prepare(my_slice, max_slice, load_type, max_records,
+                               progress=progress, path=path, path_type=path_type)
 
-    def get_identifier_raw(self, line):
-        # Find identifier from raw line
+    def should_process_item(self, child):
+        if isinstance(child, str):
+            return "jsonl" in os.path.basename(child)
+        return True
+
+    def extract_identifier(self, data):
+        if isinstance(data, dict) and isinstance(data.get("id"), str):
+            return data["id"].replace(NAMESPACE, "") or None
         return None
 
-    def get_identifier_json(self, js):
-        return js['id'].replace('https://linked-art.library.yale.edu/node/', '')
-
-    def post_process_json(self, js):
-        return js
-
-    def filter_line(self, line):
-        return False
-
     def load(self, slicen=None, maxSlice=None):
-        # in is a directory of jsonl files
-        try:
-            files = os.listdir(self.in_path)
-            files.sort()
-        except:
-            files = [self.in_path]
-        # slice down to only the files for this task
-        # maxSlice is EXCLUSIVE e.g. slices should be 0-19 for maxSlice=20
-        if slicen is not None:
-            files = files[slicen::maxSlice]
-        else:
-            maxSlice = 1
-        x = 0 
-        done_x = 0
-        start = time.time()
-        for f in files:
-            if not 'jsonl' in f:
-                continue
-            if f.endswith(('jsonl','gz')):
-                open_func = gzip.open if f.endswith('gz') else open
-            else:
-                continue
-
-            with open_func(os.path.join(self.in_path, f), "rt") as fh:
-                l = 1
-                while l:
-                    l = fh.readline()
-                    if not l:
-                        break
-                    # Find id and check if already exists before processing JSON
-                    what = self.get_identifier_raw(l)
-                    if what and what in self.out_cache:
-                        done_x += 1
-                        if not done_x % 10000:
-                            logger.info(f"Skipping past {done_x} {time.time() - start}")
-                        continue
-                    # Cache assumes JSON as input, so need to parse it
-                    x += 1
-                    try:
-                        js = json.loads(l)
-                    except:
-                        logger.error(f"Failed to parse JSON in {what}")                        
-                        continue
-                    try:
-                        new = self.post_process_json(js)
-                    except:
-                        logger.error(f"Failed to process {l}")
-                        continue
-                    if not what:
-                        what = self.get_identifier_json(new)
-                        if not what:
-                            logger.error(l)
-                            raise NotImplementedError(f"is get_identifier_raw or _json implemented for {self.__class__.__name__}?")
-                    self.out_cache[what] = new
-                    if not x % 10000:
-                        t = time.time() - start
-                        xps = x/t
-                        ttls = (self.total / (maxSlice+1)) / xps
-                        logger.info(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-        self.out_cache.commit()
+        """``manage-data.py --load --ils <slice> <max>``, until item 33
+        retires it: the DSL load of this slice."""
+        if slicen is None:
+            slicen, maxSlice = 0, 1
+        self.prepare(slicen, maxSlice)
+        return self.process()
