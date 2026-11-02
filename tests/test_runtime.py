@@ -12,6 +12,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lux_pipeline import runtime
 
+REAL_FIND_DOTENVS = runtime.find_dotenvs
+
 
 class StubConfig:
     """Records how it was built and which of the expensive steps ran."""
@@ -38,8 +40,8 @@ class StubConfig:
 def _isolated(monkeypatch):
     StubConfig.instances = []
     monkeypatch.setattr(runtime, "Config", StubConfig)
-    # no .env on the search path, and nothing in the environment
-    monkeypatch.setattr(runtime, "find_dotenv", lambda usecwd=True: "")
+    # no ./.env or ~/.lux/.env, and nothing in the environment
+    monkeypatch.setattr(runtime, "find_dotenvs", lambda: [])
     monkeypatch.delenv("LUX_BASEPATH", raising=False)
     runtime.reset_configs()
     yield
@@ -54,11 +56,64 @@ def test_basepath_comes_from_the_environment(monkeypatch):
     assert runtime.get_basepath() == "/inst"
 
 
-def test_basepath_loads_the_nearest_dotenv(monkeypatch, tmp_path):
-    env = tmp_path / ".env"
-    env.write_text("LUX_BASEPATH=/from-dotenv\n")
-    monkeypatch.setattr(runtime, "find_dotenv", lambda usecwd=True: str(env))
-    assert runtime.get_basepath() == "/from-dotenv"
+@pytest.fixture
+def places(monkeypatch, tmp_path):
+    """A working directory and a home directory, both without a .env, and
+    the real lookup."""
+    monkeypatch.setattr(runtime, "find_dotenvs", REAL_FIND_DOTENVS)
+    cwd, home = tmp_path / "work", tmp_path / "home"
+    (cwd / "sub").mkdir(parents=True)
+    (home / ".lux").mkdir(parents=True)
+    monkeypatch.chdir(cwd)
+    monkeypatch.setenv("HOME", str(home))
+    # set, then deleted: monkeypatch then removes what load_dotenv sets
+    for var in ("LUX_BASEPATH", "LUX_TEST_ONLY"):
+        monkeypatch.setenv(var, "")
+        monkeypatch.delenv(var)
+    return cwd, home
+
+
+def test_dotenv_paths_are_cwd_then_home_lux(places):
+    cwd, home = places
+    assert runtime.dotenv_paths() == [cwd / ".env", home / ".lux" / ".env"]
+    assert runtime.find_dotenvs() == []
+    assert runtime.get_basepath() == ""
+
+
+def test_basepath_from_the_cwd_dotenv(places):
+    cwd, _ = places
+    (cwd / ".env").write_text("LUX_BASEPATH=/from-cwd\n")
+    assert runtime.get_basepath() == "/from-cwd"
+
+
+def test_basepath_from_home_lux_dotenv(places):
+    _, home = places
+    (home / ".lux" / ".env").write_text("LUX_BASEPATH=/from-home\n")
+    assert runtime.find_dotenvs() == [str(home / ".lux" / ".env")]
+    assert runtime.get_basepath() == "/from-home"
+
+
+def test_cwd_dotenv_wins_and_home_fills_the_gaps(places):
+    cwd, home = places
+    (cwd / ".env").write_text("LUX_BASEPATH=/from-cwd\n")
+    (home / ".lux" / ".env").write_text("LUX_BASEPATH=/from-home\nLUX_TEST_ONLY=home\n")
+    assert runtime.get_basepath() == "/from-cwd"
+    assert runtime.os.environ["LUX_TEST_ONLY"] == "home"
+
+
+def test_the_environment_wins_over_both(places, monkeypatch):
+    cwd, home = places
+    (cwd / ".env").write_text("LUX_BASEPATH=/from-cwd\n")
+    (home / ".lux" / ".env").write_text("LUX_BASEPATH=/from-home\n")
+    monkeypatch.setenv("LUX_BASEPATH", "/from-env")
+    assert runtime.get_basepath() == "/from-env"
+
+
+def test_parent_directories_are_not_searched(places, monkeypatch):
+    cwd, _ = places
+    (cwd / ".env").write_text("LUX_BASEPATH=/from-parent\n")
+    monkeypatch.chdir(cwd / "sub")
+    assert runtime.get_basepath() == ""
 
 
 def test_basepath_is_empty_when_unset():

@@ -23,7 +23,7 @@ from lux_pipeline.cli import _services
 
 
 @pytest.fixture(autouse=True)
-def _no_network(monkeypatch):
+def _no_network(monkeypatch, tmp_path):
     """initialize fetches the Linked Art schemas and probes the servers;
     answer with a tiny schema and reachable servers."""
     class Resp:
@@ -38,6 +38,12 @@ def _no_network(monkeypatch):
     # the database offer: not a tty, so nothing is asked or created unless a test says so
     monkeypatch.setattr(_services, "postgres_database_status", lambda s, name, timeout=5: (False, True))
     monkeypatch.setattr(initialize.sys.stdin, "isatty", lambda: False, raising=False)
+    # a home whose ~/.lux/.env exists, so the offer to write it is not made
+    # unless a test removes it; never the real one
+    home = tmp_path / "_home"
+    (home / ".lux").mkdir(parents=True)
+    (home / ".lux" / ".env").write_text("LUX_BASEPATH=/elsewhere\n")
+    monkeypatch.setenv("HOME", str(home))
 
 
 def init(rest):
@@ -454,6 +460,8 @@ def stub_build(monkeypatch):
 def run_testinstall(rest=(), cwd=None, monkeypatch=None):
     if cwd is not None:
         monkeypatch.chdir(cwd)
+        # never the real ~/.lux/.env
+        monkeypatch.setenv("HOME", str(Path(cwd).parent / "home"))
     runtime.reset_configs()
     return testinstall.CommandHandler(None).process(Namespace(command="testinstall"), list(rest))
 
@@ -660,3 +668,55 @@ def test_testinstall_skip_pg_tune(installed, monkeypatch, capsys):
     assert run_testinstall(["--skip-workers", "--skip-pg-tune"], cwd=installed,
                            monkeypatch=monkeypatch) is True
     assert "postgres tuned" not in capsys.readouterr().out
+
+
+# --- ~/.lux/.env -------------------------------------------------------------
+
+
+def home_env():
+    return Path(os.environ["HOME"]) / ".lux" / ".env"
+
+
+def test_an_existing_home_dotenv_is_kept_and_reported(tmp_path, capsys):
+    init([str(tmp_path / "a")])
+    assert home_env().read_text() == "LUX_BASEPATH=/elsewhere\n"
+    assert "~/.lux/.env: kept (LUX_BASEPATH=/elsewhere); edit it" in capsys.readouterr().out
+
+
+def test_home_dotenv_offered_at_a_tty_and_written_on_yes(tmp_path, monkeypatch, capsys):
+    home_env().unlink()
+    monkeypatch.setattr(initialize.sys.stdin, "isatty", lambda: True, raising=False)
+    asked = []
+    monkeypatch.setattr("builtins.input", lambda q: asked.append(q) or "y")
+    root = tmp_path / "a"
+    bp = init([str(root), "--no-create-db"])
+    assert asked == [f"Write {home_env()} pointing at this installation, so lux works from "
+                     f"any directory? [y/N] "]
+    assert home_env().read_text() == f"LUX_BASEPATH={bp}\n"
+    assert "~/.lux/.env: written" in capsys.readouterr().out
+    # and lux now finds it from anywhere
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LUX_BASEPATH", "")
+    monkeypatch.delenv("LUX_BASEPATH")
+    assert runtime.get_basepath() == str(bp)
+
+
+def test_home_dotenv_not_written_on_no_or_without_a_tty(tmp_path, monkeypatch, capsys):
+    home_env().unlink()
+    init([str(tmp_path / "a")])                  # no tty: not asked, not written
+    assert not home_env().exists()
+    monkeypatch.setattr(initialize.sys.stdin, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr("builtins.input", lambda q: "")
+    init([str(tmp_path / "a"), "--no-create-db"])
+    assert not home_env().exists()
+    assert "~/.lux/.env: not written" in capsys.readouterr().out
+
+
+def test_home_dotenv_flags(tmp_path, monkeypatch, capsys):
+    home_env().unlink()
+    monkeypatch.setattr(initialize.sys.stdin, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr("builtins.input", lambda q: pytest.fail(f"asked: {q}"))
+    init([str(tmp_path / "a"), "--no-create-db", "--no-home-dotenv"])
+    assert not home_env().exists()
+    bp = init([str(tmp_path / "a"), "--no-create-db", "--home-dotenv"])
+    assert home_env().read_text() == f"LUX_BASEPATH={bp}\n"

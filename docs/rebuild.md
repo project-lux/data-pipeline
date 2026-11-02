@@ -1,8 +1,8 @@
 # How to Rebuild the Dataset with the Pipeline
 
 Every step is a `lux` command (`lux help` lists them, `lux <command>
---help` gives the options). Run them from the repository directory, which
-needs the installation's `.env` (see [install.md](install.md)). Parallel
+--help` gives the options). They need the installation's `.env`, in
+`~/.lux/` or the directory they run from (see [install.md](install.md)). Parallel
 commands take `--max-workers N` (default: `max_workers` in the base
 configuration) and show a console view; `lux watch --latest` attaches to
 a running build from another terminal.

@@ -102,11 +102,12 @@ class CommandHandler(BaseHandler):
     # --- the checks ----------------------------------------------------------------
 
     def check_dotenv(self):
-        from dotenv import find_dotenv
-        fn = find_dotenv(usecwd=True)
-        if not fn and not os.getenv("LUX_BASEPATH"):
-            raise FileNotFoundError("no .env found from the current directory upwards and LUX_BASEPATH is not set")
-        return fn or "LUX_BASEPATH from the environment"
+        if os.getenv("LUX_ENV_FILE"):
+            return f"{os.environ['LUX_ENV_FILE']} (--env)"
+        fns = runtime.find_dotenvs()
+        if not fns and not os.getenv("LUX_BASEPATH"):
+            raise FileNotFoundError("no ./.env or ~/.lux/.env found and LUX_BASEPATH is not set")
+        return ", ".join(fns) or "LUX_BASEPATH from the environment"
 
     def check_basepath(self):
         bp = runtime.get_basepath()

@@ -81,14 +81,31 @@ the configuration, Postgres (and Redis where configured), the idmap, the
 sources' components, the data directories, the schemas, and that worker
 processes can be started.
 
-`lux` finds its configuration through the nearest `.env`, searched from
-the current directory upwards (or `LUX_BASEPATH` in the environment).
-`lux initialize` writes it into the installation directory; the build
-scripts run from the repository, so copy it there too:
+`lux` finds its configuration through `LUX_BASEPATH`: from the
+environment, else the `.env` in the current directory, else
+`~/.lux/.env` (parent directories are not searched). `lux initialize`
+writes the `.env` into the installation directory, and offers to write
+`~/.lux/.env` too when there is none (`--home-dotenv` / `--no-home-dotenv`
+answer for a script), so `lux` works from any directory; a `.env` in the
+current directory still wins. To do it by hand:
 
 ```
-cp ~/lux/data/.env ~/lux/data-pipeline/
+mkdir -p ~/.lux && cp ~/lux/data/.env ~/.lux/
 ```
+
+To switch between installations, give each one a named file in `~/.lux/`
+and pick it with the global `--env` option, which wins over the shell's
+`LUX_BASEPATH` and both `.env` files:
+
+```
+cp ~/lux/data/.env ~/.lux/prod.env
+cp ~/lux-test/data/.env ~/.lux/test.env
+lux --env test counts          # ~/.lux/test.env
+lux --env prod counts          # ~/.lux/prod.env
+lux --env ~/lux-test/data ...  # a directory's .env, or a file's path
+```
+
+`LUX_BASEPATH=/path lux ...` also works for a single command.
 
 
 ## 4. Data

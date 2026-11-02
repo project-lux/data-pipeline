@@ -37,7 +37,14 @@ name up front; ``--create-db`` answers yes without asking, for a script;
 idmap record is switched to the Postgres store, a dated
 ``idmap_update_token.txt`` is written, and the idmap's empty tables are
 created. Each of those is skipped when already done, and a database
-already configured is only verified. Finish with ``lux testinstall``.
+already configured is only verified.
+
+``lux`` reads ``./.env`` and then ``~/.lux/.env``. When ``~/.lux/.env``
+does not exist you are asked whether to write it, pointing at this
+installation, so that ``lux`` works from any directory
+(``--home-dotenv`` writes it without asking, ``--no-home-dotenv`` never
+asks; with no one at the keyboard it is not written). An existing one is
+never changed. Finish with ``lux testinstall``.
 """
 
 import json
@@ -291,6 +298,11 @@ class CommandHandler(BaseHandler):
                         help="Create the database and the idmap without asking (for scripts)")
         ap.add_argument("--no-create-db", action="store_true",
                         help="Never offer to create the database")
+        ap.add_argument("--home-dotenv", action="store_true",
+                        help="Write ~/.lux/.env pointing at this installation, without asking, "
+                             "when it does not exist")
+        ap.add_argument("--no-home-dotenv", action="store_true",
+                        help="Never offer to write ~/.lux/.env")
         ap.add_argument("directory", nargs="?", default=".",
                         help="Where the installation lives (default: the current directory)")
         ap.add_argument("--configs", metavar="PATH",
@@ -426,6 +438,31 @@ class CommandHandler(BaseHandler):
             out(f"  .env: written (LUX_BASEPATH={basepath})")
         env.write_text(wanted)
 
+    def offer_home_dotenv(self, basepath, args, out=print):
+        """Write ``~/.lux/.env`` (``LUX_BASEPATH=<basepath>``) when it does
+        not exist and the user says so. An existing one is only reported.
+        Returns True when written."""
+        from lux_pipeline.runtime import dotenv_paths
+        env = dotenv_paths()[-1]
+        if env.exists():
+            current = dotenv_basepath(env)
+            note = "" if current == str(basepath) else "; edit it to use this installation from anywhere"
+            out(f"  ~/.lux/.env: kept (LUX_BASEPATH={current or '<unset>'}){note}")
+            return False
+        if getattr(args, "no_home_dotenv", False):
+            out("  ~/.lux/.env: not written (--no-home-dotenv)")
+            return False
+        assume = True if getattr(args, "home_dotenv", False) else None
+        if not ask(f"Write {env} pointing at this installation, so lux works from any directory?",
+                   assume):
+            out("  ~/.lux/.env: not written; run lux from the installation directory, "
+                "or copy its .env there")
+            return False
+        env.parent.mkdir(parents=True, exist_ok=True)
+        env.write_text(f"LUX_BASEPATH={basepath}\n")
+        out(f"  ~/.lux/.env: written (LUX_BASEPATH={basepath})")
+        return True
+
     # --- the command -------------------------------------------------------------
 
     def process(self, args, rest):
@@ -467,6 +504,7 @@ class CommandHandler(BaseHandler):
             except Exception as e:
                 print(f"  database: FAILED: {type(e).__name__}: {e}")
                 problems.append("the database")
+        self.offer_home_dotenv(basepath, args)
         print("Next:")
         if problems:
             print(f"  start or configure {' and '.join(problems)} (the cache defaults and the map records in "
