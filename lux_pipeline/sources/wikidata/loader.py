@@ -62,9 +62,10 @@ class WdLoader(WdFetcher, WdConfigManager, Loader):
 
     def _load_dump(self, slicen, maxSlice):
         opener = bz2.open if self.in_path.endswith(".bz2") else gzip.open
+        # Different-from pairs are not written here: `lux build-differents`
+        # builds them from the datacache as URIs the merged index can load
         with opener(self.in_path, "rt") as fh, \
-            open(os.path.join(self.configs.temp_dir, f'wd_equivs_{slicen}.csv'), 'w') as efh, \
-            open(os.path.join(self.configs.temp_dir, f'wd_diffs_{slicen}.csv'), 'w') as dfh:
+            open(os.path.join(self.configs.temp_dir, f'wd_equivs_{slicen}.csv'), 'w') as efh:
 
 
             fh.readline() # chomp initial [
@@ -104,11 +105,9 @@ class WdLoader(WdFetcher, WdConfigManager, Loader):
                 self.out_cache.set(new, identifier=what)
 
                 # Create intermediate files for indexing
-                sames, diffs = self.process_equivs({'data':new})
+                sames, _ = self.process_equivs({'data':new})
                 for sx,sy in sames:
                     efh.write(f'{sx},{sy}\n')
-                for dx,dy in diffs:
-                    dfh.write(f'{dx},{dy}\n')
 
                 # Record is done: the cache may commit here, and only here
                 self.out_cache.checkpoint()
