@@ -26,7 +26,8 @@ rm ../data/logs/*
 echo "Starting Reconciliation Phase"
 
 rm ../data/logs/flags/reconcile_is_done*txt
-rm metatypes-*.json
+# the metatypes-*.json slice files live under the configuration's temp_dir
+# (2026-11); merge-metatypes.py reads and removes them
 
 # Remove any old assertion temp files from previous reconcile?
 
@@ -72,7 +73,6 @@ fi
 ### Merge metatypes
 echo "Merging Metatypes"
 python ./merge-metatypes.py
-rm metatypes-*.json
 mv metatypes.json ../data/files/
 sleep 30
 

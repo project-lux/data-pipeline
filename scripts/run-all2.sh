@@ -21,14 +21,15 @@
 # command whose workers are processes it starts itself; `lux reconcile`
 # then runs identify, metatypes and write-refs at its end.
 #
-# Run from the repository: the metatypes-*.json slice files and
-# reference_uris.txt are written in the working directory. On an error the
-# script exits 1 and appends a line to $STATUS_FILE; slices still running
-# are left to run.
+# The metatypes-*.json slice files and reference_uris.txt the phases hand
+# each other live under the configuration's temp_dir, so the script may be
+# run from any directory. On an error the script exits 1 and appends a line
+# to $STATUS_FILE; slices still running are left to run.
 #
 # Environment (defaults in brackets): ENGINE [null], WORKERS [24],
 # LOGS [../data/logs], STATUS_FILE [/data/logs/pipeline_process_status.txt],
-# EXPORTS [/data-export/output/lux/latest], WAIT_INTERVAL [30].
+# EXPORTS [/data-export/output/lux/latest], WAIT_INTERVAL [30],
+# TEMP [the configuration's temp_dir, asked of lux].
 #
 # The old commands and their replacements:
 #
@@ -67,6 +68,10 @@ WORKERS=${WORKERS:-24}
 LOGS=${LOGS:-../data/logs}
 STATUS_FILE=${STATUS_FILE:-/data/logs/pipeline_process_status.txt}
 EXPORTS=${EXPORTS:-/data-export/output/lux/latest}
+# where the reconcile slices leave metatypes-*.json: with ENGINE=null each
+# slice is its own `lux reconcile --my-worker`, and none of them clears
+# what a failed earlier run left, so the script does
+TEMP=${TEMP:-$(echo 'print(cfgs.temp_dir)' | lux --log ERROR interactive)}
 export LOGS
 
 if [[ "$ENGINE" != "null" && "$ENGINE" != "mp" ]]
@@ -130,7 +135,7 @@ rm -f $LOGS/* 2> /dev/null
 echo "Starting Reconciliation Phase"
 
 rm -f $LOGS/flags/reconcile_is_done*txt
-rm -f metatypes-*.json
+rm -f "$TEMP"/metatypes-*.json
 
 # was: nohup python ./run-reconcile.py $count 24 $1 > ../data/logs/reconcile_$count.txt 2>&1 &
 if [[ "$ENGINE" == "mp" ]]

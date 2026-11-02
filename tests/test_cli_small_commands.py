@@ -66,8 +66,10 @@ class StubConfigs:
         self.log = [] if log is None else log
         self.data_dir = str(tmp_path / "data")
         self.log_dir = str(tmp_path / "logs")
+        self.temp_dir = str(tmp_path / "temp")
         Path(self.data_dir).mkdir(parents=True, exist_ok=True)
         Path(self.log_dir).mkdir(parents=True, exist_ok=True)
+        Path(self.temp_dir).mkdir(parents=True, exist_ok=True)
         self.idmap = Idmap(self.log, token, optimize)
 
     def get_idmap(self):
@@ -342,11 +344,14 @@ def real_merge(monkeypatch):
 
 def test_metatypes_merges_the_slices_into_the_data_dir(tmp_path, cwd, real_merge):
     cfgs = StubConfigs(tmp_path)
-    (cwd / "metatypes-0.json").write_text(json.dumps({"a": ["t1"]}))
-    (cwd / "metatypes-1.json").write_text(json.dumps({"a": ["t2"], "b": ["t3"]}))
+    temp = Path(cfgs.temp_dir)
+    (temp / "metatypes-0.json").write_text(json.dumps({"a": ["t1"]}))
+    (temp / "metatypes-1.json").write_text(json.dumps({"a": ["t2"], "b": ["t3"]}))
     got = run(metatypes.CommandHandler, cfgs)
     assert got == {"a": ["t1", "t2"], "b": ["t3"]}
     assert json.loads((Path(cfgs.data_dir) / "metatypes.json").read_text()) == got
+    # the slice files are consumed; the working directory was never involved
+    assert list(temp.iterdir()) == []
     assert list(cwd.iterdir()) == []
 
 
@@ -354,7 +359,7 @@ def test_metatypes_refuses_to_empty_an_existing_map(tmp_path, cwd, real_merge):
     cfgs = StubConfigs(tmp_path)
     target = Path(cfgs.data_dir) / "metatypes.json"
     target.write_text(json.dumps({"a": ["t1"]}))
-    with pytest.raises(RuntimeError, match="no metatypes-\\*.json"):
+    with pytest.raises(RuntimeError, match="no .*temp.*metatypes-\\*.json"):
         run(metatypes.CommandHandler, cfgs)
     assert json.loads(target.read_text()) == {"a": ["t1"]}
     assert run(metatypes.CommandHandler, cfgs, "--force") == {}
@@ -378,12 +383,13 @@ def ref_mgr(monkeypatch):
     class RefMgr:
         def __init__(self, cfgs, idmap, workers=1):
             cfgs.log.append("ReferenceManager")
+            self.configs = cfgs
             self.log = cfgs.log
             self.done_refs = made[0] if made else Queue(cfgs.log)
 
         def write_done_refs(self):
             self.log.append("write_done_refs")
-            with open("reference_uris.txt", "w") as fh:
+            with open(os.path.join(self.configs.temp_dir, "reference_uris.txt"), "w") as fh:
                 fh.write("0|yuid|uri\n")
 
     for mod in (write_refs, reconcile_phase):
@@ -395,18 +401,20 @@ def test_write_refs_writes_then_clears(tmp_path, cwd, ref_mgr, capsys):
     cfgs = StubConfigs(tmp_path)
     path = run(write_refs.CommandHandler, cfgs)
     assert cfgs.log == ["get_idmap", "ReferenceManager", "write_done_refs", "clear"]
-    assert path == str(cwd / "reference_uris.txt")
+    assert path == os.path.join(cfgs.temp_dir, "reference_uris.txt")
     assert capsys.readouterr().out == f"wrote {path}\n"
+    assert list(cwd.iterdir()) == []
 
 
 @pytest.mark.parametrize("counted", [True, False])
 def test_write_refs_refuses_to_empty_an_existing_file(tmp_path, cwd, ref_mgr, counted):
     cfgs = StubConfigs(tmp_path)
     ref_mgr.append(Queue(cfgs.log, size=0, counted=counted))
-    (cwd / "reference_uris.txt").write_text("0|yuid|kept\n")
+    refs = Path(cfgs.temp_dir) / "reference_uris.txt"
+    refs.write_text("0|yuid|kept\n")
     with pytest.raises(RuntimeError, match="queue is empty"):
         run(write_refs.CommandHandler, cfgs)
-    assert (cwd / "reference_uris.txt").read_text() == "0|yuid|kept\n"
+    assert refs.read_text() == "0|yuid|kept\n"
     assert "write_done_refs" not in cfgs.log
     run(write_refs.CommandHandler, cfgs, "--force")
     assert cfgs.log[-2:] == ["write_done_refs", "clear"]
@@ -414,9 +422,10 @@ def test_write_refs_refuses_to_empty_an_existing_file(tmp_path, cwd, ref_mgr, co
 
 def test_write_refs_overwrites_an_old_file_when_there_is_a_queue(tmp_path, cwd, ref_mgr):
     cfgs = StubConfigs(tmp_path)
-    (cwd / "reference_uris.txt").write_text("last build\n")
+    refs = Path(cfgs.temp_dir) / "reference_uris.txt"
+    refs.write_text("last build\n")
     run(write_refs.CommandHandler, cfgs)
-    assert (cwd / "reference_uris.txt").read_text() == "0|yuid|uri\n"
+    assert refs.read_text() == "0|yuid|uri\n"
 
 
 def test_write_refs_with_an_empty_queue_and_no_file_runs(tmp_path, cwd, ref_mgr):
@@ -430,7 +439,7 @@ def test_the_phase_function_builds_its_own_manager(tmp_path, cwd, ref_mgr):
     cfgs = StubConfigs(tmp_path)
     path = reconcile_phase.write_refs(cfgs, cfgs.idmap)
     assert cfgs.log == ["ReferenceManager", "write_done_refs", "clear"]
-    assert path == os.path.abspath("reference_uris.txt")
+    assert path == os.path.join(cfgs.temp_dir, "reference_uris.txt")
 
 
 # --- listed ------------------------------------------------------------------

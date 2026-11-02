@@ -21,7 +21,7 @@ import os
 from lux_pipeline.process.identity_resolver import IdentityResolver
 from lux_pipeline.process.phases.merge import read_update_token
 from lux_pipeline.process.reconciler import Reconciler
-from lux_pipeline.process.reference_manager import ReferenceManager
+from lux_pipeline.process.reference_manager import ReferenceManager, references_path
 from lux_pipeline.process.timing import PhaseTimer
 from lux_pipeline.progress import null_progress
 from lux_pipeline.storage.cache.postgres import PoolManager
@@ -142,20 +142,22 @@ def new_update_token(cfgs, idmap=None):
 
 
 def write_refs(cfgs, idmap, ref_mgr=None):
-    """Write the done-refs queue to ``reference_uris.txt`` and clear the
-    queue: manage-data.py ``--write-refs`` as a function. Needs identity to
-    have been resolved first, since each line carries its URI's YUID.
+    """Write the done-refs queue to ``<temp_dir>/reference_uris.txt`` and
+    clear the queue: manage-data.py ``--write-refs`` as a function. Needs
+    identity to have been resolved first, since each line carries its
+    URI's YUID.
 
-    The file is written to the **working directory**, and merge
-    (`iter_done_refs`) reads it from there, so every phase of a build must
-    run from the same directory. `ref_mgr` is a `ReferenceManager` to use
-    instead of building one. Returns the file's absolute path.
+    The file goes under the configuration's ``temp_dir``
+    (`reference_manager.references_path`), where merge (`iter_done_refs`)
+    reads it, so the phases need not share a working directory. `ref_mgr`
+    is a `ReferenceManager` to use instead of building one. Returns the
+    file's path.
     """
     if ref_mgr is None:
         ref_mgr = ReferenceManager(cfgs, idmap)
     ref_mgr.write_done_refs()
     ref_mgr.done_refs.clear()
-    return os.path.abspath("reference_uris.txt")
+    return references_path(cfgs)
 
 
 def reconcile_slice(cfgs, idmap, networkmap, to_do, my_slice=-1, max_slice=-1,

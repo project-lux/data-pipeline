@@ -8,10 +8,9 @@
     lux merge --source all --my-worker 3 --max-workers 24 --no-ui   # one slice, shell-orchestrated
 
 Replaces `run-merge.py` and `merge_parallel.sh`. `--source all` is every
-internal source, as `run-merge.py --all`. Run it from the directory
-reconcile ran in, after `lux identify`, `lux metatypes` and `lux
-write-refs` (or a `lux reconcile` that ran them): the references pass reads
-``reference_uris.txt`` from the working directory. See
+internal source, as `run-merge.py --all`. Run it after `lux identify`,
+`lux metatypes` and `lux write-refs` (or a `lux reconcile` that ran them):
+the references pass reads ``<temp_dir>/reference_uris.txt``. See
 `lux_pipeline.process.tasks.merge_task` for what is checked before the
 workers start.
 """

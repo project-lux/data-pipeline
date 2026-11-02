@@ -19,10 +19,9 @@ every referenced cluster in the file in that one process.
 
 Before any worker starts, the driver checks what every worker would
 otherwise find missing only on its own: the update token, and
-``reference_uris.txt`` in the working directory when the references pass
-runs (``lux write-refs`` writes it; workers inherit the driver's working
-directory). A missing ``<data_dir>/metatypes.json`` is only warned about:
-the final mapper carries on without metatypes.
+``<temp_dir>/reference_uris.txt`` when the references pass runs (``lux
+write-refs`` writes it). A missing ``<data_dir>/metatypes.json`` is only
+warned about: the final mapper carries on without metatypes.
 
 There is no driver tail: `post-build-portal.py` is a separate step.
 """
@@ -31,11 +30,10 @@ import logging
 import os
 
 from lux_pipeline.process.phases.merge import merge_slice, read_update_token, select_sources
+from lux_pipeline.process.reference_manager import references_path
 from ._task_manager import TaskManager, flags_pattern, remove_stale
 
 logger = logging.getLogger("lux_pipeline")
-
-REFERENCES_FILE = "reference_uris.txt"
 
 
 class MergeManager(TaskManager):
@@ -114,10 +112,10 @@ class MergeManager(TaskManager):
             read_update_token(cfgs)
         except OSError as e:
             raise ValueError(f"No update token ({e}); 'lux new-token' writes one") from e
-        if self.do_references and not os.path.exists(REFERENCES_FILE):
-            raise ValueError(f"No {REFERENCES_FILE} in {os.getcwd()} for the references pass: "
-                             f"run 'lux write-refs' here first (or 'lux reconcile' without "
-                             f"--no-finish), or pass --no-refs")
+        refs = references_path(cfgs)
+        if self.do_references and not os.path.exists(refs):
+            raise ValueError(f"No {refs} for the references pass: run 'lux write-refs' first "
+                             f"(or 'lux reconcile' without --no-finish), or pass --no-refs")
         metatypes = os.path.join(cfgs.data_dir, "metatypes.json")
         if not os.path.exists(metatypes):
             logger.warning(f"No {metatypes}: the merged records will have no metatypes "

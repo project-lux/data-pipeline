@@ -32,8 +32,10 @@ class StubConfigs:
     def __init__(self, tmp_path, token="__20261027__", metatypes=True):
         self.data_dir = str(tmp_path / "data")
         self.log_dir = str(tmp_path / "logs")
+        self.temp_dir = str(tmp_path / "temp")
         Path(self.data_dir).mkdir(parents=True, exist_ok=True)
         Path(self.log_dir).mkdir(parents=True, exist_ok=True)
+        Path(self.temp_dir).mkdir(parents=True, exist_ok=True)
         if token is not None:
             (Path(self.data_dir) / "idmap_update_token.txt").write_text(f"{token}\n")
         if metatypes:
@@ -49,18 +51,22 @@ class StubConfigs:
 
 @pytest.fixture
 def harness(tmp_path, monkeypatch):
-    """A configuration, `merge_slice` replaced by a recorder, the working
-    directory a fresh one holding ``reference_uris.txt``, and
+    """A configuration, `merge_slice` replaced by a recorder, the
+    configuration's temp_dir holding ``reference_uris.txt``, and
     `runtime.get_configs` pointed at the configuration so the null engine's
-    worker finds it."""
+    worker finds it. The working directory is a fresh, empty one: the
+    phases must not depend on it."""
     cwd = tmp_path / "cwd"
     cwd.mkdir()
     monkeypatch.chdir(cwd)
-    (cwd / "reference_uris.txt").write_text("0|yuid|uri\n")
+    temp = tmp_path / "temp"
+    temp.mkdir()
+    (temp / "reference_uris.txt").write_text("0|yuid|uri\n")
 
     class Harness:
         def __init__(self):
             self.cwd = cwd
+            self.temp = temp
             self.cfgs = None
             self.calls = []
             self.fail = False
@@ -213,7 +219,7 @@ def test_recids_run_one_worker_unsliced_without_references(harness, caplog):
 
 def test_recids_need_no_references_file(harness):
     h = harness
-    (h.cwd / "reference_uris.txt").unlink()
+    (h.temp / "reference_uris.txt").unlink()
     m = h.manager(sources=("ycba",), workers=1, recid="obj/1")
     m.process("null")
     assert len(h.calls) == 1
@@ -249,19 +255,19 @@ def test_an_unusable_token_is_rejected_before_any_worker(harness, token, match):
 
 def test_no_references_file_is_rejected_before_any_worker(harness):
     h = harness
-    (h.cwd / "reference_uris.txt").unlink()
+    (h.temp / "reference_uris.txt").unlink()
     m = h.manager(workers=2)
-    with pytest.raises(ValueError, match="No reference_uris.txt in .*lux write-refs"):
+    with pytest.raises(ValueError, match="No .*temp.*reference_uris.txt .*lux write-refs"):
         m.process("null")
     assert h.calls == []
     m = h.manager(workers=2, only_refs=True)
-    with pytest.raises(ValueError, match="No reference_uris.txt"):
+    with pytest.raises(ValueError, match="No .*reference_uris.txt"):
         m.process("null")
 
 
 def test_no_references_file_is_fine_without_the_references_pass(harness):
     h = harness
-    (h.cwd / "reference_uris.txt").unlink()
+    (h.temp / "reference_uris.txt").unlink()
     m = h.manager(workers=1, no_refs=True)
     m.process("null")
     assert len(h.calls) == 1
