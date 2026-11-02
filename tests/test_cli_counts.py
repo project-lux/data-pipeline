@@ -274,3 +274,57 @@ def test_plain_is_the_default(capsys):
 def test_help_lists_counts_with_its_docstring():
     from lux_pipeline.cli.help import list_commands
     assert ("counts", "Count records in caches, maps and indexes.") in list_commands()
+
+
+# --- counts_data: the same counts as data (web UI item W03) -------------------
+
+
+def test_counts_data_has_a_section_per_kind_asked_for(indexed):
+    h = CommandHandler(indexed)
+    args = Namespace(source="aat", cache="datacache,recordcache", map="idmap,done_refs", index="all")
+    data = counts.counts_data(indexed, sources=h.resolve_sources(args), caches=h.resolve_caches(args),
+                              maps=h.resolve_maps(args), indexes=h.resolve_indexes(args))
+    assert data["caches"] == {"rows": [
+        {"group": "external", "source": "aat", "cache": "datacache", "count": 250_000, "exact": False},
+        {"group": "external", "source": "aat", "cache": "recordcache", "count": 5, "exact": True},
+    ], "total": 250_005}
+    assert data["maps"] == {"rows": [{"map": "idmap", "count": 1_000_000, "exact": False},
+                                     {"map": "done_refs", "count": 9, "exact": False}],
+                            "total": 1_000_009}
+    rows = data["indexes"]["rows"]
+    assert [(r["source"], r["index"], r["count"]) for r in rows] == [
+        ("aat", "name", 3), ("aat", "id", 2), ("wikidata", "name", None)]
+    # the missing index says why, and is not in the total
+    assert rows[2]["error"] and rows[0]["error"] is None
+    assert data["indexes"]["total"] == 5
+
+
+def test_counts_data_leaves_out_what_was_not_asked_for():
+    data = counts.counts_data(StubConfigs(), sources=None, maps=None, indexes=None)
+    assert data == {"caches": None, "maps": None, "indexes": None}
+    empty = counts.counts_data(StubConfigs(), indexes=[])
+    assert empty["indexes"] == {"rows": [], "total": 0}
+
+
+def test_counts_data_takes_the_index_opener():
+    opened = []
+
+    class Index(list):
+        def close(self):
+            opened.append("closed")
+
+    def opener(path):
+        opened.append(path)
+        return Index([1, 2, 3, 4])
+
+    data = counts.counts_data(StubConfigs(), indexes=[("external", "aat", "name", "/x.lmdb")],
+                              open_index=opener)
+    assert data["indexes"]["rows"][0]["count"] == 4
+    assert opened == ["/x.lmdb", "closed"]
+
+
+def test_process_returns_the_data_it_printed(capsys):
+    args = Namespace(command="counts", source="ycba")
+    data = CommandHandler(StubConfigs()).process(args, [])
+    assert data["caches"]["total"] == 19 and data["maps"] is None
+    assert lines(capsys)[-1] == "Total cache records: ~19"

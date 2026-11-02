@@ -83,59 +83,22 @@ class CommandHandler(BaseHandler):
         return [(group, source, INDEX_LABELS.get(name, name), path)
                 for group, source, name, path in targets.indexes(self.configs, which)]
 
-    # --- counting ----------------------------------------------------------
+    # --- counting (lux_pipeline.cli.counts.counts_data) ----------------------
 
     def count_caches(self, sources, caches):
         """``([(group, source, cache type, count, exact)], total)``"""
-        rows = []
-        total = 0
-        for group, cfg in sources:
-            for c in caches:
-                cache = cfg.get(c)
-                if cache is None:
-                    continue
-                n, exact = _count(cache)
-                rows.append((group, cfg["name"], c, n, exact))
-                total += n
-        return rows, total
+        return count_caches(sources, caches)
 
     def count_maps(self, maps):
-        """``([(map name, count)], total)``. Counts are reported as estimates:
-        the postgres idmap answers ``len()`` from the catalog."""
-        rows = []
-        total = 0
-        for m in maps:
-            n = len(targets.map_store(self.configs, m))
-            rows.append((m, n))
-            total += n
-        return rows, total
+        """``([(map name, count)], total)``"""
+        return count_maps(self.configs, maps)
 
     def open_index(self, path):
-        from lux_pipeline.storage.idmap.lmdb import TabLmdb
-        return TabLmdb.open(path, "r", readahead=False, writemap=True)
+        return open_index_file(path)
 
     def count_indexes(self, indexes):
-        """``([(group, source, label, count or None)], total)``; ``None``
-        when the index file could not be opened (not built yet, or wrong
-        path)."""
-        rows = []
-        total = 0
-        for group, source, label, path in indexes:
-            try:
-                idx = self.open_index(path)
-            except Exception as e:
-                logger.warning(f"Could not open {label} index for {source} at {path}: {e}")
-                rows.append((group, source, label, None))
-                continue
-            try:
-                n = len(idx)
-            finally:
-                close = getattr(idx, "close", None)
-                if close:
-                    close()
-            rows.append((group, source, label, n))
-            total += n
-        return rows, total
+        """``([(group, source, label, count or None)], total)``"""
+        return count_indexes(indexes, self.open_index)
 
     # --- the command -------------------------------------------------------
 
@@ -146,18 +109,135 @@ class CommandHandler(BaseHandler):
         maps = self.resolve_maps(args)
         indexes = self.resolve_indexes(args)
 
-        # each section is (rows, total); None when it was not asked for.
-        # The totals are kept apart so the map and index totals do not
-        # include the caches
-        cache_sec = self.count_caches(sources, caches) if sources else None
-        map_sec = self.count_maps(maps) if getattr(args, "map", None) else None
-        index_sec = self.count_indexes(indexes) if getattr(args, "index", None) else None
+        # a section is counted only when it was asked for; the totals are
+        # kept apart so the map and index totals do not include the caches
+        data = counts_data(self.configs,
+                           sources=sources or None, caches=caches,
+                           maps=maps if getattr(args, "map", None) else None,
+                           indexes=indexes if getattr(args, "index", None) else None,
+                           open_index=self.open_index)
+        cache_sec, map_sec, index_sec = sections(data)
 
         # print is the command's result
         if getattr(args, "table", False):
             render_tables(cache_sec, map_sec, index_sec)
         else:
             render_plain(cache_sec, map_sec, index_sec)
+        return data
+
+
+# --- the counts as data -----------------------------------------------------------
+
+
+def count_caches(sources, caches):
+    """``([(group, source, cache type, count, exact)], total)`` for the
+    caches of type `caches` that each of `sources` (``[(group, cfg)]``)
+    has."""
+    rows = []
+    total = 0
+    for group, cfg in sources:
+        for c in caches:
+            cache = cfg.get(c)
+            if cache is None:
+                continue
+            n, exact = _count(cache)
+            rows.append((group, cfg["name"], c, n, exact))
+            total += n
+    return rows, total
+
+
+def count_maps(cfgs, maps):
+    """``([(map name, count)], total)``. Counts are reported as estimates:
+    the postgres idmap answers ``len()`` from the catalog."""
+    rows = []
+    total = 0
+    for m in maps:
+        n = len(targets.map_store(cfgs, m))
+        rows.append((m, n))
+        total += n
+    return rows, total
+
+
+def open_index_file(path):
+    """An index file, read-only, as the reconcilers open it."""
+    from lux_pipeline.storage.idmap.lmdb import TabLmdb
+    return TabLmdb.open(path, "r", readahead=False, writemap=True)
+
+
+def count_indexes(indexes, opener=open_index_file, errors=None):
+    """``([(group, source, label, count or None)], total)``; ``None``
+    when the index file could not be opened (not built yet, or wrong
+    path), with the reason in `errors` (``{(source, label): message}``)
+    when given."""
+    rows = []
+    total = 0
+    for group, source, label, path in indexes:
+        try:
+            idx = opener(path)
+        except Exception as e:
+            logger.warning(f"Could not open {label} index for {source} at {path}: {e}")
+            rows.append((group, source, label, None))
+            if errors is not None:
+                errors[(source, label)] = f"{type(e).__name__}: {e}"
+            continue
+        try:
+            n = len(idx)
+        finally:
+            close = getattr(idx, "close", None)
+            if close:
+                close()
+        rows.append((group, source, label, n))
+        total += n
+    return rows, total
+
+
+def counts_data(cfgs, sources=None, caches=DEFAULT_CACHES, maps=None, indexes=None,
+                open_index=None):
+    """The counts `lux counts` prints, as data, for targets already
+    resolved (`lux_pipeline.cli._targets`): `sources` ``[(group, cfg)]``
+    with the cache types `caches`, `maps` (names) and `indexes`
+    (``[(group, source, label, path)]``). A section is None when its
+    targets are None (not asked for); asked for with nothing in it, it is
+    empty with a total of 0::
+
+        {"caches":  {"rows": [{"group", "source", "cache", "count", "exact"}], "total"} | None,
+         "maps":    {"rows": [{"map", "count", "exact": False}], "total"} | None,
+         "indexes": {"rows": [{"group", "source", "index", "count" | None, "exact": True,
+                               "error" | None}], "total"} | None}
+
+    A map's count is an estimate (Postgres answers from its catalog); an
+    index's is exact, or None with the reason when the file could not be
+    opened. `open_index` replaces how an index file is opened."""
+    out = {"caches": None, "maps": None, "indexes": None}
+    if sources is not None:
+        rows, total = count_caches(sources, caches)
+        out["caches"] = {"rows": [{"group": g, "source": s, "cache": c, "count": n, "exact": e}
+                                  for g, s, c, n, e in rows], "total": total}
+    if maps is not None:
+        rows, total = count_maps(cfgs, maps)
+        out["maps"] = {"rows": [{"map": m, "count": n, "exact": False} for m, n in rows],
+                       "total": total}
+    if indexes is not None:
+        errors = {}
+        rows, total = count_indexes(indexes, open_index or open_index_file, errors)
+        out["indexes"] = {"rows": [{"group": g, "source": s, "index": label, "count": n,
+                                    "exact": True, "error": errors.get((s, label))}
+                                   for g, s, label, n in rows], "total": total}
+    return out
+
+
+def sections(data):
+    """`counts_data`'s result as the ``(rows, total)`` tuples (or None)
+    `render_plain` and `render_tables` print."""
+    def sec(name, keys):
+        part = data.get(name)
+        if part is None:
+            return None
+        return [tuple(r[k] for k in keys) for r in part["rows"]], part["total"]
+
+    return (sec("caches", ("group", "source", "cache", "count", "exact")),
+            sec("maps", ("map", "count")),
+            sec("indexes", ("group", "source", "index", "count")))
 
 
 # --- output ------------------------------------------------------------------

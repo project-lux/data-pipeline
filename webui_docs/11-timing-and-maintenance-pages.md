@@ -36,7 +36,10 @@ if `list_runs` has one with that command.
 
 `api/counts.py: counts_rows(state, source, cache, map, index)` reuses
 `counts.CommandHandler(cfgs)`'s `resolve_*` methods with a `Namespace`
-(they are the target rules) then `counts_data`. Sources are instantiated
+(they are the target rules) then `counts_data`, whose result has one
+section per kind (`caches`, `maps`, `indexes`), None when not asked for,
+each `{"rows": [...], "total"}`; an index row carries `error` when its
+file could not be opened. Sources are instantiated
 through `state.source(name)` for each named source first (counting needs
 the cache objects). The SSE variant yields one row at a time.
 

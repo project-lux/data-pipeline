@@ -17,6 +17,7 @@ compared with what ``lux pg-tune`` recommends for this machine and
 failure (``--skip-pg-tune`` leaves it out).
 """
 
+import io
 import logging
 import os
 import sys
@@ -61,12 +62,24 @@ class Advice(Exception):
 
 
 class Check:
-    """One line per check; raising inside ``with`` is the FAIL."""
+    """Runs one check at a time: a line per check written to `out`, and
+    the same as data in `results`, ``[{"label", "state": "OK" | "WARN" |
+    "FAIL", "detail", "required"}]``. A check fails by raising."""
 
     def __init__(self, out=None):
         self.out = out or sys.stdout
         self.failed = False
         self.detail = ""
+        self.results = []
+
+    def record(self, label, state, detail="", required=True, line=None):
+        self.results.append({"label": label, "state": state, "detail": detail,
+                             "required": required})
+        if state == "FAIL":
+            self.failed = True
+        if line is None:
+            line = f"{state:<5} {label}" + (f": {detail}" if detail else "")
+        self.out.write(line + "\n")
 
     def run(self, label, fn, required=True):
         """True to carry on: always after OK, and after a failure of a
@@ -74,16 +87,16 @@ class Check:
         try:
             detail = fn()
         except Advice as e:
-            self.out.write(f"WARN  {label}: {e}\n")
+            self.record(label, "WARN", str(e), required)
             return True
         except Exception as e:
             if required:
-                self.out.write(f"FAIL  {label}: {type(e).__name__}: {e}\n")
-                self.failed = True
+                self.record(label, "FAIL", f"{type(e).__name__}: {e}", required)
                 return False
-            self.out.write(f"WARN  {label}: {type(e).__name__}: {e} (not required)\n")
+            self.record(label, "WARN", f"{type(e).__name__}: {e}", required,
+                        line=f"WARN  {label}: {type(e).__name__}: {e} (not required)")
             return True
-        self.out.write(f"OK    {label}" + (f": {detail}" if detail else "") + "\n")
+        self.record(label, "OK", detail or "", required)
         return True
 
 
@@ -125,8 +138,10 @@ class CommandHandler(BaseHandler):
         return str(cc)
 
     def check_config(self):
-        runtime.reset_configs()
-        cfgs = runtime.get_configs(instantiate=False, basepath=self.basepath)
+        cfgs = getattr(self, "given_configs", None)
+        if cfgs is None:
+            runtime.reset_configs()
+            cfgs = runtime.get_configs(instantiate=False, basepath=self.basepath)
         self.cfgs = cfgs
         return (f"{len(cfgs.internal)} internal, {len(cfgs.external)} external, "
                 f"{len(cfgs.results)} results, {len(cfgs.map_stores)} maps, max_workers {cfgs.max_workers}")
@@ -247,33 +262,67 @@ class CommandHandler(BaseHandler):
 
     # --- the command -------------------------------------------------------------
 
-    def process(self, args, rest):
-        super().process(args, rest)
-        self.basepath = ""
-        self.cfgs = None
-        check = Check()
+    def checks(self, args):
+        """``[(label, check, required, needs)]`` in the order they run.
+        `needs` is what the check cannot run without: ``"basepath"`` (an
+        earlier check found LUX_BASEPATH), ``"configs"`` (the configuration
+        built), or None. A check that is not `required` reports a failure
+        as WARN."""
+        workers = getattr(args, "workers", 0) or 0
         steps = [
-            (".env", self.check_dotenv),
-            ("LUX_BASEPATH", self.check_basepath),
-            ("configuration directory", self.check_config_dir),
-            ("configuration builds", self.check_config),
-            ("postgres reachable", self.check_postgres),
-            ("redis reachable", self.check_redis, False),
-            ("idmap reachable", self.check_idmap),
-            ("globals load", self.check_globals),
-            ("source components build, caches reachable", self.check_components),
-            ("data directories exist and are writable", self.check_directories),
-            ("validator schemas present", self.check_schemas),
+            (".env", self.check_dotenv, True, None),
+            ("LUX_BASEPATH", self.check_basepath, True, None),
+            ("configuration directory", self.check_config_dir, True, "basepath"),
+            ("configuration builds", self.check_config, True, "basepath"),
+            ("postgres reachable", self.check_postgres, True, "configs"),
+            ("redis reachable", self.check_redis, False, "configs"),
+            ("idmap reachable", self.check_idmap, True, "configs"),
+            ("globals load", self.check_globals, True, "configs"),
+            ("source components build, caches reachable", self.check_components, True, "configs"),
+            ("data directories exist and are writable", self.check_directories, True, "configs"),
+            ("validator schemas present", self.check_schemas, True, "configs"),
         ]
         if not getattr(args, "skip_workers", False):
             steps.append(("worker processes spawn",
-                          lambda: self.check_workers(args.workers or self.cfgs.max_workers)))
+                          lambda: self.check_workers(workers or self.cfgs.max_workers), True,
+                          "configs"))
         if not getattr(args, "skip_pg_tune", False):
             steps.append(("postgres tuned for the build",
-                          lambda: self.check_pg_tune(args.workers), False))
-        for label, fn, *rest in steps:
-            if not check.run(label, fn, *rest):
-                print(f"Stopped at the first failure. Fix it and run lux testinstall again.")
-                sys.exit(1)
+                          lambda: self.check_pg_tune(workers), False, "configs"))
+        return steps
+
+    def run_checks(self, args, out=None, stop_on_fail=True, cfgs=None):
+        """Run the checks and return their results, ``[{"label", "state",
+        "detail", "required"}]`` (`Check.results`), writing a line per
+        check to `out` (None: nowhere).
+
+        `stop_on_fail` stops at the first failure, as the command does;
+        without it every check gets a row, and one that needs what an
+        earlier failure left missing reports that instead of running.
+        `cfgs`, when given, is the configuration to check (the web UI's
+        own) instead of one built afresh through `lux_pipeline.runtime`."""
+        self.basepath = ""
+        self.cfgs = None
+        self.given_configs = cfgs
+        check = Check(out if out is not None else io.StringIO())
+        missing = {"basepath": "LUX_BASEPATH was not found",
+                   "configs": "the configuration did not build"}
+        for label, fn, required, needs in self.checks(args):
+            if (needs == "basepath" and not self.basepath) or \
+                    (needs == "configs" and self.cfgs is None):
+                ok = not required
+                check.record(label, "FAIL" if required else "WARN", missing[needs], required)
+            else:
+                ok = check.run(label, fn, required)
+            if not ok and stop_on_fail:
+                break
+        return check.results
+
+    def process(self, args, rest):
+        super().process(args, rest)
+        results = self.run_checks(args, out=sys.stdout, stop_on_fail=True)
+        if any(r["state"] == "FAIL" for r in results):
+            print(f"Stopped at the first failure. Fix it and run lux testinstall again.")
+            sys.exit(1)
         print("All checks passed.")
         return True
