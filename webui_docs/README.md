@@ -79,9 +79,11 @@ ones the web UI adds.
     the optional `web` block to `base`/`system`) applies the same edit to
     `config_cache/config_cache/` and says so in the PR, per `CLAUDE.md`.
 12. **Tests:** `python -m pytest tests/ -q` must pass. New tests go in
-    `tests/test_web_*.py` and `tests/test_<module>.py`. The database-free
-    installation fixture of W01 (`tests/webui_fixtures.py`) is what every
-    later test builds on.
+    `tests/test_web_*.py` and `tests/test_<module>.py`. Shared helpers live
+    in `tests/webui_fixtures.py`: `write_fake_run` (W01) for a run's files,
+    and the database-free installation (W00) that every test needing a
+    real `Config` builds on. Never build tests on `docs/sample_config` (out
+    of date) or `config_cache/` (untracked).
 
 ## How to use an item document
 

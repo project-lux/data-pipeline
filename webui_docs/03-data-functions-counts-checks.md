@@ -113,5 +113,5 @@ cell) instead of raising — that is what `list_sources` prints today.
 ## Acceptance criteria
 
 * Tests pass; `lux counts`, `lux list`, `lux testinstall` output unchanged
-  (diff before / after on the sample installation of `tests/webui_fixtures.py`
-  if W01 is in, else on stub configs).
+  (diff before / after on the installation of `tests/webui_fixtures.py`
+  if W00 is in, else on stub configs).

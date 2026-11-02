@@ -201,9 +201,7 @@ problem.
 ## Tests
 
 `tests/test_config_store.py` over `tests/webui_fixtures.make_installation`
-(W01) or, if W01 is not merged, a tmp dir with `docs/sample_config` copied
-and `base.json` rewritten the same way (keep the helper local, then switch
-to the fixture later):
+(W00; never `docs/sample_config`, which is out of date):
 
 * `read_record("aat")` equals `json.load` of the file; is not the same
   object as `cfgs.external["aat"]`.
@@ -227,7 +225,7 @@ to the fixture later):
 `tests/test_cli_config.py`: `show`, `set` (file changed, rest of the file
 identical), `set` with invalid value refused with exit 1, `check` on the
 installation reports nothing, `delete` without `--force` asks / refuses,
-mutating subcommands refuse while a fake run (W01 fixture or a hand-written
+mutating subcommands refuse while a fake run (W01's `write_fake_run` or a hand-written
 status file updated now) is unfinished.
 
 ## Acceptance criteria

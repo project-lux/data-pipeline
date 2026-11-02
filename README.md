@@ -48,7 +48,8 @@ build machine.
 
 Every worker writes `<log_dir>/<command>-<timestamp>-w<n>.status` and
 `.log` files; `lux watch --latest` reads them to attach to a running (or
-finished) build from another terminal. `--log DEBUG` (or `--debug`) turns
+finished) build from another terminal. The command itself leaves
+`<prefix>.run` beside them: its command line and how it ended. `--log DEBUG` (or `--debug`) turns
 up the logging, and `--no-ui` gives plain output instead of the console
 view. Other commands worth knowing:
 

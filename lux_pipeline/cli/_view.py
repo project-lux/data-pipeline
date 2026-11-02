@@ -29,7 +29,9 @@ from rich.progress import (
 from rich.table import Table
 from rich.text import Text
 
-from lux_pipeline.progress import log_path, read_status, status_path
+# LogTailer lives with the other readers of a run's files; imported here
+# too, where it used to be defined
+from lux_pipeline.progress import LogTailer, read_build
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -102,37 +104,6 @@ class Header:
         grid.add_column(justify="right")
         grid.add_row("[b]LUX Data Pipeline", self.prefix or "", datetime.now().strftime("%H:%M:%S"))
         return Panel(grid)
-
-
-class LogTailer:
-    """Incrementally reads complete new lines from each worker's log file."""
-
-    def __init__(self, prefix, workers):
-        self.prefix = prefix
-        self.workers = workers
-        self.offsets = {}
-
-    def read_new_lines(self):
-        """``[(worker, line)]`` for every complete line written since the
-        last call. A worker may be mid-write, so only data up to the last
-        newline is consumed."""
-        if not self.prefix:
-            return []
-        lines = []
-        for n in range(self.workers):
-            try:
-                with open(log_path(self.prefix, n), "rb") as fh:
-                    fh.seek(self.offsets.get(n, 0))
-                    data = fh.read()
-            except OSError:
-                continue
-            nl = data.rfind(b"\n")
-            if nl == -1:
-                continue
-            self.offsets[n] = self.offsets.get(n, 0) + nl + 1
-            for line in data[:nl].split(b"\n"):
-                lines.append((n, line.decode("utf-8", errors="replace")))
-        return lines
 
 
 def clamp_level(name):
@@ -216,32 +187,28 @@ class BuildView:
             return self._refresh()
 
     def _refresh(self):
-        all_done = True
-        seen = 0
+        # the files are read by lux_pipeline.progress.read_build, which every
+        # view of a run shares; this only puts the numbers on the screen
+        visible = set()
         for n, tid in self.tasks.items():
-            st = read_status(status_path(self.prefix, n))
+            task = self._task(tid)
+            if task is not None and task.visible:
+                visible.add(n)
+        build = read_build(self.prefix, self.workers, visible)
+        for n, tid in self.tasks.items():
+            st = build["workers"][n]
             if st is None:
-                all_done = False
                 continue
-            seen += 1
             self.status[n] = st
-            label = st.get("description") or st.get("phase") or "running"
             self.progress.update(tid, completed=st.get("completed") or 0,
-                                 total=st.get("total"), description=f"w{n} {label}")
+                                 total=st.get("total"), description=f"w{n} {build['labels'][n]}")
             task = self._task(tid)
             if task is not None and not task.started:
                 self.progress.start_task(tid)
-            if not st.get("done"):
-                all_done = False
-        workers = [self._task(tid) for tid in self.tasks.values()]
-        workers = [t for t in workers if t is not None and t.visible]
-        completed = sum(t.completed for t in workers)
-        totals = [t.total for t in workers]
-        total = sum(totals) if workers and all(t is not None for t in totals) else None
-        self.progress.update(self.all_task, completed=completed, total=total)
+        self.progress.update(self.all_task, completed=build["completed"], total=build["total"])
         for n, line in self.tailer.read_new_lines():
             self.add_worker_line(n, line)
-        self.done = seen > 0 and all_done
+        self.done = build["done"]
         return self.done
 
     # ----------------------------------------------------------- lifecycle

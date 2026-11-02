@@ -107,7 +107,7 @@ laptop (the validator reads its schemas on first use, not at construction).
 
 | Module | Role |
 |---|---|
-| `lux_pipeline/progress.py` | `null_progress`, `StatusWriter`, `read_status`, `unfinished_workers`, `status_path`/`log_path`, `Sliced` |
+| `lux_pipeline/progress.py` | `null_progress`, `StatusWriter`, `read_status`, `unfinished_workers`, `status_path`/`log_path`, `Sliced`; the one reader of a run's files (web UI item W01): `read_build` (every worker's status and the totals; `BuildView` renders from it), `LogTailer`, `count_workers`, `latest_prefix`, `RUNNING_WINDOW`; the run record `<prefix>.run` (`RunRecord`, `read_run`, `run_state`, `list_runs`), written by the driver, never a worker |
 | `lux_pipeline/runtime.py` | `get_configs()` (cached per process; `LUX_BASEPATH` from the environment, then `./.env`, then `~/.lux/.env`, no upward search: `dotenv_paths`, `find_dotenvs`; the global `--env NAME|FILE|DIR` (`use_env`: `~/.lux/NAME.env`, a file, or `DIR/.env`) overrides all of them and sets `LUX_ENV_FILE`), `reset_configs()`, `configure_logging()` |
 | `lux_pipeline/log.py` | the shared `logger` |
 | `lux_pipeline/config.py` | `importObject` with legacy-path shim; `Config` reading `system`/`base` and `default` records; `max_workers`, `temp_dir`, `indexes_dir`; optional `nt_dir`, `distribution_dir` (both fall back to `exports_dir`), `backup_dir` |
@@ -139,3 +139,11 @@ laptop (the validator reads its schemas on first use, not at construction).
 | `lux_pipeline/storage/cache/abstract.py` | item 38: `AbstractCache`, the cache API contract: required methods raise `NotImplementedError`, the rest (`get_multi`, `has_multi`, `get_fresh`, `len_estimate`, type iterators, bulk, commit hooks, dict methods) have defaults; `PooledCache` and `FsCache` inherit it. Backend-only capabilities (`backup`/`restore`, Postgres maintenance, `get_like`) stay out because callers probe for them with `getattr`. `FsCache` keeps times as file mtimes and `refresh_time`/`valid`/`change` in `<key>.json.meta` |
 
 Worker status and log files follow `<log_dir>/<command>-<timestamp>-w<n>.status|.log`.
+Beside them the driver writes `<prefix>.run`: the command line, host and
+pid, planned and final worker count, sources, `parent` (a `lux build`'s
+prefix, from `LUX_PARENT_RUN`), start, finish and exit status (130 for an
+interrupt). `CommandHandler.process` writes it for every worker command
+(not for one `--my-worker` slice) and `entry.run` re-finishes it when a
+command fails after its workers; `lux build` writes its own with
+`phases`, `current` and `steps`, and gives every worker phase the prefix
+`<build prefix>-<phase>`.
