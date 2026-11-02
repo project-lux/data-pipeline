@@ -16,7 +16,15 @@ and `manage-data.py --nt` run from `export_parallel.sh` / `nt_parallel.sh`.
   the datacache records its recordcache used, in the form ``lux load
   --type export`` reads.
 
-The first four slice their caches by worker number and worker count, so
+``caches`` (``--cache datacache[,recordcache...]``) is its own kind of
+export: every record of those caches of the selected sources, internal,
+external or results, by `export_cache_slice` -- each source's cache sliced
+across all the workers like the merged records, one
+``export_<source>_<cache>_<n>.jsonl.gz`` per worker (no ``_<n>`` with one
+worker), in ``--type external``'s line format. ``--type`` is left unset (or
+``external``) with it.
+
+The first four types slice their caches by worker number and worker count, so
 every record is written by exactly one worker. ``external`` writes one file
 per source and so cannot share a source between workers: worker ``n`` takes
 every ``max_workers``-th selected source starting at the ``n``-th, and
@@ -30,7 +38,8 @@ There is no driver tail.
 import logging
 import os
 
-from lux_pipeline.process.phases.export import (CHUNK, GZIP_LEVEL, SOURCES, export_external,
+from lux_pipeline.process.phases.export import (CHUNK, GZIP_LEVEL, SOURCES, cache_export_path,
+                                                export_cache_slice, export_external,
                                                 export_nt_slice, export_slice,
                                                 export_sources_slice)
 from ._task_manager import TaskManager, flags_pattern, remove_stale
@@ -53,8 +62,25 @@ def normalize_type(export_type):
     return t
 
 
+# the export_type of a --cache export
+CACHE_EXPORT = "cache"
+
+
+def parse_caches(value, export_type=None):
+    """The cache types ``--cache`` names, or ``[]``. ``--type`` may be
+    left unset or be ``external`` alongside it; anything else is a
+    ``ValueError``."""
+    caches = [c.strip() for c in (value or "").split(",") if c.strip()]
+    if caches and export_type not in (None, "external", *[a for a, t in ALIASES.items()
+                                                          if t == "external"]):
+        raise ValueError(f"--cache exports whole caches; it does not combine with "
+                         f"--type {export_type}")
+    return caches
+
+
 class ExportManager(TaskManager):
-    """Options, read from `args` in ``__init__``: ``export_type``, ``gz``,
+    """Options, read from `args` in ``__init__``: ``export_type``, ``caches``
+    (``--cache``), ``gz``,
     ``chunk`` (records per cache query; ``LUX_EXPORT_CHUNK``, else 1000),
     ``gzip_level`` (``LUX_EXPORT_GZIP``, else 9, for the JSONL exports; the
     phase's own default for the others) and ``out_dir``."""
@@ -66,8 +92,12 @@ class ExportManager(TaskManager):
         self.chunk_size = None
         self.gzip_level = None
         self.out_dir = None
+        self.caches = []
         if args is not None:
-            self.export_type = normalize_type(getattr(args, "export_type", None) or "marklogic")
+            self.caches = parse_caches(getattr(args, "cache", None),
+                                       getattr(args, "export_type", None))
+            self.export_type = (CACHE_EXPORT if self.caches else
+                                normalize_type(getattr(args, "export_type", None) or "marklogic"))
             self.gz = bool(getattr(args, "gz", False))
             self.chunk_size = getattr(args, "chunk", None)
             self.gzip_level = getattr(args, "gzip_level", None)
@@ -87,7 +117,9 @@ class ExportManager(TaskManager):
         """The merged results for the merged-record types, an external
         source for ``sources`` and ``external``."""
         name = cfg["name"]
-        if self.export_type in MERGED_TYPES:
+        if self.export_type == CACHE_EXPORT:
+            pass        # any source: what it has is checked in check()
+        elif self.export_type in MERGED_TYPES:
             if (which, name) != ("results", "merged"):
                 raise ValueError(f"--type {self.export_type} exports the merged records, "
                                  f"not {name}")
@@ -104,7 +136,14 @@ class ExportManager(TaskManager):
     def check(self):
         """Raised in the driver before any worker starts: nothing selected.
         For ``external``, no more workers than sources."""
-        if self.export_type not in MERGED_TYPES and not self.sources:
+        if self.export_type == CACHE_EXPORT:
+            if not self.sources:
+                raise ValueError("No source selected for --cache")
+            missing = [f"{name} has no {c}" for which, name in self.sources for c in self.caches
+                       if getattr(self.configs, which)[name].get(c) is None]
+            if missing:
+                raise ValueError("--cache: " + "; ".join(missing))
+        elif self.export_type not in MERGED_TYPES and not self.sources:
             raise ValueError(f"No source selected for --type {self.export_type}")
         if self.gz and self.export_type not in ("marklogic", "merged"):
             logger.info(f"--gz has no effect on --type {self.export_type}: its files are "
@@ -118,6 +157,11 @@ class ExportManager(TaskManager):
         """The external sources worker `n` exports."""
         return self.names[n::self.max_workers]
 
+    @property
+    def targets(self):
+        """``[(group, source name, cache type)]`` for a ``--cache`` export."""
+        return [(which, name, c) for which, name in self.sources for c in self.caches]
+
     def _gzip_kw(self):
         return {} if self.gzip_level is None else {"gzip_level": self.gzip_level}
 
@@ -126,6 +170,11 @@ class ExportManager(TaskManager):
         function returns (a list of them for ``external``)."""
         t = self.export_type
         mx = self.max_workers
+        if t == CACHE_EXPORT:
+            # one worker writes the whole cache, unsliced, as export-source.py did
+            sliced = mx > 1
+            return export_cache_slice(cfgs, self.targets, n if sliced else -1, mx if sliced else -1,
+                                      out_dir=self.out_dir, progress=progress, **self._gzip_kw())
         if t in ("marklogic", "merged"):
             return export_slice(cfgs, n, mx, no_ml=(t == "merged"), gz=self.gz,
                                 chunk_size=self.chunk_size, out_dir=self.out_dir,
@@ -149,14 +198,24 @@ class ExportManager(TaskManager):
     # ----------------------------------------------------------- driver
 
     def clear_stale(self):
-        """Before a marklogic / merged run over every slice: that type's
+        """Before a marklogic / merged (or ``--cache``) run over every slice: that type's
         ``export_full_*`` / ``export_merged_*`` files in the directory this
         run writes to (an earlier run with more workers leaves its higher
         slices behind, and the load would read them) and the done flags
         (run-all.sh's ``rm``). A single slice leaves them."""
-        if self.my_slice > -1 or self.export_type not in ("marklogic", "merged"):
+        if self.my_slice > -1:
             return 0
         out_dir = self.out_dir or self.configs.exports_dir
+        if self.export_type == CACHE_EXPORT:
+            # this run's files, and the slices or the unsliced file of an
+            # earlier one, which a load of the directory would read too
+            pats = []
+            for _, name, c in self.targets:
+                pats.append(cache_export_path(out_dir, name, c))
+                pats.append(cache_export_path(out_dir, name, c, 0).replace("_0.jsonl", "_*.jsonl"))
+            return remove_stale(*pats)
+        if self.export_type not in ("marklogic", "merged"):
+            return 0
         stem = "export_merged" if self.export_type == "merged" else "export_full"
         return remove_stale(os.path.join(out_dir, f"{stem}_*.jsonl"),
                             os.path.join(out_dir, f"{stem}_*.jsonl.gz"),
