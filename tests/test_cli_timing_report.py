@@ -1,13 +1,12 @@
 """`lux timing-report`: the per-slice timing JSON added up per phase, the
 side-by-side comparison, the profiles, log_dir from the configuration when
 no --dir is given, the Rich view (the default) and the plain text
-(``--no-ui``), which the root timing-report.py prints too.
+(``--no-ui``).
 Synthetic timing files written by hand plus real PhaseTimer output; no
 database and no installed configuration."""
 
 import io
 import json
-import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -213,26 +212,6 @@ def test_listed_and_documented():
     assert err is None
     for opt in ("--dir", "--phase", "--compare", "--profile"):
         assert opt in text
-
-
-def test_legacy_script_prints_the_same_report(tmp_path, capsys):
-    merge_run(tmp_path, slow_seconds=7200)
-    assert lux("--dir", str(tmp_path)) == 0
-    ours = capsys.readouterr().out
-    res = subprocess.run([sys.executable, str(ROOT / "timing-report.py"), "--dir", str(tmp_path)],
-                         capture_output=True, text=True, cwd=ROOT)
-    assert res.returncode == 0, res.stderr
-    assert res.stdout == ours
-
-
-def test_legacy_script_exits_1_without_timing(tmp_path):
-    res = subprocess.run([sys.executable, str(ROOT / "timing-report.py"), "--dir", str(tmp_path)],
-                         capture_output=True, text=True, cwd=ROOT)
-    assert res.returncode == 1
-    assert "no timing-*.json" in res.stdout
-
-
-# --- the Rich view ----------------------------------------------------------
 
 
 def test_rich_report(tmp_path, capsys, wide):
