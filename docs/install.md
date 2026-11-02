@@ -84,9 +84,10 @@ processes can be started.
 `lux` finds its configuration through `LUX_BASEPATH`: from the
 environment, else the `.env` in the current directory, else
 `~/.lux/.env` (parent directories are not searched). `lux initialize`
-writes the `.env` into the installation directory; copy it to `~/.lux/`
-so `lux` works from any directory (a `.env` in the current directory
-still wins):
+writes the `.env` into the installation directory, and offers to write
+`~/.lux/.env` too when there is none (`--home-dotenv` / `--no-home-dotenv`
+answer for a script), so `lux` works from any directory; a `.env` in the
+current directory still wins. To do it by hand:
 
 ```
 mkdir -p ~/.lux && cp ~/lux/data/.env ~/.lux/
