@@ -51,9 +51,17 @@ def phase_key(phase):
         return (len(PHASE_ORDER), phase)
 
 
-def load(directory, phase=None):
+def load(directory, phase=None, stale=None):
     """``{phase: [timing json, ...]}`` for the ``timing-*.json`` files in
-    `directory`, or only `phase`'s."""
+    `directory`, or only `phase`'s: the phase's latest run only.
+
+    A run rewrites ``timing-<phase>-<slice>.json`` for the slices it has, so
+    files of an earlier run survive beside it when that run had more slices
+    (``-24`` .. ``-31`` after a 32-way run, beside a 24-way one) or none
+    (``-all``, a ``--recid`` or single-process run). They differ from the
+    latest run in ``max_slice``, so a phase keeps the files whose
+    ``max_slice`` is that of its most recently updated file; the names of
+    the others go into `stale` (``{phase: [file name, ...]}``) if given."""
     out = defaultdict(list)
     for fn in sorted(glob.glob(os.path.join(directory, "timing-*.json"))):
         try:
@@ -75,7 +83,18 @@ def load(directory, phase=None):
             j["times_estimated"] = True
         if "started_at" not in j and j.get("updated_at") is not None:
             j["started_at"] = j["updated_at"] - j.get("seconds", 0)
+        j["file"] = os.path.basename(fn)
         out[j.get("phase", "?")].append(j)
+    for ph, runs in out.items():
+        newest = max(runs, key=lambda r: r.get("updated_at") or 0)
+        keep = [r for r in runs if r.get("max_slice") == newest.get("max_slice")]
+        if len(keep) < len(runs):
+            dropped = sorted(r["file"] for r in runs if r not in keep)
+            logger.debug(f"{ph}: ignoring {len(dropped)} file(s) of an earlier run: "
+                         f"{', '.join(dropped)}")
+            if stale is not None:
+                stale[ph] = dropped
+            out[ph] = keep
     return out
 
 
@@ -121,6 +140,13 @@ def summarise(runs):
     }
 
 
+def stale_note(files):
+    """What the report says about the files `load` set aside."""
+    shown = ", ".join(files[:4]) + (f", ... ({len(files) - 4} more)" if len(files) > 4 else "")
+    return (f"{len(files)} file{'s' if len(files) != 1 else ''} of an earlier run with a "
+            f"different number of slices: {shown}")
+
+
 def slice_rates(s):
     """The spread of one phase's per-slice rates, or None for two slices or
     fewer: ``lowest``, ``highest``, ``median``, ``spread`` (% of the
@@ -157,6 +183,8 @@ def report_lines(phase, s, stragglers=True):
     out.append(f"  {s['worker_seconds'] / 3600:.1f} worker-hours, "
                f"{s['cpu_seconds'] / 3600:.1f} cpu-hours = {s['cpu_percent']:.0f}% cpu")
     idle = 100 - s["cpu_percent"]
+    if s.get("stale_files"):
+        out.append(f"  ignored {stale_note(s['stale_files'])}")
     if idle > 20:
         out.append(f"  workers are off-cpu {idle:.0f}% of the time -- the stages below "
                    f"say what they are waiting in")
@@ -334,8 +362,11 @@ STRAGGLER_SHARE = 0.10
 
 
 def fmt_duration(secs):
-    """``2h 05m``, ``14m 30s`` or ``45s``."""
+    """``4d 02h``, ``2h 05m``, ``14m 30s`` or ``45s``."""
     secs = int(round(max(secs, 0)))
+    d, rem = divmod(secs, 86400)
+    if d:
+        return f"{d}d {rem // 3600:02d}h"
     h, rem = divmod(secs, 3600)
     m, s = divmod(rem, 60)
     if h:
@@ -386,6 +417,10 @@ def overall_summary(phases, top=TOP_BOTTLENECKS):
     * ``stragglers``: ``(phase, seconds, slow slices)`` where the phase
       waited on its slowest slice for more than `STRAGGLER_SHARE` of its
       wall clock (slowest slice's time less the median slice's)
+    * ``spread_out``: ``(phase, span, wall)`` for phases whose slices ran
+      across far more time than the phase's wall clock (over three times,
+      and more than `GAP_WARNING` longer): slices of different runs, or a
+      run restarted slice by slice
     * ``incomplete``: phases not every slice of which finished
     * ``times_estimated``: some clock times came from file mtimes
     """
@@ -438,6 +473,9 @@ def overall_summary(phases, top=TOP_BOTTLENECKS):
             stragglers.append((ph, wait, sr["slow"] if sr else []))
     stragglers.sort(key=lambda x: -x[1])
 
+    spread_out = [(ph, e - s, w) for ph, s, e, w, _done in timeline
+                  if e - s > max(3 * w, w + GAP_WARNING)]
+
     return {
         "phases": len(rows),
         "started_at": started, "ended_at": ended, "elapsed": elapsed,
@@ -446,10 +484,15 @@ def overall_summary(phases, top=TOP_BOTTLENECKS):
         "timeline": timeline, "gaps": gaps,
         "wall": wall, "worker_seconds": worker, "cpu_seconds": cpu,
         "cpu_percent": cpu / worker * 100 if worker else 0,
-        "bottlenecks": bottlenecks, "stragglers": stragglers,
+        "bottlenecks": bottlenecks, "stragglers": stragglers, "spread_out": spread_out,
         "incomplete": [ph for ph, s in rows if s["complete"] < s["slices"]],
         "times_estimated": any(s.get("times_estimated") for _, s in rows),
     }
+
+
+def spread_note(phase, span, wall):
+    return (f"{phase}'s slices span {fmt_duration(span)} but its wall clock is "
+            f"{fmt_duration(wall)} -- slices from more than one run?")
 
 
 ESTIMATED_TIMES = ("some start and end times are estimated from the files' modification "
@@ -476,6 +519,8 @@ def summary_lines(t):
                        f"{fmt_duration(w):>9}" + ("" if done else "  (not finished)"))
     for a, b, secs in t["gaps"]:
         out.append(f"  {fmt_duration(secs)} between {a} and {b} -- probably not the same build")
+    for ph, span, w in t["spread_out"]:
+        out.append(f"  {spread_note(ph, span, w)}")
     if t["bottlenecks"]:
         out.append("\n  biggest bottlenecks (elapsed time the stage accounts for):")
         for ph, name, secs, share in t["bottlenecks"]:
@@ -506,7 +551,8 @@ def directory_data(directory, phase=None, profile=None):
     from the ``profile-*.prof`` files, or None for none. Raises when there
     is no timing JSON to report on."""
     _check_dir(directory)
-    phases = load(directory, phase)
+    stale = {}
+    phases = load(directory, phase, stale)
     if not phases:
         which = f"timing-{phase}-*.json" if phase else "timing-*.json"
         raise RuntimeError(f"no {which} in {directory} -- has a phase run since "
@@ -515,6 +561,7 @@ def directory_data(directory, phase=None, profile=None):
     out = []
     for ph in sorted(phases, key=phase_key):
         s = summarise(phases[ph])
+        s["stale_files"] = stale.get(ph, [])
         prof = (profile_data(profiles[ph], stages=list(s["stages"]), n=profile)
                 if ph in profiles else None)
         out.append((ph, s, prof))

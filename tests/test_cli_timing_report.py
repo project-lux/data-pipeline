@@ -25,7 +25,7 @@ from lux_pipeline.process.timing import PhaseTimer
 
 
 def write_timing(d, phase, slice_n, records, seconds, cpu, stages, complete=True, marks=None,
-                 started_at=None):
+                 started_at=None, max_slice=None):
     d.mkdir(parents=True, exist_ok=True)
     js = {"phase": phase, "slice": slice_n, "records": records, "seconds": seconds,
           "cpu_seconds": cpu, "complete": complete,
@@ -33,6 +33,8 @@ def write_timing(d, phase, slice_n, records, seconds, cpu, stages, complete=True
           "stages": {k: {"calls": c, "seconds": s} for k, (c, s) in stages.items()}}
     if marks:
         js["marks"] = marks
+    if max_slice is not None:
+        js["max_slice"] = max_slice
     if started_at is not None:
         js["started_at"] = started_at
         js["updated_at"] = started_at + seconds
@@ -446,3 +448,79 @@ def test_summary_at_the_bottom_rich(tmp_path, capsys, wide):
 def test_durations():
     f = timing_report.fmt_duration
     assert (f(45), f(870), f(7500), f(-3)) == ("45s", "14m 30s", "2h 05m", "0s")
+    assert f(4 * 86400 + 8100) == "4d 02h"
+
+
+# --- files left by an earlier run -------------------------------------------
+
+OLD = T0 - 4 * 86400
+
+
+def mixed_reconcile(d):
+    """Today's 4-way reconcile over the files of an 8-way one four days ago
+    (slices 4-7 survive), and reconcile-refs over an unsliced run's -all."""
+    for n in range(8):
+        write_timing(d, "reconcile", n, 1000, 9000, 4500, {"acquire": (1000, 4500)},
+                     started_at=OLD, max_slice=8)
+    for n in range(4):
+        write_timing(d, "reconcile", n, 1000, 8100, 4000, {"acquire": (1000, 4000)},
+                     started_at=T0, max_slice=4)
+    write_timing(d, "reconcile-refs", "all", 10, 600, 300, {}, started_at=OLD, max_slice=-1)
+    for n in range(4):
+        write_timing(d, "reconcile-refs", n, 100, 3000, 1500, {}, started_at=T0 + 8200,
+                     max_slice=4)
+
+
+def test_an_earlier_runs_slices_are_left_out(tmp_path):
+    mixed_reconcile(tmp_path)
+    stale = {}
+    phases = timing_report.load(str(tmp_path), stale=stale)
+    assert sorted(r["slice"] for r in phases["reconcile"]) == [0, 1, 2, 3]
+    assert len(phases["reconcile-refs"]) == 4
+    assert stale == {"reconcile": [f"timing-reconcile-{n}.json" for n in range(4, 8)],
+                     "reconcile-refs": ["timing-reconcile-refs-all.json"]}
+    s = timing_report.summarise(phases["reconcile"])
+    assert (s["started_at"], s["wall"], s["slices"]) == (T0, 8100, 4)
+
+
+def test_the_timeline_starts_with_the_latest_run(tmp_path):
+    mixed_reconcile(tmp_path)
+    t = timing_report.overall_summary(timing_report.directory_data(str(tmp_path))[0])
+    assert t["started_at"] == T0
+    assert [(r[0], r[1]) for r in t["timeline"]] == [("reconcile", T0),
+                                                    ("reconcile-refs", T0 + 8200)]
+    assert t["spread_out"] == [] and t["gaps"] == []
+
+
+def test_left_out_files_are_named(tmp_path, capsys, wide):
+    mixed_reconcile(tmp_path)
+    assert lux("--dir", str(tmp_path)) == 0
+    out = capsys.readouterr().out
+    assert ("ignored 4 files of an earlier run with a different number of slices: "
+            "timing-reconcile-4.json, timing-reconcile-5.json") in out
+    assert "ignored 1 file of an earlier run" in out and "timing-reconcile-refs-all.json" in out
+    assert lux_rich("--dir", str(tmp_path)) == 0
+    assert "ignored 4 files of an earlier run" in capsys.readouterr().out
+
+
+def test_the_latest_run_wins_even_unsliced(tmp_path):
+    for n in range(4):
+        write_timing(tmp_path, "reconcile", n, 1000, 8100, 4000, {}, started_at=OLD, max_slice=4)
+    write_timing(tmp_path, "reconcile", "all", 1, 60, 30, {}, started_at=T0, max_slice=-1)
+    stale = {}
+    phases = timing_report.load(str(tmp_path), stale=stale)
+    assert [r["file"] for r in phases["reconcile"]] == ["timing-reconcile-all.json"]
+    assert len(stale["reconcile"]) == 4
+
+
+def test_slices_spread_over_days_are_flagged(tmp_path, capsys):
+    """Same number of slices, so nothing to tell them apart by -- but a
+    phase whose slices span days against a wall clock of hours is shown."""
+    write_timing(tmp_path, "reconcile", 0, 1000, 8100, 4000, {}, started_at=OLD, max_slice=2)
+    write_timing(tmp_path, "reconcile", 1, 1000, 8100, 4000, {}, started_at=T0, max_slice=2)
+    write_timing(tmp_path, "merge", 0, 1000, 3600, 1000, {}, started_at=T0 + 9000)
+    t = timing_report.overall_summary(timing_report.directory_data(str(tmp_path))[0])
+    assert [(ph, w) for ph, _, w in t["spread_out"]] == [("reconcile", 8100)]
+    assert lux("--dir", str(tmp_path)) == 0
+    assert ("reconcile's slices span 4d 02h but its wall clock is 2h 15m -- slices from "
+            "more than one run?") in capsys.readouterr().out
