@@ -454,6 +454,8 @@ def stub_build(monkeypatch):
 def run_testinstall(rest=(), cwd=None, monkeypatch=None):
     if cwd is not None:
         monkeypatch.chdir(cwd)
+        # never the real ~/.lux/.env
+        monkeypatch.setenv("HOME", str(Path(cwd).parent / "home"))
     runtime.reset_configs()
     return testinstall.CommandHandler(None).process(Namespace(command="testinstall"), list(rest))
 

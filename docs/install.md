@@ -81,13 +81,15 @@ the configuration, Postgres (and Redis where configured), the idmap, the
 sources' components, the data directories, the schemas, and that worker
 processes can be started.
 
-`lux` finds its configuration through the nearest `.env`, searched from
-the current directory upwards (or `LUX_BASEPATH` in the environment).
-`lux initialize` writes it into the installation directory; the build
-scripts run from the repository, so copy it there too:
+`lux` finds its configuration through `LUX_BASEPATH`: from the
+environment, else the `.env` in the current directory, else
+`~/.lux/.env` (parent directories are not searched). `lux initialize`
+writes the `.env` into the installation directory; copy it to `~/.lux/`
+so `lux` works from any directory (a `.env` in the current directory
+still wins):
 
 ```
-cp ~/lux/data/.env ~/lux/data-pipeline/
+mkdir -p ~/.lux && cp ~/lux/data/.env ~/.lux/
 ```
 
 

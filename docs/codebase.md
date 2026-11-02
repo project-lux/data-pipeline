@@ -101,7 +101,7 @@ kind that does not set them itself. An instance without them keeps using the sin
 
 ### runtime.py, log.py, progress.py
 
-* `runtime.get_configs()` builds the process's `Config` once (from `LUX_BASEPATH`, read from the nearest `.env`), and `configure_logging()` sets up the shared `lux_pipeline` logger. Every worker process builds its own; connections are never shared between processes.
+* `runtime.get_configs()` builds the process's `Config` once (from `LUX_BASEPATH`, read from the environment, `./.env` or `~/.lux/.env`), and `configure_logging()` sets up the shared `lux_pipeline` logger. Every worker process builds its own; connections are never shared between processes.
 * Library code logs through `logging.getLogger("lux_pipeline")` and never prints.
 * Components report progress through a `progress=` callable (`progress.null_progress` by default). A worker gets a `StatusWriter`, which rewrites `<log_dir>/<command>-<timestamp>-w<n>.status`; the worker's log goes to the matching `.log`. `lux watch` and the console view read those files, so no component knows whether, or how, it is being displayed.
 
