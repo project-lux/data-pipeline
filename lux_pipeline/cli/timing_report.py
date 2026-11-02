@@ -14,6 +14,13 @@ slices up: records, wall time, worker- and cpu-hours, the share of worker
 time in each stage (nested stages listed under their parent, never
 subtracted twice), and the slow and fast slices. Works on a running build
 too: a phase still in flight shows as not finished, with partial numbers.
+Phases are listed in the order the build runs them (reconcile,
+reconcile-refs, identify, merge, ...).
+
+With more than one phase, a summary of them all follows: start to end
+and the time between phases, a timeline, the stages that account for
+the most elapsed time across every phase, and the phases that waited on
+a slow slice.
 
 ``--profile [N]`` adds the top N functions from the
 ``profile-<phase>-<slice>.prof`` files that ``lux reconcile|merge|export

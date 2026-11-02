@@ -24,7 +24,8 @@ from lux_pipeline.process import timing_report
 from lux_pipeline.process.timing import PhaseTimer
 
 
-def write_timing(d, phase, slice_n, records, seconds, cpu, stages, complete=True, marks=None):
+def write_timing(d, phase, slice_n, records, seconds, cpu, stages, complete=True, marks=None,
+                 started_at=None):
     d.mkdir(parents=True, exist_ok=True)
     js = {"phase": phase, "slice": slice_n, "records": records, "seconds": seconds,
           "cpu_seconds": cpu, "complete": complete,
@@ -32,6 +33,9 @@ def write_timing(d, phase, slice_n, records, seconds, cpu, stages, complete=True
           "stages": {k: {"calls": c, "seconds": s} for k, (c, s) in stages.items()}}
     if marks:
         js["marks"] = marks
+    if started_at is not None:
+        js["started_at"] = started_at
+        js["updated_at"] = started_at + seconds
     (d / f"timing-{phase}-{slice_n}.json").write_text(json.dumps(js))
 
 
@@ -88,8 +92,8 @@ def test_lux_prints_every_phase(tmp_path, capsys):
     assert "slow slices (>20% under median): 2" in out
     assert "\n=== reconcile  (0/1 finished)" in out
     assert "source boundaries (slice 0): ycba at 2m" in out
-    # phases in name order
-    assert out.index("=== merge") < out.index("=== reconcile")
+    # phases in build order: reconcile before merge
+    assert out.index("=== reconcile") < out.index("=== merge")
 
 
 def test_phase_restricts_the_report(tmp_path, capsys):
@@ -244,7 +248,7 @@ def test_rich_report(tmp_path, capsys, wide):
     assert "inside merge  already counted above, not additional" in out
     assert "slow (>20% under median): 2" in out
     assert "ycba at 2m" in out
-    assert out.index("─ merge ") < out.index("─ reconcile ")
+    assert out.index("─ reconcile ") < out.index("─ merge ")
     # not the plain text
     assert "=== merge" not in out
 
@@ -315,3 +319,130 @@ def test_the_view_shares_the_numbers_with_the_text(tmp_path):
     assert sr["slow"] == [2] and sr["fast"] == [] and not sr["even"]
     assert timing_report.slice_rates({**s, "slices": 2}) is None
     assert timing_report.nested_overrun(s, "merge") == 0
+
+
+# --- build order and the summary of every phase ----------------------------
+
+T0 = 1793520000.0   # 2026-11-01 morning, UTC
+
+
+def build(d, gap=60):
+    """A small build: reconcile (one slow slice), identify, merge (idmap
+    bound), export, `gap` seconds apart."""
+    t = T0
+    for n, secs in enumerate((5400, 5500, 7900)):
+        write_timing(d, "reconcile", n, 1000, secs, secs / 2,
+                     {"acquire": (1000, secs * 0.5), "acquire.map": (1000, secs * 0.2)},
+                     started_at=t)
+    t += 7900 + gap
+    write_timing(d, "identify", "all", 1000, 2700, 2400, {"resolve": (1, 2000)}, started_at=t)
+    t += 2700 + gap
+    for n in range(3):
+        write_timing(d, "merge", n, 1000, 10800, 1080,
+                     {"fetch_idmap": (1000, 5400), "merge": (1000, 3240)}, started_at=t)
+    t += 10800 + gap
+    write_timing(d, "export", 0, 1000, 2400, 1700, {"write": (1000, 1200)}, started_at=t)
+    return t + 2400
+
+
+def test_phase_order_is_the_builds():
+    names = ["export", "zeta", "merge-refs", "identify", "reconcile-refs", "alpha",
+             "reconcile", "merge", "sheets", "export-nt"]
+    assert sorted(names, key=timing_report.phase_key) == [
+        "sheets", "reconcile", "reconcile-refs", "identify", "merge", "merge-refs",
+        "export", "export-nt", "alpha", "zeta"]
+
+
+def test_compare_in_build_order(tmp_path, capsys):
+    for d in ("old", "new"):
+        write_timing(tmp_path / d, "merge", 0, 10, 10, 9, {})
+        write_timing(tmp_path / d, "identify", "all", 10, 10, 9, {})
+        write_timing(tmp_path / d, "reconcile", 0, 10, 10, 9, {})
+    assert lux("--compare", str(tmp_path / "old"), str(tmp_path / "new")) == 0
+    out = capsys.readouterr().out
+    assert out.index("=== reconcile") < out.index("=== identify") < out.index("=== merge")
+
+
+def test_phase_timer_records_clock_times(tmp_path):
+    t = PhaseTimer("merge", slice_n=0, max_slice=1, out_dir=str(tmp_path), stream=io.StringIO())
+    t.step()
+    t.finish()
+    js = json.loads((tmp_path / "timing-merge-0.json").read_text())
+    assert js["started_at"] <= js["updated_at"]
+    assert abs(js["updated_at"] - __import__("time").time()) < 60
+
+
+def test_old_files_take_their_times_from_the_mtime(tmp_path):
+    write_timing(tmp_path, "merge", 0, 10, 600, 300, {})
+    fn = tmp_path / "timing-merge-0.json"
+    import os
+    os.utime(fn, (T0, T0))
+    s = timing_report.summarise(timing_report.load(str(tmp_path))["merge"])
+    assert (s["started_at"], s["ended_at"], s["times_estimated"]) == (T0 - 600, T0, True)
+
+
+def test_overall_summary(tmp_path):
+    end = build(tmp_path)
+    phases, _ = timing_report.directory_data(str(tmp_path))
+    assert [p[0] for p in phases] == ["reconcile", "identify", "merge", "export"]
+    t = timing_report.overall_summary(phases)
+    assert t["phases"] == 4
+    assert (t["started_at"], t["ended_at"], t["elapsed"]) == (T0, end, end - T0)
+    assert t["between"] == 180 and t["in_phases"] == end - T0 - 180
+    assert t["gaps"] == []
+    assert [r[0] for r in t["timeline"]] == ["reconcile", "identify", "merge", "export"]
+    assert t["wall"] == 7900 + 2700 + 10800 + 2400
+    # merge's wall shared out by worker time: half of it waiting on the idmap
+    ph, name, secs, share = t["bottlenecks"][0]
+    assert (ph, name, secs) == ("merge", "fetch_idmap", 5400)
+    assert share == pytest.approx(5400 / t["wall"])
+    assert ("merge", "merge", 3240, pytest.approx(3240 / t["wall"])) in t["bottlenecks"]
+    assert len(t["bottlenecks"]) == timing_report.TOP_BOTTLENECKS
+    # nested stages never compete with their parent
+    assert all(name != "acquire.map" for _, name, _, _ in t["bottlenecks"])
+    # reconcile's slowest slice ran 2400s past the median
+    assert t["stragglers"] == [("reconcile", 2400, [2])]
+    assert t["incomplete"] == [] and not t["times_estimated"]
+
+
+def test_one_phase_has_no_summary(tmp_path, capsys):
+    merge_run(tmp_path)
+    phases, _ = timing_report.directory_data(str(tmp_path))
+    assert timing_report.overall_summary(phases) is None
+    assert lux("--dir", str(tmp_path)) == 0
+    assert "=== all" not in capsys.readouterr().out
+
+
+def test_far_apart_phases_are_flagged(tmp_path):
+    build(tmp_path, gap=7 * 3600)
+    t = timing_report.overall_summary(timing_report.directory_data(str(tmp_path))[0])
+    assert [(a, b) for a, b, _ in t["gaps"]] == [("reconcile", "identify"), ("identify", "merge"),
+                                                ("merge", "export")]
+
+
+def test_summary_at_the_bottom_plain(tmp_path, capsys):
+    build(tmp_path)
+    assert lux("--dir", str(tmp_path)) == 0
+    out = capsys.readouterr().out
+    tail = out[out.index("=== all 4 phases"):]
+    assert out.index("=== export") < out.index("=== all 4 phases")
+    assert "start to end" in tail and "3m 00s between phases" in tail
+    assert "merge / fetch_idmap" in tail and "1h 30m" in tail
+    assert "reconcile waited 40m 00s on its slowest slice (slow: 2)" in tail
+
+
+def test_summary_at_the_bottom_rich(tmp_path, capsys, wide):
+    build(tmp_path, gap=7 * 3600)
+    assert lux_rich("--dir", str(tmp_path)) == 0
+    out = capsys.readouterr().out
+    tail = out[out.index("─ all 4 phases "):]
+    assert out.index("─ export ") < out.index("─ all 4 phases ")
+    assert "start to end" in tail and "Timeline" in tail and "Biggest bottlenecks" in tail
+    assert "fetch_idmap" in tail and "1h 30m" in tail
+    assert "probably not the same build" in tail
+    assert "reconcile waited 40m 00s on its slowest slice" in tail
+
+
+def test_durations():
+    f = timing_report.fmt_duration
+    assert (f(45), f(870), f(7500), f(-3)) == ("45s", "14m 30s", "2h 05m", "0s")

@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import pstats
+import time
 from collections import defaultdict
 
 # One definition of "a dotted name is nested inside its prefix", shared with
@@ -28,6 +29,26 @@ from lux_pipeline.process.timing import split_stages
 logger = logging.getLogger("lux_pipeline")
 
 DEFAULT_TOP = 20
+
+# The order a build runs its phases in (lux build, run-all.sh): the start-up
+# steps, reconcile and its references, identify, merge and its references,
+# the portal pass, then the exports. Reports list phases in this order; a
+# phase not named here comes after them, alphabetically.
+PHASE_ORDER = (
+    "download", "harvest", "load", "load-index", "clear", "sheets",
+    "reconcile", "reconcile-refs", "identify", "metatypes", "write-refs",
+    "merge", "merge-refs", "portal",
+    "export", "export-merged", "export-nt", "export-sources", "export-external",
+)
+
+
+def phase_key(phase):
+    """Sort key putting phases in build order (`PHASE_ORDER`), unknown ones
+    last by name."""
+    try:
+        return (PHASE_ORDER.index(phase), "")
+    except ValueError:
+        return (len(PHASE_ORDER), phase)
 
 
 def load(directory, phase=None):
@@ -43,6 +64,17 @@ def load(directory, phase=None):
             continue
         if phase and j.get("phase") != phase:
             continue
+        if "updated_at" not in j:
+            # written before PhaseTimer recorded clock times: the file is
+            # rewritten on every progress report and at the end, so its
+            # mtime is (about) when the snapshot was taken
+            try:
+                j["updated_at"] = os.path.getmtime(fn)
+            except OSError:
+                j["updated_at"] = None
+            j["times_estimated"] = True
+        if "started_at" not in j and j.get("updated_at") is not None:
+            j["started_at"] = j["updated_at"] - j.get("seconds", 0)
         out[j.get("phase", "?")].append(j)
     return out
 
@@ -66,7 +98,12 @@ def summarise(runs):
     # parent, and counting both drove this negative (-53.1% on reconcile).
     top, kids = split_stages(stages)
     accounted = sum(s[1] for s in top.values())
+    starts = [r["started_at"] for r in runs if r.get("started_at") is not None]
+    ends = [r["updated_at"] for r in runs if r.get("updated_at") is not None]
     return {
+        "started_at": min(starts) if starts else None,
+        "ended_at": max(ends) if ends else None,
+        "times_estimated": any(r.get("times_estimated") for r in runs),
         "slices": n,
         "complete": sum(1 for r in runs if r.get("complete")),
         "records": records,
@@ -287,6 +324,173 @@ def profile_data_lines(phase, p):
     return out
 
 
+# ------------------------------------------------------------- all phases
+
+TOP_BOTTLENECKS = 5
+# consecutive phases further apart than this are probably not one build
+GAP_WARNING = 6 * 3600
+# a phase's wait on its slowest slices worth reporting, as a share of its wall
+STRAGGLER_SHARE = 0.10
+
+
+def fmt_duration(secs):
+    """``2h 05m``, ``14m 30s`` or ``45s``."""
+    secs = int(round(max(secs, 0)))
+    h, rem = divmod(secs, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}h {m:02d}m"
+    if m:
+        return f"{m}m {s:02d}s"
+    return f"{s}s"
+
+
+def fmt_time(epoch):
+    """Local time, to the minute."""
+    return time.strftime("%Y-%m-%d %H:%M", time.localtime(epoch))
+
+
+def _union(intervals):
+    """Total length covered by `intervals` ((start, end) pairs)."""
+    total = 0.0
+    cur_s = cur_e = None
+    for s, e in sorted(intervals):
+        if cur_e is None or s > cur_e:
+            if cur_e is not None:
+                total += cur_e - cur_s
+            cur_s, cur_e = s, e
+        else:
+            cur_e = max(cur_e, e)
+    if cur_e is not None:
+        total += cur_e - cur_s
+    return total
+
+
+def overall_summary(phases, top=TOP_BOTTLENECKS):
+    """All the phases together, or None for fewer than two. `phases` is
+    `directory_data`'s ``[(phase, summary, profile), ...]`` (or
+    ``(phase, summary)`` pairs).
+
+    * ``started_at`` / ``ended_at`` / ``elapsed``: first start to last end
+      (None without clock times); ``in_phases``, the part of it some phase
+      was running; ``between``, the rest -- untimed steps and waiting
+    * ``timeline``: ``(phase, start, end, wall, complete)`` in build order
+    * ``gaps``: ``(after, before, seconds)`` for consecutive phases more
+      than `GAP_WARNING` apart, which are likely from different builds
+    * ``wall``: the phases' wall clocks added up; ``worker_seconds``,
+      ``cpu_seconds``, ``cpu_percent`` across them all
+    * ``bottlenecks``: the `top` largest ``(phase, stage, seconds, share)``,
+      where seconds is the phase's wall clock apportioned by the stage's
+      share of its worker time -- the elapsed time it accounts for -- and
+      share is that of the summed wall; ``(unattributed)`` competes too
+    * ``stragglers``: ``(phase, seconds, slow slices)`` where the phase
+      waited on its slowest slice for more than `STRAGGLER_SHARE` of its
+      wall clock (slowest slice's time less the median slice's)
+    * ``incomplete``: phases not every slice of which finished
+    * ``times_estimated``: some clock times came from file mtimes
+    """
+    rows = [(p[0], p[1]) for p in phases]
+    if len(rows) < 2:
+        return None
+    timed = [(ph, s) for ph, s in rows if s["started_at"] is not None and s["ended_at"] is not None]
+    timeline = sorted(((ph, s["started_at"], s["ended_at"], s["wall"],
+                        s["complete"] == s["slices"]) for ph, s in timed),
+                      key=lambda r: phase_key(r[0]))
+    started = min((r[1] for r in timeline), default=None)
+    ended = max((r[2] for r in timeline), default=None)
+    elapsed = ended - started if timeline else None
+    in_phases = _union([(r[1], r[2]) for r in timeline]) if timeline else None
+
+    gaps = []
+    reach = None
+    prev = None
+    for r in sorted(timeline, key=lambda r: r[1]):
+        if reach is not None and r[1] - reach > GAP_WARNING:
+            gaps.append((prev, r[0], r[1] - reach))
+        if reach is None or r[2] > reach:
+            reach, prev = r[2], r[0]
+
+    wall = sum(s["wall"] for _, s in rows)
+    worker = sum(s["worker_seconds"] for _, s in rows)
+    cpu = sum(s["cpu_seconds"] for _, s in rows)
+
+    cands = []
+    for ph, s in rows:
+        ws = s["worker_seconds"]
+        if not ws:
+            continue
+        for name, (_calls, secs) in s["top_stages"].items():
+            cands.append((ph, name, secs / ws * s["wall"]))
+        if s["unattributed"] > 0:
+            cands.append((ph, "(unattributed)", s["unattributed"] / ws * s["wall"]))
+    cands.sort(key=lambda c: -c[2])
+    bottlenecks = [(ph, name, secs, secs / wall if wall else 0)
+                   for ph, name, secs in cands[:top]]
+
+    stragglers = []
+    for ph, s in rows:
+        if s["slices"] < 3:
+            continue
+        secs = sorted(r["seconds"] for r in s["runs"])
+        wait = secs[-1] - secs[len(secs) // 2]
+        if s["wall"] and wait > s["wall"] * STRAGGLER_SHARE:
+            sr = slice_rates(s)
+            stragglers.append((ph, wait, sr["slow"] if sr else []))
+    stragglers.sort(key=lambda x: -x[1])
+
+    return {
+        "phases": len(rows),
+        "started_at": started, "ended_at": ended, "elapsed": elapsed,
+        "in_phases": in_phases,
+        "between": elapsed - in_phases if timeline else None,
+        "timeline": timeline, "gaps": gaps,
+        "wall": wall, "worker_seconds": worker, "cpu_seconds": cpu,
+        "cpu_percent": cpu / worker * 100 if worker else 0,
+        "bottlenecks": bottlenecks, "stragglers": stragglers,
+        "incomplete": [ph for ph, s in rows if s["complete"] < s["slices"]],
+        "times_estimated": any(s.get("times_estimated") for _, s in rows),
+    }
+
+
+ESTIMATED_TIMES = ("some start and end times are estimated from the files' modification "
+                   "times (written before PhaseTimer recorded them)")
+
+
+def summary_lines(t):
+    """`overall_summary`'s result `t` as lines; none for None."""
+    if t is None:
+        return []
+    out = [f"\n=== all {t['phases']} phases"]
+    if t["elapsed"] is not None:
+        out.append(f"  {fmt_time(t['started_at'])} to {fmt_time(t['ended_at'])}: "
+                   f"{fmt_duration(t['elapsed'])} start to end")
+        out.append(f"  {fmt_duration(t['in_phases'])} inside a timed phase, "
+                   f"{fmt_duration(t['between'])} between phases")
+    out.append(f"  {fmt_duration(t['wall'])} of phase wall clock added up, "
+               f"{t['worker_seconds'] / 3600:.1f} worker-hours, "
+               f"{t['cpu_percent']:.0f}% cpu")
+    if t["timeline"]:
+        out.append(f"\n  {'phase':<20} {'started':>16} {'finished':>16} {'wall':>9}")
+        for ph, s, e, w, done in t["timeline"]:
+            out.append(f"  {ph:<20} {fmt_time(s):>16} {fmt_time(e):>16} "
+                       f"{fmt_duration(w):>9}" + ("" if done else "  (not finished)"))
+    for a, b, secs in t["gaps"]:
+        out.append(f"  {fmt_duration(secs)} between {a} and {b} -- probably not the same build")
+    if t["bottlenecks"]:
+        out.append("\n  biggest bottlenecks (elapsed time the stage accounts for):")
+        for ph, name, secs, share in t["bottlenecks"]:
+            out.append(f"    {ph + ' / ' + name:<36} {fmt_duration(secs):>9} "
+                       f"{share * 100:>5.1f}% of all phases")
+    for ph, wait, slow in t["stragglers"]:
+        out.append(f"  {ph} waited {fmt_duration(wait)} on its slowest slice"
+                   + (f" (slow: {', '.join(map(str, slow))})" if slow else ""))
+    if t["incomplete"]:
+        out.append(f"  not finished: {', '.join(t['incomplete'])}")
+    if t["times_estimated"]:
+        out.append(f"  ({ESTIMATED_TIMES})")
+    return out
+
+
 # ------------------------------------------------------------- reports
 
 
@@ -297,7 +501,7 @@ def _check_dir(directory):
 
 def directory_data(directory, phase=None, profile=None):
     """``[(phase, summary, profile data or None), ...]`` for every phase (or
-    `phase`) in `directory`, in name order, and whether profiles were asked
+    `phase`) in `directory`, in build order (`phase_key`), and whether profiles were asked
     for but none found. `profile` is the number of top functions to take
     from the ``profile-*.prof`` files, or None for none. Raises when there
     is no timing JSON to report on."""
@@ -309,7 +513,7 @@ def directory_data(directory, phase=None, profile=None):
                            f"timing was added?")
     profiles = load_profiles(directory, phase) if profile else {}
     out = []
-    for ph in sorted(phases):
+    for ph in sorted(phases, key=phase_key):
         s = summarise(phases[ph])
         prof = (profile_data(profiles[ph], stages=list(s["stages"]), n=profile)
                 if ph in profiles else None)
@@ -330,12 +534,13 @@ def directory_report(directory, phase=None, profile=None):
     for ph, s, prof in phases:
         out.extend(report_lines(ph, s))
         out.extend(profile_data_lines(ph, prof))
+    out.extend(summary_lines(overall_summary(phases)))
     return out
 
 
 def compare_data(a_dir, b_dir, phase=None):
     """Two runs' timing JSON side by side: one dict per phase in either,
-    in name order. A phase in only one has ``only_in`` (that directory);
+    in build order. A phase in only one has ``only_in`` (that directory);
     otherwise ``metrics``, ``[(label, before, after, change %), ...]``, and
     ``stages``, ``[(name, before hrs, after hrs, change % or None for a new
     stage), ...]`` largest-after first."""
@@ -343,7 +548,7 @@ def compare_data(a_dir, b_dir, phase=None):
     _check_dir(b_dir)
     a, b = load(a_dir, phase), load(b_dir, phase)
     out = []
-    for ph in sorted(set(a) | set(b)):
+    for ph in sorted(set(a) | set(b), key=phase_key):
         if ph not in a or ph not in b:
             out.append({"phase": ph, "only_in": a_dir if ph in a else b_dir})
             continue

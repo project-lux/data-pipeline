@@ -150,6 +150,8 @@ class PhaseTimer:
         self.count = 0
         self.skipped = 0
         self.t0 = time.perf_counter()
+        # the clock time it started, so a report can lay phases on a timeline
+        self.started_at = time.time()
         self.cpu0 = time.process_time()
         self._last_report = self.t0
         self._last_count = 0
@@ -326,6 +328,10 @@ class PhaseTimer:
                        for n, s in rows},
             "unaccounted_seconds": round(el - accounted, 1),
             "marks": self.marks,
+            # clock times (epoch seconds): when the phase started, and when this
+            # snapshot was taken -- its end, once complete is True
+            "started_at": round(self.started_at, 1),
+            "updated_at": round(time.time(), 1),
             # False means this is a snapshot of a phase still running (or one
             # that died); the numbers are real but partial
             "complete": self.complete,
