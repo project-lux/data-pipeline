@@ -445,7 +445,11 @@ def pid_alive(pid):
 
 
 def exit_state(code):
-    return "finished" if code == 0 else "interrupted" if code == 130 else "failed"
+    """0 finished; 130 (Ctrl-C) or a negative code (ended by a signal, as
+    the web UI's cancel ends a run) interrupted; anything else failed."""
+    if code == 0:
+        return "finished"
+    return "interrupted" if code == 130 or (isinstance(code, int) and code < 0) else "failed"
 
 
 def run_state(record, build, now=None, window=RUNNING_WINDOW):

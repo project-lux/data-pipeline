@@ -44,8 +44,8 @@ from datetime import datetime
 from lux_pipeline import runtime
 from lux_pipeline.progress import RunRecord
 
-from ._handler import (PARENT_RUN_ENV, BaseHandler, command_argv, default_prefix, finish_record,
-                       refuse_while_building)
+from ._handler import (PARENT_RUN_ENV, RUN_EXTRA_ENV, BaseHandler, command_argv, default_prefix,
+                       finish_record, refuse_while_building, run_extra)
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -162,6 +162,8 @@ class CommandHandler(BaseHandler):
         """The environment a step runs in: this one, plus the build's prefix
         as ``LUX_PARENT_RUN``, which each phase records as its parent."""
         env = dict(os.environ)
+        # the build's own record says who started it; its phases' do not
+        env.pop(RUN_EXTRA_ENV, None)
         if getattr(self, "build_prefix", None):
             env[PARENT_RUN_ENV] = self.build_prefix
         return env
@@ -222,8 +224,8 @@ class CommandHandler(BaseHandler):
         self.run_prefix = None      # a build has no workers of its own to count
         self.run_record = RunRecord(prefix, "build", command_argv(args), engine=args.engine,
                                     workers=0, sources=[args.source or "all"],
-                                    extra={"phases": self.phases(args), "current": None,
-                                           "steps": []}).start()
+                                    extra={**run_extra(), "phases": self.phases(args),
+                                           "current": None, "steps": []}).start()
         try:
             current = None
             for phase, step in steps:

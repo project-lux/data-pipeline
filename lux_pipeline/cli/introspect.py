@@ -320,6 +320,34 @@ def argv_from_values(spec, values):
     return [spec["name"], *positionals, *options]
 
 
+def values_from_argv(spec, argv):
+    """The form values (``{dest: value}``) a command line sets, read back
+    through the real parsers: what a "run again" link prefills. `argv` is
+    a run's recorded command line, ``["lux", <command>, ...]`` or without
+    ``lux``; options a form does not show (``--prefix``, ``--no-ui``,
+    ``--my-worker``, ...) and values equal to their default are left out."""
+    argv = list(argv or [])
+    if argv and argv[0] == "lux":
+        argv = argv[1:]
+    args, rest = entry.build_parser().parse_known_args(argv)
+    _, ap = command_parser(spec["name"])
+    ns, _unknown = ap.parse_known_args(rest, namespace=args)
+    out = {}
+    for o in spec["options"]:
+        if o["dest"] in HIDDEN or not hasattr(ns, o["dest"]):
+            continue
+        value = getattr(ns, o["dest"])
+        # a flag not given is its default (store_true: False; store_false: True)
+        if value is None or value == [] or value == o["default"]:
+            continue
+        out[o["dest"]] = value
+    return out
+
+
+# what a form never shows: the runner sets them, or they make no sense from a page
+HIDDEN = frozenset({"no_ui", "prefix", "my_worker", "debug", "help", "env"})
+
+
 def confirm_reason(spec, values):
     """Why this run of the command needs a typed confirmation, or None."""
     reason = spec.get("confirms")

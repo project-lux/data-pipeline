@@ -235,3 +235,15 @@ svg.timeline { width: 100%; max-height: 24rem; margin: 0.5rem 0; font: 11px var(
 svg.timeline text { fill: var(--fg); }
 svg.timeline rect.done { fill: var(--bar); }
 svg.timeline rect.running { fill: var(--warn); }
+
+/* command forms (W10) */
+.form.command fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 1rem; padding: 0.5rem 1rem 1rem; }
+.form.command legend { padding: 0 0.4rem; font-weight: 600; }
+.form.command .field { margin: 0.4rem 0 0.6rem; }
+.form.command .field label.inline { display: inline-flex; gap: 0.4rem; margin-left: 0.75rem; }
+.form.command .pair { display: inline-flex; gap: 0.5rem; }
+.phase-picks { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; margin: 0.5rem 0; }
+.phase-picks label { display: inline-flex; gap: 0.35rem; align-items: center; margin: 0; }
+ol.steps code { overflow-wrap: anywhere; }
+pre.doc { white-space: pre-wrap; }
+.cancel-run { margin: 0.75rem 0; }

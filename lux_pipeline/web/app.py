@@ -34,7 +34,8 @@ logger = logging.getLogger("lux_pipeline")
 
 HERE = Path(__file__).parent
 # the areas, in navigation order (web.api.<name> and web.routers.<name>)
-AREAS = ("dashboard", "runs", "records", "counts", "timing", "config", "maintenance", "health")
+AREAS = ("dashboard", "commands", "runs", "records", "counts", "timing", "config", "maintenance",
+         "health")
 # messages kept for the page a POST redirects to (?flash=<id>)
 FLASH_LIMIT = 200
 
@@ -125,6 +126,9 @@ def create_app(settings=None):
                   dependencies=[Depends(require_token), Depends(require_csrf)],
                   docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
     app.state.lux = AppState(settings)
+    # starts, cancels and reaps the commands run from the web (W10)
+    from .runner import Runner
+    app.state.runner = Runner(app.state.lux)
     app.state.csrf = new_csrf_token()
     app.state.version = _version()
     app.state.templates = make_templates()
@@ -139,6 +143,12 @@ def create_app(settings=None):
         app.include_router(pages.router)
         if getattr(pages, "NAV", None):
             app.state.nav.append(pages.NAV)
+
+    # the runs this server started before a restart, still running
+    try:
+        app.state.runner.adopt()
+    except Exception as e:
+        logger.debug(f"could not look for runs to adopt: {e}")
 
     @app.get("/healthz", include_in_schema=False)
     def healthz():

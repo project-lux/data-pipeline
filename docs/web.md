@@ -51,6 +51,23 @@ bind where you can.
   them, with their `<prefix>.run` records); the last lines of
   `pipeline_process_status.txt`; the last health check. The header's
   *running* badge shows from any page while a run is going.
+* **Commands** (`/commands`): every `lux` command by group, each a form
+  built from its own options (a tick box for a flag, a list for a choice,
+  a number, a line per value for a repeated option), the sources offered
+  as you type. Under the form is the exact command line it will run,
+  updated as you fill it in. A run that deletes or rewrites what a build
+  depends on (`clear`, `identify`, `build --clear`, `pg-maintain` other
+  than `--bloat`, ...) says what it will do and starts only once you type
+  the command's name. A build phase, or such a run, is refused while a
+  build is running, as in the shell; a command with `--force` can be
+  forced. A run started here is a process of its own (as `lux build` runs
+  its phases), its output in `<prefix>.out` beside its status and log
+  files in `log_dir`; you go straight to its run page. The server can be
+  restarted while it runs. `config`, `serve`, `watch`, `help`,
+  `interactive` and `initialize` are described, not run. *Build*
+  (`/commands/build`): `lux build` with a tick box per phase, `--from` /
+  `--to`, *clear first*, the sources, workers, engine and profiling; *Show
+  the steps* lists what `lux build --dry-run` prints for those choices.
 * **Runs** (`/runs`): every run under `log_dir`, newest first, with its
   state (running, finished, failed, interrupted, killed when its process
   died without finishing, unknown for an old shell run), filtered by
@@ -61,7 +78,13 @@ bind where you can.
   stop following, jump to the first error, and read a worker's earlier
   lines. A `lux build` shows its phases, each linked to its own run, and
   each phase links back to its build. A run started from a shell slice by
-  slice shows too. `/runs/_latest` opens the newest.
+  slice shows too. `/runs/_latest` opens the newest. *Run again* opens the
+  command's form filled in as the run was. A run started from the web can
+  be cancelled from its page by typing `cancel`: its process and its
+  workers are sent SIGTERM (SIGKILL ten seconds later if still there), and
+  the run reads as interrupted. A run started in a shell cannot be: stop
+  it there (its pid is shown); a phase of a web-started build is stopped
+  by cancelling the build.
 * **Records** (`/records`): type anything you can name a record by (a
   URI, a `…##quaType` key, a curie like `aat:300033618`, a YUID, or a
   source's own identifier with the source chosen) and see where it is: a
@@ -89,7 +112,8 @@ bind where you can.
   and Postgres, the settings to change for the build's workers and the SQL
   to do it; and, on request, `lux pg-maintain --bloat` for each cache
   table: rows, size, and the space VACUUM will not give back, with the
-  command that would. Nothing on the page changes a table.
+  command that would. Nothing on the page changes a table: its
+  `lux pg-maintain` commands are links to the command's form.
 * **Configuration** (`/config`): every record, grouped by type, with the
   file (and sub-config store) it came from, and the sources at a glance.
   A record's page has two ways to edit it. *Fields*: the keys the
@@ -114,11 +138,17 @@ Everything a page shows is also JSON under `/api/` (`/api/dashboard`,
 `events`), `/api/records/journey?q=`, `/api/records/sample?source=`,
 `/api/counts`, `/api/timing`, `/api/maintenance/tune`,
 `/api/maintenance/bloat`,
-`/api/config`, `/api/config/<key>`,
+`/api/config`, `/api/config/<key>`, `/api/commands`, `/api/commands/<name>`
+(a command's options), `POST /api/commands/<name>/preview` (a form, or
+JSON `{"values": {option: value}}`, to its command line),
 `/api/health`); `/api/docs` lists the routes.
 
 ## Safety
 
 Every request that changes something (a POST) carries the page's CSRF
 token, or is refused. The server never runs a pipeline phase in its own
-process.
+process: a command runs as `python -m lux_pipeline.cli.entry <command>
+... --no-ui --prefix <log_dir>/<command>-<timestamp>`, its arguments a
+list (never a shell string). `--my-worker`, `--debug`, `--prefix` and
+`--env` never come from a form. Whatever a form sends, the server checks
+it against the command's own parser and the confirmation itself.

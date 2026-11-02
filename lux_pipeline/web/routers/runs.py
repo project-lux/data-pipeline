@@ -4,9 +4,10 @@ view shows it, live while it runs."""
 from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from lux_pipeline.progress import list_runs
+from lux_pipeline.progress import list_runs, read_run
 from lux_pipeline.web.api.runs import (FINISHED, LEVELS, full_prefix, log_data, log_dir, rel_prefix,
                                        run_data, runs_data)
+from lux_pipeline.web.api.commands import run_again_url
 from lux_pipeline.web.app import page
 
 router = APIRouter(include_in_schema=False)
@@ -38,4 +39,8 @@ def run(request: Request, rel: str):
     live = data["state"] not in FINISHED
     script = {"rel": data["rel"], "live": live, "offsets": log["offsets"],
               "starts": log["starts"], "workers": data["workers"]}
-    return page(request, "runs/run.html", r=data, log=log, live=live, levels=LEVELS, script=script)
+    record = read_run(prefix)
+    cancel = request.app.state.runner.cancellable(record) if live else "it is not running"
+    again = run_again_url(data["command"], data["argv"]) if data["argv"] else None
+    return page(request, "runs/run.html", r=data, log=log, live=live, levels=LEVELS, script=script,
+                cancel_why=cancel, again=again)

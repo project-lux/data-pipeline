@@ -131,7 +131,8 @@ def state(tmp_path, **kw):
     return run_state(read_run(prefix), read_build(prefix, 2))
 
 
-@pytest.mark.parametrize("exit, expected", [(0, "finished"), (1, "failed"), (130, "interrupted")])
+@pytest.mark.parametrize("exit, expected", [(0, "finished"), (1, "failed"), (130, "interrupted"),
+                                            (-15, "interrupted"), (3, "failed")])
 def test_state_from_the_records_exit(tmp_path, exit, expected):
     assert state(tmp_path, exit=exit, done=True) == expected
 
@@ -285,6 +286,19 @@ def test_an_interrupt_is_recorded(tmp_path):
     rec = read_run(str(tmp_path / "logs" / "quiet-1"))
     assert (rec["exit"], rec["error"]) == (130, "interrupted")
     assert run_state(rec, read_build(rec["prefix"], 1)) == "interrupted"
+
+
+def test_whoever_starts_a_command_can_add_to_its_record(tmp_path, monkeypatch):
+    """LUX_RUN_EXTRA (the web UI's runner): its fields go into the record;
+    a value that is not a JSON object is ignored, never an error."""
+    monkeypatch.setenv("LUX_RUN_EXTRA", '{"web": true, "stdout": "/x/run.out"}')
+    h, args, rest = run_handler(tmp_path, ["--source", "ycba"])
+    h.process(args, rest)
+    rec = read_run(args.prefix)
+    assert rec["web"] is True and rec["stdout"] == "/x/run.out" and rec["exit"] == 0
+    monkeypatch.setenv("LUX_RUN_EXTRA", "[1, 2")
+    from lux_pipeline.cli._handler import run_extra
+    assert run_extra() == {}
 
 
 def test_one_slice_of_many_writes_no_record(tmp_path):

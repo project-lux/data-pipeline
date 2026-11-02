@@ -187,3 +187,75 @@ ends.
   shows the same steps as the shell; a real build started from the page
   shows the phase strip and completes; `lux watch` and the web agree.
 * Tests pass.
+
+## As built
+
+`web/runner.py`, `web/api/commands.py`, `web/routers/commands.py`,
+`templates/commands/{index,form,build,_fields}.html`, `static/cmdform.js`;
+the Commands area in the navigation, after the dashboard. Differences
+from the design above:
+
+* **The record is there from the first moment.** `start` writes a
+  provisional `<prefix>.run` (`web: true`, `stdout`, the child's pid,
+  `workers: 0`) for every command, so the run page exists when the
+  browser is redirected to it. A worker command's driver (and `lux build`)
+  replaces it with its own; the web fields survive because the runner
+  passes them in `LUX_RUN_EXTRA` (JSON), which
+  `CommandHandler.start_record` and `lux build` add to their records
+  (`_handler.run_extra`; anyone starting a command can use it). Merging
+  into the file after the driver writes it would be lost at the driver's
+  next write. `lux build` drops `LUX_RUN_EXTRA` from its phases'
+  environment, so only the build reads as web-started: a phase's page
+  says "cancel the build".
+* **The reaper** polls every half second (`proc.poll()` for a child,
+  `pid_alive` for an adopted run). A run that ends without having
+  finished its record (a `BaseHandler` command, one that failed before
+  its driver wrote one, a cancelled one) is finished with the exit code
+  and the last line of `.out` as the error. A SIGTERM'd Python never
+  writes its own record, so a cancel is finished as `exit: -15`,
+  `error: "cancelled from the web"`. `progress.exit_state` reads a
+  negative exit (ended by a signal) as **interrupted**, like 130. An
+  adopted run (not this server's child) has no exit code to record: when
+  its process goes, the record is left for `run_state` to call killed,
+  unless it was cancelled from here.
+* **The guard** (`Runner.check`) is the shell's `refuse_while_building`
+  for a phase (`GROUPS["phases"]`) and for a run that needs confirming
+  (`guarded`: the route passes whether `confirm_reason` gave a reason, so
+  `pg-maintain --bloat` is not held up); `force` passes only when the
+  command has `--force` and it was ticked. Two phases started from here
+  never run at once.
+* **Confirmation** is a field under the command line, shown when the
+  preview says the run needs it (no modal, no `confirm.js`); the server
+  checks the phrase.
+* **Forms**: a field per option of `command_spec` not in
+  `introspect.HIDDEN` (`no_ui`, `prefix`, `my_worker`, `debug`, `help`,
+  `env`). An optional-value option (`timing-report --profile`) has a
+  "given without a value" box (`<dest>__bare`); a repeated option
+  (`validate --ignore`) a textarea, a line each. `api/commands.form_values`
+  reads a submitted form or a query string the same way, for the preview,
+  the start and a prefilled form. A form sent back with an error keeps
+  what was typed.
+* **Run again**: `introspect.values_from_argv(spec, argv)` reads a run's
+  recorded command line back through the real parsers (the options a form
+  never shows and defaults left out); `api/commands.run_again_url` makes
+  the query string (for a build, the phase boxes from `--skip`). A test
+  checks every option of every runnable command round-trips: form values
+  → command line → link → form values → the same command line.
+* **The build page** has phase boxes (`phase`, with `phases_shown` to tell
+  "none ticked" from "not this form"; unticked phases become `--skip`),
+  *clear first*, `--from` / `--to`, and the other options as fields.
+  *Show the steps* posts to `/api/commands/build/dry-run` from the page,
+  or, without scripts, reloads it with `?preview_steps=1`; the lines are
+  `lux build --dry-run`'s `[phase]` lines with the interpreter shown as
+  `lux`.
+* `POST /api/commands/<name>/preview` takes a form (the page's; the error
+  is in the answer) or JSON `{"values": {...}}` (an option the command
+  lacks, or a value it cannot take, is a 400) and returns the argv too.
+* Acceptance on the laptop (2026-11-02): `lux validate --source aat
+  --max-records 500` started from the form (15 workers, mp) finished;
+  its `.run` (with `web`, `stdout`), `.out`, status, log and errors files
+  are all in `log_dir`; a second one with `--max-records 200000` was
+  cancelled from its page at about 3,000 records and read as interrupted,
+  no worker left. The build page's steps for `--source ycba`, reconcile
+  and merge ticked, match `lux build --dry-run` in the shell.
+

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "commands/_fields.html" import running_banner %}
+{% block title %}Commands{% endblock %}
+{% block content %}
+<h1>Commands</h1>
+<p class="lead">Every <code>lux</code> command, as a form built from its own options. A run started here is a process of
+its own, with its progress and log on its run page; the server can be restarted while it runs.
+The whole build has <a href="/commands/build">its own page</a>.</p>
+{{ running_banner(running) }}
+<div class="cards">
+{% for g in groups %}
+  <section class="card">
+    <h2>{{ g.label }}</h2>
+    <table class="table commands">
+      <tbody>
+      {% for c in g.commands %}
+        <tr><td><a href="/commands/{{ c.name }}">{{ c.name }}</a></td>
+          <td class="detail">{{ c.summary }}
+            {% if not c.runnable %}<span class="badge state-not">not run from here</span>{% endif %}
+            {% if c.confirms %}<span class="badge state-warn" title="{{ c.confirms }}">confirm</span>{% endif %}
+            {% if c.runs_workers %}<span class="badge state-found">workers</span>{% endif %}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endfor %}
+</div>
+{% endblock %}
