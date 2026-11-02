@@ -7,8 +7,8 @@ workers' status and log files, the configuration files -- through the
 same functions the `lux` commands print from. The plan is in
 `webui_docs/`; this page grows with it (item W13 completes it).
 
-Built so far: the server, the **Dashboard**, **Configuration** and
-**Health** pages.
+Built so far: the server, the **Dashboard**, **Runs**, **Configuration**
+and **Health** pages.
 
 ## Install and start
 
@@ -50,6 +50,17 @@ bind where you can.
   them, with their `<prefix>.run` records); the last lines of
   `pipeline_process_status.txt`; the last health check. The header's
   *running* badge shows from any page while a run is going.
+* **Runs** (`/runs`): every run under `log_dir`, newest first, with its
+  state (running, finished, failed, interrupted, killed when its process
+  died without finishing, unknown for an old shell run), filtered by
+  command or state. A run's page is `lux watch` in the browser: a row per
+  worker (what it is doing, its bar, done/total, %, elapsed, remaining),
+  the all-workers row, and the log, all following the run live and
+  stopping when it ends. The log can be filtered by level and worker,
+  stop following, jump to the first error, and read a worker's earlier
+  lines. A `lux build` shows its phases, each linked to its own run, and
+  each phase links back to its build. A run started from a shell slice by
+  slice shows too. `/runs/_latest` opens the newest.
 * **Configuration** (`/config`): every record, grouped by type, with the
   file (and sub-config store) it came from, and the sources at a glance.
   A record's page has two ways to edit it. *Fields*: the keys the
@@ -70,7 +81,8 @@ bind where you can.
   settings with `lux pg-tune` are off unless ticked.
 
 Everything a page shows is also JSON under `/api/` (`/api/dashboard`,
-`/api/dashboard/running`, `/api/config`, `/api/config/<key>`,
+`/api/dashboard/running`, `/api/runs`, `/api/runs/<run>` (and its `log`,
+`events`), `/api/config`, `/api/config/<key>`,
 `/api/health`); `/api/docs` lists the routes.
 
 ## Safety

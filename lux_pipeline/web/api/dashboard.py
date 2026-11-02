@@ -46,14 +46,20 @@ def run_summary(run):
             "labels": [p["labels"][n] for n in sorted(p["labels"])]}
 
 
+def linked(state, run):
+    """`run_summary` with ``rel``, what its page's URL names it by (W09)."""
+    from lux_pipeline.web.api.runs import rel_prefix
+    return dict(run_summary(run), rel=rel_prefix(state, run["prefix"]))
+
+
 def dashboard_data(state):
     cfgs = state.configs()
     runs = state.runs()
     return {
         "installation": installation(state),
         "sources": {g: list(getattr(cfgs, g)) for g in ("internal", "external", "results")},
-        "running": [run_summary(r) for r in runs if r["state"] == "running"],
-        "recent": [run_summary(r) for r in runs[:10]],
+        "running": [linked(state, r) for r in runs if r["state"] == "running"],
+        "recent": [linked(state, r) for r in runs[:10]],
         "last_build": last_build(state),
         "health": state.health if state.health["finished"] else None,
     }
@@ -61,7 +67,7 @@ def dashboard_data(state):
 
 def running_data(state):
     """What the header's badge needs, cheap enough to poll."""
-    return [run_summary(r) for r in state.running()]
+    return [linked(state, r) for r in state.running()]
 
 
 @router.get("")

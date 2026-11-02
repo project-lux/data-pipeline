@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge, bar %}
+{% block title %}Runs{% endblock %}
+{% block content %}
+<h1>Runs</h1>
+<p class="lead">Every run under <code>{{ data.log_dir }}</code>, newest first: what <code>lux watch</code> can attach to,
+including runs started from a shell slice by slice.</p>
+<form class="form inline" method="get" action="/runs">
+  <label>Command <select name="command"><option value="">any</option>
+    {% for c in data.commands %}<option value="{{ c }}"{% if c == command %} selected{% endif %}>{{ c }}</option>{% endfor %}</select></label>
+  <label>State <select name="state"><option value="">any</option>
+    {% for s in states %}<option value="{{ s }}"{% if s == state %} selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
+  <button type="submit" class="secondary">Show</button>
+  <a href="/runs/_latest">watch the latest</a>
+</form>
+{% if data.runs %}
+<table class="table">
+  <thead><tr><th>Command</th><th>State</th><th>Started</th><th class="num">Took</th><th class="num">Workers</th><th>Progress</th><th>Run</th></tr></thead>
+  <tbody>
+  {% for r in data.runs %}
+    <tr><td>{% if r.parent %}<span class="muted">↳ </span>{% endif %}{{ r.command }}</td><td>{{ badge(r.state) }}</td>
+        <td>{{ fmt_time(r.started) }}</td><td class="num">{{ fmt_duration(r.duration) }}</td>
+        <td class="num">{{ r.workers }}</td><td>{% if r.workers %}{{ bar(r.completed, r.total) }}{% endif %}</td>
+        <td class="path">{% if r.rel %}<a href="/runs/{{ r.rel }}">{{ r.rel }}</a>{% else %}{{ r.prefix }}{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">No runs{% if command or state %} like that{% endif %}.</p>
+{% endif %}
+{% endblock %}

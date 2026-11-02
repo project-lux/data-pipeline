@@ -27,7 +27,7 @@
     <table class="table">
       <tbody>
       {% for r in data.running %}
-        <tr><td>{{ r.command }}</td><td>{{ bar(r.completed, r.total) }}</td>
+        <tr><td>{% if r.rel %}<a href="/runs/{{ r.rel }}">{{ r.command }}</a>{% else %}{{ r.command }}{% endif %}</td><td>{{ bar(r.completed, r.total) }}</td>
             <td class="muted">{{ r.workers }} worker(s), started {{ fmt_time(r.started) }}</td></tr>
       {% endfor %}
       </tbody>
@@ -63,13 +63,13 @@
 </div>
 
 <section class="card wide">
-  <h2>Recent runs</h2>
+  <h2>Recent runs <a class="small" href="/runs">all runs</a> <a class="small" href="/runs/_latest">watch the latest</a></h2>
   {% if data.recent %}
   <table class="table">
     <thead><tr><th>Command</th><th>State</th><th>Started</th><th class="num">Workers</th><th>Progress</th><th>Prefix</th></tr></thead>
     <tbody>
     {% for r in data.recent %}
-      <tr><td>{{ r.command }}</td><td>{{ badge(r.state) }}</td><td>{{ fmt_time(r.started) }}</td>
+      <tr><td>{% if r.rel %}<a href="/runs/{{ r.rel }}">{{ r.command }}</a>{% else %}{{ r.command }}{% endif %}</td><td>{{ badge(r.state) }}</td><td>{{ fmt_time(r.started) }}</td>
           <td class="num">{{ r.workers }}</td><td>{{ bar(r.completed, r.total) }}</td>
           <td class="path">{{ r.prefix }}</td></tr>
     {% endfor %}

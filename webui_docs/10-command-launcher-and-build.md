@@ -144,6 +144,11 @@ positionals first, checks choices and required options, and refuses
 4. Build page with dry-run.
 5. `docs/web.md` section.
 
+Testing note (from W09): to read a run's event stream while the test
+starts or changes things, use `tests/web_client.LiveServer` (a real uvicorn
+server in a thread); the `TestClient` holds a streaming response until it
+ends.
+
 ## Tests (`tests/test_web_commands.py`, `tests/test_web_runner.py`)
 
 * `/api/commands` has every command with a group; `/commands/reconcile`
