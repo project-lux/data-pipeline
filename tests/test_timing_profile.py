@@ -1,6 +1,6 @@
-"""cProfile inside PhaseTimer, and timing-report.py --profile (item 41)."""
+"""cProfile inside PhaseTimer, and --profile on the phase commands (item 41)."""
 
-import importlib.util
+import importlib
 import io
 import json
 import os
@@ -16,8 +16,6 @@ import pytest
 from lux_pipeline.cli._handler import add_profile_arg, enable_profiling
 from lux_pipeline.process import timing
 from lux_pipeline.process.timing import PhaseTimer, profiling_requested
-
-ROOT = Path(__file__).parent.parent
 
 
 def busy(n=2000):
@@ -145,45 +143,3 @@ def test_the_phase_commands_take_profile(command, monkeypatch):
     h.configs = None
     h.make_manager([], args)
     assert seen["env"] == "1"
-
-
-# --- timing-report.py --profile -------------------------------------------------
-
-
-def report_module():
-    spec = importlib.util.spec_from_file_location("timing_report", ROOT / "timing-report.py")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-def test_the_report_adds_up_the_slices(tmp_path, capsys, monkeypatch):
-    run(tmp_path, slice_n=0, profile=True)
-    run(tmp_path, slice_n=1, profile=True)
-    run(tmp_path, phase="reconcile-refs", slice_n=0, profile=True)
-    rep = report_module()
-    profiles = rep.load_profiles(str(tmp_path))
-    assert {k: len(v) for k, v in profiles.items()} == {"reconcile": 2, "reconcile-refs": 1}
-    one = rep.combine(profiles["reconcile"][:1])
-    both = rep.combine(profiles["reconcile"])
-    busy_key = next(f for f in both.stats if f[2] == "busy")
-    assert both.stats[busy_key][1] == 2 * one.stats[busy_key][1] == 10
-
-    monkeypatch.setattr(sys, "argv", ["timing-report.py", "--dir", str(tmp_path),
-                                      "--phase", "reconcile", "--profile", "5"])
-    rep.main()
-    out = capsys.readouterr().out
-    assert "=== reconcile profile  (2 slices," in out
-    assert "top 5 by cumulative" in out and "top 5 by internal" in out
-    # the "busy" stage matched the function of that name, and its callees
-    assert "\n  busy: busy (tests/test_timing_profile.py:" in out
-    assert "<genexpr>" in out
-    assert "reconcile-refs profile" not in out
-
-
-def test_the_report_without_profiles_says_how_to_get_them(tmp_path, capsys, monkeypatch):
-    run(tmp_path)
-    rep = report_module()
-    monkeypatch.setattr(sys, "argv", ["timing-report.py", "--dir", str(tmp_path), "--profile"])
-    rep.main()
-    assert "no profile-*.prof found" in capsys.readouterr().out
