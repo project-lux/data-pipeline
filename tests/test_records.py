@@ -194,6 +194,34 @@ def test_metadata_and_sample(built):
     assert len(ended) == 5
 
 
+def test_sample_leaves_no_iteration_open():
+    """A Postgres cache iterates on a second connection; stopping early must
+    close the cursor and end that connection's transaction."""
+    log = []
+
+    class Conn:
+        autocommit = False
+
+        def rollback(self):
+            log.append("rollback")
+
+    class Cache:
+        iterating_conn = Conn()
+
+        def iter_keys(self):
+            try:
+                for i in range(100):
+                    yield f"k{i}"
+            finally:
+                log.append("cursor closed")
+
+        def end_read(self):
+            log.append("end_read")
+
+    assert records.sample(Cache(), n=3) == ["k0", "k1", "k2"]
+    assert log == ["cursor closed", "end_read", "rollback"]
+
+
 def test_validate(built, monkeypatch):
     cfgs, _ = built
     row = cfgs.internal["ycba"]["recordcache"]["object/1"]

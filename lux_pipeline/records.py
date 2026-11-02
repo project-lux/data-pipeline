@@ -401,8 +401,18 @@ def metadata(cache, key):
 def sample(cache, n=50, typ=None, since=None):
     """Up to `n` keys of `cache`: of records of type `typ` (``Concept``
     is any concept type; this reads records, so it scans the cache), or
-    with a record time of at least `since`, or any. The read is ended
-    afterwards, so a Postgres cursor is not left open."""
+    with a record time of at least `since`, or any.
+
+    Nothing is left open afterwards. A Postgres cache iterates through a
+    server-side cursor on a second connection (``iterating_conn``); stopping
+    after `n` keys closes the cursor (closing the generator) but would leave
+    that connection idle in its transaction, holding the table's ACCESS
+    SHARE lock (a later TRUNCATE or CLUSTER of the table then fails), and
+    ``end_read`` ends only the main connection's. So that transaction is
+    rolled back here, where the iteration is known to be over; not in
+    ``end_read``, which a build calls while a slice may still be
+    iterating."""
+    it = None
     try:
         if typ:
             it = cache.iter_keys_type(typ)
@@ -412,9 +422,18 @@ def sample(cache, n=50, typ=None, since=None):
             it = cache.iter_keys()
         return [str(k) for k in itertools.islice(it, max(0, int(n)))]
     finally:
+        close = getattr(it, "close", None)
+        if close is not None:
+            close()
         end = getattr(cache, "end_read", None)
         if end is not None:
             end()
+        conn = getattr(cache, "iterating_conn", None)
+        if conn is not None and not getattr(conn, "autocommit", True):
+            try:
+                conn.rollback()
+            except Exception as e:  # a look must not fail on tidying up
+                logger.debug(f"ending the iteration's transaction: {e}")
 
 
 def validate(cfgs, row):

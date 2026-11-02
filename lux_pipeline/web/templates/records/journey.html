@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "_macros.html" import kv, badge %}
+{% block title %}{{ q }}{% endblock %}
+{% block scripts %}<script type="module" src="/static/records.js"></script>{% endblock %}
+{% set ref = j.ref %}
+{% macro look(target) %}/records/show?{{ {'q': target}|urlencode }}{% endmacro %}
+{% block content %}
+<p class="crumbs"><a href="/records">Records</a> /</p>
+<h1 class="ref">{{ q }}</h1>
+{% if ref.kind == "yuid" %}
+{{ kv([("is", "a YUID"), ("uuid", ref.uuid)]) }}
+{% else %}
+{{ kv([("is", "a " ~ ref.kind), ("source", ref.source ~ " (" ~ ref.group ~ ")"), ("identifier", ref.identifier),
+       ("uri", ref.uri), ("type", ref.rectype)]) }}
+{% endif %}
+{% if j.notes %}<ul class="problems">{% for n in j.notes %}<li class="warning">{{ n }}</li>{% endfor %}</ul>{% endif %}
+{% if ref.kind != "yuid" and not j.mapped %}<p><a href="/records/show?{{ base }}&amp;mapped=1&amp;tab=mapped">Map it now</a>
+  <span class="muted">(runs the source's mapper on the stored raw record; nothing is fetched or stored)</span></p>{% endif %}
+
+{% if check %}
+<div class="banner {{ 'ok' if check.valid else 'fail' }}" role="status">
+  {% if check.missing %}Cannot validate: {{ check.missing }}
+  {% elif check.valid %}The {{ check.stage }} record is valid.
+  {% else %}The {{ check.stage }} record has {{ check.errors|length }} validation error(s):
+    <ul>{% for e in check.errors %}<li class="detail">{{ e }}</li>{% endfor %}</ul>{% endif %}
+</div>
+{% endif %}
+
+<div class="tabs" role="tablist">
+  {% for s in stages %}{% set st = j.stages[s] %}
+  <button type="button" role="tab" data-tab="{{ s }}"{% if s == tab %} aria-selected="true"{% endif %}{% if not st.applies %} disabled{% endif %}>
+    <span class="dot {{ 'found' if st.found else ('na' if not st.applies else 'missing') }}" aria-hidden="true"></span>{{ s }}</button>
+  {% endfor %}
+</div>
+
+{% for s in stages %}{% set st = j.stages[s] %}
+<section class="card wide stage" data-panel="{{ s }}" id="{{ s }}">
+  <h2>{{ s }} {{ badge("found" if st.found else ("not applicable" if not st.applies else "missing")) }}</h2>
+  {% if not st.found %}
+    <p class="muted">{% if not st.applies %}{% if s == "mapped" %}Not mapped: use "Map it now".{% elif s == "reconciled" %}Only external sources have a reconciled cache.{% else %}A YUID has no {{ s }} of its own.{% endif %}{% else %}Not there.{% endif %}</p>
+  {% elif s == "identity" %}
+    <p>YUID <a href="{{ look(st.uuid) }}">{{ st.yuid }}</a>, {{ st.members|length }} member(s):</p>
+    <ul class="members">
+      {% for m in st.members %}<li><a href="{{ look(m) }}">{{ m }}</a>{% if m == st.key %} <span class="badge">this record</span>{% endif %}</li>{% endfor %}
+    </ul>
+  {% elif s == "mapped" %}
+    {% for rec in st.records %}
+    <div class="json-view"><script type="application/json" class="json-data">{{ rec.data|tojson }}</script><pre class="json raw">{{ rec.data|tojson(indent=2) }}</pre></div>
+    {% endfor %}
+  {% else %}
+    {{ kv([("key", st.key), ("size", fmt_n(st.size) ~ " bytes")] + st.meta|dictsort) }}
+    <p class="actions">
+      <button type="button" class="secondary raw-toggle">Raw</button>
+      <a href="/records/raw?{{ base }}&amp;stage={{ s }}&amp;download=1">Download</a>
+      <a href="/records/show?{{ base }}&amp;validate={{ s }}&amp;tab={{ s }}">Validate</a>
+    </p>
+    <div class="json-view"><script type="application/json" class="json-data">{{ st.data|tojson }}</script><pre class="json raw">{{ st.data|tojson(indent=2) }}</pre></div>
+  {% endif %}
+</section>
+{% endfor %}
+{% endblock %}

@@ -194,3 +194,31 @@ a.small { font-size: 0.8em; font-weight: normal; margin-left: 0.75rem; }
 .log .line.cont .t, .log .line.cont .lvl { visibility: hidden; }
 .log .line.flash-line { outline: 2px solid var(--warn); }
 .log { max-height: 36rem; }
+
+/* --- records (W08) ------------------------------------------------------------ */
+.search { display: flex; gap: 0.5rem; margin: 1rem 0; }
+.search input[type=search] { flex: 1; font: inherit; font-family: var(--mono); padding: 0.45rem 0.6rem;
+                              border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--fg); }
+.banner.ok { color: var(--ok); }
+h1.ref { font-family: var(--mono); font-size: 1.15rem; overflow-wrap: anywhere; }
+.keys, .members { padding-left: 1.1rem; font-family: var(--mono); font-size: 0.9em; overflow-wrap: anywhere; }
+.tabs { flex-wrap: wrap; }
+.tabs button:disabled { opacity: 0.45; cursor: default; }
+.dot { display: inline-block; width: 0.55rem; height: 0.55rem; border-radius: 50%; margin-right: 0.35rem; vertical-align: middle; }
+.dot.found { background: var(--ok); }
+.dot.missing { border: 1px solid var(--muted); }
+.dot.na { background: transparent; }
+.badge.state-found { color: var(--ok); }
+.badge.state-missing, .badge.state-not { color: var(--muted); }
+.json-tree { font: 0.85em/1.5 var(--mono); background: var(--code); border: 1px solid var(--line);
+             border-radius: 6px; padding: 0.5rem 0.75rem; overflow: auto; max-height: 40rem; }
+.json-tree summary { cursor: pointer; }
+.json-tree .j-body { padding-left: 1.25rem; border-left: 1px dotted var(--line); }
+.j-key { color: var(--accent); }
+.j-str { color: var(--fg); overflow-wrap: anywhere; }
+.j-num, .j-bool { color: var(--warn); }
+.j-null { color: var(--muted); }
+.j-type { color: var(--level-critical); font-weight: 600; }
+.j-hint { font-weight: normal; }
+.j-brace { color: var(--muted); }
+.j-more { margin: 0.25rem 0; font-size: 0.85em; padding: 0.15rem 0.5rem; }

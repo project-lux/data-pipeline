@@ -34,12 +34,13 @@
 <section class="card wide">
   <h2>Sources at a glance</h2>
   <table class="table">
-    <thead><tr><th>Source</th><th>Group</th><th>Namespace</th><th class="num">Order</th><th>Classes</th></tr></thead>
+    <thead><tr><th>Source</th><th>Group</th><th>Namespace</th><th class="num">Order</th><th>Classes</th><th>Records</th></tr></thead>
     <tbody>
     {% for s in data.sources %}
       <tr><td><a href="/config/{{ s.source|urlencode }}">{{ s.source }}</a></td><td>{{ s.group }}</td>
           <td class="path" title="{{ s.namespace }}">{{ s.namespace_display }}</td><td class="num">{{ s.order }}</td>
-          <td class="detail">{% for c in s.classes %}<span class="muted">{{ c.label }}</span> {{ c.short }}{% if not loop.last %}, {% endif %}{% endfor %}</td></tr>
+          <td class="detail">{% for c in s.classes %}<span class="muted">{{ c.label }}</span> {{ c.short }}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+          <td><a href="/records/browse?source={{ s.source|urlencode }}">browse</a></td></tr>
     {% endfor %}
     </tbody>
   </table>

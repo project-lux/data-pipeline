@@ -59,6 +59,10 @@ replay took too long; try `lux viz` at a shell".
 2. Template with SVG; link from the Records identity tab.
 3. `docs/web.md` section.
 
+Note (from W08): the record page's identity tab is where "Graph with…"
+goes: a link beside each other member to `/graph?a=<this record>&b=<member>`
+(`templates/records/journey.html`, the `identity` stage).
+
 ## Tests (`tests/test_web_graph.py`)
 
 * With `records.identity_graph` patched to return a four-node graph with a

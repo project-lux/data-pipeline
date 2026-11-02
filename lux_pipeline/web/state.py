@@ -34,6 +34,8 @@ class AppState:
         self._idmap = None
         self.health = {"running": False, "results": [], "started": None, "finished": None,
                        "options": {}}
+        # the last lookups on the records page, newest first
+        self.recent_lookups = []
 
     # --- configuration ----------------------------------------------------------------
 
@@ -65,6 +67,21 @@ class AppState:
         with self.lock:
             return instantiate_source(self.configs(), name)
 
+    def build_all(self):
+        """Every source built (once each, through `source`) and the globals
+        looked up: what mapping a record needs, since mappers reach other
+        sources. Never `Config.instantiate_all`, which builds everything
+        again on every call."""
+        cfgs = self.configs()
+        with self.lock:
+            for group in ("internal", "external", "results"):
+                for name in list(getattr(cfgs, group)):
+                    self.source(name)
+            if not getattr(self, "_globals_cached", False):
+                cfgs.cache_globals(self.idmap())
+                self._globals_cached = True
+        return cfgs
+
     def idmap(self):
         """The identity map, its memory cache off."""
         with self.lock:
@@ -80,6 +97,7 @@ class AppState:
         close what was opened, and build it again on next use."""
         with self.lock:
             cfgs, self._cfgs, self._idmap = self._cfgs, None, None
+            self._globals_cached = False
         if cfgs is None:
             return
         for group in ("internal", "external", "results"):

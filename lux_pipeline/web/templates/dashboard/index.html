@@ -17,7 +17,7 @@
     <h2>Sources</h2>
     {% for group in ("internal", "external", "results") %}
     <h3>{{ group }} <span class="muted">({{ data.sources[group]|length }})</span></h3>
-    <p class="names">{{ data.sources[group]|join(", ") or "none" }}</p>
+    <p class="names">{% for n in data.sources[group] %}<a href="/records/browse?source={{ n|urlencode }}">{{ n }}</a>{% if not loop.last %}, {% endif %}{% else %}none{% endfor %}</p>
     {% endfor %}
   </section>
 

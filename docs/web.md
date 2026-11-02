@@ -7,8 +7,8 @@ workers' status and log files, the configuration files -- through the
 same functions the `lux` commands print from. The plan is in
 `webui_docs/`; this page grows with it (item W13 completes it).
 
-Built so far: the server, the **Dashboard**, **Runs**, **Configuration**
-and **Health** pages.
+Built so far: the server, the **Dashboard**, **Runs**, **Records**,
+**Configuration** and **Health** pages.
 
 ## Install and start
 
@@ -61,6 +61,17 @@ bind where you can.
   lines. A `lux build` shows its phases, each linked to its own run, and
   each phase links back to its build. A run started from a shell slice by
   slice shows too. `/runs/_latest` opens the newest.
+* **Records** (`/records`): type anything you can name a record by (a
+  URI, a `…##quaType` key, a curie like `aat:300033618`, a YUID, or a
+  source's own identifier with the source chosen) and see where it is: a
+  tab for each stage (datacache, recordcache, reconciled, mapped,
+  identity, rewritten, merged, MarkLogic), marked found or missing, each
+  with its key, times and size, the record as a collapsible tree (every
+  `id` a link to its own lookup) or raw, a download, and validation
+  against the schemas. The identity lists the members as links. *Map it
+  now* runs the source's mapper on the stored raw record (nothing is
+  fetched or stored). *Browse a cache* lists keys of any source's cache,
+  by type or since a time. Nothing on these pages changes anything.
 * **Configuration** (`/config`): every record, grouped by type, with the
   file (and sub-config store) it came from, and the sources at a glance.
   A record's page has two ways to edit it. *Fields*: the keys the
@@ -82,7 +93,8 @@ bind where you can.
 
 Everything a page shows is also JSON under `/api/` (`/api/dashboard`,
 `/api/dashboard/running`, `/api/runs`, `/api/runs/<run>` (and its `log`,
-`events`), `/api/config`, `/api/config/<key>`,
+`events`), `/api/records/journey?q=`, `/api/records/sample?source=`,
+`/api/config`, `/api/config/<key>`,
 `/api/health`); `/api/docs` lists the routes.
 
 ## Safety

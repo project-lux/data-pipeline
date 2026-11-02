@@ -1,6 +1,6 @@
 # W08. Record pages
 
-**Size:** L · **Depends on:** W05, W06
+**Size:** L · **Depends on:** W05, W06 · **Done:** 2026-11-02
 **Read:** `05-record-inspection-service.md`; `lux_pipeline/records.py` (as
 merged); `lux_pipeline/storage/cache/abstract.py` (`METADATA_FIELDS`,
 `CONCEPT_TYPES`); `DESIGN.md` §3 (Records), §5
@@ -89,6 +89,51 @@ Links from elsewhere: W07's source table links each source to
 5. Browse panel.
 6. Validate.
 7. `docs/web.md` section.
+
+## As built
+
+`web/api/records.py`, `web/routers/records.py`,
+`templates/records/{index,journey}.html`, `static/{records,jsontree,tabs}.js`
+(`tabs.js` shared with the configuration page). Differences from the design
+above:
+
+* **One page, named by query string:** `/records/show?q=<anything>[&source=<name>]`
+  for every kind of reference, YUIDs included, instead of `/records/r/{ref}`
+  and `/records/y/{yuid}`. References are URIs with `//`, `#` and `:`; a
+  query carries them unchanged where a path needs careful encoding (and
+  some proxies normalise paths). `&mapped=1` maps the record now;
+  `&tab=<stage>`; `&validate=<stage>` shows a stage's validation (a GET:
+  it changes nothing). `/records/raw?q=&stage=[&download=1]` is a stage's
+  record as JSON; `/records/browse?source=&cache=&type=&since=&n=`. A
+  reference that resolves to nothing re-renders the search page with the
+  message and what was typed (400).
+* **Mapping** needs the other sources built (mappers reach them):
+  `AppState.build_all()` builds each source once through
+  `records.instantiate_source`, and the globals once, never
+  `Config.instantiate_all`.
+* **Stages** say whether they apply: a YUID has no source stages, only an
+  external source has a reconciled cache, merged / MarkLogic only when the
+  installation has those results; the tab of one that does not apply is
+  disabled. `rewritten` is shown too (W05 added it).
+* The identity tab's "Graph with…" link is left to W12, which adds the
+  graph page.
+* **An open transaction found and fixed (in W05's `records.sample`).**
+  Checked against the local Postgres: after a sample, the server held a
+  connection *idle in transaction*. A Postgres cache iterates through a
+  server-side cursor on a second connection (`iterating_conn`), and
+  `end_read` only ends the main connection's transaction, so the read
+  lock stayed (a later TRUNCATE or CLUSTER of the table would fail).
+  `sample` now closes its generator and rolls back the iterating
+  connection; not `end_read`, which a build calls while a slice may still
+  be iterating. After the fix, three samples and a lookup leave every
+  connection idle. `lux show --sample` is fixed with it.
+* Recent lookups (20, newest first) are kept in the server.
+
+Run against the local instance's Postgres: the AAT URI, its curie and its
+YUID pages rendered in 0.6 s or less (117 kB with the record's JSON); the
+journey found the datacache row, the recordcache record and the
+nine-member identity; samples of aat, ycba and lcnaf (by type) answered
+in tens of milliseconds.
 
 ## Tests (`tests/test_web_records.py`)
 
