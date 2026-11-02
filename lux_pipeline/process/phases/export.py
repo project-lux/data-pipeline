@@ -11,7 +11,9 @@ written out as JSONL and N-Triples. `export_nt_slice` is manage-data.py's
 scripts parse argv and call these; the manager (`ExportManager`, ``lux
 export``) calls them from each worker. `export_external` has no script: it
 writes the external records a build used in the form ``lux load --type
-export`` reads.
+export`` reads. `export_cache_slice` (``lux export --cache``) writes this
+worker's slice of whole caches -- export-source.py and exportExternal.py's
+``--all-data`` -- in the same form.
 
 The chunked loop in `export_slice` is run-export.py's, moved and not
 changed: nothing inside a ``with timer.stage(...)`` block may be edited
@@ -416,6 +418,64 @@ def export_external(cfgs, name, out_dir=None, chunk_size=CHUNK, gzip_level=1,
         return {"source": name, "written": 0, "missing": missing, "path": None}
     logger.info(f"{written:,} records -> {fn}")
     return {"source": name, "written": written, "missing": missing, "path": fn}
+
+
+def cache_export_path(out_dir, name, cache, my_slice=-1):
+    """``export_<name>_<cache>.jsonl.gz``, or ``..._<slice>.jsonl.gz`` for
+    one slice of several."""
+    tag = f"_{my_slice}" if my_slice is not None and my_slice > -1 else ""
+    return os.path.join(out_dir, f"export_{name}_{cache}{tag}.jsonl.gz")
+
+
+def export_cache_slice(cfgs, targets, my_slice=-1, max_slice=-1, out_dir=None, gzip_level=1,
+                       progress=null_progress):
+    """Every record of each ``(group, source name, cache type)`` in
+    `targets` -- or, with ``my_slice > -1``, slice `my_slice` of
+    `max_slice` of each -- to `cache_export_path` in `out_dir`
+    (``cfgs.exports_dir``): one ``<identifier>\t{"data": ...}`` line per
+    record, as `export_external` writes, which ``lux load --file ...
+    --file-type dir/lines.gz/tabjson`` reads back (and ``--type export``
+    for an unsliced datacache). The records come out of the cache as JSON
+    text and are written without being parsed. An empty slice leaves no
+    file.
+
+    Returns ``[{"source", "cache", "written", "path"}, ...]``, ``path``
+    None where nothing was written.
+    """
+    if out_dir is None:
+        out_dir = cfgs.exports_dir
+    os.makedirs(out_dir, exist_ok=True)
+    sliced = my_slice is not None and my_slice > -1
+    results = []
+    for group, name, ctype in targets:
+        cache = getattr(cfgs, group)[name][ctype]
+        fn = cache_export_path(out_dir, name, ctype, my_slice if sliced else -1)
+        total = _estimate(cache)
+        progress(description=f"{name} {ctype}",
+                 total=total // max_slice if sliced and max_slice > 0 else total, completed=0)
+        records = (cache.iter_records_slice(my_slice, max_slice, raw=True) if sliced
+                   else cache.iter_records(raw=True))
+        written = 0
+        with gzip.open(fn, "wt", gzip_level, encoding="utf-8") as fh:
+            for rec in records:
+                data = rec["data"]
+                if not isinstance(data, str):
+                    data = dumps(data)
+                fh.write(f'{rec["identifier"]}\t{{"data":{data}}}\n')
+                written += 1
+                progress(advance=1)
+        if not written:
+            os.remove(fn)
+            fn = None
+            logger.info(f"{name} {ctype}: nothing to export")
+        else:
+            logger.info(f"{name} {ctype}: {written:,} records -> {fn}")
+        results.append({"source": name, "cache": ctype, "written": written, "path": fn})
+
+    # force all postgres connections to close
+    poolman = PoolManager.get_instance()
+    poolman.put_all("localsocket")
+    return results
 
 
 def _fetch_multi(cache, keys):

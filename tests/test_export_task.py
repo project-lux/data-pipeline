@@ -24,7 +24,8 @@ from lux_pipeline.process.tasks._task_manager import WorkerFailed
 from lux_pipeline.process.tasks.export_task import ExportManager
 from lux_pipeline.progress import StatusWriter, null_progress
 
-PHASES = ("export_slice", "export_nt_slice", "export_sources_slice", "export_external")
+PHASES = ("export_slice", "export_nt_slice", "export_sources_slice", "export_external",
+          "export_cache_slice")
 
 
 # --- stubs -------------------------------------------------------------------
@@ -482,3 +483,173 @@ def test_one_slice_or_another_type_leaves_them(harness, options):
     out = earlier_export(cfgs)
     assert h.manager(workers=2, **options).clear_stale() == 0
     assert len(list(out.iterdir())) == 5
+
+
+# --- --cache: whole caches ---------------------------------------------------
+
+
+class SliceCache:
+    """A cache of ``{identifier: data}`` that hands out records as the
+    Postgres one does with raw=True: the data as JSON text."""
+
+    def __init__(self, rows):
+        self.rows = rows
+
+    def _raw(self, k):
+        d = self.rows[k]
+        return {"identifier": k, "data": d if isinstance(d, str) else json.dumps(d)}
+
+    def iter_records(self, raw=False):
+        return (self._raw(k) for k in sorted(self.rows))
+
+    def iter_records_slice(self, mySlice=0, maxSlice=10, raw=False):
+        return (self._raw(k) for i, k in enumerate(sorted(self.rows)) if i % maxSlice == mySlice)
+
+    def len_estimate(self):
+        return len(self.rows)
+
+
+class CacheConfigs:
+    def __init__(self, tmp_path, rows):
+        self.exports_dir = str(tmp_path / "exports")
+        self.internal = {"ycba": {"name": "ycba", "datacache": SliceCache(rows),
+                                  "recordcache": SliceCache({})}}
+        self.external = {}
+        self.results = {}
+
+
+ROWS = {f"obj{i}": {"id": f"https://example.org/obj{i}", "n": i} for i in range(7)}
+
+
+def test_export_cache_unsliced(tmp_path, no_pool):
+    cfgs = CacheConfigs(tmp_path, ROWS)
+    seen = []
+    out = phase.export_cache_slice(cfgs, [("internal", "ycba", "datacache")],
+                                   progress=lambda **kw: seen.append(kw))
+    fn = os.path.join(cfgs.exports_dir, "export_ycba_datacache.jsonl.gz")
+    assert out == [{"source": "ycba", "cache": "datacache", "written": 7, "path": fn}]
+    lines = read_lines(fn)
+    # the line --type external writes, which tabjson unwraps
+    assert {ident: json.loads(js) for ident, js in lines} == {k: {"data": v} for k, v in ROWS.items()}
+    assert seen[0] == {"description": "ycba datacache", "total": 7, "completed": 0}
+    assert sum(kw.get("advance", 0) for kw in seen) == 7
+
+
+def test_export_cache_slices_cover_every_record_once(tmp_path, no_pool):
+    cfgs = CacheConfigs(tmp_path, ROWS)
+    got = []
+    for n in range(3):
+        out = phase.export_cache_slice(cfgs, [("internal", "ycba", "datacache")], n, 3)
+        assert out[0]["path"].endswith(f"export_ycba_datacache_{n}.jsonl.gz")
+        got += [ident for ident, _ in read_lines(out[0]["path"])]
+    assert sorted(got) == sorted(ROWS)
+
+
+def test_export_cache_leaves_no_file_for_an_empty_cache(tmp_path, no_pool):
+    cfgs = CacheConfigs(tmp_path, ROWS)
+    out = phase.export_cache_slice(cfgs, [("internal", "ycba", "recordcache")])
+    assert out == [{"source": "ycba", "cache": "recordcache", "written": 0, "path": None}]
+    assert os.listdir(cfgs.exports_dir) == []
+
+
+def test_export_cache_lines_load_as_tabjson(tmp_path, no_pool):
+    """The loader's tabjson format reads the line back to the record."""
+    from lux_pipeline.process.base.loader import Loader
+    cfgs = CacheConfigs(tmp_path, {"obj1": {"id": "x"}})
+    fn = phase.export_cache_slice(cfgs, [("internal", "ycba", "datacache")])[0]["path"]
+    ldr = Loader.__new__(Loader)
+    ldr.name = "ycba"
+    ldr.file_opener = lambda path, comp: gzip.open(path, "rb")
+    ldr._post_process_json = lambda data, ident: data
+    assert ldr.make_tabjson(fn, "gz", "test") == {"identifier": "obj1", "data": {"id": "x"}}
+
+
+def cache_configs(h):
+    cfgs = h.configure()
+    cfgs.internal["ycba"]["datacache"] = object()
+    cfgs.internal["ycba"]["recordcache"] = object()
+    cfgs.external["wikidata"]["datacache"] = object()
+    return cfgs
+
+
+def test_cache_export_slices_every_source_across_the_workers(harness):
+    h = harness
+    cache_configs(h)
+    m = h.manager(sources=["ycba", "wikidata"], workers=3, cache="datacache")
+    assert m.export_type == export_task.CACHE_EXPORT
+    h.run_all(m)
+    targets = [("internal", "ycba", "datacache"), ("external", "wikidata", "datacache")]
+    assert [(c[0], c[2]) for c in h.calls] == [("export_cache_slice", (targets, n, 3))
+                                              for n in range(3)]
+
+
+def test_cache_export_with_one_worker_is_unsliced(harness):
+    h = harness
+    cache_configs(h)
+    m = h.manager(sources=["ycba"], workers=1, cache="datacache, recordcache")
+    h.run_all(m)
+    assert h.calls[0][2] == ([("internal", "ycba", "datacache"),
+                              ("internal", "ycba", "recordcache")], -1, -1)
+
+
+def test_cache_export_checks_the_caches_exist(harness):
+    h = harness
+    cache_configs(h)
+    m = h.manager(sources=["ycba", "aat"], workers=2, cache="datacache,recordcache2")
+    with pytest.raises(ValueError, match="ycba has no recordcache2; aat has no datacache"):
+        m.check()
+
+
+@pytest.mark.parametrize("export_type,ok", [(None, True), ("external", True),
+                                            ("external-zip", True), ("merged", False),
+                                            ("nt", False)])
+def test_cache_and_type(harness, export_type, ok):
+    h = harness
+    cache_configs(h)
+    if ok:
+        assert h.manager(sources=["ycba"], workers=1, cache="datacache",
+                         export_type=export_type).export_type == "cache"
+    else:
+        with pytest.raises(ValueError, match="does not combine with --type"):
+            h.manager(sources=["ycba"], workers=1, cache="datacache", export_type=export_type)
+
+
+def test_cache_export_clears_only_its_own_earlier_files(harness):
+    h = harness
+    cfgs = cache_configs(h)
+    out = Path(cfgs.exports_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    for fn in ("export_ycba_datacache.jsonl.gz", "export_ycba_datacache_30.jsonl.gz",
+               "export_ycba_recordcache_0.jsonl.gz", "export_full_0.jsonl", "export_ycba.jsonl.gz"):
+        (out / fn).write_text("")
+    m = h.manager(sources=["ycba"], workers=2, cache="datacache")
+    assert m.clear_stale() == 2
+    assert sorted(p.name for p in out.iterdir()) == [
+        "export_full_0.jsonl", "export_ycba.jsonl.gz", "export_ycba_recordcache_0.jsonl.gz"]
+
+
+def test_command_cache(harness, tmp_path):
+    h = harness
+    cache_configs(h)
+    h.patch()
+    m = run_command(h.cfgs, ["--cache", "datacache"], tmp_path, source="ycba", workers=1)
+    assert m.sources == [("internal", "ycba")]
+    assert h.calls[0][0] == "export_cache_slice"
+    assert h.calls[0][2] == ([("internal", "ycba", "datacache")], -1, -1)
+
+
+def test_command_cache_my_worker(harness, tmp_path):
+    h = harness
+    cache_configs(h)
+    h.patch()
+    run_command(h.cfgs, ["--cache", "datacache"], tmp_path, source="wikidata", workers=24,
+                my_worker=5)
+    assert h.calls[0][2] == ([("external", "wikidata", "datacache")], 5, 24)
+
+
+def test_command_cache_needs_a_source(harness, tmp_path):
+    h = harness
+    cache_configs(h)
+    h.patch()
+    with pytest.raises(ValueError, match="--cache needs --source"):
+        run_command(h.cfgs, ["--cache", "datacache"], tmp_path, workers=1)

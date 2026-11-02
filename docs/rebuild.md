@@ -144,6 +144,9 @@ lux export --type nt --max-workers 24       # N-Triples in nt_dir, for QLever
 ```
 
 `lux export --help` lists the other types (`merged`, `sources`, `external`).
+`lux export --source ycba --cache datacache` dumps a whole cache instead
+(`--max-workers N` splits it), for `lux load --file <dir> --file-type
+dir/lines.gz/tabjson` on another instance.
 
 
 ## Choosing an engine
