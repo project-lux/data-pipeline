@@ -21,7 +21,7 @@ more. Tick the box in the PR that lands the item.
 | W06 | [Server skeleton, `lux serve`, dashboard, health](06-server-skeleton-and-dashboard.md) | L | W00, W01, W03 | ☑ |
 | W07 | [Configuration pages](07-config-pages.md) | L | W04, W06 | ☑ |
 | W08 | [Record pages](08-record-pages.md) | L | W05, W06 | ☐ |
-| W09 | [Run pages and live progress](09-run-pages-live-progress.md) | L | W01, W06 | ☐ |
+| W09 | [Run pages and live progress](09-run-pages-live-progress.md) | L | W01, W06 | ☑ |
 | W10 | [Command launcher and the build page](10-command-launcher-and-build.md) | L | W02, W09 | ☐ |
 | W11 | [Timing, counts and maintenance pages](11-timing-and-maintenance-pages.md) | M | W03, W06 | ☐ |
 | W12 | [Identity graph page](12-identity-graph-page.md) | S | W05, W06 | ☐ |

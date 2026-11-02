@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge, bar %}
+{% block title %}{{ r.command }}{% endblock %}
+{% block scripts %}<script type="module" src="/static/runs.js"></script>{% endblock %}
+{% macro pct(row) %}{% if row.percent is not none %}{{ "%3.0f"|format(row.percent) }}%{% else %}-{% endif %}{% endmacro %}
+{% block content %}
+<script type="application/json" id="run-page">{{ script|tojson }}</script>
+<p class="crumbs"><a href="/runs">Runs</a> /{% if r.parent %} {% if r.parent.rel %}<a href="/runs/{{ r.parent.rel }}">part of {{ r.parent.rel }}</a>{% else %}part of {{ r.parent.prefix }}{% endif %} /{% endif %}</p>
+<h1>{{ r.command }} <span id="run-state">{{ badge(r.state) }}</span></h1>
+<dl class="kv">
+  <dt>run</dt><dd>{{ r.prefix }}</dd>
+  {% if r.argv %}<dt>command</dt><dd>{{ r.argv|join(" ") }}</dd>{% endif %}
+  <dt>started</dt><dd>{{ fmt_time(r.started) }}</dd>
+  <dt>took</dt><dd id="run-elapsed">{{ fmt_duration(r.all.elapsed) }}</dd>
+  {% if r.engine %}<dt>engine</dt><dd>{{ r.engine }}</dd>{% endif %}
+  {% if r.sources %}<dt>sources</dt><dd>{{ r.sources|join(", ") }}</dd>{% endif %}
+  {% if r.exit is not none %}<dt>exit</dt><dd>{{ r.exit }}{% if r.error %}: {{ r.error }}{% endif %}</dd>{% endif %}
+  {% if not r.argv %}<dt>record</dt><dd class="muted">none (started slice by slice from a shell)</dd>{% endif %}
+</dl>
+
+{% if r.phases %}
+<ol class="phases">
+  {% for p in r.phases %}
+  <li class="state-{{ p.state|replace(' ', '-') }}" title="{{ p.commands|join('\n') }}">
+    {% if p.run and p.run.rel %}<a href="/runs/{{ p.run.rel }}">{{ p.phase }}</a>{% else %}{{ p.phase }}{% endif %}
+    <span>{{ p.state }}</span></li>
+  {% endfor %}
+</ol>
+{% endif %}
+
+{% if r.workers %}
+<table class="table workers" id="workers">
+  <thead><tr><th>Worker</th><th>Doing</th><th>Progress</th><th class="num">%</th><th class="num">Elapsed</th><th class="num">Remaining</th></tr></thead>
+  <tbody>
+  {% for w in r.rows if w.visible %}
+    <tr data-worker="{{ w.n }}" class="{{ 'done' if w.done else ('waiting' if w.waiting else '') }}">
+      <td class="w">w{{ w.n }}</td><td class="label">{{ w.label }}</td>
+      <td class="progress">{{ bar(w.completed, w.total) }}</td>
+      <td class="num pct">{{ pct(w) }}</td>
+      <td class="num elapsed">{{ fmt_duration(w.elapsed) }}</td><td class="num eta">{{ fmt_duration(w.eta) }}</td></tr>
+  {% endfor %}
+  </tbody>
+  <tfoot>
+    <tr data-worker="all"><td class="w">all</td><td class="label">{{ r.all.workers }} worker(s)</td>
+      <td class="progress">{{ bar(r.all.completed, r.all.total) }}</td><td class="num pct">{{ pct(r.all) }}</td>
+      <td class="num elapsed">{{ fmt_duration(r.all.elapsed) }}</td><td class="num eta">{{ fmt_duration(r.all.eta) }}</td></tr>
+  </tfoot>
+</table>
+{% else %}
+<p class="muted">This run has no workers of its own{% if r.phases %}: its phases are the runs above{% endif %}.</p>
+{% endif %}
+
+{% if r.children %}
+<h2>Runs it started</h2>
+<ul>{% for c in r.children %}<li>{% if c.run.rel %}<a href="/runs/{{ c.run.rel }}">{{ c.command }}</a>{% else %}{{ c.command }}{% endif %} {{ badge(c.state) }}</li>{% endfor %}</ul>
+{% endif %}
+
+{% if r.workers %}
+<section class="card wide">
+  <h2>Log</h2>
+  <div class="form inline log-controls">
+    <label>From <select id="log-level">{% for l in levels %}<option value="{{ l }}"{% if l == "INFO" %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></label>
+    <label>Worker <select id="log-worker"><option value="">all</option>{% for w in r.rows %}<option value="{{ w.n }}">w{{ w.n }}</option>{% endfor %}</select></label>
+    <label><input type="checkbox" id="log-follow" checked> follow</label>
+    <button type="button" class="secondary" id="log-first-error">First error</button>
+    <button type="button" class="secondary" id="log-earlier" title="Choose a worker first">Earlier lines</button>
+  </div>
+  <div class="log" id="log" aria-live="off">{% for l in log.lines %}<div class="line level-{{ l.level }}{% if l.cont %} cont{% endif %}" data-worker="{{ l.worker }}" data-level="{{ l.level }}"><span class="t">{{ l.time or "" }}</span> <span class="lvl">{{ l.level if not l.cont else "" }}</span> <span class="w">w{{ l.worker }}</span> <span class="msg">{{ l.text }}</span></div>{% endfor %}</div>
+</section>
+{% endif %}
+{% if r.stdout %}<p><a href="/api/runs/{{ r.rel }}/stdout">The command's own output</a></p>{% endif %}
+{% endblock %}

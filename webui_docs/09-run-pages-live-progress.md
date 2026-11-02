@@ -1,6 +1,6 @@
 # W09. Run pages and live progress
 
-**Size:** L · **Depends on:** W01, W06 · **Unblocks:** W10
+**Size:** L · **Depends on:** W01, W06 · **Unblocks:** W10 · **Done:** 2026-11-02
 **Read:** `lux_pipeline/cli/_view.py` (every rendering rule: the header,
 the Progress columns, `w<n> waiting`, `total=None` indeterminate,
 `start_task` on first status, `set_visible`, the all-workers row, the
@@ -151,6 +151,47 @@ timing JSON for the phase, if present in `log_dir`, is linked
 4. SSE generator; live updates; `logpanel.js` controls.
 5. Build strip and breadcrumb.
 6. `docs/web.md` section; `CLAUDE.md` row for `lux watch` mentions the web.
+
+## As built
+
+`web/api/runs.py`, `web/routers/runs.py`, `templates/runs/{index,run}.html`,
+`static/runs.js`; `progress.describe_run` (one run as `list_runs`
+describes it; `list_runs` now calls it) and `progress.run_exists`.
+Differences from the design above:
+
+* **Elapsed time** is counted from the run's start (its record, else its
+  prefix's timestamp), not from when the server first saw a worker: it is
+  stateless, and a page opened late or after a restart shows the real
+  figure (`lux watch` attached after a run shows 0:00:00). A worker that
+  is done stops at its last status update; the estimate of what remains
+  is elapsed x remaining / done, only while the run is running.
+* **The log's initial fill and the stream join exactly:** `/log` returns
+  each worker's file offset (`offsets`), the page passes them to
+  `/events?offsets=0:1234,1:5678`, and the stream reads on from there, so
+  no line is lost or shown twice. `starts` is where "earlier lines" asks
+  back from (one worker at a time). `tail` reads a file from the end a
+  block at a time and never a line still being written.
+* Log lines interleave across workers by time; a continuation (a
+  traceback) takes its line's level and stays under it.
+* **The phase strip** comes from the build's record's `steps` (W01):
+  finished / failed / running / pending (killed or "not run" once the
+  build is over), each linked to its run; a phase run links back to its
+  build ("part of ...").
+* `/runs/_latest` goes to the newest run (the dashboard's "watch the
+  latest"); the dashboard and the header badge link to run pages.
+* Server-sent event streams are capped at 8 at once (429).
+* **Testing streams needs a real server.** Starlette's `TestClient` runs a
+  response to its end before handing over any of it, so a stream that
+  only ends when the test changes files deadlocks.
+  `tests/web_client.LiveServer` runs the app on uvicorn on a free port in
+  a thread and reads the stream with urllib. `lux serve` (and the test
+  server) start uvicorn with `ws="none"`: nothing uses websockets.
+
+Run against the local instance: a page opened on a running `lux validate
+--source aat --max-records 3000 --max-workers 2` followed it to the end
+over the event stream (14 status events, 82 log lines, then `done`:
+finished, exit 0, 6,000 of 11,190) and agreed with `lux watch` on the
+same run (3,000 of 5,595 per worker, 6,000 of 11,190 in all).
 
 ## Tests (`tests/test_web_runs.py`)
 

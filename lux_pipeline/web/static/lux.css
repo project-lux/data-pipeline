@@ -165,3 +165,32 @@ button.danger { background: var(--fail); border-color: var(--fail); }
 .diff .add { color: var(--ok); }
 .diff .del { color: var(--fail); }
 .diff .hunk { color: var(--muted); }
+
+/* --- runs (W09) ----------------------------------------------------------------- */
+a.small { font-size: 0.8em; font-weight: normal; margin-left: 0.75rem; }
+.workers td.w { color: var(--worker); font-family: var(--mono); }
+.workers tr.done td { color: var(--muted); }
+.workers tr.done progress.bar { opacity: 0.6; }
+.workers tr.waiting .label { color: var(--muted); font-style: italic; }
+.workers tfoot td { font-weight: 600; border-top: 2px solid var(--line); }
+.phases { display: flex; flex-wrap: wrap; gap: 0.4rem; list-style: none; padding: 0; margin: 0.75rem 0 1rem; }
+.phases li { border: 1px solid currentColor; border-radius: 6px; padding: 0.25rem 0.6rem; }
+.phases li span { font-size: 0.8em; margin-left: 0.3rem; }
+.phases li a { color: inherit; font-weight: 600; }
+.phases .state-pending, .phases .state-not-run { color: var(--muted); }
+.phases .state-finished { color: var(--ok); }
+.phases .state-running { color: var(--running); }
+.phases .state-failed, .phases .state-killed { color: var(--fail); }
+.log-controls { margin: 0 0 0.5rem; }
+.log .line { white-space: pre-wrap; }
+.log .line .t { color: var(--muted); }
+.log .line .lvl { display: inline-block; min-width: 4.5em; }
+.log .line.level-DEBUG .lvl { color: var(--level-debug); }
+.log .line.level-INFO .lvl { color: var(--level-info); }
+.log .line.level-WARNING .lvl { color: var(--level-warning); }
+.log .line.level-ERROR .lvl, .log .line.level-ERROR .msg { color: var(--level-error); }
+.log .line.level-CRITICAL .lvl, .log .line.level-CRITICAL .msg { color: var(--level-critical); }
+.log .line .w { color: var(--worker); }
+.log .line.cont .t, .log .line.cont .lvl { visibility: hidden; }
+.log .line.flash-line { outline: 2px solid var(--warn); }
+.log { max-height: 36rem; }

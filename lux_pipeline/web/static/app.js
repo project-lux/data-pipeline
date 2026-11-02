@@ -31,6 +31,7 @@ async function pollRunning() {
     if (runs.length) {
       badge.textContent = runs.length === 1 ? `running: ${runs[0].command}` : `${runs.length} running`;
       badge.title = runs.map((r) => r.prefix).join("\n");
+      badge.href = runs.length === 1 && runs[0].rel ? `/runs/${runs[0].rel}` : "/runs?state=running";
     }
   } catch (e) {
     badge.hidden = true;

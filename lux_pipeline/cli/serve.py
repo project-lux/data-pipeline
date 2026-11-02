@@ -76,11 +76,12 @@ class CommandHandler(BaseHandler):
                 {"host": settings.host, "port": settings.port, "token": settings.token,
                  "debug": settings.debug, "open_browser": False})
             uvicorn.run("lux_pipeline.web.app:create_app_from_env", factory=True, reload=True,
-                        host=settings.host, port=settings.port, log_level=log_level)
+                        host=settings.host, port=settings.port, log_level=log_level, ws="none")
             return
         from lux_pipeline.web.app import create_app
+        # no websockets: the live pages use server-sent events
         uvicorn.run(create_app(settings), host=settings.host, port=settings.port,
-                    log_level=log_level)
+                    log_level=log_level, ws="none")
 
     def process(self, args, rest):
         super().process(args, rest)

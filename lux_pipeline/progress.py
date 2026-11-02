@@ -73,6 +73,8 @@ __all__ = [
     "read_run",
     "pid_alive",
     "run_state",
+    "describe_run",
+    "run_exists",
     "list_runs",
 ]
 
@@ -492,6 +494,47 @@ def _started(prefix, record):
     return min(times) if times else None
 
 
+def describe_run(prefix, now=None):
+    """One run, from its record and its files, as `list_runs` lists it::
+
+        {"prefix", "command", "state", "started", "finished", "exit",
+         "error", "argv", "parent", "workers", "visible_workers",
+         "record": <the record or None>, "progress": <read_build>}
+
+    The worker count is the status files' (`count_workers`) once there are
+    any, else the record's: a manager may run fewer workers than it was
+    given (download, export, index-load, harvest phase 1) and a null
+    engine runs one. A prefix with neither a record nor files describes a
+    run with no workers in state ``unknown``."""
+    record = read_run(prefix)
+    workers = count_workers(prefix) or int((record or {}).get("workers") or 0)
+    visible = (record or {}).get("visible_workers")
+    build = read_build(prefix, workers, set(visible) if visible is not None else None)
+    name = os.path.basename(prefix)
+    m = _STAMP_RE.match(name)
+    r = record or {}
+    return {
+        "prefix": prefix,
+        "command": r.get("command") or (m.group("command") if m else name),
+        "state": run_state(record, build, now),
+        "started": _started(prefix, record),
+        "finished": r.get("finished"),
+        "exit": r.get("exit"),
+        "error": r.get("error"),
+        "argv": r.get("argv"),
+        "parent": r.get("parent"),
+        "workers": workers,
+        "visible_workers": visible,
+        "record": record,
+        "progress": build,
+    }
+
+
+def run_exists(prefix):
+    """Whether anything of a run is on disk: its record or a status file."""
+    return os.path.exists(run_path(prefix)) or count_workers(prefix) > 0
+
+
 def list_runs(log_dir, now=None):
     """Every run under `log_dir`, newest first: each prefix with a
     ``.run`` record or any ``-w<n>.status`` file (a run started from a
@@ -515,31 +558,7 @@ def list_runs(log_dir, now=None):
         m = STATUS_RE.match(fn)
         if m:
             prefixes.add(m.group("prefix"))
-    out = []
-    for prefix in prefixes:
-        record = read_run(prefix)
-        workers = count_workers(prefix) or int((record or {}).get("workers") or 0)
-        visible = (record or {}).get("visible_workers")
-        build = read_build(prefix, workers, set(visible) if visible is not None else None)
-        name = os.path.basename(prefix)
-        m = _STAMP_RE.match(name)
-        command = (record or {}).get("command") or (m.group("command") if m else name)
-        r = record or {}
-        out.append({
-            "prefix": prefix,
-            "command": command,
-            "state": run_state(record, build, now),
-            "started": _started(prefix, record),
-            "finished": r.get("finished"),
-            "exit": r.get("exit"),
-            "error": r.get("error"),
-            "argv": r.get("argv"),
-            "parent": r.get("parent"),
-            "workers": workers,
-            "visible_workers": visible,
-            "record": record,
-            "progress": build,
-        })
+    out = [describe_run(prefix, now) for prefix in prefixes]
     out.sort(key=lambda x: (x["started"] or 0, x["prefix"]), reverse=True)
     return out
 
