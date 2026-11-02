@@ -1,8 +1,10 @@
 # Design: the LUX pipeline web UI
 
-Written 2026-11-02 against `main` at `80ad820` (every `refactor_docs` item
-merged except 33 and 42). Read `CLAUDE.md` for the shape of the repository
-the design builds on; this document assumes it.
+Written 2026-11-02 against `main` at `7f858d8` (every `refactor_docs` item
+merged except 33 and 42; PR #355 moved the files the phases hand each
+other, `metatypes-*.json` and `reference_uris.txt`, under `temp_dir`, so
+no command depends on its working directory). Read `CLAUDE.md` for the
+shape of the repository the design builds on; this document assumes it.
 
 ## 1. What it is
 
