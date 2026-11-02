@@ -1,37 +1,12 @@
 """Attach to a running or finished build and show its progress and logs."""
 
-import glob
-import os
-import re
 import time
 
 from lux_pipeline.cli._handler import BaseHandler
 from lux_pipeline.cli._view import BuildView
-
-STATUS_RE = re.compile(r"^(?P<prefix>.*)-w(?P<n>\d+)\.status$")
-
-
-def count_workers(prefix):
-    """How many ``<prefix>-w<n>.status`` files there are: the highest n + 1."""
-    highest = -1
-    for fn in glob.glob(glob.escape(prefix) + "-w*.status"):
-        m = STATUS_RE.match(fn)
-        if m and m.group("prefix") == prefix:
-            highest = max(highest, int(m.group("n")))
-    return highest + 1
-
-
-def latest_prefix(log_dir):
-    """The prefix of the most recently updated build under `log_dir`, or None."""
-    newest, best = None, -1.0
-    for fn in glob.glob(os.path.join(glob.escape(log_dir), "*-w*.status")):
-        m = STATUS_RE.match(fn)
-        if not m:
-            continue
-        mtime = os.path.getmtime(fn)
-        if mtime > best:
-            newest, best = m.group("prefix"), mtime
-    return newest
+# the readers of a run's files live in lux_pipeline.progress; imported here
+# too, where they used to be defined
+from lux_pipeline.progress import STATUS_RE, count_workers, latest_prefix  # noqa: F401
 
 
 class CommandHandler(BaseHandler):

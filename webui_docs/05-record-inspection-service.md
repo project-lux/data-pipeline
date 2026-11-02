@@ -156,7 +156,7 @@ Rich when a TTY (a JSON syntax-highlighted panel), plain otherwise.
 ## Tests
 
 On `tests/webui_fixtures.make_configs(tmp, instantiate=True)` with
-`seed_records`:
+`seed_records` (W00):
 
 * `resolve`: a full AAT URI → external aat, identifier `300033618`; the
   curie; `##quaType`; a UUID → yuid; a bare identifier without `--source`

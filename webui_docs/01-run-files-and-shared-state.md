@@ -1,284 +1,176 @@
 # W01. Run files: shared reader, `.run` records, `list_runs`
 
-**Size:** M · **Depends on:** — · **Unblocks:** W06, W09, W10
-**Read:** `lux_pipeline/progress.py` (all), `lux_pipeline/cli/_view.py`
-(`LogTailer`, `BuildView._refresh`), `lux_pipeline/cli/watch.py`
-(`count_workers`, `latest_prefix`), `lux_pipeline/cli/_handler.py`
-(`CommandHandler.process`, `default_prefix`), `lux_pipeline/cli/build.py`
-(`process`, `lux`), `tests/test_build_view.py`, `tests/test_progress.py`,
-`tests/test_cli_build.py`
+**Size:** M · **Depends on:** — · **Unblocks:** W06, W09, W10 · **Done:** 2026-11-02
+**Read:** `lux_pipeline/progress.py`, `lux_pipeline/cli/_view.py`
+(`BuildView._refresh`), `lux_pipeline/cli/watch.py`, `lux_pipeline/cli/_handler.py`
+(`CommandHandler.process`), `lux_pipeline/cli/build.py`, `lux_pipeline/cli/entry.py`
+(`run`), `tests/test_build_view.py`, `tests/test_cli_build.py`
+
+This document describes the item as built. It was revised before
+implementation (2026-11-02, agreed with Rob): the test installation moved
+to its own item (W00); the worker count comes from the status files, not
+the start of the run; a run's state comes from its record; the command
+line comes from `entry.run`; `lux build` records each step; interrupts
+are recorded.
 
 ## Intent
 
-Make one module, `lux_pipeline/progress.py`, the reader of everything a
-run leaves on disk, so the Rich view, `lux watch` and the web pages all
-see a run the same way; and give a run a small record of what it is,
-`<prefix>.run`, written by the driver.
-
-After this item:
+Make `lux_pipeline/progress.py` the one reader of everything a run leaves
+on disk, so the Rich view, `lux watch` and the web pages see a run the same
+way; and give a run a record of what it is, `<prefix>.run`, written by the
+driver.
 
 ```python
 from lux_pipeline.progress import (read_build, LogTailer, count_workers, latest_prefix,
-                                   list_runs, RunRecord, run_path, read_run)
-state = read_build(prefix, workers)            # one dict with every worker's status and the totals
+                                   list_runs, RunRecord, run_path, read_run, run_state)
+state = read_build(prefix, workers)            # every worker's status and the totals
 runs = list_runs(log_dir)                      # every run under log_dir, newest first
 ```
 
-and `lux reconcile ...` leaves `<log_dir>/reconcile-<ts>.run` beside its
-`-w<n>.status` files.
-
-## Why it matters
-
-`BuildView._refresh` does the reading and the Rich updating in one method,
-and `LogTailer` sits in the only module allowed to import Rich. A web page
-would have to copy both. The status files also do not say which command
-ran, with what arguments, or whether the driver is still alive — things a
-run list and a cancel button need.
+`lux reconcile ...` leaves `<log_dir>/reconcile-<ts>.run` beside its
+`-w<n>.status` files; `lux build` leaves `<log_dir>/build-<ts>.run` with
+its steps.
 
 ## Files
 
-| Action | Path | Notes |
+| Action | Path | Change |
 |---|---|---|
-| Edit | `lux_pipeline/progress.py` | add `read_build`, `LogTailer` (moved), `count_workers`, `latest_prefix` (moved), `run_path`, `RunRecord`, `read_run`, `list_runs`, `pid_alive` |
-| Edit | `lux_pipeline/cli/_view.py` | import `LogTailer` from progress; `_refresh` calls `read_build` |
-| Edit | `lux_pipeline/cli/watch.py` | import `count_workers`, `latest_prefix` from progress (keep the names re-exported so nothing else breaks) |
-| Edit | `lux_pipeline/cli/_handler.py` | `CommandHandler.process` writes the run record at start and end |
-| Edit | `lux_pipeline/cli/build.py` | writes its own run record with `phases` / `current`; passes `--prefix` to every phase step even when the user gave none (so phases are discoverable), and `parent` through the environment variable `LUX_PARENT_RUN` |
-| Edit | `tests/test_progress.py`, `tests/test_build_view.py`, `tests/test_cli_build.py` | extend |
-| Create | `tests/webui_fixtures.py` | the database-free installation fixture every later item uses (see Tests) |
+| Edit | `lux_pipeline/progress.py` | `RUNNING_WINDOW`, `STATUS_RE`, `LogTailer`, `count_workers`, `latest_prefix` (moved); `worker_label`, `read_build`, `run_path`, `RunRecord`, `read_run`, `pid_alive`, `run_state`, `list_runs` (new) |
+| Edit | `lux_pipeline/cli/_view.py` | `_refresh` renders from `read_build`; `LogTailer` imported from progress (still importable from `_view`) |
+| Edit | `lux_pipeline/cli/watch.py` | `count_workers`, `latest_prefix`, `STATUS_RE` imported from progress (still importable from `watch`) |
+| Edit | `lux_pipeline/cli/_handler.py` | `RUNNING_WINDOW`, `_WORKER_RE` from progress; `command_argv`, `exit_code`, `finish_record`; `BaseHandler.run_record` / `run_prefix`; `CommandHandler.start_record`; `process` writes and finishes the record |
+| Edit | `lux_pipeline/cli/entry.py` | `args.cli_argv`; re-finishes the record when a command fails after its workers succeeded |
+| Edit | `lux_pipeline/cli/build.py` | every worker phase gets `--prefix <P>-<phase>` (P: `--prefix` or `<log_dir>/build-<ts>`); the build's record with `phases`, `current`, `steps`; `LUX_PARENT_RUN` in each step's environment (`step_env`) |
+| Create | `tests/webui_fixtures.py` | `write_fake_run`, `dead_pid` (W00 adds the installation) |
+| Create | `tests/test_run_files.py` | |
+| Edit | `tests/test_build_view.py`, `tests/test_cli_build.py` | view / `read_build` agreement; the build's record |
 
 ## Design
 
-### `read_build(prefix, workers, visible=None) -> dict`
+### `read_build(prefix, workers, visible=None)`
 
 ```python
-{
-  "prefix": prefix,
-  "workers": {0: {...status...} | None, 1: ..., },     # read_status(status_path(prefix, n)) for n in range(workers)
-  "seen": 2,                                           # how many have a status file
-  "done": False,                                       # seen > 0 and every status says done  (BuildView's rule)
-  "completed": 24325, "total": 197530 | None,          # over the visible workers: sum of completed; sum of totals only when every visible worker has one
-  "labels": {0: "ycba", 1: "references", ...},         # description or phase or "running" (BuildView's label rule); "waiting" for None
-}
+{"prefix", "workers": {n: status | None}, "labels": {n: label},
+ "seen": int, "done": bool, "completed": int, "total": int | None}
 ```
 
-`visible` is a set of worker numbers to include in the totals (default all).
-This is exactly what `BuildView._refresh` computes today; move the logic,
-do not reimplement it. `BuildView._refresh` becomes: call `read_build`
-with `visible = {n for n, tid in self.tasks.items() if task visible}`,
-then for each worker update its Rich task (`completed`, `total`,
-description `f"w{n} {label}"`, `start_task` on first status), update the
-all-workers task from `completed` / `total`, tail the log, set `self.done`.
-Behaviour must be identical; `tests/test_build_view.py` must pass
-unchanged before you add to it.
+The console view's rules, moved, not reimplemented: label is
+`description`, else `phase`, else `running`, `waiting` without a file;
+`done` is `seen > 0` and every worker's status says done, hidden workers
+included, so pass the number of workers that will write files; the totals
+cover `visible` workers only, and `total` is `None` while any of them has
+none. `BuildView._refresh` calls it with the set of its visible tasks and
+puts the numbers on screen.
 
-### `LogTailer`
+### The record
 
-Moved verbatim from `cli/_view.py` (it imports nothing from Rich). Leave
-`from lux_pipeline.progress import LogTailer` in `_view.py` so the name is
-still there.
+`RunRecord(prefix, command, argv, *, engine, workers, visible_workers,
+sources, parent, extra)` writes `<prefix>.run` atomically (tmp +
+`os.replace`) and never raises:
 
-### `count_workers(prefix)`, `latest_prefix(log_dir)`
-
-Moved verbatim from `cli/watch.py` with their regex; `watch.py` imports
-them. `STATUS_RE` moves too; `_handler._WORKER_RE` is the same pattern and
-may import it.
-
-### The run record
-
-```python
-def run_path(prefix): return f"{prefix}.run"
-
-class RunRecord:
-    """What the driver knows about a run and the workers' files do not.
-    Written atomically (tmp + os.replace) like StatusWriter; never by a worker."""
-    def __init__(self, prefix, command, argv, *, engine=None, workers=0, visible_workers=None,
-                 sources=(), parent=None, extra=None): ...
-    def start(self): ...            # pid=os.getpid(), started=time.time(), finished=None, exit=None; write
-    def finish(self, exit=0, error=None): ...   # finished=time.time(); write
-    def update(self, **fields): ... # e.g. current="merge"; write
-    def state(self) -> dict
-
-def read_run(prefix) -> dict | None     # tolerant like read_status
-def pid_alive(pid) -> bool              # os.kill(pid, 0), False on ProcessLookupError, True on PermissionError
+```json
+{"prefix": "/.../logs/reconcile-2026-11-02-141500", "command": "reconcile",
+ "argv": ["lux", "reconcile", "--source", "all", "--max-workers", "24"],
+ "host": "lux-build", "pid": 48213, "engine": "mp", "workers": 24,
+ "visible_workers": [0, 1, "..."], "sources": ["ycba", "yuag"], "parent": null,
+ "started": 1762111500.1, "finished": null, "exit": null, "error": null}
 ```
 
-Fields, all always present: `prefix, command, argv, pid, engine, workers,
-visible_workers, sources, started, finished, exit, error, parent` plus
-anything in `extra` (build uses `phases`, `current`; the web runner adds
-`web`, `stdout`). `argv` is `["lux", *sys.argv[1:]]` with `sys.argv[0]`
-replaced by `lux` whatever it was (`python -m lux_pipeline.cli.entry` runs
-too).
+* `start()` stamps `pid` and `started`; `update(**fields)` rewrites;
+  `finish(exit, error, workers)` stamps `finished`. A later `finish`
+  overwrites an earlier one.
+* `exit`: 0, 1 for a failure, 130 for an interrupt (`error` is then
+  `"interrupted"`), a `SystemExit`'s own code.
+* `workers` is planned at the start (`manager.max_workers`; 1 under the
+  null engine, which runs worker 0 only) and replaced at the finish by the
+  status files' count (`count_workers`) when there are any: download,
+  export and index-load reduce their count inside `process()`, and
+  harvest's phase 1 runs fewer than phase 2.
+* `visible_workers`: all but those `CommandHandler.process` hides
+  (`hide_idle_workers`: worker numbers from `len(manager.sources)`),
+  trimmed to the final count.
+* `sources`: the manager's source names in order, without repeats
+  (download has one entry per file).
+* `argv`: `entry.run` keeps the arguments it was given as
+  `args.cli_argv`; `command_argv(args)` prefixes `lux`.
+* `parent`: `LUX_PARENT_RUN` from the environment, which `lux build` sets
+  for its steps.
+* Not written for one `--my-worker` slice: the slices of one run share a
+  prefix and would overwrite each other's record.
 
-### `list_runs(log_dir) -> list[dict]`
+Who writes it:
 
-Every prefix under `log_dir` that has a `.run` file **or** any `-w<n>.status`
-file (a shell-started run has only the latter). For each:
+* `CommandHandler.process` (every worker command), after the manager is
+  built and its sources prepared, finishing it on success and on any
+  exception, `KeyboardInterrupt` included. Kept as `self.run_record`.
+* `entry.run` finishes it again when `hdlr.process` raises: harvest (failed
+  sources) and validate (`--strict`) raise after the base `process`
+  returned, so the record must say how the command ended, not how the
+  workers did.
+* `lux build` writes its own (`workers` 0, `extra={"phases", "current",
+  "steps"}`). Each step's entry, appended as it starts and completed as it
+  ends: `{"phase", "command", "argv": ["lux", ...], "prefix" (None for a
+  one-shot step), "started", "finished", "exit"}`. The one-shot steps
+  (clear, new-token, sheets, portal) write no record of their own, so this
+  is where their outcome is.
 
-```python
-{"prefix", "command", "started", "finished", "exit", "workers", "parent",
- "state": "running" | "finished" | "failed" | "killed" | "unknown",
- "progress": read_build(prefix, workers)}      # workers from the record, else count_workers
-```
+### `run_state(record, build)`
 
-State: `exit == 0` → finished; `exit` non-zero → failed; `finished` None
-and `pid_alive(pid)` → running; `finished` None and pid dead → killed; no
-record → `finished` if `read_build(...)["done"]` else `unknown` (if its
-newest status `updated` is within `_handler.RUNNING_WINDOW`, call it
-running). `command` without a record comes from the prefix's basename up
-to the timestamp (`reconcile-2026-11-02-141500` → `reconcile`), `started`
-from the oldest status file's mtime. Sorted by `started` descending.
-Prefixes are grouped by the `STATUS_RE` prefix group exactly as
-`latest_prefix` groups them.
+| Record | State |
+|---|---|
+| `exit` 0 / 130 / other | `finished` / `interrupted` / `failed` |
+| unfinished, this host, driver alive | `running` |
+| unfinished, this host, driver gone | `killed` (SIGKILL, the OOM killer: no `finally` ran) |
+| none, or from another host | `finished` if every worker says done; `running` if a status was updated within `RUNNING_WINDOW`; else `unknown` |
 
-### Writing it from the driver
+### `list_runs(log_dir)`
 
-In `CommandHandler.process` (`_handler.py`), after `manager` is built and
-sources prepared and before the engine runs:
+Every prefix under `log_dir` with a `.run` or any `-w<n>.status` file (a
+run started slice by slice from a shell has only status files), newest
+first: `{"prefix", "command", "state", "started", "finished", "exit",
+"error", "argv", "parent", "workers", "visible_workers", "record",
+"progress"}`. `workers` is `count_workers(prefix)` when there are files,
+else the record's. `command` is the record's, else the prefix's name up
+to its timestamp. `started` is the record's, else the prefix's timestamp,
+else the oldest file time.
 
-```python
-visible = list(range(len(manager.sources), wks)) if getattr(manager, "hide_idle_workers", False) else []
-record = RunRecord(prefix, args.command, ["lux", *sys.argv[1:]], engine=args.engine, workers=wks,
-                   visible_workers=[n for n in range(wks) if n not in visible],
-                   sources=[name for _, name in manager.sources] if manager.sources and isinstance(manager.sources[0], tuple) else list(manager.sources),
-                   parent=os.environ.get("LUX_PARENT_RUN") or None)
-record.start()
-try:
-    ... existing run ...
-except BaseException as e:
-    record.finish(exit=1, error=f"{type(e).__name__}: {e}"); raise
-else:
-    record.finish(exit=0)
-```
-
-`manager.sources` is `[(which, name)]` for most managers; check the shape
-rather than assume (some managers keep names only). Writing the record
-must never fail the command: wrap the writes as `StatusWriter._write`
-does. The "status/log prefix" line is still printed.
-
-In `build.py`: `process` creates `RunRecord(prefix, "build", ..., extra={"phases": [p for p, _ in steps], "current": None})`
-with `prefix = args.prefix or default_prefix(cfgs, "build")`, calls
-`start()`, `update(current=phase)` as each phase begins, and `finish`.
-`steps` must give every phase a prefix: today `self.lux` only adds
-`--prefix` when `args.prefix` is set; change it to use the build's own
-prefix as the base (`f"{prefix}-{phase}"`) always. One-shot steps
-(`workers=False`: clear, new-token, sheets) are `BaseHandler`s and write
-no record; that is fine. `run_step` sets `LUX_PARENT_RUN=<build prefix>`
-in the child's environment (`subprocess.run(argv, env={**os.environ, ...})`).
-
-## Known hazards
+## Known hazards (kept)
 
 * `progress.py` imports nothing from `rich`, `multiprocessing`, `ray` or
-  `lux_pipeline.cli` (its docstring's rule). `_handler.RUNNING_WINDOW` is in
-  `cli`; copy the constant into `progress.py` as `RUNNING_WINDOW = 3600` and
-  have `_handler` import it from there.
-* `lux watch --latest` and `scripts/wait-for-flags.sh` glob `*-w*.status`;
-  a `.run` file does not match that glob, so neither notices it. (The
-  shell-script tests were removed in PR #341; there is nothing to update
-  there.)
-* Status files are written by workers in **other processes**; the record by
-  the driver. Do not let a worker (`_run_worker`) touch the record.
-* A `--my-worker i` run (null engine, shell-orchestrated) is one slice of a
-  larger run: do **not** write a `.run` for it, or 24 shell slices will
-  fight over one file. `if args.my_worker > -1: record = None`.
-* `default_prefix` uses `log_dir` or `"."`; a prefix outside `log_dir` is
-  invisible to `list_runs`, as it is to `lux watch --latest` today.
+  `lux_pipeline.cli`. `_handler` imports `RUNNING_WINDOW` from it.
+* Workers never touch the record; `_run_worker` is unchanged.
+* `unfinished_workers` and `refuse_while_building` still read only the
+  status files, so a run without a record is still seen; a `.run` file
+  does not match the `*-w*.status` globs of `lux watch --latest` and
+  `scripts/wait-for-flags.sh`.
+* A prefix outside `log_dir` is invisible to `list_runs`, as to
+  `lux watch --latest`.
+* `run-all2.sh` empties `log_dir` (`rm -f $LOGS/*`) at the start of every
+  shell build, so the run list reaches back to the last one. `lux build`
+  does not.
 
-## Steps
+## Tests (as written)
 
-1. Move `LogTailer`, `count_workers`, `latest_prefix`, `STATUS_RE` into
-   `progress.py`; re-import them in `_view.py` and `watch.py`. Run the
-   tests: green, unchanged.
-2. Add `read_build`; rewrite `BuildView._refresh` on top of it. Tests green.
-3. Add `run_path`, `RunRecord`, `read_run`, `pid_alive`, `list_runs`.
-4. Write the record from `CommandHandler.process` and `build.py`.
-5. Create `tests/webui_fixtures.py` (below) and the tests.
-6. Update the `lux_pipeline/progress.py` row of the table in `CLAUDE.md`
-   and the `BuildView` doc line in `docs/codebase.md` if it describes
-   `_refresh`.
-
-## Tests
-
-`tests/webui_fixtures.py` — not a test file; imported by tests. It builds a
-**database-free installation** in a `tmp_path`:
-
-```python
-def make_installation(tmp_path) -> Path:
-    """Copy docs/sample_config into <tmp>/config_cache, then rewrite:
-    base.json  -> base_dir=<tmp>, data_dir=data/files, log_dir=data/logs, exports_dir=data/exports,
-                  indexes_dir=data/indexes, dumps_dir=data/dumps, temp_dir=data/tmp, tests_dir=data/tests, max_workers=2
-    caches.json -> no host/port/user; every record gets the filesystem classes:
-                  sources: datacacheClass=storage.cache.filesystem.DataCache,
-                           recordcacheClass=storage.cache.filesystem.InternalRecordCache | ExternalRecordCache,
-                           recordcacheReconciledClass=storage.cache.filesystem.ReconciledRecordCache,
-                           recordcache2Class=storage.cache.filesystem.RecordCache
-                  merged/marklogic: recordcacheClass=storage.cache.filesystem.MergedRecordCache
-                  maps: storeClass=storage.idmap.filesystem.IdMap (idmap) and ...filesystem.FsMap for the rest;
-                  drop map_idmap_sub.json, ml_*.json
-    Create the directories. Write <tmp>/.env with LUX_BASEPATH=<tmp>.
-    Keep only a handful of sources (ycba, yuag, aat, ulan, wikidata, lcnaf) so Config builds fast."""
-
-def make_configs(tmp_path, instantiate=False) -> Config     # Config(basepath=str(tmp_path)), optionally instantiate_all()
-def seed_records(cfgs) -> dict                              # a few records in ycba's datacache and recordcache, aat's, one merged record; returns the keys/yuids
-def write_fake_run(log_dir, command, workers, *, done=False, record=True, ts="2026-11-02-141500") -> str   # status + log files (+ .run); returns prefix
-```
-
-Check first that `Config(basepath=...)` over the rewritten sample builds
-with `instantiate=True` and no network. What the filesystem stores need
-(read `storage/idmap/filesystem.py` and `storage/cache/filesystem.py`):
-
-* `FsMap.__init__` reads `config["base_dir"]` and `config["all_configs"]`
-  (`instantiate_map` sets the latter); give every map record
-  `"base_dir": "<tmp>/data/files"` (or put it in a `{"type": "default",
-  "name": "map"}` record, which `merge_configs` applies to every map).
-* The filesystem `IdMap` reads `<data_dir>/idmap_update_token.txt` and
-  raises without a well-formed token: write `__20260101__` there.
-* `cache_globals` looks every `globals.json` term up in the idmap;
-  `FsMap.get` returns `None` for a missing key, so the globals come out
-  `None` and nothing raises. Seed the terms only if a test needs them.
-* `FsCache.__init__` creates `<base_dir>/<name>_<tabletype>`; the cache
-  records need `base_dir` too (the `caches` record is merged under every
-  cache config, so set it there).
-* Sources with `fetch` build a `Fetcher` and look up `networkmap`; keep
-  `map_networkmap.json` with the `FsMap` class. The internal sources'
-  default `ASHarvester` is built at instantiate time from the record's
-  `activitystreams` key; the sample records have it.
-
-Record in the fixture's docstring what you had to adjust; the later items
-rely on this fixture building a *real* `Config`.
-
-`tests/test_progress.py` additions:
-
-* `read_build` on two status files (one done, one not) gives `seen=2`,
-  `done=False`, totals as BuildView computed; with a hidden worker the
-  totals exclude it; with no files `seen=0, done=False`.
-* `RunRecord.start()` then `read_run()`; `finish(exit=1, error=...)`;
-  the write is atomic (no `.run.*.tmp` left).
-* `list_runs` over a fake log dir: a run with a record and a live pid
-  (`os.getpid()`) is `running`; a dead pid (use a pid from `subprocess`
-  that has exited, or 2**22) is `killed`; a shell-only run (status files,
-  no record) is `finished` when all done; sorted newest first.
-
-`tests/test_build_view.py`: unchanged tests pass; add one that `BuildView`
-and `read_build` agree on `completed` / `total` for the same files.
-
-`tests/test_cli_build.py`: the build writes `<prefix>.run` with `phases`
-and the last `current`; every worker step's argv has `--prefix
-<prefix>-<phase>`; the child env has `LUX_PARENT_RUN`.
-
-`tests/test_cli_entry.py` or a new `tests/test_run_record.py`: a
-`CommandHandler` whose `make_manager` returns a trivial `TaskManager`
-(`needs_configs = False`, null engine) leaves a `.run` with `exit 0`; one
-whose worker raises leaves `exit 1` and an `error`; `--my-worker 0` leaves
-none.
+* `tests/test_run_files.py`: the moved names still importable where they
+  were; `read_build` totals, hidden workers, waiting workers, labels;
+  record round trip, worker-count rules, an unwritable record not
+  raising; `pid_alive`; every `run_state` row; `list_runs` over a running,
+  a killed, a shell-only and a build run, newest first, with the worker
+  count from the files; the handler writing and finishing the record
+  (success, worker failure, interrupt, `--my-worker`, hidden workers);
+  `entry.run` re-finishing a record for a command that failed after its
+  workers.
+* `tests/test_build_view.py`: `BuildView` and `read_build` agree.
+* `tests/test_cli_build.py`: the build's record (phases, steps, exits,
+  `current`), a failed step, prefixes without `--prefix`, `LUX_PARENT_RUN`,
+  no record from `--dry-run`.
 
 ## Acceptance criteria
 
-* `python -m pytest tests/ -q` passes; `tests/test_build_view.py`'s
-  pre-existing tests pass without edits.
-* `lux watch` behaves exactly as before (manual check on a fake run from
-  the fixture: `lux watch <prefix>` from the test's tmp dir).
-* After `lux counts` nothing new is written (it is a `BaseHandler`); after
-  any `CommandHandler` command a `<prefix>.run` exists with the fields in
-  §Design; `lux build --dry-run` writes nothing.
-* `grep -n "import rich\|from rich" lux_pipeline/progress.py` is empty.
+* `python -m pytest tests/ -q` passes; the pre-existing tests of
+  `test_build_view.py` and `test_cli_build.py` pass unchanged.
+* `lux watch <prefix>` renders a finished fake run as before.
+* `lux build --dry-run` writes nothing; any worker command leaves a
+  `<prefix>.run`; `grep -n "rich" lux_pipeline/progress.py` finds nothing.
+* On the build machine (Rob): a `lux build` leaves `build-<ts>.run` with
+  its steps, and each phase's record names it as `parent`.

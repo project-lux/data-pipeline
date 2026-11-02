@@ -15,19 +15,22 @@ sources and reports them.
 
 import logging
 import os
-import re
+import sys
 import time
 from argparse import ArgumentParser
 from datetime import datetime
 
-from lux_pipeline.progress import unfinished_workers
+# RUNNING_WINDOW: a worker that has not reported done but wrote its status
+# this recently is taken to be running; an older one was killed without
+# reporting. Defined with the other readers of a run's files.
+from lux_pipeline.progress import (RUNNING_WINDOW, STATUS_RE, RunRecord, count_workers,
+                                   unfinished_workers)
 
 logger = logging.getLogger("lux_pipeline")
 
-# A worker that has not reported done but wrote its status this recently is
-# taken to be running; an older one was killed without reporting
-RUNNING_WINDOW = 3600
-_WORKER_RE = re.compile(r"^(?P<prefix>.*)-w(?P<n>\d+)\.status$")
+_WORKER_RE = STATUS_RE
+# set by `lux build` in each phase's environment: the build's own prefix
+PARENT_RUN_ENV = "LUX_PARENT_RUN"
 
 
 def default_prefix(cfgs, command):
@@ -77,6 +80,46 @@ def refuse_while_building(cfgs, command, force=False, window=RUNNING_WINDOW, now
     return list(running)
 
 
+def command_argv(args):
+    """The command line as typed, ``["lux", ...]``: what `entry.run` was
+    given (it keeps it as ``args.cli_argv``), else this process's
+    arguments."""
+    argv = getattr(args, "cli_argv", None)
+    if argv is None:
+        argv = sys.argv[1:]
+    return ["lux", *argv]
+
+
+def exit_code(exc):
+    """The exit status a run ending in `exc` reports: 130 for an
+    interrupt, a ``SystemExit``'s own code, 1 for anything else."""
+    if isinstance(exc, KeyboardInterrupt):
+        return 130
+    if isinstance(exc, SystemExit):
+        code = exc.code
+        return code if isinstance(code, int) else (0 if code is None else 1)
+    return 1
+
+
+def finish_record(record, exc=None, prefix=None):
+    """Finish a run record after its command ends, with `exc` the exception
+    it ended in (None: success). The worker count is re-read from the
+    status files under `prefix`, since a manager may run fewer workers than
+    it was given. Never raises."""
+    if record is None:
+        return
+    try:
+        workers = count_workers(prefix) if prefix else 0
+        if exc is None:
+            record.finish(exit=0, workers=workers)
+        else:
+            error = "interrupted" if isinstance(exc, KeyboardInterrupt) else \
+                f"{type(exc).__name__}: {exc}"
+            record.finish(exit=exit_code(exc), error=error, workers=workers)
+    except Exception as e:  # the record must never be what fails a command
+        logger.debug(f"could not finish the run record: {e}")
+
+
 def add_profile_arg(ap):
     """``--profile`` for the phase commands; see `enable_profiling`."""
     ap.add_argument("--profile", action="store_true",
@@ -101,6 +144,11 @@ class BaseHandler:
     def __init__(self, cfgs):
         self.configs = cfgs
         self.default_source = "all"
+        # the RunRecord of this run, if the command writes one (the worker
+        # commands and `lux build`); entry.run finishes it again if the
+        # command fails after its own finish
+        self.run_record = None
+        self.run_prefix = None
 
     def add_args(self, ap):
         """Add this command's own options to `ap` (an ArgumentParser)."""
@@ -147,6 +195,35 @@ class CommandHandler(BaseHandler):
         workers. Commands override this; item 07 supplies the base."""
         raise NotImplementedError(f"{type(self).__name__} has no manager yet")
 
+    def start_record(self, prefix, args, manager, workers):
+        """Write ``<prefix>.run`` for this run and return its `RunRecord`;
+        ``None`` for one ``--my-worker`` slice of a larger run, which is one
+        of many processes sharing the prefix (each slice would overwrite
+        the others' record). Never raises."""
+        if getattr(args, "my_worker", -1) > -1:
+            return None
+        try:
+            hidden = set()
+            if getattr(manager, "hide_idle_workers", False):
+                hidden = set(range(len(manager.sources), workers))
+            # the null engine runs worker 0 only; otherwise the manager's
+            # count, which list_runs replaces by the status files' once
+            # there are any (some managers run fewer than they were given)
+            planned = 1 if args.engine == "null" else max(1, int(manager.max_workers))
+            names = []
+            for s in manager.sources:
+                name = s[1] if isinstance(s, (tuple, list)) else s
+                if name not in names:
+                    names.append(name)
+            record = RunRecord(prefix, args.command, command_argv(args), engine=args.engine,
+                               workers=planned,
+                               visible_workers=[n for n in range(planned) if n not in hidden],
+                               sources=names, parent=os.environ.get(PARENT_RUN_ENV) or None)
+            return record.start()
+        except Exception as e:
+            logger.debug(f"could not write the run record for {prefix}: {e}")
+            return None
+
     def make_view(self, prefix, workers, args):
         """The console view for a build, or ``None`` for plain output."""
         from lux_pipeline.cli._view import BuildView
@@ -169,15 +246,24 @@ class CommandHandler(BaseHandler):
         for s in sources:
             manager.prepare_single(s)
 
-        view = None if args.no_ui else self.make_view(prefix, wks, args)
-        if view is None:
-            manager.process(args.engine, prefix, None)
-        else:
-            if getattr(manager, "hide_idle_workers", False):
-                for n in range(len(manager.sources), wks):
-                    view.set_visible(n, False)
-            with view:
-                manager.process(args.engine, prefix, view)
+        # <prefix>.run: the command, its options and its outcome, beside the
+        # workers' status and log files (lux_pipeline.progress.list_runs)
+        self.run_prefix = prefix
+        self.run_record = self.start_record(prefix, args, manager, wks)
+        try:
+            view = None if args.no_ui else self.make_view(prefix, wks, args)
+            if view is None:
+                manager.process(args.engine, prefix, None)
+            else:
+                if getattr(manager, "hide_idle_workers", False):
+                    for n in range(len(manager.sources), wks):
+                        view.set_visible(n, False)
+                with view:
+                    manager.process(args.engine, prefix, view)
+        except BaseException as e:
+            finish_record(self.run_record, e, prefix)
+            raise
+        finish_record(self.run_record, None, prefix)
         # so a build can be re-attached with `lux watch`
         print(f"status/log prefix: {prefix}")
         return manager

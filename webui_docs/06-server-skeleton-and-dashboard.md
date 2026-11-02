@@ -1,6 +1,6 @@
 # W06. Server skeleton, `lux serve`, dashboard, health
 
-**Size:** L · **Depends on:** W01, W03 · **Unblocks:** W07–W12
+**Size:** L · **Depends on:** W00, W01, W03 · **Unblocks:** W07–W12
 **Read:** `DESIGN.md` §2, §3 (Dashboard), §5; `lux_pipeline/cli/_handler.py`
 (`BaseHandler`, `refuse_while_building`); `lux_pipeline/cli/entry.py`
 (`NO_CONFIG_COMMANDS`, how `needs_configs` is honoured); `lux_pipeline/runtime.py`;
@@ -162,7 +162,7 @@ log_level="warning" unless --debug)`. Print the URL.
 
 ```python
 def make_client(tmp_path, *, seed=True) -> (TestClient, AppState)
-# make_installation(tmp_path); monkeypatch LUX_BASEPATH; Settings(open_browser=False); create_app; TestClient(app)
+# make_installation(tmp_path) (W00); monkeypatch LUX_BASEPATH; Settings(open_browser=False); create_app; TestClient(app)
 ```
 
 `pytest.importorskip("fastapi")` at the top of every web test module, so

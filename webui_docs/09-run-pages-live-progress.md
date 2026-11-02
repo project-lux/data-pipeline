@@ -133,6 +133,13 @@ timing JSON for the phase, if present in `log_dir`, is linked
 * Many open SSE connections each tail the files: fine for one operator;
   cap at 8 concurrent per server and return 429 above (W13 may tune).
 * `BuildView` is **not** changed here; it already uses `read_build` (W01).
+* States are `run_state`'s (W01): `running`, `finished`, `failed`,
+  `interrupted`, `killed`, `unknown`. Take a run's worker count from
+  `list_runs` / `count_workers`, never the record's planned count alone:
+  some managers run fewer workers than they were given.
+* A build's phase strip comes from its record's `steps` (W01), which
+  include the one-shot steps (clear, new-token, sheets, portal) that write
+  no record of their own; link a step to its run through its `prefix`.
 
 ## Steps
 

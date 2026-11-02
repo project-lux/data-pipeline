@@ -177,6 +177,22 @@ def test_level_is_clamped_to_a_valid_name():
     assert clamp_level(None) == "INFO"
 
 
+def test_the_view_and_read_build_agree(tmp_path):
+    """BuildView renders what lux_pipeline.progress.read_build reads, so the
+    console and any other view of a run report the same numbers."""
+    from lux_pipeline.progress import read_build
+    prefix = make_build(tmp_path)
+    view = BuildView(prefix, 3, console=console(), auto_refresh=False)
+    view.set_visible(2, False)
+    view.refresh()
+    build = read_build(prefix, 3, visible={0, 1})
+    all_task = view._task(view.all_task)
+    assert (all_task.completed, all_task.total) == (build["completed"], build["total"]) == (90, 150)
+    assert view.done is build["done"] is False
+    for n in (0, 1):
+        assert view._task(view.tasks[n]).description == f"w{n} {build['labels'][n]}"
+
+
 def test_log_panel_is_bounded():
     p = LogPanel(max_lines=3)
     for i in range(10):

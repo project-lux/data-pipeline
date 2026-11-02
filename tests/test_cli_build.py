@@ -14,6 +14,7 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 from lux_pipeline.cli import build, entry
+from lux_pipeline.progress import read_run
 from lux_pipeline.cli._handler import BaseHandler
 
 
@@ -167,6 +168,69 @@ def test_dry_run_runs_nothing(tmp_path, monkeypatch, capsys):
     assert hdlr.ran == []
     assert "[clear]" in out and "new-token" in out and "[portal]" in out
     assert not Path(hdlr.configs.log_dir, "pipeline_process_status.txt").exists()
+
+
+# --- the build's run record (<prefix>.run) ---------------------------------------
+
+
+def test_the_build_records_its_phases_and_steps(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    hdlr = make(tmp_path)
+    run(hdlr, ["--skip", "sheets,portal", "--prefix", str(tmp_path / "logs" / "b1")])
+    rec = read_run(str(tmp_path / "logs" / "b1"))
+    assert rec["command"] == "build" and rec["exit"] == 0 and rec["workers"] == 0
+    assert rec["phases"] == ["reconcile", "merge", "export"] and rec["current"] == "export"
+    assert [(s["phase"], s["command"], s["exit"]) for s in rec["steps"]] == [
+        ("reconcile", "reconcile", 0), ("merge", "merge", 0), ("export", "export", 0)]
+    assert rec["steps"][1]["prefix"] == str(tmp_path / "logs" / "b1-merge")
+    assert rec["steps"][1]["argv"][:2] == ["lux", "merge"]
+    assert all(s["started"] <= s["finished"] for s in rec["steps"])
+
+
+def test_a_failed_step_is_in_the_record(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    hdlr = make(tmp_path, {"merge": 3})
+    with pytest.raises(RuntimeError):
+        run(hdlr, ["--skip", "sheets", "--prefix", str(tmp_path / "logs" / "b2")])
+    rec = read_run(str(tmp_path / "logs" / "b2"))
+    assert rec["exit"] == 1 and "build stopped in merge" in rec["error"]
+    assert [(s["phase"], s["exit"]) for s in rec["steps"]] == [("reconcile", 0), ("merge", 3)]
+    assert rec["current"] == "merge"
+
+
+def test_every_worker_phase_gets_a_prefix_without_one_given(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    hdlr = make(tmp_path)
+    run(hdlr, ["--clear"])
+    base = hdlr.build_prefix
+    assert base.startswith(os.path.join(hdlr.configs.log_dir, "build-"))
+    assert read_run(base)["exit"] == 0
+    by = {}
+    for a in hdlr.ran:
+        by.setdefault(name_of(a), a)
+    for phase in ("reconcile", "merge", "export"):
+        assert by[phase][by[phase].index("--prefix") + 1] == f"{base}-{phase}"
+    for one_shot in ("clear", "new-token", "sheets", "portal"):
+        assert "--prefix" not in by[one_shot]
+    clears = [s for s in read_run(base)["steps"] if s["phase"] == "clear"]
+    assert [s["command"] for s in clears] == ["clear", "clear", "new-token"]
+    assert all(s["prefix"] is None for s in clears)
+
+
+def test_each_step_is_told_its_parent(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    hdlr = make(tmp_path)
+    seen = []
+    hdlr.run_step = lambda argv: seen.append(hdlr.step_env().get("LUX_PARENT_RUN")) or 0
+    run(hdlr, ["--to", "reconcile", "--prefix", str(tmp_path / "logs" / "b3")])
+    assert seen == [str(tmp_path / "logs" / "b3")] * 2
+
+
+def test_a_dry_run_writes_no_record(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    hdlr = make(tmp_path)
+    run(hdlr, ["--dry-run"])
+    assert list(Path(hdlr.configs.log_dir).glob("*.run")) == []
 
 
 def test_refuses_while_a_build_runs(tmp_path, monkeypatch):

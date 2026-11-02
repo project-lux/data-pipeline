@@ -19,10 +19,14 @@ phases, in order:
     export     lux export
 
 Each step is a separate ``lux`` process, so each phase loads a fresh
-configuration and gets its own status/log prefix for ``lux watch``;
-``--prefix P`` gives them ``P-<phase>``. Each phase's command removes what
-an earlier build left behind (metatypes slice files, done flags, old
-export slices) before its workers start. The first step to fail stops the
+configuration and gets its own status/log prefix for ``lux watch``:
+``<P>-<phase>``, where ``P`` is ``--prefix`` or the build's own
+``<log_dir>/build-<timestamp>``. The build writes ``<P>.run``: its
+command line, its phases, the one running now (``current``) and each
+step's command, prefix, start, end and exit status (``steps``); every
+phase's own record names the build as its ``parent``. Each phase's
+command removes what an earlier build left behind (metatypes slice
+files, done flags, old export slices) before its workers start. The first step to fail stops the
 build. The files the phases hand to each other (``metatypes-*.json``,
 ``reference_uris.txt``) live under ``temp_dir``, so it may be run from any
 directory. Success and failure are appended, as by run-all.sh, to
@@ -34,11 +38,14 @@ import os
 import shlex
 import subprocess
 import sys
+import time
 from datetime import datetime
 
 from lux_pipeline import runtime
+from lux_pipeline.progress import RunRecord
 
-from ._handler import BaseHandler, refuse_while_building
+from ._handler import (PARENT_RUN_ENV, BaseHandler, command_argv, default_prefix, finish_record,
+                       refuse_while_building)
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -91,11 +98,14 @@ class CommandHandler(BaseHandler):
             raise ValueError("--clear, but the clear phase is outside --from / --to / --skip")
         return out
 
-    def lux(self, args, command, *opts, phase=None, workers=True):
+    def lux(self, args, command, *opts, phase=None, workers=True, prefix=None):
         """argv for one ``lux`` step, with the global options passed on:
         all of them to a phase run by workers, only the log level to a
         one-shot step, and to ``portal`` (its own process pool) the
-        worker count too."""
+        worker count too. A phase run by workers gets the status/log
+        prefix ``<prefix>-<phase>``; `prefix` is the build's own (default
+        ``--prefix``)."""
+        prefix = prefix or args.prefix
         argv = [sys.executable, "-m", "lux_pipeline.cli.entry", command, *opts]
         if args.log:
             argv += ["--log", args.log]
@@ -113,14 +123,15 @@ class CommandHandler(BaseHandler):
                 argv += ["--engine", args.engine]
             if args.no_ui:
                 argv.append("--no-ui")
-            if args.prefix:
-                argv += ["--prefix", f"{args.prefix}-{phase or command}"]
+            if prefix:
+                argv += ["--prefix", f"{prefix}-{phase or command}"]
             if args.profile:
                 argv.append("--profile")
         return argv
 
-    def steps(self, args):
-        """``[(phase, argv)]`` for the whole run."""
+    def steps(self, args, prefix=None):
+        """``[(phase, argv)]`` for the whole run; `prefix` is the build's
+        status/log prefix (default ``--prefix``)."""
         source = args.source or "all"
         out = []
         for phase in self.phases(args):
@@ -133,18 +144,47 @@ class CommandHandler(BaseHandler):
             elif phase == "sheets":
                 out.append((phase, self.lux(args, "sheets", workers=False)))
             elif phase in ("reconcile", "merge"):
-                out.append((phase, self.lux(args, phase, "--source", source)))
+                out.append((phase, self.lux(args, phase, "--source", source, prefix=prefix)))
             elif phase == "portal":
                 out.append((phase, self.lux(args, "portal", workers="count")))
             elif phase == "export":
-                out.append((phase, self.lux(args, "export")))
+                out.append((phase, self.lux(args, "export", prefix=prefix)))
         return out
+
+    @staticmethod
+    def step_prefix(argv):
+        """The ``--prefix`` a step was given, or None (a one-shot step)."""
+        return argv[argv.index("--prefix") + 1] if "--prefix" in argv else None
 
     # --- running -----------------------------------------------------------
 
+    def step_env(self):
+        """The environment a step runs in: this one, plus the build's prefix
+        as ``LUX_PARENT_RUN``, which each phase records as its parent."""
+        env = dict(os.environ)
+        if getattr(self, "build_prefix", None):
+            env[PARENT_RUN_ENV] = self.build_prefix
+        return env
+
     def run_step(self, argv):
         """Run one step in the foreground; its exit status."""
-        return subprocess.run(argv).returncode
+        return subprocess.run(argv, env=self.step_env()).returncode
+
+    def record_step(self, phase, argv):
+        """Add a step to the build's record as it starts; returns its entry."""
+        entry = {"phase": phase, "command": argv[3] if len(argv) > 3 else None,
+                 "argv": ["lux", *argv[3:]], "prefix": self.step_prefix(argv),
+                 "started": time.time(), "finished": None, "exit": None}
+        if self.run_record is not None:
+            self.run_record.data["steps"].append(entry)
+            self.run_record.update(current=phase)
+        return entry
+
+    def end_step(self, entry, code):
+        entry["finished"] = time.time()
+        entry["exit"] = code
+        if self.run_record is not None:
+            self.run_record.update()
 
     def record(self, path, line):
         if not path:
@@ -166,7 +206,8 @@ class CommandHandler(BaseHandler):
             for n in (s.strip() for s in args.source.split(",")):
                 if n and n not in known:
                     raise ValueError(f"Unknown source: {n}")
-        steps = self.steps(args)
+        prefix = args.prefix or default_prefix(cfgs, "build")
+        steps = self.steps(args, prefix)
         status_file = args.status_file
         if status_file is None and getattr(cfgs, "log_dir", None):
             status_file = os.path.join(cfgs.log_dir, "pipeline_process_status.txt")
@@ -177,17 +218,30 @@ class CommandHandler(BaseHandler):
             return steps
 
         refuse_while_building(cfgs, "build", args.force)
-        current = None
-        for phase, step in steps:
-            if phase != current:
-                current = phase
-                print(f"=== {phase} ===", flush=True)
-            logger.info(f"running: {shlex.join(step)}")
-            code = self.run_step(step)
-            if code != 0:
-                self.record(status_file, f"[Error] Error in {phase}")
-                raise RuntimeError(f"build stopped in {phase}: {shlex.join(step)} "
-                                   f"exited with {code}")
+        self.build_prefix = prefix
+        self.run_prefix = None      # a build has no workers of its own to count
+        self.run_record = RunRecord(prefix, "build", command_argv(args), engine=args.engine,
+                                    workers=0, sources=[args.source or "all"],
+                                    extra={"phases": self.phases(args), "current": None,
+                                           "steps": []}).start()
+        try:
+            current = None
+            for phase, step in steps:
+                if phase != current:
+                    current = phase
+                    print(f"=== {phase} ===", flush=True)
+                logger.info(f"running: {shlex.join(step)}")
+                entry = self.record_step(phase, step)
+                code = self.run_step(step)
+                self.end_step(entry, code)
+                if code != 0:
+                    self.record(status_file, f"[Error] Error in {phase}")
+                    raise RuntimeError(f"build stopped in {phase}: {shlex.join(step)} "
+                                       f"exited with {code}")
+        except BaseException as e:
+            finish_record(self.run_record, e)
+            raise
+        finish_record(self.run_record)
         self.record(status_file, "[Success] Build was successful")
         print("Build finished")
         return steps

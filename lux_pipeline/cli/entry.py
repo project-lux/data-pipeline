@@ -14,6 +14,7 @@ import sys
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 
 from lux_pipeline import runtime
+from lux_pipeline.cli._handler import exit_code, finish_record
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -102,6 +103,8 @@ def run(argv=None):
     """Everything `main` does, returning the exit status instead of exiting."""
     ap = build_parser()
     args, rest = ap.parse_known_args(argv)
+    # the command line as given, for the run record (<prefix>.run)
+    args.cli_argv = list(sys.argv[1:] if argv is None else argv)
     if args.help:
         if not args.command:
             ap.print_help()
@@ -170,10 +173,14 @@ def run(argv=None):
         if args.debug:
             logger.debug(f"calling {type(hdlr).__name__}.process with {args} and {rest}")
         hdlr.process(args, rest)
-    except SystemExit:
-        raise
-    except Exception as e:
-        if args.debug:
+    except BaseException as e:
+        # a command may fail after its workers succeeded and its record was
+        # finished (harvest with failed sources, validate --strict): the
+        # record says how the command ended, not how the workers did
+        if not (isinstance(e, SystemExit) and exit_code(e) == 0):
+            finish_record(getattr(hdlr, "run_record", None), e, getattr(hdlr, "run_prefix", None))
+        # as before: only an Exception becomes a one-line error and exit 1
+        if not isinstance(e, Exception) or args.debug:
             raise
         return _fail(f"lux {args.command}: {type(e).__name__}: {e}", 1)
     return 0

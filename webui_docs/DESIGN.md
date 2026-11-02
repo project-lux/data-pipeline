@@ -205,12 +205,16 @@ one method, and `LogTailer` lives in the Rich module. W01 moves the reading
 into `lux_pipeline/progress.py` (no Rich there, by its design rules):
 
 ```python
-def read_build(prefix, workers) -> dict
-# {"workers": {n: status-or-None}, "seen": int, "done": bool,
+def read_build(prefix, workers, visible=None) -> dict
+# {"workers": {n: status-or-None}, "labels": {n: label}, "seen": int, "done": bool,
 #  "completed": int, "total": int|None}        # the all-workers numbers, visible workers only
 class LogTailer: ...                            # moved verbatim from cli/_view.py
-def count_workers(prefix) / latest_prefix(log_dir) / list_runs(log_dir)   # moved from cli/watch.py, plus list_runs
+def count_workers(prefix) / latest_prefix(log_dir)   # moved from cli/watch.py
+def list_runs(log_dir) / run_state(record, build)    # new
 ```
+
+(Built in W01, 2026-11-02; `01-run-files-and-shared-state.md` is the
+reference for the details.)
 
 `BuildView.refresh` becomes "call `read_build`, update the tasks"; the web
 SSE generator calls the same `read_build` and the same `LogTailer`, so the
@@ -228,19 +232,23 @@ writes (never a worker):
 ```json
 {"prefix": "/.../logs/reconcile-2026-11-02-141500", "command": "reconcile",
  "argv": ["lux", "reconcile", "--source", "all", "--max-workers", "24"],
- "pid": 48213, "engine": "mp", "workers": 24, "visible_workers": 24,
- "sources": ["ycba", "yuag", "..."], "started": 1762111500.1,
- "finished": null, "exit": null, "error": null, "parent": null}
+ "host": "lux-build", "pid": 48213, "engine": "mp", "workers": 24,
+ "visible_workers": [0, 1, "..."], "sources": ["ycba", "yuag", "..."],
+ "started": 1762111500.1, "finished": null, "exit": null, "error": null,
+ "parent": null}
 ```
 
 written at the start of `CommandHandler.process` (after the manager is
-built) and rewritten at the end with `finished`, `exit` (0, or 1 with
-`error` the exception text). `lux build` writes one for itself with
-`"phases": [...]` and `"current": "merge"`, and each phase it starts gets
-`parent` set (it already passes `--prefix P-<phase>`; the web runner
-always passes a prefix). The web runner adds `"web": true` and the stdout
-file path. A run whose driver is gone (`pid` dead) with `finished` null is
-shown as *killed*. `unfinished_workers` and `refuse_while_building` are
+built) and rewritten at the end with `finished`, `exit` (0; 1 with
+`error` the exception text; 130 for an interrupt) and the worker count
+the status files show. `entry.run` re-finishes it when a command fails
+after its workers succeeded. `lux build` writes one for itself with
+`"phases"`, `"current"` and `"steps"` (each step's command, prefix,
+times and exit status, the one-shot steps included), gives every worker
+phase a prefix `P-<phase>`, and each phase records the build as its
+`parent`. The web runner adds `"web": true` and the stdout file path. A
+run's state comes from its record: its exit status once finished,
+*running* while its driver lives, *killed* once it is gone (`run_state`). `unfinished_workers` and `refuse_while_building` are
 unchanged: they still read the status files, so a run started at a shell
 without `.run` is still seen.
 
@@ -360,8 +368,9 @@ today, has its own tests, and is a PR on its own before any web code.
 
 | # | Module | Change | Why the web needs it |
 |---|---|---|---|
-| W01 | `lux_pipeline/progress.py` | `read_build`, `LogTailer`, `count_workers`, `latest_prefix`, `list_runs`, `RunRecord` (`<prefix>.run`); `cli/_view.py` and `cli/watch.py` import them from here | one reader for both views; a list of runs; the command line and liveness of a run |
-| W01 | `cli/_handler.py` `CommandHandler.process`, `cli/build.py` | write the run record at start and end; build records its phases and passes `parent` | run list, build phase strip, cancel |
+| W00 | `tests/webui_fixtures.py` | a database-free installation written in test code | a real `Config` for every later test |
+| W01 | `lux_pipeline/progress.py` | `read_build`, `LogTailer`, `count_workers`, `latest_prefix`, `list_runs`, `run_state`, `RunRecord` (`<prefix>.run`); `cli/_view.py` and `cli/watch.py` import them from here | one reader for both views; a list of runs; the command line and liveness of a run |
+| W01 | `cli/_handler.py` `CommandHandler.process`, `cli/entry.py`, `cli/build.py` | write and finish the run record; entry re-finishes it after a late failure; build records its steps and passes `parent` | run list, build phase strip, cancel |
 | W02 | `cli/introspect.py` (new) | `command_spec(name)`: a command's options from its `ArgumentParser` as data; `all_command_specs()`; `argv_from_values(spec, values)`; classification (phase / step / store / info; destructive) | forms generated from the real options, never a hand-kept copy that drifts |
 | W03 | `cli/counts.py`, `cli/testinstall.py`, `cli/list.py` | `counts_data(cfgs, sources, caches, maps, indexes)` and `Check` collecting `results` (`[(label, state, detail)]`) with printing done from them; `list.source_rows(cfgs, which)` | tables as data |
 | W04 | `config.py` `handle_config_record(k, rec, origin=None)` + `record_origins`; `config_store.py`, `config_schema.py` (new); `cli/config.py` (new, `lux config show|set|check`) | the editor writes to the right file; a CLI face so it is testable and useful without the web |
@@ -389,12 +398,13 @@ any item. `BuildView`'s rendering is untouched beyond calling `read_build`.
 
 ## 8. Order of work and effort
 
-W01–W05 are the enabling refactors (each S or M, each independent of the
-others except as the index says). W06 is the skeleton every page needs.
-W07–W12 are the pages, independent of each other once W06 is in, so they
-can go in parallel. W13 is hardening and docs, last. Rough total: four
-small, four medium and five large items; the large ones (W06, W07, W08,
-W09, W10) are mostly templates and routes.
+W00 is the test installation the later items' tests build on. W01–W05
+are the enabling refactors (each S or M, each independent of the others
+except as the index says). W06 is the skeleton every page needs. W07–W12
+are the pages, independent of each other once W06 is in, so they can go
+in parallel. W13 is hardening and docs, last. Rough total: five small,
+four medium and five large items; the large ones (W06, W07, W08, W09,
+W10) are mostly templates and routes.
 
 Build-machine verification (anything needing the live Postgres, the real
 idmap or a running build) is Rob's; a PR says what it could not verify
