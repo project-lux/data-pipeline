@@ -3,25 +3,12 @@
 // says how many warnings it would save with). Without this script both
 // tabs show, one above the other, and the server checks on save.
 import { post } from "./app.js";
+import { setupTabs } from "./tabs.js";
 
 const pageData = document.getElementById("config-page");
 const key = pageData ? JSON.parse(pageData.textContent).key : null;
 
-// --- tabs ----------------------------------------------------------------
-const tabs = document.querySelectorAll("[data-tab]");
-function show(name) {
-  for (const t of tabs) t.setAttribute("aria-selected", String(t.dataset.tab === name));
-  for (const p of document.querySelectorAll("[data-panel]")) p.hidden = p.dataset.panel !== name;
-  const url = new URL(window.location);
-  url.searchParams.set("tab", name);
-  url.searchParams.delete("flash");
-  history.replaceState(null, "", url);
-}
-if (tabs.length) {
-  const selected = [...tabs].find((t) => t.getAttribute("aria-selected") === "true");
-  show(selected ? selected.dataset.tab : "fields");
-  for (const t of tabs) t.addEventListener("click", () => show(t.dataset.tab));
-}
+setupTabs("fields");
 
 // --- checking the JSON ------------------------------------------------------
 const textarea = document.getElementById("record-text");
