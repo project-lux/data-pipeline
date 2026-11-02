@@ -34,6 +34,7 @@ import os
 import sys
 import time
 
+from lux_pipeline.process import host_cpu
 from lux_pipeline.progress import null_progress
 
 
@@ -153,6 +154,8 @@ class PhaseTimer:
         # the clock time it started, so a report can lay phases on a timeline
         self.started_at = time.time()
         self.cpu0 = time.process_time()
+        # postgres's and the machine's cpu, which process_time cannot see
+        self.host0 = host_cpu.read_counters()
         self._last_report = self.t0
         self._last_count = 0
         self.marks = []
@@ -337,6 +340,9 @@ class PhaseTimer:
             "complete": self.complete,
             # the cProfile stats beside this file, once written
             "profile": os.path.basename(self.profile_file) if self.profile_file else None,
+            # machine-wide counters at the start and now (see host_cpu): a
+            # report subtracts the phase's earliest from its latest
+            "host_cpu": {"start": self.host0, "now": host_cpu.read_counters()},
             "written_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         }
         try:

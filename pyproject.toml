@@ -30,6 +30,8 @@ dependencies = [
     "pyluach",
     "PyYAML",
     "rich",
+    # host cpu counters (lux_pipeline.process.host_cpu) where there is no /proc
+    "psutil; sys_platform != 'linux'",
 ]
 
 [project.optional-dependencies]

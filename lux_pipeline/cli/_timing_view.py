@@ -22,7 +22,7 @@ from rich.tree import Tree
 
 from lux_pipeline.process.timing_report import (
     ESTIMATED_TIMES, METRIC_FORMATS, NO_PROFILES, PROFILE_TITLES, fmt_duration, fmt_time,
-    nested_overrun, overall_summary, slice_rates, spread_note, stale_note)
+    nested_overrun, overall_summary, postgres_meanwhile, slice_rates, spread_note, stale_note)
 
 BAR_WIDTH = 20
 
@@ -83,8 +83,36 @@ def summary_grid(s):
                  Text("rate", label), Text(f"{s['rate']:,.0f}/s", style="bold"))
     grid.add_row(Text("worker-hours", label), f"{s['worker_seconds'] / 3600:,.1f}",
                  Text("cpu-hours", label), f"{s['cpu_seconds'] / 3600:,.1f}",
-                 Text("cpu", label), cpu_cell)
+                 Text("worker cpu", label), cpu_cell)
+    host_row(grid, s.get("host"))
     return grid
+
+
+def _percent_cell(pct, color):
+    cell = Table.grid(padding=(0, 1))
+    cell.add_row(Text(f"{pct:.0f}%", style=f"bold {color}"), _bar(pct, color))
+    return cell
+
+
+def host_row(grid, h):
+    """Postgres's cpu and the machine's, in a six-column grid; nothing
+    without readings. Postgres's cores are the number of cpus its processes
+    kept busy on average; iowait is shown where the platform has it."""
+    if not h:
+        return
+    label = "dim"
+    pg = (Text.assemble((f"{h['postgres'] / 3600:,.1f}", "bold"),
+                        (f"  ({h['postgres_cores']:.1f} cores)", "dim"))
+          if h["postgres"] is not None else Text("not local", style="dim"))
+    machine = (_percent_cell(h["busy_percent"], _cpu_color(h["busy_percent"]))
+               if h["busy_percent"] is not None else Text("-", style="dim"))
+    io = h["iowait_percent"]
+    iowait = (_percent_cell(io, "red" if io >= 20 else "yellow" if io >= 5 else "green")
+              if io is not None else Text("n/a", style="dim"))
+    cpus = f" ({h['cpus']} cpus)" if h.get("cpus") else ""
+    grid.add_row(Text("postgres cpu-h", label), pg,
+                 Text(f"machine{cpus}", label), machine,
+                 Text("iowait", label), iowait)
 
 
 def stage_table(s):
@@ -159,7 +187,8 @@ def phase_panel(phase, s):
         parts.append(Text(f"ignored {stale_note(s['stale_files'])}", style="dim yellow"))
     if idle > 20:
         parts.append(Text(f"workers are off-cpu {idle:.0f}% of the time -- the stages "
-                          f"say what they are waiting in", style="yellow"))
+                          f"say what they are waiting in" + postgres_meanwhile(s.get("host")),
+                          style="yellow"))
     if s["stages"]:
         parts += [Text(""), stage_table(s), *nested_tables(s)]
     st = slices_text(s)
@@ -237,8 +266,14 @@ def summary_panel(t):
                           style="yellow" if t["between"] > 0.1 * t["elapsed"] else ""))
     cpu = t["cpu_percent"]
     grid.add_row(Text("worker-hours", "dim"), f"{t['worker_seconds'] / 3600:,.1f}",
-                 Text("cpu", "dim"), Text(f"{cpu:.0f}%", style=f"bold {_cpu_color(cpu)}"))
+                 Text("worker cpu", "dim"), Text(f"{cpu:.0f}%", style=f"bold {_cpu_color(cpu)}"))
     parts.append(grid)
+    if t.get("host"):
+        hg = Table.grid(padding=(0, 2))
+        for _ in range(6):
+            hg.add_column()
+        host_row(hg, t["host"])
+        parts.append(hg)
 
     if t["timeline"]:
         t0, span = t["started_at"], max(t["elapsed"], 1)
