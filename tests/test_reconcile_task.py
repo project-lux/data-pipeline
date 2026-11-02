@@ -123,7 +123,8 @@ def make_tail(log, stats=None):
 
 @pytest.fixture(autouse=True)
 def _in_tmp(tmp_path, monkeypatch):
-    # a full run removes metatypes-*.json from the working directory
+    # the stub's temp_dir is under tmp_path; the working directory is also
+    # tmp_path, so a file written there by mistake would show up in the globs
     monkeypatch.chdir(tmp_path)
 
 
@@ -427,11 +428,15 @@ def test_merge_metatypes_unions_the_slices_in_sorted_order_and_deletes_them(tmp_
     cwd = tmp_path / "cwd"
     cwd.mkdir()
     monkeypatch.chdir(cwd)
-    (cwd / "metatypes-1.json").write_text(json.dumps({f"{AAT}1": ["t1", "t2"], f"{AAT}2": ["t3"]}))
-    (cwd / "metatypes-0.json").write_text(json.dumps({f"{AAT}1": ["t2", "t9"]}))
-    (cwd / "metatypes-10.json").write_text(json.dumps({f"{AAT}1": ["t0"], f"{AAT}3": ["t4"]}))
-    (cwd / "metatypes-single.json").write_text(json.dumps({f"{AAT}4": ["t5"]}))
-    (cwd / "other.json").write_text("{}")
+    # the slices live under temp_dir, wherever the process runs
+    (cwd / "metatypes-99.json").write_text(json.dumps({"not": ["merged"]}))
+    temp = Path(cfgs.temp_dir)
+    temp.mkdir(parents=True, exist_ok=True)
+    (temp / "metatypes-1.json").write_text(json.dumps({f"{AAT}1": ["t1", "t2"], f"{AAT}2": ["t3"]}))
+    (temp / "metatypes-0.json").write_text(json.dumps({f"{AAT}1": ["t2", "t9"]}))
+    (temp / "metatypes-10.json").write_text(json.dumps({f"{AAT}1": ["t0"], f"{AAT}3": ["t4"]}))
+    (temp / "metatypes-single.json").write_text(json.dumps({f"{AAT}4": ["t5"]}))
+    (temp / "other.json").write_text("{}")
 
     got = ref_mgr_for(cfgs).merge_metatypes()
 
@@ -441,7 +446,8 @@ def test_merge_metatypes_unions_the_slices_in_sorted_order_and_deletes_them(tmp_
                    f"{AAT}4": ["t5"]}
     out = Path(cfgs.data_dir) / "metatypes.json"
     assert json.loads(out.read_text()) == got
-    assert sorted(p.name for p in cwd.iterdir()) == ["other.json"]
+    assert sorted(p.name for p in temp.iterdir()) == ["other.json"]
+    assert sorted(p.name for p in cwd.iterdir()) == ["metatypes-99.json"]
 
 
 def test_merge_metatypes_with_no_slices_writes_an_empty_map(tmp_path, monkeypatch):
@@ -540,8 +546,10 @@ def stale_files(tmp_path, cfgs):
     cfgs.log_dir = str(tmp_path / "logs")
     flags = tmp_path / "logs" / "flags"
     flags.mkdir(parents=True)
+    temp = Path(cfgs.temp_dir)
+    temp.mkdir(parents=True, exist_ok=True)
     for fn in ("metatypes-0.json", "metatypes-single.json", "metatypes.json"):
-        (tmp_path / fn).write_text("{}")
+        (temp / fn).write_text("{}")
     (flags / "reconcile_is_done-3.txt").write_text("1")
     (flags / "merge_is_done-3.txt").write_text("1")
     return flags
@@ -552,7 +560,7 @@ def test_a_full_run_clears_what_an_earlier_one_left(harness, tmp_path):
     flags = stale_files(tmp_path, h.configure())
     m = h.manager(workers=2)
     removed = []
-    m.finish = lambda: removed.append(sorted(p.name for p in tmp_path.glob("metatypes*")))
+    m.finish = lambda: removed.append(sorted(p.name for p in Path(h.cfgs.temp_dir).glob("metatypes*")))
     m.process("null")
     # the slice files went before the workers started; metatypes.json is the merged one
     assert removed == [["metatypes.json"]]
@@ -565,5 +573,5 @@ def test_a_partial_run_leaves_them(harness, tmp_path, options):
     flags = stale_files(tmp_path, h.configure())
     m = h.manager(sources=("ycba",), workers=1 if "my_worker" not in options else 2, **options)
     assert m.clear_stale() == 0
-    assert len(list(tmp_path.glob("metatypes-*.json"))) == 2
+    assert len(list(Path(h.cfgs.temp_dir).glob("metatypes-*.json"))) == 2
     assert len(list(flags.iterdir())) == 2

@@ -10,6 +10,39 @@ logger = logging.getLogger("lux_pipeline")
 # rather than a list literal rebuilt on every key of every node
 SKIP_PROPS = frozenset(["equivalent", "access_point", "conforms_to"])
 
+# The files the phases hand to each other -- the reconcile slices' metatypes
+# and the referenced URIs merge reads -- live under the configuration's
+# temp_dir, so every phase finds them whatever directory it was started
+# from. (They were written in the working directory until 2026-11.)
+METATYPES_SLICE = "metatypes-{}.json"
+REFERENCES_FILE = "reference_uris.txt"
+
+
+def _temp_dir(configs):
+    """``configs.temp_dir``, created if missing. `Config` always sets it
+    (``<base_dir>/tmp`` by default)."""
+    d = configs.temp_dir
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def metatypes_path(configs, my_slice=-1):
+    """Where reconcile slice `my_slice` (``-1``: an unsliced run) writes
+    its metatypes: ``<temp_dir>/metatypes-<n>.json`` or ``-single``."""
+    tag = my_slice if my_slice > -1 else "single"
+    return os.path.join(_temp_dir(configs), METATYPES_SLICE.format(tag))
+
+
+def metatypes_pattern(configs):
+    """The glob matching every slice's metatypes file."""
+    return os.path.join(glob.escape(_temp_dir(configs)), METATYPES_SLICE.format("*"))
+
+
+def references_path(configs):
+    """``<temp_dir>/reference_uris.txt``: written by `write_done_refs`
+    after reconcile, read by `iter_done_refs` in merge."""
+    return os.path.join(_temp_dir(configs), REFERENCES_FILE)
+
 
 class ReferenceManager(object):
     def __init__(self, configs, idmap, workers=1):
@@ -56,11 +89,8 @@ class ReferenceManager(object):
         self.ref_idle_poll = getattr(configs, "reference_idle_poll", 2)
 
     def write_metatypes(self, my_slice):
-        # write out our slice of metatypes
-        if my_slice > -1:
-            fn = f"metatypes-{my_slice}.json"
-        else:
-            fn = f"metatypes-single.json"
+        # write out our slice of metatypes, under temp_dir
+        fn = metatypes_path(self.configs, my_slice)
         # values are sets (membership testing them was a list scan per
         # classification per node); sorted on the way out so the file is
         # also stable between runs
@@ -70,14 +100,14 @@ class ReferenceManager(object):
 
     def merge_metatypes(self):
         """Merge the slices' ``metatypes-*.json`` -- written by
-        `write_metatypes` into the working directory -- into
+        `write_metatypes` under ``temp_dir`` -- into
         ``<data_dir>/metatypes.json``, where the final mapper reads it, and
         delete the slice files. merge-metatypes.py plus run-all.sh's ``rm``
         and ``mv`` as a method: the files in sorted order, so a key's list
         does not depend on filesystem order; the first file's lists are
         kept and the others' entries appended when new. Returns the merged
         map; an empty one when there are no slice files."""
-        files = sorted(glob.glob("metatypes-*.json"))
+        files = sorted(glob.glob(metatypes_pattern(self.configs)))
         mt = {}
         for f in files:
             with open(f) as fh:
@@ -154,7 +184,8 @@ class ReferenceManager(object):
         maxd = self.configs.max_distance
         seen = set()
         x = kept = deduped = unresolved = reported = 0
-        with open("reference_uris.txt", "w") as fh:
+        path = references_path(self.configs)
+        with open(path, "w") as fh:
             for chunk in self._batched(self.done_refs.iter_items(), 10000):
                 wanted = []
                 for (key, vals) in chunk:
@@ -188,8 +219,9 @@ class ReferenceManager(object):
                         seen.add(token)
                     kept += 1
                     fh.write(f"{dist}|{yuid or ''}|{key}\n")
-        logger.info(f"reference_uris.txt: {kept} lines from {x} done refs "
-              f"({deduped} duplicate YUIDs dropped, {unresolved} with no YUID)")
+        logger.info(f"{path}: {kept} lines from {x} done refs "
+                    f"({deduped} duplicate YUIDs dropped, {unresolved} with no YUID)")
+        return path
 
     @staticmethod
     def _split_done_ref(line):
@@ -209,7 +241,7 @@ class ReferenceManager(object):
         return parts
 
     def iter_done_refs(self, my_slice, max_slice):
-        with open("reference_uris.txt", "r") as fh:
+        with open(references_path(self.configs), "r") as fh:
             if my_slice < 0 or max_slice < 0:
                 # just read the whole file
                 # (previously an empty/blank first line yielded a bogus [""]

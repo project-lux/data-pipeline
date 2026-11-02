@@ -325,6 +325,7 @@ def test_claim_size_is_unchanged_for_a_single_worker():
 
 class StubConfigs:
     max_distance = 3
+    temp_dir = None     # set per test: where reference_uris.txt goes
 
     def is_qua(self, recid):
         return "##qua" in recid
@@ -350,9 +351,10 @@ class StubIdMap:
         return out
 
 
-def make_rm(store, idmap=None):
+def make_rm(store, idmap=None, temp_dir=None):
     rm = object.__new__(ReferenceManager)
     rm.configs = StubConfigs()
+    rm.configs.temp_dir = str(temp_dir) if temp_dir is not None else None
     rm.done_refs = refmap(store)
     rm.idmap = idmap if idmap is not None else StubIdMap()
     return rm
@@ -362,9 +364,8 @@ def test_write_done_refs_batches_and_filters(tmp_path, monkeypatch):
     store = Store(100)
     for i, k in enumerate(store.order):
         store[k] = {"dist": "9" if i < 10 else "1", "type": "Type"}
-    rm = make_rm(store)
+    rm = make_rm(store, temp_dir=tmp_path)
 
-    monkeypatch.chdir(tmp_path)
     rm.write_done_refs()
 
     lines = (tmp_path / "reference_uris.txt").read_text().splitlines()
@@ -384,9 +385,8 @@ def test_write_done_refs_dedupes_by_yuid(tmp_path, monkeypatch):
     store = Store(10)
     yuid = "https://lux.collections.yale.edu/data/concept/" + "a" * 32
     cluster = {store.order[0]: yuid, store.order[3]: yuid, store.order[7]: yuid}
-    rm = make_rm(store, StubIdMap(shared=cluster))
+    rm = make_rm(store, StubIdMap(shared=cluster), temp_dir=tmp_path)
 
-    monkeypatch.chdir(tmp_path)
     rm.write_done_refs()
 
     lines = [line.split("|", 2) for line in
@@ -405,9 +405,8 @@ def test_write_done_refs_keeps_refs_with_no_yuid(tmp_path, monkeypatch):
     store = Store(5)
     idmap = StubIdMap()
     idmap.get_multi = lambda keys, chunk=1000: {k: None for k in keys}
-    rm = make_rm(store, idmap)
+    rm = make_rm(store, idmap, temp_dir=tmp_path)
 
-    monkeypatch.chdir(tmp_path)
     rm.write_done_refs()
 
     lines = (tmp_path / "reference_uris.txt").read_text().splitlines()

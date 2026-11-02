@@ -38,9 +38,10 @@ loads its same-as / different-from pairs and fixes (`--fetch-only`,
 (`.[xlsx]`) or a directory of `<tab name>.csv` files instead. And `lux portal` tags
 the merged records the YPM portal needs. A full `lux reconcile`, `merge`
 or `export` first removes what an earlier run left (metatypes slice files,
-done flags, old export slices); one `--my-worker` slice never does. Run
-`lux build` from the repository: like the shell script, it writes
-`metatypes-*.json` and `reference_uris.txt` in the working directory. `./run-all2.sh --all` is the same build as shell
+done flags, old export slices); one `--my-worker` slice never does. The
+files the phases hand to each other (`metatypes-*.json`,
+`reference_uris.txt`) live under the configuration's `temp_dir`, so the
+phases may be run from any directory. `./run-all2.sh --all` is the same build as shell
 (`ENGINE=mp` for one `lux` per phase instead of one per slice); the legacy
 `run-all.sh` beside it is kept until the two have been compared on the
 build machine.

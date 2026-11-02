@@ -23,9 +23,9 @@ configuration and gets its own status/log prefix for ``lux watch``;
 ``--prefix P`` gives them ``P-<phase>``. Each phase's command removes what
 an earlier build left behind (metatypes slice files, done flags, old
 export slices) before its workers start. The first step to fail stops the
-build. Run it from the repository, as the shell script: the
-``metatypes-*.json`` files and ``reference_uris.txt`` are written in the
-working directory. Success and failure are appended, as by run-all.sh, to
+build. The files the phases hand to each other (``metatypes-*.json``,
+``reference_uris.txt``) live under ``temp_dir``, so it may be run from any
+directory. Success and failure are appended, as by run-all.sh, to
 ``--status-file`` (default ``<log_dir>/pipeline_process_status.txt``).
 """
 

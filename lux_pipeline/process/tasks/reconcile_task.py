@@ -38,7 +38,7 @@ import logging
 from lux_pipeline.process.phases.identify import report_lines, resolve_identity, vacuum_idmap
 from lux_pipeline.process.phases.reconcile import (new_update_token, reconcile_slice, select_sources,
                                                    write_refs)
-from lux_pipeline.process.reference_manager import ReferenceManager
+from lux_pipeline.process.reference_manager import ReferenceManager, metatypes_pattern
 from ._task_manager import TaskManager, flags_pattern, remove_stale
 
 logger = logging.getLogger("lux_pipeline")
@@ -146,13 +146,13 @@ class ReconcileManager(TaskManager):
 
     def clear_stale(self):
         """Before a run over every slice: the ``metatypes-*.json`` slice
-        files in the working directory, which the finish (or ``lux
-        metatypes``) would merge into this build's, and the phase's done
-        flags (run-all.sh's ``rm``). A single slice, ``--recid`` or
-        ``--baseline`` run leaves them: they may be another run's."""
+        files under ``temp_dir``, which the finish (or ``lux metatypes``)
+        would merge into this build's, and the phase's done flags
+        (run-all.sh's ``rm``). A single slice, ``--recid`` or ``--baseline``
+        run leaves them: they may be another run's."""
         if self.my_slice > -1 or self.recids or self.baseline:
             return 0
-        return remove_stale("metatypes-*.json", flags_pattern(self.configs, "reconcile"))
+        return remove_stale(metatypes_pattern(self.configs), flags_pattern(self.configs, "reconcile"))
 
     def process(self, engine="mp", prefix=None, view=None):
         """Check the selection, mint the token if asked, clear what an
@@ -193,8 +193,9 @@ class ReconcileManager(TaskManager):
         ref_mgr = ReferenceManager(cfgs, idmap)
         logger.info("Merging metatypes")
         metatypes = ref_mgr.merge_metatypes()
-        logger.info("Writing the referenced URIs to reference_uris.txt")
-        write_refs(cfgs, idmap, ref_mgr)
+        logger.info("Writing the referenced URIs")
+        path = write_refs(cfgs, idmap, ref_mgr)
+        logger.info(f"Wrote {path}")
         logger.info("Done, ready to merge")
 
         self.finish_stats = {"identify": stats, "metatypes": len(metatypes)}

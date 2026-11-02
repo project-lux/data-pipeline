@@ -352,7 +352,7 @@ def test_iter_done_refs_skips_blank_lines(tmp_path, monkeypatch):
     from lux_pipeline.process.reference_manager import ReferenceManager
 
     rm = object.__new__(ReferenceManager)
-    monkeypatch.chdir(tmp_path)
+    rm.configs = type("Cfgs", (), {"temp_dir": str(tmp_path)})()
     (tmp_path / "reference_uris.txt").write_text(
         "1|yuid:a|http://a##quaType\n\n2||http://b##quaType\n")
     got = list(rm.iter_done_refs(-1, -1))
@@ -373,7 +373,7 @@ def test_iter_done_refs_rejects_the_pre_dedupe_format(tmp_path, monkeypatch):
     from lux_pipeline.process.reference_manager import ReferenceManager
 
     rm = object.__new__(ReferenceManager)
-    monkeypatch.chdir(tmp_path)
+    rm.configs = type("Cfgs", (), {"temp_dir": str(tmp_path)})()
     (tmp_path / "reference_uris.txt").write_text("1|http://a##quaType\n")
     with pytest.raises(ValueError, match="--write-refs"):
         list(rm.iter_done_refs(-1, -1))
