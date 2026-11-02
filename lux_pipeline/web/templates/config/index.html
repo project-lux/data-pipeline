@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Configuration{% endblock %}
+{% block content %}
+<h1>Configuration</h1>
+<p class="lead">Every record of <code>{{ data.config_dir }}</code>{% if data.stores %} and its sub-config stores ({{ data.stores|join(", ") }}){% endif %}: {{ data.count }} in all. A record is saved in the file it came from, changing only what changed.</p>
+
+{% if data.building %}<div class="banner warn">{{ data.building }}. Saving is refused while it runs unless you say otherwise on the record's page.</div>{% endif %}
+
+<div class="actions">
+  <a class="button" href="/config/_new">New record</a>
+  <form method="post" action="/config/_reload" class="inline">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="back" value="/config">
+    <button type="submit" class="secondary">Reload from the files</button>
+  </form>
+</div>
+
+{% for group in data.groups %}
+<section class="card wide">
+  <h2>{{ group.label }} <span class="muted">({{ group.records|length }})</span></h2>
+  <table class="table">
+    <thead><tr><th>Key</th><th>Name</th><th>About</th><th>Store</th><th>File</th></tr></thead>
+    <tbody>
+    {% for r in group.records %}
+      <tr><td><a href="/config/{{ r.key|urlencode }}">{{ r.key }}</a></td>
+          <td>{{ r.name or "" }}</td><td class="detail">{{ r.summary }}{% if r.error %} <span class="badge state-fail">{{ r.error }}</span>{% endif %}</td>
+          <td>{{ r.store or "" }}</td><td class="path">{{ r.path }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endfor %}
+
+<section class="card wide">
+  <h2>Sources at a glance</h2>
+  <table class="table">
+    <thead><tr><th>Source</th><th>Group</th><th>Namespace</th><th class="num">Order</th><th>Classes</th></tr></thead>
+    <tbody>
+    {% for s in data.sources %}
+      <tr><td><a href="/config/{{ s.source|urlencode }}">{{ s.source }}</a></td><td>{{ s.group }}</td>
+          <td class="path" title="{{ s.namespace }}">{{ s.namespace_display }}</td><td class="num">{{ s.order }}</td>
+          <td class="detail">{% for c in s.classes %}<span class="muted">{{ c.label }}</span> {{ c.short }}{% if not loop.last %}, {% endif %}{% endfor %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

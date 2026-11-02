@@ -1,6 +1,6 @@
 # W07. Configuration pages
 
-**Size:** L · **Depends on:** W04, W06
+**Size:** L · **Depends on:** W04, W06 · **Done:** 2026-11-02
 **Read:** `04-config-store-and-schema.md`; `lux_pipeline/config_store.py`,
 `config_schema.py` (as merged); `lux_pipeline/cli/list.py` (`source_rows`,
 W03); `lux_pipeline/cli/_handler.py` (`refuse_while_building`); W06's
@@ -108,6 +108,51 @@ how many records were read.
 3. Fields tab and `editor.js`.
 4. New, delete, reload.
 5. `docs/web.md` section.
+
+## As built
+
+`web/api/config.py` (data functions and JSON routes), `web/routers/config.py`
+(pages), `templates/config/{index,record,new}.html`, `static/editor.js`.
+Differences from the design above:
+
+* **The two tabs are two forms, not one synced object.** Re-rendering the
+  JSON tab from an object would re-dump the text and lose the file's
+  layout, which W04 keeps. The Fields form posts `field:<key>` values
+  (`mode=fields`) and is saved with `write_record`, so only changed keys
+  change; the JSON form posts its text (`mode=text`) and is saved
+  verbatim with `write_text`. Both work without JavaScript; `editor.js`
+  switches tabs and checks the JSON as it is typed (`/api/config/<key>/validate`),
+  shows the diff, and labels the save button with the warning count.
+* **Fields:** a select for a boolean ("not set", true, false), a number for
+  an integer, a JSON textarea for a list or dict, text otherwise; in a
+  class field `null` switches the component off. An empty text field
+  keeps an empty string on a key that has one (the caches' `host`), and a
+  *remove* box takes the key out. Keys the catalogue does not know are
+  listed read-only and changed on the JSON tab. A class key with a default
+  shows the default when absent; a path shows where it resolves and
+  whether it exists; a class its state (ok, off, old path, error).
+* **The routes** for the actions are `/config/_new` and `/config/_reload`:
+  a key cannot start with `_`, so a record called `new` or `reload` is
+  never hidden. Checking and diffing are JSON routes,
+  `POST /api/config/<key>/validate|diff` with `{"text"}` or `{"data"}`.
+* **Deleting** asks for the key to be typed in the form (checked by the
+  server) rather than in a script dialog.
+* **Messages** after a redirect are kept in the server (`app.flash`,
+  `redirect_with`: `?flash=<id>`), never taken from the URL, so a link
+  cannot make a page say something; `redirect_with` only goes to a path on
+  this server (`_reload`'s `back` cannot send you elsewhere).
+* **Refusals keep what was typed:** a save refused while a build runs (409,
+  with the "write anyway" box), a field or text that is not JSON (400),
+  or a record that does not validate (400) re-renders the page with the
+  submitted values and the problems.
+* An unknown record is 404.
+
+Checked against the live configurations: every record of the build
+machine's copies (37) and of pipeline-configs (44) renders as a page and as
+JSON. On a scratch copy of pipeline-configs, saving `merge_order` through
+a running server's Fields form, with all 25 of its fields submitted,
+wrote a file identical to `lux config set aat merge_order 11` on another
+copy, one changed line in the whole tree.
 
 ## Tests (`tests/test_web_config.py`)
 

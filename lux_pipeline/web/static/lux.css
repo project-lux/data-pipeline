@@ -122,3 +122,46 @@ button { font: inherit; padding: 0.4rem 0.9rem; border-radius: 6px; border: 1px 
          background: var(--accent); color: var(--accent-fg); cursor: pointer; }
 button:disabled { opacity: 0.55; cursor: default; }
 button.secondary { background: transparent; color: var(--accent); }
+
+/* --- messages, banners, problems (W07) --------------------------------------- */
+.flash { padding: 0.6rem 0.9rem; border-radius: 6px; margin: 0 0 1rem; border: 1px solid var(--ok); color: var(--ok); }
+.flash-info { border-color: var(--muted); color: var(--muted); }
+.flash-fail { border-color: var(--fail); color: var(--fail); }
+.banner { padding: 0.6rem 0.9rem; border-radius: 6px; margin: 0.75rem 0; border: 1px solid currentColor; }
+.banner.warn { color: var(--warn); }
+.banner.fail { color: var(--fail); }
+.problems { margin: 0.5rem 0; padding-left: 1.25rem; }
+.problems .error, #json-status.error { color: var(--fail); }
+.problems .warning { color: var(--warn); }
+.crumbs { margin: 0 0 0.25rem; color: var(--muted); }
+.actions { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin: 0.75rem 0; }
+form.inline { display: inline; }
+a.button { display: inline-block; padding: 0.4rem 0.9rem; border-radius: 6px; background: var(--accent); color: var(--accent-fg); }
+a.button:hover { text-decoration: none; }
+button.danger { background: var(--fail); border-color: var(--fail); }
+.card.danger { border-color: var(--fail); }
+.choices { columns: 3 10rem; }
+
+/* --- tabs ------------------------------------------------------------------- */
+.tabs { display: flex; gap: 0.25rem; margin: 1rem 0 -1px; }
+.tabs button { background: transparent; color: var(--fg); border: 1px solid var(--line); border-bottom: 0;
+               border-radius: 6px 6px 0 0; }
+.tabs button[aria-selected="true"] { background: var(--card); color: var(--accent); font-weight: 600; }
+
+/* --- the record's fields ----------------------------------------------------- */
+.fields .field { display: grid; grid-template-columns: 16rem 1fr; gap: 0.2rem 1rem; padding: 0.5rem 0;
+                 border-bottom: 1px solid var(--line); align-items: start; }
+.fields .field > label:first-child { grid-row: span 2; margin: 0; }
+.fields .field.absent > label:first-child code { color: var(--muted); }
+.fields .field input[type=text], .fields .field textarea { width: 100%; }
+.fields .field .help { grid-column: 2; }
+.fields .unset { grid-column: 2; display: inline-flex; gap: 0.3rem; margin: 0; font-size: 0.85em; color: var(--muted); }
+.force { display: inline-flex; gap: 0.4rem; color: var(--warn); }
+@media (max-width: 800px) { .fields .field { grid-template-columns: 1fr; } .fields .field > label:first-child { grid-row: auto; } }
+
+/* --- diffs ------------------------------------------------------------------ */
+.diff { background: var(--code); border: 1px solid var(--line); border-radius: 6px; padding: 0.6rem 0.8rem;
+        font: 0.85em/1.4 var(--mono); max-height: 24rem; overflow: auto; white-space: pre; }
+.diff .add { color: var(--ok); }
+.diff .del { color: var(--fail); }
+.diff .hunk { color: var(--muted); }

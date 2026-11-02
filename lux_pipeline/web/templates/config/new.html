@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}New record{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="/config">Configuration</a> /</p>
+<h1>New record</h1>
+{% if error %}<div class="banner fail" role="alert">{{ error }}</div>{% endif %}
+{% if problems %}<ul class="problems">{% for p in problems %}<li class="{{ 'warning' if p.startswith('warning:') else 'error' }}">{{ p }}</li>{% endfor %}</ul>{% endif %}
+
+{% if not record_type %}
+<p>What kind of record?</p>
+<ul class="choices">
+  {% for t in types %}<li><a href="/config/_new?type={{ t|urlencode }}">{{ t }}</a></li>{% endfor %}
+</ul>
+{% else %}
+<form method="post" action="/config/_new" class="form">
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+  <input type="hidden" name="type" value="{{ record_type }}">
+  <label for="new-key">Key (the file name; a source's name must be the same)</label>
+  <input id="new-key" type="text" name="key" value="{{ key }}" required pattern="[A-Za-z0-9][A-Za-z0-9_.\-]*">
+  <label for="new-store">Where</label>
+  <select id="new-store" name="store">
+    <option value="">the configuration directory</option>
+    {% for s in stores %}<option value="{{ s }}"{% if s == store_key %} selected{% endif %}>sub-config store {{ s }}</option>{% endfor %}
+  </select>
+  <label for="new-text">The record ({{ record_type }}): fill in what is empty</label>
+  <textarea id="new-text" name="text" rows="16" spellcheck="false">{{ text }}</textarea>
+  <label class="force"><input type="checkbox" name="force" value="1"> write even if a build is running</label>
+  <p><button type="submit">Create</button></p>
+</form>
+{% endif %}
+{% endblock %}
