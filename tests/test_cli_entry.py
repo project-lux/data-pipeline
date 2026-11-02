@@ -380,3 +380,66 @@ def test_requirements_and_pyproject_agree():
     assert deps == reqs
     assert proj["project"]["scripts"]["lux"] == "lux_pipeline.cli.entry:main"
     assert "ray" in proj["project"]["optional-dependencies"]
+
+
+# --- --env -------------------------------------------------------------------
+
+
+@pytest.fixture
+def two_envs(monkeypatch, tmp_path):
+    """~/.lux/{prod,test}.env, a ./.env, LUX_BASEPATH in the shell; the
+    variables --env sets are removed again afterwards."""
+    home, work = tmp_path / "home", tmp_path / "work"
+    (home / ".lux").mkdir(parents=True)
+    work.mkdir()
+    (home / ".lux" / "prod.env").write_text("LUX_BASEPATH=/srv/prod\n")
+    (home / ".lux" / "test.env").write_text("LUX_BASEPATH=/srv/test\n")
+    (work / ".env").write_text("LUX_BASEPATH=/from-cwd\n")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(work)
+    monkeypatch.setenv("LUX_BASEPATH", "/from-shell")
+    monkeypatch.setenv("LUX_ENV_FILE", "")
+    monkeypatch.delenv("LUX_ENV_FILE")
+    seen = []
+    monkeypatch.setattr(runtime, "get_configs",
+                        lambda *a, **kw: seen.append(runtime.get_basepath()))
+    return home, work, seen
+
+
+@pytest.mark.parametrize("value, expected", [("test", "/srv/test"), ("prod", "/srv/prod")])
+def test_env_name_picks_home_lux_name_env_over_everything(value, expected, two_envs, monkeypatch,
+                                                         fake_command):
+    home, _, seen = two_envs
+    run(["fake-cmd", "--env", value], monkeypatch)
+    assert seen == [expected]
+    assert runtime.os.environ["LUX_ENV_FILE"] == str(home / ".lux" / f"{value}.env")
+
+
+def test_env_file_and_directory(two_envs, monkeypatch, tmp_path, fake_command):
+    _, _, seen = two_envs
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / ".env").write_text("LUX_BASEPATH=/srv/other\n")
+    run(["fake-cmd", "--env", str(other)], monkeypatch)
+    run(["fake-cmd", "--env", str(other / ".env")], monkeypatch)
+    assert seen == ["/srv/other", "/srv/other"]
+
+
+def test_without_env_the_shell_wins(two_envs, monkeypatch, fake_command):
+    _, _, seen = two_envs
+    run(["fake-cmd"], monkeypatch)
+    assert seen == ["/from-shell"]
+
+
+@pytest.mark.parametrize("value", ["nosuch", "/no/such/dir"])
+def test_an_unknown_env_exits_2(value, two_envs, monkeypatch, capsys, fake_command):
+    assert run(["fake-cmd", "--env", value], monkeypatch) == 2
+    assert f"no .env for --env {value}" in capsys.readouterr().err
+    assert Recorder.calls == []
+
+
+def test_an_env_without_basepath_exits_2(two_envs, monkeypatch, capsys, fake_command):
+    home, _, _ = two_envs
+    (home / ".lux" / "empty.env").write_text("OTHER=1\n")
+    assert run(["fake-cmd", "--env", "empty"], monkeypatch) == 2
+    assert "does not set LUX_BASEPATH" in capsys.readouterr().err

@@ -19,7 +19,7 @@ import os
 import sys
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
 from lux_pipeline.config import Config
 
@@ -35,6 +35,42 @@ def dotenv_paths():
 def find_dotenvs():
     """The `dotenv_paths` that exist, as strings, in order."""
     return [str(p) for p in dotenv_paths() if p.is_file()]
+
+
+def resolve_env(value):
+    """The ``.env`` file ``--env value`` names: a file; a directory's
+    ``.env``; or, for a bare name, ``~/.lux/<name>.env``. Raises
+    ``FileNotFoundError`` listing what was tried."""
+    p = Path(value).expanduser()
+    tried = [p]
+    if p.is_file():
+        return p
+    if p.is_dir():
+        if (p / ".env").is_file():
+            return p / ".env"
+        tried = [p / ".env"]
+    if os.sep not in value and "/" not in value:
+        named = Path.home() / ".lux" / f"{value}.env"
+        if named.is_file():
+            return named
+        tried.append(named)
+    raise FileNotFoundError(f"no .env for --env {value} (tried {', '.join(str(t) for t in tried)})")
+
+
+def use_env(value):
+    """``--env``: load the file `resolve_env` finds over the environment
+    (it wins over the shell's variables and over ``./.env`` and
+    ``~/.lux/.env``, which `get_basepath` then only fills in around it), and
+    record it as ``LUX_ENV_FILE``. Spawned workers and subprocesses inherit
+    the result. Raises ``ValueError`` when the file sets no
+    ``LUX_BASEPATH``. Returns the file."""
+    fn = resolve_env(value)
+    if not dotenv_values(fn).get("LUX_BASEPATH"):
+        raise ValueError(f"{fn} does not set LUX_BASEPATH")
+    load_dotenv(fn, override=True)
+    os.environ["LUX_ENV_FILE"] = str(fn)
+    reset_configs()
+    return fn
 
 
 def get_basepath():

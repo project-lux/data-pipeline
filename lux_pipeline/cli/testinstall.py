@@ -102,6 +102,8 @@ class CommandHandler(BaseHandler):
     # --- the checks ----------------------------------------------------------------
 
     def check_dotenv(self):
+        if os.getenv("LUX_ENV_FILE"):
+            return f"{os.environ['LUX_ENV_FILE']} (--env)"
         fns = runtime.find_dotenvs()
         if not fns and not os.getenv("LUX_BASEPATH"):
             raise FileNotFoundError("no ./.env or ~/.lux/.env found and LUX_BASEPATH is not set")

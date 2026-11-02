@@ -358,9 +358,10 @@ class RayEngine(Engine):
     def run(self, prefix, view):
         ray = self.ray
         remote = ray.remote(_run_worker)
-        if os.getenv("LUX_PROFILE"):
-            # a local ray's workers inherit it; a cluster's don't
-            remote = remote.options(runtime_env={"env_vars": {"LUX_PROFILE": os.environ["LUX_PROFILE"]}})
+        # a local ray's workers inherit these; a cluster's don't
+        env = {k: os.environ[k] for k in ("LUX_PROFILE", "LUX_BASEPATH") if os.getenv(k)}
+        if env:
+            remote = remote.options(runtime_env={"env_vars": env})
         if prefix:
             logger.info(f"worker logs: {prefix}-w*.log")
         futures = {remote.remote(self.manager, n, prefix, self.manager.log_level, True): n

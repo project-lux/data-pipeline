@@ -98,7 +98,7 @@ laptop (the validator reads its schemas on first use, not at construction).
 | Module | Role |
 |---|---|
 | `lux_pipeline/progress.py` | `null_progress`, `StatusWriter`, `read_status`, `unfinished_workers`, `status_path`/`log_path`, `Sliced` |
-| `lux_pipeline/runtime.py` | `get_configs()` (cached per process; `LUX_BASEPATH` from the environment, then `./.env`, then `~/.lux/.env`, no upward search: `dotenv_paths`, `find_dotenvs`), `reset_configs()`, `configure_logging()` |
+| `lux_pipeline/runtime.py` | `get_configs()` (cached per process; `LUX_BASEPATH` from the environment, then `./.env`, then `~/.lux/.env`, no upward search: `dotenv_paths`, `find_dotenvs`; the global `--env NAME|FILE|DIR` (`use_env`: `~/.lux/NAME.env`, a file, or `DIR/.env`) overrides all of them and sets `LUX_ENV_FILE`), `reset_configs()`, `configure_logging()` |
 | `lux_pipeline/log.py` | the shared `logger` |
 | `lux_pipeline/config.py` | `importObject` with legacy-path shim; `Config` reading `system`/`base` and `default` records; `max_workers`, `temp_dir`, `indexes_dir`; optional `nt_dir`, `distribution_dir` (both fall back to `exports_dir`), `backup_dir` |
 | `lux_pipeline/cli/entry.py`, `_handler.py`, `help.py` | `lux` dispatcher, `BaseHandler` / `CommandHandler` (`needs_configs`, `resolve_sources`, `make_manager`, `make_view`) |

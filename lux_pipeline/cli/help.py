@@ -15,6 +15,7 @@ logger = logging.getLogger("lux_pipeline")
 GLOBAL_OPTIONS = """\
 Global options (before or after the command):
   --log LEVEL          DEBUG, INFO, WARNING or ERROR (default INFO)
+  --env NAME|FILE|DIR  use ~/.lux/NAME.env, FILE, or DIR/.env instead of ./.env and ~/.lux/.env
   --debug              log at DEBUG and re-raise errors instead of exiting
   --source S           all, internal, external, results, or names separated by commas
   --max-records N      stop each worker after N records

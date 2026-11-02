@@ -32,6 +32,9 @@ def build_parser():
     ap.add_argument("command", nargs="?", help="Command to run; 'lux help' lists them")
     ap.add_argument("--log", help="Log level: DEBUG, INFO, WARNING, ERROR (default INFO)")
     ap.add_argument("--debug", action="store_true", help="Log at DEBUG and re-raise errors")
+    ap.add_argument("--env", metavar="NAME|FILE|DIR",
+                    help="Use this .env instead of ./.env and ~/.lux/.env: a file, a "
+                         "directory's .env, or ~/.lux/<NAME>.env")
     ap.add_argument("--source", help="Sources to process: all, internal, external, results, or names separated by commas")
     ap.add_argument("--max-records", "--max_records", type=int, default=-1,
                     help="Stop each worker after this many records")
@@ -120,6 +123,13 @@ def run(argv=None):
         runtime.configure_logging(args.log)
     except ValueError as e:
         return _fail(f"lux: {e}", 2)
+
+    if args.env:
+        try:
+            fn = runtime.use_env(args.env)
+        except (FileNotFoundError, ValueError) as e:
+            return _fail(f"lux: {e}", 2)
+        logger.debug(f"environment from {fn}")
 
     if args.my_worker > -1:
         args.engine = "null"

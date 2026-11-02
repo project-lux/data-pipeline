@@ -93,6 +93,20 @@ current directory still wins. To do it by hand:
 mkdir -p ~/.lux && cp ~/lux/data/.env ~/.lux/
 ```
 
+To switch between installations, give each one a named file in `~/.lux/`
+and pick it with the global `--env` option, which wins over the shell's
+`LUX_BASEPATH` and both `.env` files:
+
+```
+cp ~/lux/data/.env ~/.lux/prod.env
+cp ~/lux-test/data/.env ~/.lux/test.env
+lux --env test counts          # ~/.lux/test.env
+lux --env prod counts          # ~/.lux/prod.env
+lux --env ~/lux-test/data ...  # a directory's .env, or a file's path
+```
+
+`LUX_BASEPATH=/path lux ...` also works for a single command.
+
 
 ## 4. Data
 
