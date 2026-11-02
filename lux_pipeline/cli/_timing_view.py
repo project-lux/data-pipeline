@@ -22,7 +22,7 @@ from rich.tree import Tree
 
 from lux_pipeline.process.timing_report import (
     ESTIMATED_TIMES, METRIC_FORMATS, NO_PROFILES, PROFILE_TITLES, fmt_duration, fmt_time,
-    nested_overrun, overall_summary, slice_rates)
+    nested_overrun, overall_summary, slice_rates, spread_note, stale_note)
 
 BAR_WIDTH = 20
 
@@ -155,6 +155,8 @@ def slices_text(s):
 def phase_panel(phase, s):
     parts = [summary_grid(s)]
     idle = 100 - s["cpu_percent"]
+    if s.get("stale_files"):
+        parts.append(Text(f"ignored {stale_note(s['stale_files'])}", style="dim yellow"))
     if idle > 20:
         parts.append(Text(f"workers are off-cpu {idle:.0f}% of the time -- the stages "
                           f"say what they are waiting in", style="yellow"))
@@ -255,6 +257,8 @@ def summary_panel(t):
     for a, b, secs in t["gaps"]:
         parts.append(Text(f"{fmt_duration(secs)} between {a} and {b} -- probably not the "
                           f"same build", style="yellow"))
+    for ph, span, w in t["spread_out"]:
+        parts.append(Text(spread_note(ph, span, w), style="yellow"))
 
     if t["bottlenecks"]:
         bt = _table("Biggest bottlenecks")
