@@ -87,11 +87,10 @@ name.
 Confirmation: when `confirm_needed(spec, values)`, the *Run* button opens
 the typed-confirmation modal (`confirm.js`) asking for the command name;
 the phrase is posted as `confirm` and checked server-side (never trust
-the modal). The page says *why* in one sentence from a small table in
-`api/commands.py` (`clear`: "deletes the selected caches"; `restore`:
-"replaces stores"; `new-token`: "a new token mid-build splits the build";
-`identify` / `write-refs` / `metatypes`: "rewrites the identity map /
-reference queue from the current assertions"; `build --clear`; …).
+the modal). The page says *why* in one sentence:
+`introspect.confirm_reason(spec, values)` (W02), which also knows the
+exceptions (`build` only with `--clear`, `pg-maintain` with `--bloat`
+alone). Do not keep a second table of reasons in the web package.
 
 ### The build page
 
@@ -107,8 +106,12 @@ Groups in `introspect.GROUPS` order, a card per command with its summary
 and a *destructive* marker, plus a "Running now" line linking to active
 runs. Commands that make no sense from a browser (`interactive`, `help`,
 `watch`, `serve`, `initialize`) are listed under *Information* as
-descriptions only, without a Run button (`introspect` gives them
-`group: "info"`; `api/commands.py` has `NOT_RUNNABLE = {...}`).
+descriptions only, without a Run button: `spec["runnable"]` is False for
+them (`introspect.NOT_RUNNABLE`, W02). Build forms from
+`introspect.command_spec` and command lines with
+`introspect.argv_from_values`, which coerces form strings, puts
+positionals first, checks choices and required options, and refuses
+`my_worker`.
 
 ## Known hazards
 

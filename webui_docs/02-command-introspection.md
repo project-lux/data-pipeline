@@ -1,6 +1,6 @@
 # W02. Command introspection (`cli/introspect.py`)
 
-**Size:** S · **Depends on:** — · **Unblocks:** W10
+**Size:** S · **Depends on:** — · **Unblocks:** W10 · **Done:** 2026-11-02
 **Read:** `lux_pipeline/cli/entry.py` (`build_parser`, `resolve_command`,
 `command_help`), `lux_pipeline/cli/help.py` (`list_commands`,
 `GLOBAL_OPTIONS`), `lux_pipeline/cli/_handler.py` (`BaseHandler`,
@@ -108,6 +108,40 @@ which do not.
 1. Write the module; `python -c "from lux_pipeline.cli.introspect import *; import json; print(json.dumps(command_spec('export'), indent=1))"` and read it against `lux export --help`.
 2. Tests.
 3. (Optional) `lux help --json`.
+
+## As built
+
+`lux_pipeline/cli/introspect.py` as designed above, plus:
+
+* **Spec fields** beyond the design: `runnable` (False for `NOT_RUNNABLE`:
+  help, watch, interactive, initialize, serve), `confirms` (the reason
+  text, or None). Each option also has `type_name` (`iso8601`,
+  `feed_url`, `existing_path`: a hint for the form), `const` (the value an
+  optional-value option takes when given bare: `timing-report --profile`
+  20, `initialize --clone` the pipeline-configs URL) and `repeat` (an
+  append option: `validate --ignore`).
+* **A destination the command reuses** drops the global option: only
+  `watch` does (its positional `prefix` is the global `--prefix`).
+* **Confirmation** is `confirm_reason(spec, values)`: one sentence per
+  command in `CONFIRM`, None when no confirmation is needed (`build`
+  without `--clear`; `pg-maintain` with nothing but `--bloat`); `load
+  --clear` says it empties the datacache first. `confirm_needed` is
+  `confirm_reason(...) is not None`. W10 shows this sentence and keeps no
+  table of its own.
+* **`argv_from_values`**: `coerce` turns form strings into what the option
+  takes (`"4"` to 4; `"on"`/`"off"` for flags; a list for repeated and
+  two-valued options) and names the option in its `ValueError`;
+  positionals go straight after the command (`initialize --clone DIR`
+  would otherwise take DIR as the URL); a store-false flag
+  (`--no-overwrite`) is written when its value is False; a bare optional
+  value (`--profile` with True) is written as the flag alone; a required
+  option (restore's `backup` directory) must be given; `my_worker` raises
+  rather than being dropped silently.
+* `lux help --json` and `lux help <command> --json` print the specs.
+* The module keeps the plan's name `introspect.py`, not `_introspect.py`:
+  like `entry.py`, it is a public module of `lux_pipeline.cli` that is not
+  a command, and `lux help` (which looks for a `CommandHandler`) does not
+  list it.
 
 ## Tests
 
