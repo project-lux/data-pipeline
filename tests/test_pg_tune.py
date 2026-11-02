@@ -1,4 +1,5 @@
-"""The tuning script's arithmetic, and the parts of it that could do harm.
+"""`lux pg-tune`: its arithmetic, the parts of it that could do harm, and
+the command (lux_pipeline.storage.pg_tune, formerly pg-tune.py).
 
 Two things are worth pinning. The sizing formulas are anchored on the box in
 docs/idmap-migration.md, whose figures were arrived at by measurement rather
@@ -9,16 +10,18 @@ shared_preload_libraries instead of appending to it silently unloads whatever
 else was there.
 """
 
-import importlib.util
 import sys
+from argparse import Namespace
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-_spec = importlib.util.spec_from_file_location("pg_tune", ROOT / "pg-tune.py")
-pg = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(pg)
+from lux_pipeline.cli import entry
+from lux_pipeline.cli import pg_tune as cli
+from lux_pipeline.storage import pg_tune as pg
 
 GB, MB = pg.GB, pg.MB
 
@@ -181,3 +184,101 @@ def test_an_uninspected_server_assumes_the_fourth_connection():
     """Over-provisioning connections is safe; under-provisioning is a build
     that dies partway through."""
     assert recs(srv=None, workers=24)["max_connections"].value == "125"
+
+
+# --- pending_changes (lux testinstall) --------------------------------------
+
+
+def test_pending_changes_names_what_differs_as_alter_system_writes_it():
+    m = machine()
+    srv = server(max_connections=("100", None), shared_buffers=("16384", "8kB"))
+    pending = {name: (cur, want) for name, cur, want in pg.pending_changes(m, srv, 24)}
+    assert pending["max_connections"] == ("100", recs(m, srv)["max_connections"].value)
+    want_sb = recs(m, srv)["shared_buffers"].value
+    assert pending["shared_buffers"][1] == want_sb and want_sb.endswith("GB")
+
+
+def test_pending_changes_leaves_out_what_is_already_set():
+    m = machine()
+    r = recs(m, server())
+    srv = server(max_connections=(r["max_connections"].value, None))
+    names = [n for n, _, _ in pg.pending_changes(m, srv, 24)]
+    assert "max_connections" not in names
+
+
+def test_pending_changes_needs_a_server_and_memory():
+    assert pg.pending_changes(machine(), None, 24) is None
+    m = machine()
+    m["ram"]["total"] = 0
+    assert pg.pending_changes(m, server(), 24) is None
+
+
+# --- the command ------------------------------------------------------------
+
+
+def run_cmd(monkeypatch, cfgs, *argv):
+    from lux_pipeline import runtime
+    if isinstance(cfgs, Exception):
+        def get_configs(*a, **kw):
+            raise cfgs
+    else:
+        def get_configs(*a, **kw):
+            assert kw == {"instantiate": False}      # read, never instantiated
+            return cfgs
+    monkeypatch.setattr(runtime, "get_configs", get_configs)
+    return entry.run(["--no-ui", "pg-tune", *argv])
+
+
+@pytest.fixture
+def no_server(monkeypatch):
+    """analyse without probing this machine's database: record its arguments."""
+    seen = {}
+
+    def analyse(db, no_db=False, idmap_table="idmap", unreadable=None):
+        seen.update(db=db, no_db=no_db, idmap_table=idmap_table, unreadable=unreadable)
+        return machine(), None, unreadable or ("skipped (--no-db)" if no_db else "stub")
+    monkeypatch.setattr(pg, "analyse", analyse)
+    return seen
+
+
+def test_command_sizes_from_the_configuration(monkeypatch, capsys, no_server):
+    cfgs = Namespace(caches={"dbname": "lux"}, max_workers=15,
+                     map_stores={"idmap": {"tableName": "idmap2"}})
+    assert run_cmd(monkeypatch, cfgs) == 0
+    out = capsys.readouterr().out
+    assert no_server == {"db": {"dbname": "lux"}, "no_db": False, "idmap_table": "idmap2",
+                         "unreadable": None}
+    assert "Sized for --workers 15" in out
+    assert "REINDEX (VERBOSE) TABLE CONCURRENTLY idmap2;" in out
+
+
+def test_command_options_override(monkeypatch, capsys, no_server):
+    cfgs = Namespace(caches={}, max_workers=15, map_stores={})
+    assert run_cmd(monkeypatch, cfgs, "--workers", "40", "--no-db", "--idmap-table", "t") == 0
+    assert no_server["no_db"] is True and no_server["idmap_table"] == "t"
+    assert "Sized for --workers 40" in capsys.readouterr().out
+
+
+def test_command_without_a_configuration_sizes_the_machine(monkeypatch, capsys, no_server):
+    assert run_cmd(monkeypatch, RuntimeError("LUX_BASEPATH is not set")) == 0
+    out = capsys.readouterr().out
+    assert no_server["db"] is None
+    assert "server       not inspected: could not read the pipeline configuration " \
+           "(LUX_BASEPATH is not set)" in out
+    assert "Sized for --workers 24" in out
+
+
+def test_command_without_memory_exits_1(monkeypatch, capsys):
+    m = machine()
+    m["ram"]["total"] = 0
+    monkeypatch.setattr(pg, "analyse", lambda *a, **kw: (m, None, "stub"))
+    cfgs = Namespace(caches={}, max_workers=4, map_stores={})
+    with pytest.raises(SystemExit) as info:
+        run_cmd(monkeypatch, cfgs)
+    assert info.value.code == 1
+    assert "Cannot size anything without a memory figure" in capsys.readouterr().out
+
+
+def test_command_is_listed():
+    from lux_pipeline.cli.help import list_commands
+    assert dict(list_commands())["pg-tune"].startswith("Suggest Postgres settings")

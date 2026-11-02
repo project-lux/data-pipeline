@@ -11,7 +11,10 @@ still names it (a warning only: the pipeline no longer needs Redis);
 the idmap is reachable; the globals load; every source's components build and the
 first datacache answers; every data directory exists and is writable;
 the validator's schema files are present; ``max_workers`` worker
-processes can be spawned and report back.
+processes can be spawned and report back. Last, Postgres's settings are
+compared with what ``lux pg-tune`` recommends for this machine and
+``max_workers``: a warning naming the settings that differ, never a
+failure (``--skip-pg-tune`` leaves it out).
 """
 
 import logging
@@ -52,6 +55,11 @@ class SpawnCheckManager(TaskManager):
         return n
 
 
+class Advice(Exception):
+    """Raised by a check to say WARN with its message: something to act
+    on, not a failure, whether or not the check is required."""
+
+
 class Check:
     """One line per check; raising inside ``with`` is the FAIL."""
 
@@ -65,6 +73,9 @@ class Check:
         check that is not `required` (printed as WARN)."""
         try:
             detail = fn()
+        except Advice as e:
+            self.out.write(f"WARN  {label}: {e}\n")
+            return True
         except Exception as e:
             if required:
                 self.out.write(f"FAIL  {label}: {type(e).__name__}: {e}\n")
@@ -83,7 +94,10 @@ class CommandHandler(BaseHandler):
         ap.add_argument("--skip-workers", action="store_true",
                         help="Do not spawn worker processes to check the task engine")
         ap.add_argument("--workers", type=int, default=0,
-                        help="Spawn this many workers in the engine check (default: max_workers)")
+                        help="Spawn this many workers in the engine check, and size the "
+                             "Postgres check for them (default: max_workers)")
+        ap.add_argument("--skip-pg-tune", dest="skip_pg_tune", action="store_true",
+                        help="Do not compare Postgres's settings with lux pg-tune's")
 
     # --- the checks ----------------------------------------------------------------
 
@@ -206,6 +220,30 @@ class CommandHandler(BaseHandler):
                 raise RuntimeError(f"worker {i} wrote no status file under {prefix}")
         return f"{n} workers spawned and reported in {time.time() - start:.1f}s"
 
+    def check_pg_tune(self, workers=0):
+        """Postgres's settings against `lux pg-tune`'s recommendations for
+        this machine and `workers` (default max_workers). Settings that
+        differ are an `Advice`; a server that cannot be read is an error,
+        which the step reports as a warning."""
+        from lux_pipeline.storage import pg_tune
+        from .pg_tune import pipeline_settings
+        db, max_workers, table = pipeline_settings(self.cfgs)
+        workers = workers or max_workers
+        m, srv, why = pg_tune.analyse(db, idmap_table=table)
+        if srv is None:
+            raise RuntimeError(f"server not inspected: {why}")
+        pending = pg_tune.pending_changes(m, srv, workers)
+        if pending is None:
+            raise RuntimeError("could not size anything without a memory figure")
+        if pending:
+            shown = ", ".join(f"{name} ({cur} -> {want})" if cur is not None else name
+                              for name, cur, want in pending[:6])
+            more = f" and {len(pending) - 6} more" if len(pending) > 6 else ""
+            raise Advice(f"{len(pending)} setting{'s' if len(pending) != 1 else ''} differ "
+                         f"from the recommendation for {workers} workers: {shown}{more}. "
+                         f"lux pg-tune prints the SQL")
+        return f"{srv['version']}: every setting as recommended for {workers} workers"
+
     # --- the command -------------------------------------------------------------
 
     def process(self, args, rest):
@@ -229,6 +267,9 @@ class CommandHandler(BaseHandler):
         if not getattr(args, "skip_workers", False):
             steps.append(("worker processes spawn",
                           lambda: self.check_workers(args.workers or self.cfgs.max_workers)))
+        if not getattr(args, "skip_pg_tune", False):
+            steps.append(("postgres tuned for the build",
+                          lambda: self.check_pg_tune(args.workers), False))
         for label, fn, *rest in steps:
             if not check.run(label, fn, *rest):
                 print(f"Stopped at the first failure. Fix it and run lux testinstall again.")

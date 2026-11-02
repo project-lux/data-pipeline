@@ -1,13 +1,16 @@
-#!/usr/bin/env python3
 """Suggest postgres settings for this pipeline, sized to the machine it runs on.
 
-    python pg-tune.py                    # inspect and print what to change
-    python pg-tune.py --workers 24       # the parallelism a build will use
-    python pg-tune.py --measure-io       # add an fsync/throughput probe
-    python pg-tune.py --all              # print settings already correct too
-    python pg-tune.py --no-db            # machine only, don't connect
+    lux pg-tune                    # inspect and print what to change
+    lux pg-tune --workers 32       # the parallelism a build will use (default max_workers)
+    lux pg-tune --measure-io       # add an fsync/throughput probe
+    lux pg-tune --all              # print settings already correct too
+    lux pg-tune --no-db            # machine only, don't connect
 
-**This script changes nothing.** It prints SQL for a superuser to review and
+`analyse` measures the machine and reads the server, `report` turns that
+into the lines `lux pg-tune` prints, and `pending_changes` is the short
+form `lux testinstall` checks. Formerly pg-tune.py at the repository root.
+
+**This changes nothing.** It prints SQL for a superuser to review and
 run. ALTER SYSTEM writes postgresql.auto.conf, which overrides
 postgresql.conf, so keep that in mind if the server is configuration-managed.
 
@@ -23,7 +26,7 @@ this pipeline does, which is unusual in three ways that matter:
     from PoolManager, plus one shared by the idmap and the two reference
     maps. It is four on a server whose `synchronous_commit` is `on`, because
     the reference queues then need a session of their own to turn it off
-    (performance-backlog.md §3.7). This script reads the server to tell which
+    (performance-backlog.md §3.7). The server is read to tell which
     applies. max_connections is a correctness requirement, not a tuning knob.
 *   **Point lookups plus one big filtered scan per worker.** The workers
     already saturate the box, so per-query parallelism on top makes things
@@ -39,7 +42,6 @@ box in docs/idmap-migration.md, and the 72 GiB / 36 vCPU build server whose
 `top` and `pg_stat_activity` samples are in docs/performance-backlog.md.
 """
 
-import argparse
 import math
 import os
 import platform
@@ -293,30 +295,23 @@ def probe_write(path, mb=256):
 
 # ------------------------------------------------------------- the server
 
-def connect(args):
-    """The database the pipeline itself talks to, so the current settings
-    compared against are the ones that will actually apply."""
+def connect(db):
+    """The database the pipeline itself talks to -- `db` is the
+    configuration's cache settings (``Config.caches``) -- so the current
+    settings compared against are the ones that will actually apply.
+    ``(connection, None)`` or ``(None, why not)``."""
     try:
         import psycopg2
     except ImportError:
         return None, "psycopg2 not installed"
-    kw = {}
-    try:
-        from dotenv import load_dotenv
-        load_dotenv()
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        from lux_pipeline.config import Config
-        db = Config(basepath=os.getenv("LUX_BASEPATH", "")).caches or {}
-        kw = {"user": db.get("user") or os.getenv("USER"),
-              "dbname": db.get("dbname") or os.getenv("USER")}
-        if db.get("host"):
-            kw["host"] = db["host"]
-            kw["port"] = db.get("port", 5432)
-            if db.get("password"):
-                kw["password"] = db["password"]
-    except Exception as e:
-        # a machine-only run is still useful, so this is not fatal
-        return None, f"could not read the pipeline config ({e})"
+    db = db or {}
+    kw = {"user": db.get("user") or os.getenv("USER"),
+          "dbname": db.get("dbname") or os.getenv("USER")}
+    if db.get("host"):
+        kw["host"] = db["host"]
+        kw["port"] = db.get("port", 5432)
+        if db.get("password"):
+            kw["password"] = db["password"]
     try:
         return psycopg2.connect(**kw), None
     except Exception as e:
@@ -659,36 +654,50 @@ def recommend(m, srv, workers):
 
 # ------------------------------------------------------------------ output
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--workers", type=int, default=24,
-                    help="parallel worker processes a build uses (default 24, "
-                         "which is what the tracked build scripts run; "
-                         "performance-backlog.md §4.9 recommends trying 32, so "
-                         "pass --workers 32 BEFORE that run, not during it)")
-    ap.add_argument("--measure-io", action="store_true",
-                    help="probe fsync latency and sequential write throughput")
-    ap.add_argument("--io-path", default=None,
-                    help="where to probe (default: the data directory, else cwd)")
-    ap.add_argument("--all", action="store_true",
-                    help="print settings that are already correct too")
-    ap.add_argument("--no-db", action="store_true",
-                    help="skip the server; recommend from the machine alone")
-    ap.add_argument("--idmap-table", default="idmap",
-                    help="the identity map's table, whose measured size sizes "
-                         "shared_buffers. Matches the map config's tableName "
-                         "(default idmap); the yuid table is <name>_yuid")
-    args = ap.parse_args()
+def is_current(srv, rec):
+    """``(already set as recommended, the current value as text or None)``.
+    Never current without a server to compare against."""
+    cur_norm, cur_txt = current_value(srv, rec)
+    want = wanted_value(rec)
+    same = srv is not None and cur_norm is not None and (
+        str(cur_norm) == str(want)
+        or (rec.kind in ("bytes", "ms") and cur_norm == want))
+    return same, cur_txt
 
+
+def pending_changes(m, srv, workers):
+    """The settings the server does not have as recommended for `workers`:
+    ``[(name, current text, recommended as ALTER SYSTEM writes it), ...]``,
+    in `report`'s order
+    (pg_stat_statements' deferred ones included). Needs a server and a
+    memory figure; ``None`` without them."""
+    if srv is None or not m["ram"]["total"]:
+        return None
+    out = []
+    for _title, recs in recommend(m, srv, workers):
+        for rec in recs:
+            same, cur_txt = is_current(srv, rec)
+            if not same:
+                out.append((rec.name, cur_txt, rec.value))
+    return out
+
+
+def analyse(db, no_db=False, idmap_table="idmap", unreadable=None):
+    """Measure the machine and, unless `no_db`, read the server the
+    pipeline's cache settings `db` point at: ``(machine, server or None,
+    why the server was not read)``. `unreadable` says why there are no
+    settings, for a configuration that could not be loaded."""
     m = {"cpus": detect_cpus(), "ram": detect_ram()}
 
-    srv, why = (None, "skipped (--no-db)") if args.no_db else connect(args)
+    if no_db or db is None:
+        srv, why = None, "skipped (--no-db)" if no_db else (unreadable or "no configuration")
+    else:
+        srv, why = connect(db)
     conn = srv
     srv = None
     if conn is not None:
         try:
-            srv = read_server(conn, args.idmap_table)
+            srv = read_server(conn, idmap_table)
         except Exception as e:
             why = f"connected, but could not read pg_settings ({e})"
         finally:
@@ -698,63 +707,76 @@ def main():
     m["storage"] = detect_storage(data_dir if data_dir and os.path.isdir(data_dir)
                                   else os.getcwd())
 
+    return m, srv, why
+
+
+def report(m, srv, why, args):
+    """What to change, as ``(lines, status)``: status 1 when nothing could
+    be sized (no memory figure). `args` carries ``workers``,
+    ``measure_io``, ``io_path``, ``all`` and ``idmap_table``."""
+    data_dir = (srv or {}).get("data_dir")
+    lines = []
+
+    def out(*parts):
+        lines.append(" ".join(str(p) for p in parts) if parts else "")
+
     # ---- what we found
-    print("=" * 78)
-    print("machine")
-    print("=" * 78)
+    out("=" * 78)
+    out("machine")
+    out("=" * 78)
     c, r = m["cpus"], m["ram"]
-    print(f"  platform     {platform.platform()}")
-    print(f"  cpus         {c['logical']} logical"
+    out(f"  platform     {platform.platform()}")
+    out(f"  cpus         {c['logical']} logical"
           + (f", {c['physical']} physical" if c["physical"] else "")
           + (f"  (capped by {c['limited_by']})" if c["limited_by"] else ""))
-    print(f"  memory       {r['total'] / GB:.1f} GB"
+    out(f"  memory       {r['total'] / GB:.1f} GB"
           + (f"  (capped by {r['limited_by']})" if r["limited_by"] else "")
           if r["total"] else "  memory       unknown")
-    print(f"  storage      {m['storage']['kind']} -- {m['storage']['why']}")
+    out(f"  storage      {m['storage']['kind']} -- {m['storage']['why']}")
     if data_dir:
-        print(f"  data dir     {data_dir}")
+        out(f"  data dir     {data_dir}")
 
     if not r["total"]:
-        print("\nCannot size anything without a memory figure. Stopping.")
-        return 1
+        out("\nCannot size anything without a memory figure. Stopping.")
+        return lines, 1
 
     if args.measure_io:
         path = args.io_path or (data_dir if data_dir and os.access(data_dir, os.W_OK)
                                 else os.getcwd())
-        print(f"\n  probing {path} ...")
+        out(f"\n  probing {path} ...")
         f = probe_fsync(path)
         w = probe_write(path)
         if "error" in f:
-            print(f"  fsync        could not measure: {f['error']}")
+            out(f"  fsync        could not measure: {f['error']}")
         else:
-            print(f"  fsync        {f['median_ms']:.3f} ms median, "
+            out(f"  fsync        {f['median_ms']:.3f} ms median, "
                   f"{f['p95_ms']:.3f} ms p95")
             if f["median_ms"] > 0.5:
-                print(f"               ...slow enough that a COMMIT per write "
+                out(f"               ...slow enough that a COMMIT per write "
                       f"would serialise {args.workers} workers behind "
                       f"WALWriteLock. synchronous_commit = off matters here.")
         if "error" not in w:
-            print(f"  seq write    {w['mb_per_s']:,.0f} MB/s")
+            out(f"  seq write    {w['mb_per_s']:,.0f} MB/s")
         if sys.platform == "darwin":
-            print("               (macOS fsync() does not flush the drive "
+            out("               (macOS fsync() does not flush the drive "
                   "cache; the real number is worse)")
         if path != data_dir:
-            print("               (not the data directory -- run with "
+            out("               (not the data directory -- run with "
                   "--io-path pointing at the pg_wal filesystem for a figure "
                   "that means something)")
 
-    print()
+    out()
     if srv:
-        print(f"server       {srv['version']}")
+        out(f"server       {srv['version']}")
         if srv.get("total_bytes"):
-            print(f"             {srv['total_bytes'] / GB:.1f} GB in ordinary tables")
+            out(f"             {srv['total_bytes'] / GB:.1f} GB in ordinary tables")
     else:
-        print(f"server       not inspected: {why}")
-        print("             values below are sized from the machine only, and "
+        out(f"server       not inspected: {why}")
+        out("             values below are sized from the machine only, and "
               "every setting is printed")
-        print("             because there is nothing to compare against. "
+        out("             because there is nothing to compare against. "
               "Version-dependent choices")
-        print("             (wal_compression, maintenance_io_concurrency) "
+        out("             (wal_compression, maintenance_io_concurrency) "
               "assume PG15 or later.")
 
     # ---- the recommendations
@@ -762,13 +784,9 @@ def main():
     restart_needed, printed, deferred = [], 0, []
 
     for title, recs in groups:
-        lines = []
+        rows = []
         for rec in recs:
-            cur_norm, cur_txt = current_value(srv, rec)
-            want = wanted_value(rec)
-            same = srv is not None and cur_norm is not None and (
-                str(cur_norm) == str(want)
-                or (rec.kind in ("bytes", "ms") and cur_norm == want))
+            same, cur_txt = is_current(srv, rec)
             if same and not args.all:
                 continue
             if rec.defer:
@@ -776,51 +794,51 @@ def main():
                 # in the middle of a block meant to be run top to bottom
                 deferred.append(rec)
                 continue
-            lines.append((rec, cur_txt, same))
-        if not lines:
+            rows.append((rec, cur_txt, same))
+        if not rows:
             continue
-        print(f"\n{'-' * 78}\n-- {title}\n{'-' * 78}")
-        for rec, cur_txt, same in lines:
+        out(f"\n{'-' * 78}\n-- {title}\n{'-' * 78}")
+        for rec, cur_txt, same in rows:
             for chunk in _wrap(rec.why, 74):
-                print(f"-- {chunk}")
+                out(f"-- {chunk}")
             if cur_txt is not None:
-                print(f"--   currently: {cur_txt}"
+                out(f"--   currently: {cur_txt}"
                       + ("   (already correct)" if same else ""))
-            print(rec.statement())
+            out(rec.statement())
             printed += 1
             if rec.restart and not same:
                 restart_needed.append(rec.name)
-        print()
+        out()
 
     if printed == 0 and not deferred:
-        print("\nNothing to change -- every setting already matches.\n")
+        out("\nNothing to change -- every setting already matches.\n")
     elif printed:
-        print(f"{'-' * 78}")
-        print("SELECT pg_reload_conf();")
+        out(f"{'-' * 78}")
+        out("SELECT pg_reload_conf();")
         if restart_needed:
-            print(f"\n-- These need a full restart, not a reload:")
+            out(f"\n-- These need a full restart, not a reload:")
             for n in restart_needed:
-                print(f"--   {n}")
-            print("-- pg_ctl restart, or systemctl restart postgresql")
+                out(f"--   {n}")
+            out("-- pg_ctl restart, or systemctl restart postgresql")
 
     if deferred:
-        print(f"\n{'-' * 78}")
-        print("-- AFTER that restart, not before")
-        print(f"{'-' * 78}")
-        print("-- These belong to pg_stat_statements, and its parameters do not")
-        print("-- exist until shared_preload_libraries has loaded the library.")
-        print("-- Run before the restart, ALTER SYSTEM rejects them outright:")
-        print("--   ERROR: unrecognized configuration parameter")
-        print("--     \"pg_stat_statements.track\"")
+        out(f"\n{'-' * 78}")
+        out("-- AFTER that restart, not before")
+        out(f"{'-' * 78}")
+        out("-- These belong to pg_stat_statements, and its parameters do not")
+        out("-- exist until shared_preload_libraries has loaded the library.")
+        out("-- Run before the restart, ALTER SYSTEM rejects them outright:")
+        out("--   ERROR: unrecognized configuration parameter")
+        out("--     \"pg_stat_statements.track\"")
         for rec in deferred:
-            print()
+            out()
             for chunk in _wrap(rec.why, 74):
-                print(f"-- {chunk}")
-            print(rec.statement())
-        print("\nSELECT pg_reload_conf();")
+                out(f"-- {chunk}")
+            out(rec.statement())
+        out("\nSELECT pg_reload_conf();")
 
-    _tail(srv, m, args)
-    return 0
+    _tail(out, srv, m, args.idmap_table)
+    return lines, 0
 
 
 def _wrap(text, width):
@@ -836,71 +854,71 @@ def _wrap(text, width):
     return out
 
 
-def _tail(srv, m, args):
-    print(f"\n{'=' * 78}")
-    print("not ALTER SYSTEM -- run these too")
-    print("=" * 78)
+def _tail(out, srv, m, idmap_table):
+    out(f"\n{'=' * 78}")
+    out("not ALTER SYSTEM -- run these too")
+    out("=" * 78)
 
     ref = (srv or {}).get("ref_tables", {})
     need = [t for t, opts in ref.items()
             if not any(o.startswith("autovacuum_vacuum_scale_factor") for o in opts)]
     if srv and not ref:
-        print("\n-- all_refs / done_refs do not exist yet; they are created with the")
-        print("-- right storage parameters (see REF_STORAGE in")
-        print("-- lux_pipeline/storage/idmap/postgres.py). Nothing to do.")
+        out("\n-- all_refs / done_refs do not exist yet; they are created with the")
+        out("-- right storage parameters (see REF_STORAGE in")
+        out("-- lux_pipeline/storage/idmap/postgres.py). Nothing to do.")
     elif need or not srv:
-        print("\n-- The reference queues are work queues, not tables: every claim")
-        print("-- deletes a row, so they bloat in seconds and the claim is a LIMIT")
-        print("-- scan that walks the corpse pile. REF_STORAGE applies these at")
-        print("-- CREATE; tables that already exist need this once.")
+        out("\n-- The reference queues are work queues, not tables: every claim")
+        out("-- deletes a row, so they bloat in seconds and the claim is a LIMIT")
+        out("-- scan that walks the corpse pile. REF_STORAGE applies these at")
+        out("-- CREATE; tables that already exist need this once.")
         for t in (need or ["all_refs", "done_refs"]):
-            print(f"ALTER TABLE {t} SET (fillfactor = 70, autovacuum_enabled = true,")
-            print(f"    autovacuum_vacuum_scale_factor = 0.02,")
-            print(f"    autovacuum_vacuum_threshold = 5000,")
-            print(f"    autovacuum_vacuum_cost_delay = 0,")
-            print(f"    autovacuum_analyze_scale_factor = 0.05);")
+            out(f"ALTER TABLE {t} SET (fillfactor = 70, autovacuum_enabled = true,")
+            out(f"    autovacuum_vacuum_scale_factor = 0.02,")
+            out(f"    autovacuum_vacuum_threshold = 5000,")
+            out(f"    autovacuum_vacuum_cost_delay = 0,")
+            out(f"    autovacuum_analyze_scale_factor = 0.05);")
     else:
-        print("\n-- all_refs / done_refs already carry their storage parameters.")
+        out("\n-- all_refs / done_refs already carry their storage parameters.")
 
-    tbl = args.idmap_table
+    tbl = idmap_table
     live_idx = (srv or {}).get("idmap_indexes") or []
     # connected and pg_class had nothing for it -- as opposed to --no-db, where
     # we simply could not look
     missing = bool(srv) and not (srv or {}).get("idmap_rels")
     idx = live_idx or [f"{tbl}_pkey", f"{tbl}_yuid_idx", f"{tbl}_yuid_pkey",
                        f"{tbl}_yuid_token_idx"]
-    print("\n-- Merge is read-bound on the identity map, and these are cheaper")
-    print("-- than the shared_buffers increase above (performance-backlog.md")
-    print("-- §2.2 gives them in this order because that is the order of cost).")
+    out("\n-- Merge is read-bound on the identity map, and these are cheaper")
+    out("-- than the shared_buffers increase above (performance-backlog.md")
+    out("-- §2.2 gives them in this order because that is the order of cost).")
 
-    print("\n-- 1. REINDEX. Free, and the indexes are bloated: identify used to")
-    print("--    rewrite ~45M rows to the values they already held, one dead")
-    print("--    tuple each (§3.10 -- fixed, but the bloat it left is still")
-    print("--    on disk, and VACUUM never shrinks an index).")
+    out("\n-- 1. REINDEX. Free, and the indexes are bloated: identify used to")
+    out("--    rewrite ~45M rows to the values they already held, one dead")
+    out("--    tuple each (§3.10 -- fixed, but the bloat it left is still")
+    out("--    on disk, and VACUUM never shrinks an index).")
     if missing:
-        print(f"--    {tbl} does not exist yet; nothing to reindex.")
+        out(f"--    {tbl} does not exist yet; nothing to reindex.")
     else:
-        print(f"REINDEX (VERBOSE) TABLE CONCURRENTLY {tbl};")
-        print(f"REINDEX (VERBOSE) TABLE CONCURRENTLY {tbl}_yuid;")
-        print("--    CONCURRENTLY needs PG12+ and is slower; drop it if the")
-        print("--    build is stopped, which is the usual case for this.")
+        out(f"REINDEX (VERBOSE) TABLE CONCURRENTLY {tbl};")
+        out(f"REINDEX (VERBOSE) TABLE CONCURRENTLY {tbl}_yuid;")
+        out("--    CONCURRENTLY needs PG12+ and is slower; drop it if the")
+        out("--    build is stopped, which is the usual case for this.")
 
-    print("\n-- 2. Prewarm. Do this at the START OF MERGE, not only after a")
-    print("--    restart: merge streams ils_record_cache through a cursor while")
-    print("--    writing two more caches, and that evicts the idmap's")
-    print("--    random-access pages as the phase runs (§2.2).")
-    print("CREATE EXTENSION IF NOT EXISTS pg_prewarm;")
-    print("CREATE EXTENSION IF NOT EXISTS pg_stat_statements;")
+    out("\n-- 2. Prewarm. Do this at the START OF MERGE, not only after a")
+    out("--    restart: merge streams ils_record_cache through a cursor while")
+    out("--    writing two more caches, and that evicts the idmap's")
+    out("--    random-access pages as the phase runs (§2.2).")
+    out("CREATE EXTENSION IF NOT EXISTS pg_prewarm;")
+    out("CREATE EXTENSION IF NOT EXISTS pg_stat_statements;")
     if missing:
-        print(f"--    {tbl} does not exist yet; nothing to prewarm.")
+        out(f"--    {tbl} does not exist yet; nothing to prewarm.")
     else:
         targets = [f"pg_prewarm('{n}')" for n in idx] + [f"pg_prewarm('{tbl}')"]
-        print("SELECT " + ",\n       ".join(targets) + ";")
+        out("SELECT " + ",\n       ".join(targets) + ";")
         if not live_idx:
-            print(f"--    (index names assumed -- {tbl} was not read from")
-            print("--     pg_index; check pg_indexes if any of these error)")
-    print("--    Verify it took: shared_buffers is only worth raising if")
-    print("--    IO/DataFileRead falls. Sample pg_stat_activity mid-merge.")
+            out(f"--    (index names assumed -- {tbl} was not read from")
+            out("--     pg_index; check pg_indexes if any of these error)")
+    out("--    Verify it took: shared_buffers is only worth raising if")
+    out("--    IO/DataFileRead falls. Sample pg_stat_activity mid-merge.")
 
     if sys.platform == "linux" and m["ram"]["total"]:
         # sized from the shared_buffers actually recommended above, which is
@@ -908,17 +926,17 @@ def _tail(srv, m, args):
         # take the huge pages and silently falling back
         sb, _ = size_shared_buffers(m["ram"]["total"], srv)
         pages = int(sb * 1.1) // (2 * MB)
-        print(f"\n-- Huge pages cut the page-table overhead of a large "
+        out(f"\n-- Huge pages cut the page-table overhead of a large "
               f"shared_buffers across")
-        print(f"-- {os.cpu_count()}+ backends. As root, then restart postgres:")
-        print(f"--   sysctl -w vm.nr_hugepages={pages}   "
+        out(f"-- {os.cpu_count()}+ backends. As root, then restart postgres:")
+        out(f"--   sysctl -w vm.nr_hugepages={pages}   "
               f"(and add it to /etc/sysctl.conf)")
-        print(f"--   ALTER SYSTEM SET huge_pages = 'try';")
+        out(f"--   ALTER SYSTEM SET huge_pages = 'try';")
 
-    print(f"\n{'=' * 78}")
-    print("deliberately NOT recommended")
-    print("=" * 78)
-    print("""
+    out(f"\n{'=' * 78}")
+    out("deliberately NOT recommended")
+    out("=" * 78)
+    out("""
   full_page_writes = off
       Only safe on storage that guarantees atomic 8kB writes. A torn page
       after a crash is silent corruption, and the WAL saving is not worth it.
@@ -939,7 +957,3 @@ def _tail(srv, m, args):
       fix is to re-run it from the start. If you would rather not carry that,
       SET synchronous_commit = on for its session.
 """)
-
-
-if __name__ == "__main__":
-    sys.exit(main())

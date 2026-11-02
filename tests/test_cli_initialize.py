@@ -424,6 +424,33 @@ def test_the_real_pipeline_configs_checkout_installs_and_loads(tmp_path):
 # --- testinstall ---------------------------------------------------------------
 
 
+def tuned_server(monkeypatch, pending=(), srv=True, seen=None):
+    """`pg_tune.analyse` and `pending_changes` stubbed: a server (or none)
+    whose settings differ from the recommendation by `pending`."""
+    from lux_pipeline.storage import pg_tune
+
+    def analyse(db, no_db=False, idmap_table="idmap", unreadable=None):
+        if seen is not None:
+            seen.update(db=db, idmap_table=idmap_table)
+        return ({"ram": {"total": 1}}, {"version": "PostgreSQL 16.4"} if srv else None,
+                "could not connect (connection refused)")
+
+    def pending_changes(m, s, workers):
+        if seen is not None:
+            seen["workers"] = workers
+        return list(pending)
+
+    monkeypatch.setattr(pg_tune, "analyse", analyse)
+    monkeypatch.setattr(pg_tune, "pending_changes", pending_changes)
+
+
+def stub_build(monkeypatch):
+    monkeypatch.setattr(Config, "get_idmap", lambda self: {})
+    monkeypatch.setattr(Config, "cache_globals", lambda self, idmap=None: None)
+    monkeypatch.setattr(Config, "instantiate", lambda self, name, which=None: getattr(self, which)[name])
+    monkeypatch.setattr(Config, "instantiate_ml", lambda self, name: None)
+
+
 def run_testinstall(rest=(), cwd=None, monkeypatch=None):
     if cwd is not None:
         monkeypatch.chdir(cwd)
@@ -520,6 +547,7 @@ def test_testinstall_all_ok_with_stubbed_databases_and_real_workers(tmp_path, mo
 
     monkeypatch.setattr(Config, "instantiate", fake_instantiate)
     monkeypatch.setattr(Config, "instantiate_ml", lambda self, name: None)
+    tuned_server(monkeypatch, pending=[])
     assert run_testinstall(["--workers", "2"], cwd=root, monkeypatch=monkeypatch) is True
     lines = capsys.readouterr().out.splitlines()
     assert all(l.startswith("OK    ") for l in lines[:-1]) and lines[-1] == "All checks passed."
@@ -527,6 +555,8 @@ def test_testinstall_all_ok_with_stubbed_databases_and_real_workers(tmp_path, mo
     assert "1 entries" in lines[6] and "1 globals" in lines[7] and "sources built; " in lines[8] and "~42 records" in lines[8]
     assert lines[10].startswith("OK    validator schemas present: 11 schemas")
     assert "2 workers spawned and reported" in lines[11]
+    assert lines[12] == ("OK    postgres tuned for the build: PostgreSQL 16.4: every setting as "
+                         "recommended for 2 workers")
     assert len(list((root / "tmp").glob("testinstall-*/spawn-w*.status"))) == 2
 
 
@@ -572,3 +602,61 @@ def test_both_commands_are_listed_and_need_no_config():
     assert names["testinstall"].startswith("Check an installation step by step")
     assert initialize.CommandHandler.needs_configs is False
     assert testinstall.CommandHandler.needs_configs is False
+
+
+# --- the postgres tuning step ----------------------------------------------------
+
+
+@pytest.fixture
+def installed(tmp_path, monkeypatch, capsys):
+    root = tmp_path / "inst"
+    init([str(root)])
+    capsys.readouterr()
+    monkeypatch.delenv("LUX_BASEPATH", raising=False)
+    stub_build(monkeypatch)
+    return root
+
+
+def test_testinstall_ends_with_settings_to_change_as_a_warning(installed, monkeypatch, capsys):
+    seen = {}
+    pending = [("max_connections", "100", "125"), ("shared_buffers", "128MB", "44GB")] + \
+        [(f"setting_{i}", None, "x") for i in range(6)]
+    tuned_server(monkeypatch, pending=pending, seen=seen)
+    assert run_testinstall(["--skip-workers"], cwd=installed, monkeypatch=monkeypatch) is True
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[-1] == "All checks passed."
+    n = seen["workers"]
+    assert lines[-2] == ("WARN  postgres tuned for the build: 8 settings differ from the "
+                         f"recommendation for {n} workers: max_connections (100 -> 125), "
+                         "shared_buffers (128MB -> 44GB), setting_0, setting_1, setting_2, "
+                         "setting_3 and 2 more. lux pg-tune prints the SQL")
+    # sized for the configuration's database, max_workers and idmap table
+    assert n == runtime.get_configs(instantiate=False).max_workers
+    assert seen["idmap_table"] == "idmap"
+    assert "dbname" in seen["db"]
+
+
+def test_testinstall_sizes_for_the_workers_given(installed, monkeypatch, capsys):
+    seen = {}
+    tuned_server(monkeypatch, pending=[], seen=seen)
+    run_testinstall(["--skip-workers", "--workers", "32"], cwd=installed, monkeypatch=monkeypatch)
+    assert seen["workers"] == 32
+    assert "recommended for 32 workers" in capsys.readouterr().out
+
+
+def test_testinstall_an_unreadable_server_is_a_warning(installed, monkeypatch, capsys):
+    tuned_server(monkeypatch, srv=False)
+    assert run_testinstall(["--skip-workers"], cwd=installed, monkeypatch=monkeypatch) is True
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[-2] == ("WARN  postgres tuned for the build: RuntimeError: server not inspected: "
+                         "could not connect (connection refused) (not required)")
+
+
+def test_testinstall_skip_pg_tune(installed, monkeypatch, capsys):
+    def boom(*a, **kw):
+        raise AssertionError("pg-tune ran")
+    from lux_pipeline.storage import pg_tune
+    monkeypatch.setattr(pg_tune, "analyse", boom)
+    assert run_testinstall(["--skip-workers", "--skip-pg-tune"], cwd=installed,
+                           monkeypatch=monkeypatch) is True
+    assert "postgres tuned" not in capsys.readouterr().out
