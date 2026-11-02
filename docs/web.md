@@ -7,7 +7,8 @@ workers' status and log files, the configuration files -- through the
 same functions the `lux` commands print from. The plan is in
 `webui_docs/`; this page grows with it (item W13 completes it).
 
-Built so far: the server, the **Dashboard** and the **Health** page.
+Built so far: the server, the **Dashboard**, **Configuration** and
+**Health** pages.
 
 ## Install and start
 
@@ -49,6 +50,19 @@ bind where you can.
   them, with their `<prefix>.run` records); the last lines of
   `pipeline_process_status.txt`; the last health check. The header's
   *running* badge shows from any page while a run is going.
+* **Configuration** (`/config`): every record, grouped by type, with the
+  file (and sub-config store) it came from, and the sources at a glance.
+  A record's page has two ways to edit it. *Fields*: the keys the
+  catalogue knows, with their help, where a path resolves to and whether
+  it exists, and whether a class imports; saving changes only the keys
+  you changed, in the file's own layout. *JSON*: the file's text, checked
+  as you type, with the diff of what saving would change; saved exactly
+  as you leave it. Both write exactly what `lux config` writes, refuse an
+  invalid record (keeping what you typed), and refuse while a build runs
+  unless you tick "write anyway". New records start from a template; a
+  record is deleted by typing its key. *Reload from the files* re-reads
+  the configuration after editing it elsewhere. Committing the
+  configuration checkout stays in the shell.
 * **Health** (`/health`): `lux testinstall`'s checks, run on request in
   the background, each row arriving as its check finishes. Unlike the
   command, every check runs even after one fails; one that needs what
@@ -56,7 +70,8 @@ bind where you can.
   settings with `lux pg-tune` are off unless ticked.
 
 Everything a page shows is also JSON under `/api/` (`/api/dashboard`,
-`/api/dashboard/running`, `/api/health`); `/api/docs` lists the routes.
+`/api/dashboard/running`, `/api/config`, `/api/config/<key>`,
+`/api/health`); `/api/docs` lists the routes.
 
 ## Safety
 

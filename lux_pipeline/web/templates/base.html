@@ -24,6 +24,7 @@
       {% endfor %}
     </nav>
     <main>
+      {% if flash %}<div class="flash flash-{{ flash.kind }}" role="status">{{ flash.message }}</div>{% endif %}
       {% block content %}{% endblock %}
     </main>
   </div>

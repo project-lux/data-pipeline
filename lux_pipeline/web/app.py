@@ -10,7 +10,9 @@ area here, one line each.
 
 import importlib
 import logging
+import secrets
 import time
+from collections import OrderedDict
 from importlib import metadata
 from pathlib import Path
 
@@ -32,7 +34,9 @@ logger = logging.getLogger("lux_pipeline")
 
 HERE = Path(__file__).parent
 # the areas, in navigation order (web.api.<name> and web.routers.<name>)
-AREAS = ("dashboard", "health")
+AREAS = ("dashboard", "config", "health")
+# messages kept for the page a POST redirects to (?flash=<id>)
+FLASH_LIMIT = 200
 
 INSTALL_HINT = ("Use 'lux initialize <dir>' to create an installation, or 'lux testinstall' "
                 "to see what is wrong with this one.")
@@ -57,9 +61,31 @@ def wants_json(request):
     return "application/json" in accept and "text/html" not in accept
 
 
+def flash(request, message, kind="ok"):
+    """Keep `message` for the next page; returns the id to redirect with
+    (``?flash=<id>``). Kept in the server, so a link cannot make a page say
+    something the server did not."""
+    flashes = request.app.state.flashes
+    fid = secrets.token_urlsafe(8)
+    flashes[fid] = {"message": message, "kind": kind}
+    while len(flashes) > FLASH_LIMIT:
+        flashes.popitem(last=False)
+    return fid
+
+
+def redirect_with(request, url, message, kind="ok"):
+    """303 to `url` (a path on this server) showing `message` there."""
+    from fastapi.responses import RedirectResponse
+    if not url.startswith("/") or url.startswith("//"):
+        url = "/"
+    sep = "&" if "?" in url else "?"
+    return RedirectResponse(f"{url}{sep}flash={flash(request, message, kind)}", status_code=303)
+
+
 def page(request, template, status_code=200, **context):
     """Render `template` with what every page has: the navigation (the
-    current area marked), the installation, the CSRF token."""
+    current area marked), the installation, the CSRF token, and a message
+    a redirect left (`redirect_with`)."""
     app = request.app
     state = app.state.lux
     path = request.url.path
@@ -67,6 +93,8 @@ def page(request, template, status_code=200, **context):
             "active": path == href or (href != "/" and path.startswith(href))}
            for label, href in app.state.nav]
     cfgs = state.configs_or_none() if context.pop("with_configs", True) else None
+    fid = request.query_params.get("flash")
+    context.setdefault("flash", app.state.flashes.pop(fid, None) if fid else None)
     context.update(request=request, nav=nav, settings=state.settings, csrf_token=app.state.csrf,
                    version=app.state.version, basepath=runtime.get_basepath() or None,
                    config_ok=cfgs is not None)
@@ -101,6 +129,7 @@ def create_app(settings=None):
     app.state.version = _version()
     app.state.templates = make_templates()
     app.state.nav = []
+    app.state.flashes = OrderedDict()
     app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
 
     for area in AREAS:
