@@ -170,7 +170,8 @@ Whatever the engine, every worker writes
 
 Every phase writes `timing-<phase>-<slice>.json` to `log_dir`;
 `lux timing-report` adds the slices up, stage by stage (`--compare
-old/ new/` sets two runs side by side). To see which functions inside a
+old/ new/` sets two runs side by side; `lux --no-ui timing-report` prints
+plain text for a log or a diff). To see which functions inside a
 stage are slow, run the phase with `--profile` (or `LUX_PROFILE=1` in the
 environment, which the legacy scripts honour too), then
 `lux timing-report --profile`. Profiling slows the phase down, so
