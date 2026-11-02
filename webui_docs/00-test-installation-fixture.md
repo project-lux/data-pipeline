@@ -1,6 +1,6 @@
 # W00. A database-free test installation
 
-**Size:** S · **Depends on:** — · **Unblocks:** W04, W05, W06 (and every page item's tests)
+**Size:** S · **Depends on:** — · **Unblocks:** W04, W05, W06 (and every page item's tests) · **Done:** 2026-11-02
 **Read:** `lux_pipeline/config.py` (`Config.__init__`, `process_base`,
 `instantiate`, `instantiate_map`, `get_idmap`, `cache_globals`),
 `lux_pipeline/storage/cache/filesystem.py`, `lux_pipeline/storage/idmap/filesystem.py`,
@@ -69,6 +69,41 @@ def seed_records(cfgs) -> dict
 Callers that need `runtime.get_configs()` to find the installation set
 `LUX_BASEPATH` with `monkeypatch.setenv` and call `runtime.reset_configs()`
 before and after.
+
+## As built
+
+`tests/webui_fixtures.py` has, beside W01's `write_fake_run`:
+
+```python
+SOURCES                      # the catalogue: ycba, yuag (internal), aat, ulan (external)
+DEFAULT_SOURCES = ("ycba", "aat")
+installation_records(root, sources=DEFAULT_SOURCES) -> {key: record}
+make_installation(tmp_path, sources=DEFAULT_SOURCES) -> Path
+make_configs(tmp_path, instantiate=False, sources=DEFAULT_SOURCES) -> Config   # writes the installation if missing
+use_installation(monkeypatch, tmp_path, sources=DEFAULT_SOURCES) -> Path       # LUX_BASEPATH + runtime reset, undone after the test
+seed_records(cfgs) -> {"ycba": {...}, "aat": {...}}   # identifier, uri, key, type, yuid, uuid
+```
+
+Beyond the design above:
+
+* Every class path is the full `lux_pipeline.` one, so no legacy-path
+  warning is ever printed; a test checks each resolves unchanged.
+* `base` also has `validatorClass` (the validator reads its schemas
+  lazily, so `cfgs.validator.missing()` lists them; W05 tests the
+  missing-schema error on it), `reconcile_min_equivs`, and `path_types`
+  for every path key the live configuration has.
+* `seed_records` mints the YUIDs with the filesystem idmap's own `mint`
+  (`<internal_uri><slug>/<uuid>`, both directions written) and stores the
+  merged record under the bare UUID, as merge does (`reidentifier` keeps
+  the last path segment as `yuid`). The ycba identifier has a slash
+  (`object/1`) so the filesystem cache's escaping is exercised.
+* `use_installation` is the helper for code that calls
+  `runtime.get_configs()`: it sets `LUX_BASEPATH`, clears `LUX_ENV_FILE`
+  and the cached configuration, and monkeypatch undoes both afterwards.
+* Adding a source to the catalogue: an entry in `SOURCES` (group,
+  namespace, fetch URL, extra keys); every source needs `fetch`, since the
+  acquirer requires a fetcher. `test_every_source_in_the_catalogue_builds`
+  covers it.
 
 ## Tests (`tests/test_webui_fixtures.py`)
 

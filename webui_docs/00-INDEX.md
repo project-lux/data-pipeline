@@ -12,7 +12,7 @@ more. Tick the box in the PR that lands the item.
 
 | # | Document | Size | Depends on | Done |
 |---|---|---|---|---|
-| W00 | [A database-free test installation](00-test-installation-fixture.md) | S | — | ☐ |
+| W00 | [A database-free test installation](00-test-installation-fixture.md) | S | — | ☑ |
 | W01 | [Run files: shared reader, `.run` records, `list_runs`](01-run-files-and-shared-state.md) | M | — | ☑ |
 | W02 | [Command introspection (`cli/introspect.py`)](02-command-introspection.md) | S | — | ☐ |
 | W03 | [Data functions for counts, testinstall and list](03-data-functions-counts-checks.md) | S | — | ☐ |
