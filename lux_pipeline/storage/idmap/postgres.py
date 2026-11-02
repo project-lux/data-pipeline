@@ -272,7 +272,7 @@ class IdMap(object):
             if cur.fetchone() is None:
                 logger.error(f"*** {self.table} has no index on yuid: every cluster "
                       f"lookup is a sequential scan. Run "
-                      f"manage-data.py --idmap-indexes")
+                      f"lux pg-maintain --idmap-indexes")
 
     def _cursor(self):
         return self.conn.cursor()
