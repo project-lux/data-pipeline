@@ -38,6 +38,15 @@ format step (``seen % max_slice == my_slice``), so N workers can read the
 same file and every worker must see the children in the same order --
 which is why directory listings are sorted.
 
+An entry with ``"slice": "files"`` is sliced by file instead: each worker
+takes every ``max_slice``-th file of the spec's first directory step
+(``dir``, ``dirs``, ``pair``) and every record in it, so no worker reads
+another's files -- for a dump of many large compressed files, where reading
+every file in every worker costs N times the I/O. An entry with no
+directory step is itself the unit: every ``max_slice``-th such entry.
+Files are counted in order across the entries, and a file
+``should_process_item`` refuses is not counted.
+
 ``prepare(path=..., path_type=...)`` (``lux load --file`` / ``--file-type``)
 replaces the configured file for one run: see `Loader.override_file`.
 
@@ -71,6 +80,8 @@ CONTAINERS = ("dir", "dirs", "pair", "zip", "tar", "lines", "dict", "array",
               "arraylines", "graph", "xmls", "lmdb")
 FORMATS = ("json", "raw", "other", "tabjson")
 COMPRESSIONS = ("gz", "bz2", "z")
+DIRECTORIES = ("dir", "dirs", "pair")
+SLICES = ("records", "files")
 
 # files above this are not read through to count their lines for progress
 COUNT_LINES_BELOW = 100_000_000
@@ -163,6 +174,9 @@ class Loader(Sliced):
         self.overwrite = True
         self.max_records = -1
         self.failed_files = []
+        self.files_seen = 0        # file units met under "slice": "files", all slices
+        self._file_level = None    # len(steps) at the step whose children are sliced
+        self._slicing_files = False
         self._lmdb_envs = {}
         self._ppj_takes_identifier = None
         self.step_functions = {
@@ -248,6 +262,21 @@ class Loader(Sliced):
         if base.endswith(".xml"):
             return [step("other")]
         raise ValueError(f"Cannot guess the type of {path}; set 'type' in input_files")
+
+    def file_level(self, spec):
+        """For a spec sliced by file, ``len(steps)`` at its first directory
+        step (the step whose children are the files), or ``None`` when it
+        has none."""
+        for i, step in enumerate(spec):
+            if step[0] in DIRECTORIES:
+                return len(spec) - i
+        return None
+
+    def _take_file(self):
+        """Count one file unit; whether it is this slice's."""
+        idx = self.files_seen
+        self.files_seen += 1
+        return self.max_slice <= 1 or idx % self.max_slice == self.my_slice
 
     # --- progress ------------------------------------------------------------
 
@@ -579,6 +608,8 @@ class Loader(Sliced):
         return True
 
     def should_make_record(self, path):
+        if self._slicing_files:
+            return True
         if self.max_slice > 1 and self.seen % self.max_slice != self.my_slice:
             return False
         return True
@@ -645,8 +676,11 @@ class Loader(Sliced):
         if handler is None:
             raise ValueError(f"Unknown step type {step} in {self.name}")
         if step[0] in CONTAINERS or step[0] in self.extra_containers:
+            slice_here = self._file_level is not None and len(steps) == self._file_level
             for child in handler(path, comp, steps[1:]):
                 if self.should_process_item(child):
+                    if slice_here and not self._take_file():
+                        continue
                     self.process_step(steps[1:], child, step)
         else:
             self.seen += 1
@@ -669,6 +703,21 @@ class Loader(Sliced):
         if not entries and load_type == "records":
             return self.config.get("dumpFileType")
         return None
+
+    def configured_slice(self, load_type):
+        """How the config's one entry for `load_type` is sliced
+        (``records`` when there is not exactly one)."""
+        entries = (self.config.get("input_files") or {}).get(load_type) or []
+        return self.entry_slice(entries[0]) if len(entries) == 1 else "records"
+
+    def entry_slice(self, entry):
+        """An ``input_files`` entry's ``slice``: ``records`` (default) or
+        ``files``; ValueError for anything else."""
+        how = entry.get("slice") or "records"
+        if how not in SLICES:
+            raise ValueError(f"Unknown slice {how!r} in {self.name}'s input_files "
+                             f"(one of {', '.join(SLICES)})")
+        return how
 
     def sniffed_type(self, path):
         """The spec `path`'s content says it has (`sniff_spec`, as `lux
@@ -718,7 +767,13 @@ class Loader(Sliced):
         if not fmt:
             raise ValueError(f"Cannot tell the type of {path}; give --file-type")
         self.uses_dsl = True
-        self.my_files = [{"path": path, "fmt": self.process_fmt(fmt)}]
+        spec = self.process_fmt(fmt)
+        # the configured slicing carries over to a directory read the same
+        # way; a single file given in its place is sliced by record
+        info = {"path": path, "fmt": spec}
+        if self.configured_slice(load_type) == "files" and self.file_level(spec) is not None:
+            info["slice"] = "files"
+        self.my_files = [info]
         logger.info(f"{self.name}: loading {path} as {fmt} ({why}) instead of the configured file")
 
     def prepare(self, my_slice=-1, max_slice=-1, load_type="records", max_records=-1,
@@ -736,6 +791,7 @@ class Loader(Sliced):
         if load_type == "export":
             self.total = -1
 
+        self.files_seen = 0
         files = []
         ifs = self.config.get("input_files") or {}
         self.uses_dsl = bool(ifs) or bool(self.config.get("dumpFileType"))
@@ -761,7 +817,10 @@ class Loader(Sliced):
                     path = os.path.join(self.dumps_dir, path)
                 fmt = p.get("type")
                 fmtspec = self.process_fmt(fmt) if fmt else self.guess_fmt(path)
-                files.append({"path": path, "fmt": fmtspec})
+                info = {"path": path, "fmt": fmtspec}
+                if self.entry_slice(p) == "files":
+                    info["slice"] = "files"
+                files.append(info)
         if not files and load_type == "records" and (dfp := self.config.get("dumpFilePath")):
             fmt = self.config.get("dumpFileType")
             if fmt:
@@ -797,6 +856,10 @@ class Loader(Sliced):
         try:
             for info in self.my_files:
                 path = info["path"]
+                self._slicing_files = info.get("slice") == "files"
+                self._file_level = self.file_level(info["fmt"]) if self._slicing_files else None
+                if self._slicing_files and self._file_level is None and not self._take_file():
+                    continue    # a whole entry is the unit, and another slice's
                 self.progress(description=os.path.basename(str(path).rstrip("/")))
                 logger.info(f"Loading {path} for {self.name} in slice {self.my_slice}")
                 try:
@@ -808,6 +871,8 @@ class Loader(Sliced):
                     logger.error(f"Failed to load {path} for {self.name}: {e}", exc_info=True)
                     self.failed_files.append(path)
         finally:
+            self._slicing_files = False
+            self._file_level = None
             if hasattr(cache, "resume_commits"):
                 cache.resume_commits()
             elif hasattr(cache, "commit"):

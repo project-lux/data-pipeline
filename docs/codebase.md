@@ -136,7 +136,7 @@ A source config describes its dump files as `input_files`: a dict of load type (
     (container[.compression]/)*format[.compression]
 
     containers:  dir dirs pair zip tar lines dict array arraylines xmls lmdb
-    formats:     json raw other
+    formats:     json raw other tabjson
     compression: gz bz2 z
 
     dir         a directory of files
@@ -149,8 +149,9 @@ A source config describes its dump files as `input_files`: a dict of load type (
     xmls        an XML file; each child of the root is a member
     lmdb        an LMDB distribution store (make_*_lmdb.py); each value is a member
     json        a JSON record (a file, a member, or an already parsed item)
+    tabjson     <identifier><TAB><JSON record>, as lux export --type external writes
     raw         an already parsed JSON item (from dict / array)
     other       anything else, kept as text under {"data": ...}
 ```
 
-For example `tar.gz/lines.bz2/json` is a gzipped tar whose members are bzip2'd JSON Lines files; a datacache export is `zip.bz2/json`; an LMDB store of zlib-compressed records is `lmdb/json.z`. Slicing happens at the format step, so N workers can read the same file; every worker must see the children in the same order, which is why directory listings are sorted. Sources that still override `load()` keep the legacy path.
+For example `tar.gz/lines.bz2/json` is a gzipped tar whose members are bzip2'd JSON Lines files; a datacache export is `zip.bz2/json`; an LMDB store of zlib-compressed records is `lmdb/json.z`. Slicing happens at the format step, so N workers can read the same file; every worker must see the children in the same order, which is why directory listings are sorted. An entry with `"slice": "files"` is sliced by file instead: each worker reads every Nth file of the spec's first directory step (or, with no directory step, every Nth such entry) and all of its records, so a dump of many compressed files is read once rather than once per worker. The library dump is one: `{"path": "yul", "type": "dir/lines.gz/json", "slice": "files"}`. Sources that still override `load()` keep the legacy path.
