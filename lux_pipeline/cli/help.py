@@ -2,6 +2,8 @@
 
     lux help              # every command
     lux help harvest      # harvest's options (as lux harvest --help)
+    lux help --json       # every command and its options as JSON (lux_pipeline.cli.introspect)
+    lux help harvest --json
 """
 
 import ast
@@ -57,9 +59,20 @@ class CommandHandler(BaseHandler):
 
     def add_args(self, ap):
         ap.add_argument("topic", nargs="?", help="A command whose options to show")
+        ap.add_argument("--json", action="store_true",
+                        help="Print the command(s) and their options as JSON, as the web UI "
+                             "reads them")
 
     def process(self, args, rest):
         super().process(args, rest)
+        if getattr(args, "json", False):
+            import json
+
+            from lux_pipeline.cli.introspect import all_command_specs, command_spec
+            topic = getattr(args, "topic", None)
+            data = command_spec(topic) if topic else all_command_specs()
+            print(json.dumps(data, indent=1))
+            return data
         if getattr(args, "topic", None):
             from lux_pipeline.cli.entry import command_help
             text, err = command_help(args.topic)
