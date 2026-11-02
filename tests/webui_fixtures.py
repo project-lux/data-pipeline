@@ -129,6 +129,25 @@ def make_installation(tmp_path, sources=DEFAULT_SOURCES):
     return root
 
 
+def add_subconfig_store(root, name="sources", move=("aat",), indent=2):
+    """Give the installation at `root` a sub-config store (item 35), as
+    pipeline-configs has: ``<root>/subs/<name>_cache/``, the records named
+    in `move` moved into it from the configuration directory and written
+    with `indent` (pipeline-configs uses 2), and the ``config`` record
+    ``<name>.json`` that points at it. Returns the store's directory."""
+    root = Path(root)
+    cc = root / "config_cache"
+    directory = root / "subs" / f"{name}_cache"
+    directory.mkdir(parents=True, exist_ok=True)
+    for key in move:
+        rec = json.loads((cc / f"{key}.json").read_text())
+        (directory / f"{key}.json").write_text(json.dumps(rec, indent=indent) + "\n")
+        (cc / f"{key}.json").unlink()
+    (cc / f"{name}.json").write_text(json.dumps({"type": "config", "name": name,
+                                                 "base_dir": "subs"}, indent=4) + "\n")
+    return directory
+
+
 def make_configs(tmp_path, instantiate=False, sources=DEFAULT_SOURCES):
     """`make_installation` (unless `tmp_path` already holds one) and its
     `Config`; with `instantiate`, also ``get_idmap()``,

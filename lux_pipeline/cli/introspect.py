@@ -45,7 +45,8 @@ GROUPS = {
 
 # Interactive, long-lived, or about the terminal: described, never started
 # from a form
-NOT_RUNNABLE = frozenset({"help", "watch", "interactive", "initialize", "serve"})
+# (config: the web UI has its own configuration pages, and edit opens an editor)
+NOT_RUNNABLE = frozenset({"help", "watch", "interactive", "initialize", "serve", "config"})
 
 # Why a run needs a typed confirmation. A command named here always asks,
 # except as `_unless` says.
