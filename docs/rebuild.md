@@ -148,6 +148,12 @@ lux export --type nt --max-workers 24       # N-Triples in nt_dir, for QLever
 (`--max-workers N` splits it), for `lux load --file <dir> --file-type
 dir/lines.gz/tabjson` on another instance.
 
+`lux export --type merged --format lmdb --max-workers 24` builds the LMDB
+distribution store (`merged.lmdb` in `distribution_dir`: every record
+under its UUID, and an index by class); `--type external` or `--cache`
+with `--format lmdb` build `<source>:<id>`-keyed stores. Run as
+`--my-worker` slices, finish with the same command and `--merge-only`.
+
 
 ## Choosing an engine
 

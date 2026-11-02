@@ -8,6 +8,9 @@
     lux export --type external --source aat,wikidata # export_<name>.jsonl.gz for `lux load --type export`
     lux export --cache datacache --source wikidata --max-workers 24   # the whole datacache, 24 slices
     lux export --cache datacache,recordcache --source ycba            # export_ycba_<cache>.jsonl.gz
+    lux export --type merged --format lmdb --max-workers 24           # merged.lmdb in distribution_dir
+    lux export --type external --source all --format lmdb             # external.lmdb, <source>:<id> keys
+    lux export --cache recordcache --source wikidata --format lmdb    # wikidata_recordcache.lmdb
     lux export --my-worker 3 --max-workers 24 --no-ui   # one slice, shell-orchestrated
 
 Replaces `run-export.py`, `run-source-build.py`, `manage-data.py --nt`,
@@ -24,6 +27,18 @@ Leave ``--type`` unset with it. JSONL goes to the
 ``exports_dir``, N-Triples to the ``nt_dir`` (falling back to
 ``exports_dir``); ``--out-dir`` sends everything to one directory. See
 `lux_pipeline.process.tasks.export_task` for how the work is shared out.
+
+``--format lmdb`` builds an LMDB distribution store instead of files, from
+``--type merged``, ``--type external`` or ``--cache``, in
+``distribution_dir`` (falling back to ``exports_dir``; ``--out-dir``
+overrides). A store holds every record zlib-compressed under its key, and
+an index of the keys by class, in key order, so one class can be walked
+without reading the rest; see `lux_pipeline.storage.distribution` for the
+layout. Keys are the record's UUID as 16 bytes for ``merged`` and
+``<source>:<identifier>`` text otherwise (what ``lux load --type lmdb``
+reads); ``--lmdb-keys`` chooses. The workers write sorted runs and the
+store is built from them in key order when they are done. Run as
+``--my-worker`` slices, finish with the same command and ``--merge-only``.
 """
 
 from lux_pipeline.process.tasks.export_task import (ALIASES, EXPORT_TYPES, MERGED_TYPES,
@@ -46,6 +61,14 @@ class CommandHandler(CH):
         ap.add_argument("--cache", default=None,
                         help="Export every record of these caches of each --source instead "
                              "(cache types separated by commas, e.g. datacache)")
+        ap.add_argument("--format", default="jsonl", choices=("jsonl", "lmdb"),
+                        help="jsonl files (default), or an LMDB distribution store for "
+                             "--type merged, --type external or --cache")
+        ap.add_argument("--lmdb-keys", dest="lmdb_keys", default=None, choices=("uuid", "text"),
+                        help="Store keys: 16-byte UUIDs (default for merged) or "
+                             "<source>:<identifier> text (default otherwise)")
+        ap.add_argument("--merge-only", dest="merge_only", action="store_true",
+                        help="Only build the LMDB stores from the runs --my-worker slices wrote")
         ap.add_argument("--gz", action="store_true",
                         help="Gzip the marklogic / merged JSONL")
         ap.add_argument("--chunk", type=int, default=None,
@@ -56,7 +79,8 @@ class CommandHandler(CH):
         ap.add_argument("--out-dir", dest="out_dir", default=None,
                         help="Write every file here instead of exports_dir / nt_dir")
         add_profile_arg(ap)
-        self.extra_args = {"export_type": "export_type", "cache": "cache", "gz": "gz",
+        self.extra_args = {"export_type": "export_type", "cache": "cache", "format": "format",
+                           "lmdb_keys": "lmdb_keys", "merge_only": "merge_only", "gz": "gz",
                            "chunk": "chunk",
                            "gzip_level": "gzip_level", "out_dir": "out_dir"}
 

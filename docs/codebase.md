@@ -147,7 +147,7 @@ A source config describes its dump files as `input_files`: a dict of load type (
     array       a JSON file whose top level is an array; each item is a member
     arraylines  a JSON array written one record per line
     xmls        an XML file; each child of the root is a member
-    lmdb        an LMDB distribution store (make_*_lmdb.py); each value is a member
+    lmdb        an LMDB distribution store (lux export --format lmdb); each value is a member
     json        a JSON record (a file, a member, or an already parsed item)
     tabjson     <identifier><TAB><JSON record>, as lux export --type external writes
     raw         an already parsed JSON item (from dict / array)

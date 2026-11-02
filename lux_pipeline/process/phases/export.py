@@ -9,7 +9,11 @@ aat / ulan / lcsh / tgn datacaches mapped into their recordcaches and
 written out as JSONL and N-Triples. `export_nt_slice` is manage-data.py's
 ``--nt``: the merged records as N-Triples for the QLever index. The legacy
 scripts parse argv and call these; the manager (`ExportManager`, ``lux
-export``) calls them from each worker. `export_external` has no script: it
+export``) calls them from each worker. `export_lmdb_runs` is the worker's
+half of ``--format lmdb`` (see `lux_pipeline.storage.distribution`): the
+records of `merged_records`, `cache_records` or `external_records`,
+compressed into sorted runs that the driver merges into a store.
+`export_external` has no script: it
 writes the external records a build used in the form ``lux load --type
 export`` reads. `export_cache_slice` (``lux export --cache``) writes this
 worker's slice of whole caches -- export-source.py and exportExternal.py's
@@ -420,6 +424,82 @@ def export_external(cfgs, name, out_dir=None, chunk_size=CHUNK, gzip_level=1,
     return {"source": name, "written": written, "missing": missing, "path": fn}
 
 
+def row_key(rec):
+    """A cache row's key: ``identifier``, or ``yuid`` in the merged and
+    MarkLogic caches."""
+    key = rec.get("identifier")
+    return rec.get("yuid") if key is None else key
+
+
+def _text(data):
+    return data if isinstance(data, str) else dumps(data)
+
+
+def merged_records(cfgs, my_slice=-1, max_slice=-1):
+    """``("merged", yuid, JSON text)`` for the merged records, or one slice."""
+    rc = cfgs.results["merged"]["recordcache"]
+    rows = (rc.iter_records_slice(my_slice, max_slice, raw=True) if my_slice > -1
+            else rc.iter_records(raw=True))
+    for rec in rows:
+        yield "merged", row_key(rec), _text(rec["data"])
+
+
+def cache_records(cfgs, targets, my_slice=-1, max_slice=-1):
+    """``(source, identifier, JSON text)`` for every record of each
+    ``(group, source, cache type)`` in `targets`, or one slice of each."""
+    for group, name, ctype in targets:
+        cache = getattr(cfgs, group)[name][ctype]
+        rows = (cache.iter_records_slice(my_slice, max_slice, raw=True) if my_slice > -1
+                else cache.iter_records(raw=True))
+        for rec in rows:
+            yield name, row_key(rec), _text(rec["data"])
+
+
+def external_records(cfgs, names, chunk_size=CHUNK):
+    """``(source, identifier, JSON text)`` for the datacache records each
+    external source's recordcache used, as `export_external` writes them:
+    each identifier once, a missing datacache record skipped."""
+    for name in names:
+        src = cfgs.external[name]
+        rc, dc = src["recordcache"], src["datacache"]
+        seen = set()
+
+        def identifiers():
+            for key in rc.iter_keys():
+                ident = cfgs.split_qua(key)[0]
+                if ident not in seen:
+                    seen.add(ident)
+                    yield ident
+
+        for chunk in in_batches(identifiers(), chunk_size):
+            got = _fetch_multi(dc, chunk)
+            for ident in chunk:
+                rec = got.get(ident)
+                if rec is not None:
+                    yield name, ident, _text(rec["data"])
+
+
+def export_lmdb_runs(cfgs, records, runs_dir, worker, key_format, total=0,
+                     progress=null_progress, description="lmdb"):
+    """This worker's half of an LMDB store: `records` (``(source,
+    identifier, JSON text)``) compressed into sorted runs in `runs_dir`
+    (`storage.distribution.RunWriter`), for the driver's `build_store`.
+    Returns the writer's statistics."""
+    from lux_pipeline.storage.distribution import RunWriter
+    progress(description=description, total=total, completed=0)
+    with RunWriter(runs_dir, worker, key_format) as rw:
+        for source, ident, text in records:
+            rw.add(source, ident, text)
+            progress(advance=1)
+    stats = rw.stats
+    if stats["too_long"]:
+        logger.warning(f"{description}: {stats['too_long']:,} keys too long for LMDB, skipped")
+    logger.info(f"{description}: {stats['records']:,} records in {stats['runs']} sorted run(s)")
+    # force all postgres connections to close
+    PoolManager.get_instance().put_all("localsocket")
+    return stats
+
+
 def cache_export_path(out_dir, name, cache, my_slice=-1):
     """``export_<name>_<cache>.jsonl.gz``, or ``..._<slice>.jsonl.gz`` for
     one slice of several."""
@@ -461,7 +541,7 @@ def export_cache_slice(cfgs, targets, my_slice=-1, max_slice=-1, out_dir=None, g
                 data = rec["data"]
                 if not isinstance(data, str):
                     data = dumps(data)
-                fh.write(f'{rec["identifier"]}\t{{"data":{data}}}\n')
+                fh.write(f'{row_key(rec)}\t{{"data":{data}}}\n')
                 written += 1
                 progress(advance=1)
         if not written:

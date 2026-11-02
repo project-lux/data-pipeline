@@ -653,3 +653,221 @@ def test_command_cache_needs_a_source(harness, tmp_path):
     h.patch()
     with pytest.raises(ValueError, match="--cache needs --source"):
         run_command(h.cfgs, ["--cache", "datacache"], tmp_path, workers=1)
+
+
+# --- --format lmdb -------------------------------------------------------------
+
+from lux_pipeline.storage.distribution import DistributionStore, uuid_key  # noqa: E402
+
+
+class YuidCache(SliceCache):
+    """The merged cache: rows keyed by yuid."""
+
+    def _raw(self, k):
+        row = super()._raw(k)
+        return {"yuid": row.pop("identifier"), **row}
+
+
+def merged_rows(n=40):
+    import uuid as _u
+    import random as _r
+    rnd = _r.Random(7)
+    out = {}
+    for i in range(n):
+        u = str(_u.UUID(int=rnd.getrandbits(128), version=4))
+        out[u] = {"id": f"https://lux.collections.yale.edu/data/x/{u}",
+                  "type": ("Person", "Place", "Type")[i % 3]}
+    return out
+
+
+def run_lmdb(h, m):
+    """Every worker in this process, then the driver tail, as the mp engine
+    run does."""
+    h.run_all(m)
+    return m.build_stores()
+
+
+def lmdb_configs(h, tmp_path, rows=None, distribution=True):
+    cfgs = h.configure()
+    if distribution:
+        cfgs.distribution_dir = str(tmp_path / "dist")
+    cfgs.results["merged"]["recordcache"] = YuidCache(rows if rows is not None else merged_rows())
+    cfgs.internal["ycba"]["datacache"] = SliceCache({f"obj{i}": {"n": i} for i in range(9)})
+    cfgs.internal["ypm"]["datacache"] = SliceCache({f"spec{i}": {"type": "HumanMadeObject"}
+                                                    for i in range(5)})
+    return cfgs
+
+
+def test_lmdb_needs_a_type_it_can_store(harness):
+    with pytest.raises(ValueError, match="--format lmdb builds a store from"):
+        harness.manager(workers=1, format="lmdb")                      # marklogic
+    with pytest.raises(ValueError, match="apply to --format lmdb"):
+        harness.manager(workers=1, export_type="merged", lmdb_keys="text")
+    with pytest.raises(ValueError, match="Unknown key form"):
+        harness.manager(workers=1, export_type="merged", format="lmdb", lmdb_keys="int")
+
+
+def test_lmdb_store_plans(harness, tmp_path):
+    h = harness
+    lmdb_configs(h, tmp_path)
+    dist = str(tmp_path / "dist")
+    m = h.manager(workers=2, export_type="merged", format="lmdb")
+    m.check()
+    assert [(s["name"], s["path"], s["keys"]) for s in m.stores] == [
+        ("merged", f"{dist}/merged.lmdb", "uuid")]
+    m = h.manager(sources=["aat", "tgn"], workers=2, export_type="external", format="lmdb")
+    m.check()
+    assert [(s["name"], s["keys"], s["targets"]) for s in m.stores] == [
+        ("external", "text", ["aat", "tgn"])]
+    m = h.manager(sources=["ycba"], workers=2, cache="datacache", format="lmdb")
+    m.check()
+    assert [(s["name"], s["keys"]) for s in m.stores] == [("ycba_datacache", "text")]
+    m = h.manager(sources=["ycba", "ypm"], workers=2, cache="datacache", format="lmdb",
+                  lmdb_keys="uuid", out_dir="/o")
+    m.check()
+    assert [(s["path"], s["runs"], s["keys"]) for s in m.stores] == [
+        ("/o/datacache.lmdb", "/o/datacache.lmdb.runs", "uuid")]
+
+
+def test_lmdb_falls_back_to_exports_dir(harness, tmp_path):
+    h = harness
+    cfgs = lmdb_configs(h, tmp_path, distribution=False)
+    m = h.manager(workers=1, export_type="merged", format="lmdb")
+    m.check()
+    assert m.stores[0]["path"] == os.path.join(cfgs.exports_dir, "merged.lmdb")
+
+
+def test_lmdb_merged_store_end_to_end(harness, tmp_path, no_pool):
+    h = harness
+    rows = merged_rows(60)
+    lmdb_configs(h, tmp_path, rows)
+    m = h.manager(workers=3, export_type="merged", format="lmdb")
+    run_lmdb(h, m)
+    path = tmp_path / "dist" / "merged.lmdb"
+    assert m.store_stats[0]["records"] == 60
+    assert not (tmp_path / "dist" / "merged.lmdb.runs").exists()
+    with DistributionStore(str(path)) as s:
+        assert (s.meta["keys"], s.meta["export"], s.meta["sources"]) == ("uuid", "merged", ["merged"])
+        assert s.meta["classes"] == {"Person": 20, "Place": 20, "Type": 20}
+        assert list(s.keys("Place")) == sorted(uuid_key(u) for u, r in rows.items()
+                                               if r["type"] == "Place")
+        u = next(iter(rows))
+        assert s.get(u) == rows[u]
+
+
+def test_lmdb_slices_then_merge_only(harness, tmp_path, no_pool):
+    h = harness
+    lmdb_configs(h, tmp_path)
+    runs = tmp_path / "dist" / "merged.lmdb.runs"
+    for n in range(3):
+        m = h.manager(workers=3, export_type="merged", format="lmdb")
+        m.my_slice = n
+        m.check()
+        m._distributed(n, h.cfgs, null_progress)
+    assert {f[:5] for f in os.listdir(runs)} == {"w0000", "w0001", "w0002"}
+    assert not (tmp_path / "dist" / "merged.lmdb").exists()
+    m = h.manager(workers=3, export_type="merged", format="lmdb", merge_only=True)
+    m.process("null")
+    with DistributionStore(str(tmp_path / "dist" / "merged.lmdb")) as s:
+        assert s.meta["records"] == 40
+
+
+def test_lmdb_merge_only_without_runs_says_so(harness, tmp_path):
+    h = harness
+    lmdb_configs(h, tmp_path)
+    m = h.manager(workers=2, export_type="merged", format="lmdb", merge_only=True)
+    with pytest.raises(RuntimeError, match="no runs to merge"):
+        m.process("null")
+
+
+def test_lmdb_full_run_clears_an_earlier_attempts_runs(harness, tmp_path, no_pool):
+    h = harness
+    lmdb_configs(h, tmp_path)
+    runs = tmp_path / "dist" / "merged.lmdb.runs"
+    runs.mkdir(parents=True)
+    (runs / "w0007-00000.run").write_bytes(b"left by a 24-way attempt")
+    m = h.manager(workers=2, export_type="merged", format="lmdb")
+    m.check()
+    m.clear_stale()
+    run_lmdb(h, m)
+    with DistributionStore(str(tmp_path / "dist" / "merged.lmdb")) as s:
+        assert s.meta["records"] == 40
+
+
+def test_lmdb_cache_store_of_two_sources(harness, tmp_path, no_pool):
+    h = harness
+    lmdb_configs(h, tmp_path)
+    m = h.manager(sources=["ycba", "ypm"], workers=2, cache="datacache", format="lmdb")
+    run_lmdb(h, m)
+    with DistributionStore(str(tmp_path / "dist" / "datacache.lmdb")) as s:
+        assert (s.meta["records"], s.meta["unindexed"], s.meta["cache"]) == (14, 9, "datacache")
+        assert s.meta["sources"] == ["ycba", "ypm"]
+        assert [k.decode() for k in s.keys("HumanMadeObject")] == [f"ypm:spec{i}" for i in range(5)]
+        assert s.get("ycba:obj3") == {"n": 3}
+
+
+def test_lmdb_external_store(harness, tmp_path, no_pool):
+    h = harness
+    cfgs = lmdb_configs(h, tmp_path)
+    cfgs.split_qua = lambda k: k.split("##qua")
+    for name, ids in (("aat", ["300001", "300002"]), ("tgn", ["7000001"])):
+        keys = [f"{i}##quaType" for i in ids] + [f"{ids[0]}##quaPlace"]
+        cfgs.external[name]["recordcache"] = MemCache(dict.fromkeys(keys, {}))
+        cfgs.external[name]["datacache"] = MemCache({i: {"id": i, "type": "Type"} for i in ids})
+    m = h.manager(sources=["aat", "tgn"], workers=4, export_type="external", format="lmdb")
+    run_lmdb(h, m)
+    with DistributionStore(str(tmp_path / "dist" / "external.lmdb")) as s:
+        assert [k.decode() for k in s.keys("Type")] == ["aat:300001", "aat:300002", "tgn:7000001"]
+        assert s.meta["sources"] == ["aat", "tgn"]
+
+
+def test_cache_export_of_the_merged_cache_uses_its_yuid(tmp_path, no_pool):
+    """--cache over a results cache: its rows are keyed by yuid."""
+    cfgs = CacheConfigs(tmp_path, {})
+    rows = merged_rows(3)
+    cfgs.results = {"merged": {"name": "merged", "recordcache": YuidCache(rows)}}
+    out = phase.export_cache_slice(cfgs, [("results", "merged", "recordcache")])
+    assert sorted(i for i, _ in read_lines(out[0]["path"])) == sorted(rows)
+
+
+def test_command_lmdb_options(harness, tmp_path, no_pool):
+    h = harness
+    lmdb_configs(h, tmp_path)
+    h.patch()
+    m = run_command(h.cfgs, ["--type", "merged", "--format", "lmdb", "--lmdb-keys", "text"],
+                    tmp_path, workers=1)
+    assert (m.format, m.lmdb_keys) == ("lmdb", "text")
+    with DistributionStore(str(tmp_path / "dist" / "merged.lmdb")) as s:
+        assert s.meta["keys"] == "text" and s.meta["records"] == 40
+
+
+def test_lmdb_null_engine_with_several_workers_only_writes_runs(harness, tmp_path, no_pool):
+    """The null engine runs worker 0 alone: never a store from a third."""
+    h = harness
+    lmdb_configs(h, tmp_path)
+    m = h.manager(workers=3, export_type="merged", format="lmdb")
+    m.process("null")
+    assert not (tmp_path / "dist" / "merged.lmdb").exists()
+    assert os.path.exists(tmp_path / "dist" / "merged.lmdb.runs" / "w0000.done")
+
+
+def test_lmdb_merge_refuses_unfinished_slices(harness, tmp_path, no_pool):
+    h = harness
+    lmdb_configs(h, tmp_path)
+    m = h.manager(workers=3, export_type="merged", format="lmdb")
+    m.check()
+    m._distributed(0, h.cfgs, null_progress)
+    m._distributed(2, h.cfgs, null_progress)
+    m = h.manager(workers=3, export_type="merged", format="lmdb", merge_only=True)
+    with pytest.raises(RuntimeError, match=r"worker\(s\) 1 of 3 have not finished"):
+        m.process("null")
+    assert not (tmp_path / "dist" / "merged.lmdb").exists()
+
+
+def test_lmdb_one_worker_on_the_null_engine_builds(harness, tmp_path, no_pool):
+    h = harness
+    lmdb_configs(h, tmp_path)
+    m = h.manager(workers=1, export_type="merged", format="lmdb")
+    m.process("null")
+    with DistributionStore(str(tmp_path / "dist" / "merged.lmdb")) as s:
+        assert s.meta["records"] == 40

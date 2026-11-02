@@ -151,6 +151,17 @@ def test_nt_dir_is_optional_and_falls_back_to_exports_dir(tmp_path, value, expec
 
 
 @pytest.mark.parametrize("value, expected", [
+    (None, "data/output"),
+    ("data/dist", "data/dist"),
+    ("/data-io2/distribution", "/data-io2/distribution"),
+])
+def test_distribution_dir_is_optional_and_falls_back_to_exports_dir(tmp_path, value, expected):
+    extra = {} if value is None else {"distribution_dir": value}
+    cfgs = Config(basepath=todays_layout(tmp_path, **extra))
+    assert cfgs.distribution_dir == os.path.join(str(tmp_path), expected)
+
+
+@pytest.mark.parametrize("value, expected", [
     (None, "data/files/backups"),
     ("backups", "backups"),
     ("/data/output/backup", "/data/output/backup"),
