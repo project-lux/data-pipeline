@@ -94,7 +94,13 @@ laptop (the validator reads its schemas on first use, not at construction).
   defined inside the test function.
 - No Postgres or Redis runs locally. Tests stub them (see
   `tests/test_identity.py`, `tests/test_merge_batch.py`,
-  `tests/test_config_records.py`). Anything that needs the live instance
+  `tests/test_config_records.py`), or, for a real `Config` with every
+  component instantiated, build on `tests/webui_fixtures.py`:
+  `make_configs(tmp_path, instantiate=True)` writes a small installation
+  whose caches and maps are all filesystem stores, `seed_records` puts
+  records in it, `use_installation` points `runtime.get_configs()` at it
+  (web UI item W00). Never build tests on `docs/sample_config` (out of
+  date) or `config_cache/` (untracked). Anything that needs the live instance
   (`manage-data.py --counts`, `run-reconcile.py --aat --recid ...`, a full
   build) is run by Rob on the build server; say so in the PR instead of
   claiming it was verified.
