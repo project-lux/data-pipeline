@@ -8,7 +8,8 @@ same functions the `lux` commands print from. The plan is in
 `webui_docs/`; this page grows with it (item W13 completes it).
 
 Built so far: the server, the **Dashboard**, **Runs**, **Records**,
-**Configuration** and **Health** pages.
+**Counts**, **Timing**, **Configuration**, **Maintenance** and **Health**
+pages.
 
 ## Install and start
 
@@ -72,6 +73,23 @@ bind where you can.
   now* runs the source's mapper on the stored raw record (nothing is
   fetched or stored). *Browse a cache* lists keys of any source's cache,
   by type or since a time. Nothing on these pages changes anything.
+* **Counts** (`/counts`): `lux counts`, run when you ask (it takes a
+  while on the build machine): the caches of the sources you name (a
+  group, names, or all), the maps, the indexes; rows arrive as each is
+  counted, with totals. Estimates are `~`, exact counts `=`. The last count
+  is shown when you come back.
+* **Timing** (`/timing`): `lux timing-report` laid out as cards, one per
+  phase in build order: records, wall time, worker and cpu hours, the
+  share of worker time in each stage, the nested stages, slow slices,
+  profiles (`?profile=20` after a `--profile` run); then all the phases
+  together, with a timeline, where the time went, and stragglers.
+  `/timing/compare` sets two runs' timing directories (inside the
+  installation) side by side, changes coloured better or worse.
+* **Maintenance** (`/maintenance`): `lux pg-tune`'s view of the machine
+  and Postgres, the settings to change for the build's workers and the SQL
+  to do it; and, on request, `lux pg-maintain --bloat` for each cache
+  table: rows, size, and the space VACUUM will not give back, with the
+  command that would. Nothing on the page changes a table.
 * **Configuration** (`/config`): every record, grouped by type, with the
   file (and sub-config store) it came from, and the sources at a glance.
   A record's page has two ways to edit it. *Fields*: the keys the
@@ -94,6 +112,8 @@ bind where you can.
 Everything a page shows is also JSON under `/api/` (`/api/dashboard`,
 `/api/dashboard/running`, `/api/runs`, `/api/runs/<run>` (and its `log`,
 `events`), `/api/records/journey?q=`, `/api/records/sample?source=`,
+`/api/counts`, `/api/timing`, `/api/maintenance/tune`,
+`/api/maintenance/bloat`,
 `/api/config`, `/api/config/<key>`,
 `/api/health`); `/api/docs` lists the routes.
 

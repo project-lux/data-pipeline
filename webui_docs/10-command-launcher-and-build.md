@@ -144,6 +144,11 @@ positionals first, checks choices and required options, and refuses
 4. Build page with dry-run.
 5. `docs/web.md` section.
 
+From W11: the maintenance page (`templates/maintenance/index.html`) shows
+`lux pg-maintain` commands to copy (vacuum, rewrite one table, idmap
+indexes) and each bloat row's rewrite suggestion; turn them into links to
+the launcher (`/commands/pg-maintain?...` prefilled) here.
+
 Testing note (from W09): to read a run's event stream while the test
 starts or changes things, use `tests/web_client.LiveServer` (a real uvicorn
 server in a thread); the `TestClient` holds a streaming response until it

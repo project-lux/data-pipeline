@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Counts{% endblock %}
+{% block scripts %}<script type="module" src="/static/streamtable.js"></script>{% endblock %}
+{% block content %}
+<h1>Counts</h1>
+<p class="lead">What the caches, maps and indexes hold: <code>lux counts</code>. A large cache gives Postgres's estimate
+(<code>~</code>), a small one an exact count (<code>=</code>). It runs only when you ask; on the build machine it takes a while.</p>
+<form class="form inline" method="get" action="/counts" data-stream="/api/counts/events">
+  <input type="hidden" name="go" value="1">
+  <label>Sources <input type="text" name="source" value="{{ asked.source }}" placeholder="all, internal, external, results, or names" list="source-names"></label>
+  <datalist id="source-names"><option value="all"><option value="internal"><option value="external"><option value="results">
+    {% for g, names in groups.items() %}{% for n in names %}<option value="{{ n }}">{% endfor %}{% endfor %}</datalist>
+  <label>Caches <input type="text" name="cache" value="{{ asked.cache }}" placeholder="{{ caches|join(',') }}"></label>
+  <label>Maps <input type="text" name="map" value="{{ asked.map }}" placeholder="none, all, or names ({{ maps|join(', ') }})"></label>
+  <label>Indexes of <input type="text" name="index" value="{{ asked.index }}" placeholder="none, all, or sources"></label>
+  <button type="submit">Count</button>
+</form>
+{% if error %}<div class="banner fail" role="alert">{{ error }}</div>{% endif %}
+<p class="muted" data-stream-status>{% if result %}Counted {{ fmt_time(result.counted_at) }} in {{ fmt_duration(result.seconds) }}.{% else %}Not counted since the server started.{% endif %}</p>
+
+{% set rows = result.rows if result else [] %}
+{% for section, cols in (("caches", ("Group", "Source", "Cache", "Count")), ("maps", ("Map", "Count")), ("indexes", ("Group", "Source", "Index", "Count"))) %}
+<section class="card wide">
+  <h2>{{ section|capitalize }}</h2>
+  <table class="table" data-section="{{ section }}">
+    <thead><tr>{% for c in cols %}<th{% if c == "Count" %} class="num"{% endif %}>{{ c }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for r in rows if r.section == section %}<tr>{% for cell in r.cells %}<td{% if loop.last %} class="num"{% endif %}>{{ cell }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+    <tfoot><tr><td colspan="{{ cols|length - 1 }}">Total</td><td class="num" data-total>{{ result.totals[section] if result and section in result.totals else "" }}</td></tr></tfoot>
+  </table>
+</section>
+{% endfor %}
+{% endblock %}

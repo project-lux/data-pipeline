@@ -55,3 +55,14 @@ async def require_csrf(request: Request):
         given = form.get("_csrf")
     if not _same(given, expected):
         raise HTTPException(status_code=403, detail="missing or wrong CSRF token: reload the page")
+
+
+def under(root, path):
+    """Whether `path` is `root` or inside it, after resolving ``..`` and
+    symbolic links: for a directory or file named by a request."""
+    import os
+    if not root or not path:
+        return False
+    root = os.path.realpath(root)
+    path = os.path.realpath(path)
+    return path == root or os.path.commonpath([root, path]) == root
