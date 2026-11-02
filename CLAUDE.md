@@ -49,6 +49,16 @@ new config keys are optional with fallbacks; library code logs via
 `progress=null_progress` and nothing under `lux_pipeline/process` or
 `lux_pipeline/storage` imports `rich` or knows which engine runs it.
 
+## The next work: a web UI (`webui_docs/`)
+
+`webui_docs/` is a second self-contained plan, in the same form: a web
+application (`lux serve`) for configuring, inspecting and running the
+pipeline. Read `webui_docs/README.md`, then `DESIGN.md`, then
+`00-INDEX.md`; items are `W01`–`W13`, branches `wNN-<slug>`, PR titles
+`WNN: <item name>`. W01–W05 are refactors of existing modules (shared run
+reader and `.run` records, command introspection, data functions, config
+store, record service) with no web code; W06 onwards is the server.
+
 ## Opening PRs
 
 The `gh` CLI is not installed. Push with git, then create the PR with the
