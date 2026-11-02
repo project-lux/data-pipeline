@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Compare timing{% endblock %}
+{% macro change(c, better) %}{% if c is none %}<span class="muted">new</span>{% else %}<span class="{{ '' if better is none else ('state-ok' if better else 'state-fail') }}">{{ "%+.1f"|format(c) }}%</span>{% endif %}{% endmacro %}
+{% block content %}
+<p class="crumbs"><a href="/timing">Timing</a> /</p>
+<h1>Compare two runs</h1>
+<p class="lead">Two directories of timing JSON (a copy of an earlier build's <code>log_dir</code>, say), phase by phase. Both must be inside the installation.</p>
+<form class="form" method="get" action="/timing/compare">
+  <label>Before <input type="text" name="before" value="{{ before }}" required></label>
+  <label>After <input type="text" name="after" value="{{ after }}" required></label>
+  <label>Phase <input type="text" name="phase" value="{{ phase }}" placeholder="every phase"></label>
+  <p><button type="submit" class="secondary">Compare</button></p>
+</form>
+{% if data %}
+{% for c in data.phases %}
+<section class="card wide">
+  <h2>{{ c.phase }}</h2>
+  {% if c.only_in %}<p class="muted">Only in {{ c.only_in }}.</p>{% else %}
+  <table class="table"><thead><tr><th></th><th class="num">Before</th><th class="num">After</th><th class="num">Change</th></tr></thead><tbody>
+    {% for m in c.metrics %}<tr><td>{{ m.label }}</td><td class="num">{{ m.before }}</td><td class="num">{{ m.after }}</td><td class="num">{{ change(m.change, m.better) }}</td></tr>{% endfor %}
+  </tbody></table>
+  <table class="table"><thead><tr><th>Stage</th><th class="num">Before hrs</th><th class="num">After hrs</th><th class="num">Change</th></tr></thead><tbody>
+    {% for s in c.stages %}<tr><td>{{ s.name }}</td><td class="num">{{ "%.2f"|format(s.before) }}</td><td class="num">{{ "%.2f"|format(s.after) }}</td><td class="num">{{ change(s.change, s.better) }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% endif %}
+</section>
+{% else %}<p class="muted">No timing JSON in either directory.</p>{% endfor %}
+{% endif %}
+{% endblock %}

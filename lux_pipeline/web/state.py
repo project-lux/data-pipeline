@@ -36,6 +36,8 @@ class AppState:
                        "options": {}}
         # the last lookups on the records page, newest first
         self.recent_lookups = []
+        # the last `lux counts` the counts page ran
+        self.last_counts = None
 
     # --- configuration ----------------------------------------------------------------
 

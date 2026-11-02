@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Maintenance{% endblock %}
+{% block scripts %}<script type="module" src="/static/streamtable.js"></script>{% endblock %}
+{% block content %}
+<h1>Maintenance</h1>
+<p class="lead">Postgres, read only: <code>lux pg-tune</code>'s advice for this machine and the build, and
+<code>lux pg-maintain --bloat</code>'s report of what each cache table holds. Anything that changes a table is a
+<code>lux pg-maintain</code> run: the commands are shown to copy.</p>
+
+<section class="card wide">
+  <h2>Tuning <span class="muted small">for {{ tune.workers if tune else "-" }} workers</span></h2>
+  <form class="form inline" method="get" action="/maintenance">
+    <label>Workers <input type="number" name="workers" min="1" max="512" value="{{ tune.workers if tune else '' }}"></label>
+    <button type="submit" class="secondary">Size for them</button>
+  </form>
+  {% if tune_error %}<div class="banner fail">{{ tune_error }}</div>{% elif tune %}
+  <dl class="kv">
+    <dt>cpus</dt><dd>{{ tune.machine.cpus }} logical{% if tune.machine.physical %}, {{ tune.machine.physical }} physical{% endif %}{% if tune.machine.cpus_limited_by %} (capped by {{ tune.machine.cpus_limited_by }}){% endif %}</dd>
+    <dt>memory</dt><dd>{{ tune.machine.ram_gb }} GB{% if tune.machine.ram_limited_by %} (capped by {{ tune.machine.ram_limited_by }}){% endif %}</dd>
+    <dt>storage</dt><dd>{{ tune.machine.storage }}: {{ tune.machine.storage_why }}</dd>
+    <dt>server</dt><dd>{% if tune.server %}{{ tune.server.version }}, data in {{ tune.server.data_dir }}{% else %}<span class="state-warn">not read: {{ tune.why }}</span>{% endif %}</dd>
+  </dl>
+  {% if tune.pending is not none %}
+    {% if tune.pending %}
+    <h3>{{ tune.pending|length }} setting(s) to change</h3>
+    <table class="table"><thead><tr><th>Setting</th><th>Now</th><th>Recommended</th></tr></thead><tbody>
+      {% for p in tune.pending %}<tr><td><code>{{ p.name }}</code></td><td class="detail">{{ p.current if p.current is not none else "-" }}</td><td class="detail">{{ p.recommended }}</td></tr>{% endfor %}
+    </tbody></table>
+    {% else %}<p class="state-ok">Every setting is as recommended.</p>{% endif %}
+  {% endif %}
+  <details><summary>The full report and the SQL</summary><pre class="log">{{ tune.report|join("\n") }}</pre></details>
+  {% endif %}
+</section>
+
+<section class="card wide">
+  <h2>Bloat</h2>
+  <p class="muted">Rows, size (heap, documents, indexes) and the space VACUUM will not give back, per cache table. Reads every table's statistics: it runs when you ask.</p>
+  <form class="form inline" method="get" action="/maintenance" data-stream="/api/maintenance/bloat/events">
+    <input type="hidden" name="bloat" value="1">
+    <label>Sources <input type="text" name="source" value="{{ asked.source }}" placeholder="all, a group, or names"></label>
+    <label>Caches <input type="text" name="cache" value="{{ asked.cache }}" placeholder="{{ caches|join(',') }}"></label>
+    <button type="submit">Report</button>
+  </form>
+  {% if error %}<div class="banner fail" role="alert">{{ error }}</div>{% endif %}
+  <p class="muted" data-stream-status>{% if skipped %}Not in Postgres (skipped): {{ skipped|join(", ") }}.{% endif %}</p>
+  <table class="table" data-section="bloat">
+    <thead><tr><th>Source</th><th>Cache</th><th class="num">Rows</th><th class="num">Total</th><th class="num">Heap</th><th class="num">Documents</th><th class="num">Indexes</th><th class="num">Dead or free</th><th>Note</th></tr></thead>
+    <tbody>{% for r in rows or [] %}<tr>{% for cell in r.cells %}<td{% if 1 < loop.index0 < 8 %} class="num"{% elif loop.last %} class="detail"{% endif %}>{{ cell }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+  </table>
+  <h3>Commands</h3>
+  <pre class="log">lux pg-maintain --bloat                                   # this report
+lux pg-maintain --vacuum --source all                    # vacuum and analyse the cache tables
+lux pg-maintain --rewrite --source NAME --cache CACHE    # give back what VACUUM will not (locks the table)
+lux pg-maintain --idmap-indexes                          # the identity map's covering indexes</pre>
+</section>
+{% endblock %}
