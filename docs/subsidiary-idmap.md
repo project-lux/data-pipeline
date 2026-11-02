@@ -172,9 +172,9 @@ There is deliberately no way to push a divergence back into the master. Read
 
 ## Maintenance
 
-`optimize()` vacuums all four tables, and `manage-data.py --vacuum` does not
-know about this map — call it from `idmap-subsidiary.py --vacuum` or
-directly. The same argument as the parent's applies: `assign_bulk()` leaves a
+`optimize()` vacuums all four tables: `lux pg-maintain --vacuum --map
+idmap_sub` (or `idmap-subsidiary.py --vacuum`) calls it; a plain `lux
+pg-maintain --vacuum` walks the caches only. The same argument as the parent's applies: `assign_bulk()` leaves a
 dead tuple per member it moves, and autovacuum's 20% scale factor will not
 fire on a large map.
 
