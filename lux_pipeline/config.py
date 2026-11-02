@@ -250,6 +250,12 @@ class Config(object):
             self.nt_dir = self.exports_dir
         elif not self.nt_dir.startswith("/"):
             self.nt_dir = os.path.join(self.base_dir, self.nt_dir)
+        # Where the LMDB distribution stores go (`lux export --format lmdb`).
+        # Optional: falls back to exports_dir.
+        if not getattr(self, "distribution_dir", None):
+            self.distribution_dir = self.exports_dir
+        elif not self.distribution_dir.startswith("/"):
+            self.distribution_dir = os.path.join(self.base_dir, self.distribution_dir)
         # Where `lux backup` writes (`--dest` overrides). Optional; set it on
         # a machine whose data_dir is on a small disk.
         if not getattr(self, "backup_dir", None):

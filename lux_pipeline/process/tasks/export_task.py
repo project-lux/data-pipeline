@@ -32,16 +32,32 @@ there are never more workers than sources.
 
 JSONL goes to ``exports_dir``, N-Triples to ``nt_dir`` (which falls back to
 ``exports_dir``); ``out_dir`` sends everything a run writes to one place.
-There is no driver tail.
+
+``format = "lmdb"`` (``--format lmdb``) builds LMDB distribution stores
+(`lux_pipeline.storage.distribution`) instead of files, for ``merged``,
+``external`` and ``--cache``: ``merged.lmdb`` (UUID keys), ``external.lmdb``
+(``<source>:<id>`` keys) and, for ``--cache``, one store per cache type,
+``<source>_<cache>.lmdb`` for one source or ``<cache>.lmdb`` for several
+(``<source>:<id>`` keys); ``lmdb_keys`` overrides the key form. They go to
+``distribution_dir`` (falling back to ``exports_dir``), or ``out_dir``. The
+workers write sorted runs into ``<store>.runs/``; the driver tail merges
+them into the store in key order once every worker is done. A
+``--my-worker`` slice writes its runs only, and ``merge_only`` runs just
+the tail, over the runs every slice left. That tail is the only one.
 """
+
+import shutil
 
 import logging
 import os
 
-from lux_pipeline.process.phases.export import (CHUNK, GZIP_LEVEL, SOURCES, cache_export_path,
+from lux_pipeline.process.phases.export import (CHUNK, GZIP_LEVEL, SOURCES, _estimate,
+                                                cache_export_path, cache_records,
                                                 export_cache_slice, export_external,
-                                                export_nt_slice, export_slice,
-                                                export_sources_slice)
+                                                export_lmdb_runs, export_nt_slice,
+                                                export_slice, export_sources_slice,
+                                                external_records, merged_records)
+from lux_pipeline.storage.distribution import KEY_FORMATS, build_store, missing_workers
 from ._task_manager import TaskManager, flags_pattern, remove_stale
 
 logger = logging.getLogger("lux_pipeline")
@@ -64,6 +80,10 @@ def normalize_type(export_type):
 
 # the export_type of a --cache export
 CACHE_EXPORT = "cache"
+
+FORMATS = ("jsonl", "lmdb")
+# what --format lmdb can build a store from
+LMDB_TYPES = ("merged", "external", CACHE_EXPORT)
 
 
 def parse_caches(value, export_type=None):
@@ -93,7 +113,15 @@ class ExportManager(TaskManager):
         self.gzip_level = None
         self.out_dir = None
         self.caches = []
+        self.format = "jsonl"
+        self.lmdb_keys = None
+        self.merge_only = False
+        self.stores = []
+        self.store_stats = []
         if args is not None:
+            self.format = getattr(args, "format", None) or "jsonl"
+            self.lmdb_keys = getattr(args, "lmdb_keys", None)
+            self.merge_only = bool(getattr(args, "merge_only", False))
             self.caches = parse_caches(getattr(args, "cache", None),
                                        getattr(args, "export_type", None))
             self.export_type = (CACHE_EXPORT if self.caches else
@@ -106,6 +134,19 @@ class ExportManager(TaskManager):
             self.chunk_size = int(os.getenv("LUX_EXPORT_CHUNK", str(CHUNK)))
         if self.gzip_level is None and self.export_type in ("marklogic", "merged"):
             self.gzip_level = int(os.getenv("LUX_EXPORT_GZIP", str(GZIP_LEVEL)))
+        if self.format not in FORMATS:
+            raise ValueError(f"Unknown format: {self.format} (one of {', '.join(FORMATS)})")
+        if self.format == "lmdb" and self.export_type not in LMDB_TYPES:
+            raise ValueError(f"--format lmdb builds a store from --type merged, --type external "
+                             f"or --cache, not --type {self.export_type}")
+        if self.lmdb_keys is not None and self.lmdb_keys not in KEY_FORMATS:
+            raise ValueError(f"Unknown key form: {self.lmdb_keys} (one of {', '.join(KEY_FORMATS)})")
+        if (self.lmdb_keys or self.merge_only) and self.format != "lmdb":
+            raise ValueError("--lmdb-keys and --merge-only apply to --format lmdb")
+
+    @property
+    def lmdb(self):
+        return self.format == "lmdb"
 
     @property
     def hide_idle_workers(self):
@@ -150,6 +191,31 @@ class ExportManager(TaskManager):
                         f"always gzipped")
         if self.export_type == "external" and self.max_workers > len(self.sources):
             self.max_workers = len(self.sources)
+        if self.lmdb:
+            self.stores = self.plan_stores()
+
+    def plan_stores(self):
+        """The stores this run builds: ``{"name", "path", "runs", "keys",
+        "kind", "targets"}``, with plain-string paths so they travel to the
+        workers. Read in the driver, where the configuration is."""
+        out_dir = self.out_dir or getattr(self.configs, "distribution_dir", None) \
+            or self.configs.exports_dir
+        plans = []
+        if self.export_type == "merged":
+            plans.append(("merged", "merged", None))
+        elif self.export_type == "external":
+            plans.append(("external", "external", list(self.names)))
+        else:
+            for c in self.caches:
+                name = f"{self.sources[0][1]}_{c}" if len(self.sources) == 1 else c
+                plans.append((name, CACHE_EXPORT, [(w, n, c) for w, n in self.sources]))
+        stores = []
+        for name, kind, targets in plans:
+            path = os.path.join(out_dir, f"{name}.lmdb")
+            stores.append({"name": name, "path": path, "runs": f"{path}.runs", "kind": kind,
+                           "targets": targets,
+                           "keys": self.lmdb_keys or ("uuid" if kind == "merged" else "text")})
+        return stores
 
     # ----------------------------------------------------------- workers
 
@@ -170,6 +236,8 @@ class ExportManager(TaskManager):
         function returns (a list of them for ``external``)."""
         t = self.export_type
         mx = self.max_workers
+        if self.lmdb:
+            return self._lmdb_runs(n, cfgs, progress)
         if t == CACHE_EXPORT:
             # one worker writes the whole cache, unsliced, as export-source.py did
             sliced = mx > 1
@@ -195,6 +263,54 @@ class ExportManager(TaskManager):
                                 progress=progress, **self._gzip_kw())
                 for name in mine]
 
+    def _lmdb_runs(self, n, cfgs, progress):
+        """Worker `n`'s sorted runs for every store this run builds."""
+        mx = self.max_workers
+        sliced = mx > 1
+        sl, ms = (n, mx) if sliced else (-1, -1)
+        out = []
+        for st in self.stores:
+            if st["kind"] == "merged":
+                rc = cfgs.results["merged"]["recordcache"]
+                recs, total = merged_records(cfgs, sl, ms), _estimate(rc) // max(mx, 1)
+            elif st["kind"] == "external":
+                names = self.sources_for(n)
+                if not names:
+                    continue
+                recs = external_records(cfgs, names, self.chunk_size)
+                total = sum(_estimate(cfgs.external[nm]["recordcache"]) for nm in names)
+            else:
+                recs = cache_records(cfgs, [tuple(x) for x in st["targets"]], sl, ms)
+                total = sum(_estimate(getattr(cfgs, g)[nm][c]) for g, nm, c in st["targets"]) \
+                    // max(mx, 1)
+            out.append(export_lmdb_runs(cfgs, recs, st["runs"], n, st["keys"], total=total,
+                                        progress=progress, description=st["name"]))
+        if not out:
+            progress(done=True)
+        return out
+
+    def build_stores(self):
+        """The driver tail: merge each store's runs into it, in key order."""
+        self.store_stats = []
+        for st in self.stores:
+            if not os.path.isdir(st["runs"]):
+                raise RuntimeError(f"no runs to merge in {st['runs']}: run the export's "
+                                   f"workers first")
+            missing = missing_workers(st["runs"], self.max_workers)
+            if missing:
+                shown = ", ".join(map(str, missing[:10])) + (" ..." if len(missing) > 10 else "")
+                raise RuntimeError(f"{st['name']}: worker(s) {shown} of {self.max_workers} have "
+                                   f"not finished their runs in {st['runs']}; run those "
+                                   f"slices (same --max-workers), then --merge-only")
+            logger.info(f"Merging the runs into {st['path']}")
+            sources = sorted({x[1] for x in st["targets"]} if st["kind"] == CACHE_EXPORT
+                             else (st["targets"] or ["merged"]))
+            meta = {"export": st["kind"], "sources": sources}
+            if st["kind"] == CACHE_EXPORT:
+                meta["cache"] = st["targets"][0][2]
+            self.store_stats.append(build_store(st["path"], st["runs"], st["keys"], meta=meta))
+        return self.store_stats
+
     # ----------------------------------------------------------- driver
 
     def clear_stale(self):
@@ -205,6 +321,16 @@ class ExportManager(TaskManager):
         (run-all.sh's ``rm``). A single slice leaves them."""
         if self.my_slice > -1:
             return 0
+        if self.lmdb:
+            # an earlier attempt's runs would be merged in with this one's
+            removed = 0
+            for st in self.stores:
+                if os.path.isdir(st["runs"]):
+                    shutil.rmtree(st["runs"])
+                    removed += 1
+            if removed:
+                logger.info(f"removed the runs of {removed} earlier, unmerged store build(s)")
+            return removed
         out_dir = self.out_dir or self.configs.exports_dir
         if self.export_type == CACHE_EXPORT:
             # this run's files, and the slices or the unsliced file of an
@@ -225,8 +351,19 @@ class ExportManager(TaskManager):
         """Check the run, clear what an earlier run left, then run every
         worker. Returns the workers' results."""
         self.check()
+        if self.lmdb and self.merge_only:
+            return self.build_stores()
         self.clear_stale()
-        return super().process(engine, prefix, view)
+        results = super().process(engine, prefix, view)
+        if self.lmdb:
+            # the null engine runs one worker: --my-worker i, or worker 0
+            if self.my_slice > -1 or (engine == "null" and self.max_workers > 1):
+                logger.info(f"worker {max(self.my_slice, 0)} of {self.max_workers}: runs "
+                            f"written; when every slice is done, merge them with the same "
+                            f"command and --merge-only")
+            else:
+                self.build_stores()
+        return results
 
 
 def default_sources(export_type):

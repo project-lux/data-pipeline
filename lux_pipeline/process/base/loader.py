@@ -18,7 +18,7 @@ entries, where ``type`` is a small path language::
     array       a JSON file whose top level is an array; each item is a member
     arraylines  a JSON array written one record per line
     xmls        an XML file; each child of the root is a member
-    lmdb        an LMDB distribution store (make_*_lmdb.py); each value is a member
+    lmdb        an LMDB distribution store (lux export --format lmdb); each value is a member
     json        a JSON record (a file, a member, or an already parsed item)
     tabjson     ``<identifier><TAB><JSON record>``, as a line of
                 ``lux export --type external``; a record of only ``{"data": ...}``
