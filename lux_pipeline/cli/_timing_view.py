@@ -21,7 +21,8 @@ from rich.text import Text
 from rich.tree import Tree
 
 from lux_pipeline.process.timing_report import (
-    METRIC_FORMATS, NO_PROFILES, PROFILE_TITLES, nested_overrun, slice_rates)
+    ESTIMATED_TIMES, METRIC_FORMATS, NO_PROFILES, PROFILE_TITLES, fmt_duration, fmt_time,
+    nested_overrun, overall_summary, slice_rates)
 
 BAR_WIDTH = 20
 
@@ -211,6 +212,81 @@ def profile_panel(phase, p):
                  border_style="magenta", padding=(0, 1))
 
 
+# --- all phases together ---------------------------------------------------
+
+TIMELINE_WIDTH = 40
+
+
+def summary_panel(t):
+    """`overall_summary`'s result: start to end, a timeline of the phases,
+    the biggest bottlenecks and the stragglers."""
+    parts = []
+    grid = Table.grid(padding=(0, 2))
+    for _ in range(4):
+        grid.add_column()
+    if t["elapsed"] is not None:
+        grid.add_row(Text("start to end", "dim"),
+                     Text(fmt_duration(t["elapsed"]), style="bold"),
+                     Text("from", "dim"),
+                     f"{fmt_time(t['started_at'])}  to  {fmt_time(t['ended_at'])}")
+        grid.add_row(Text("in phases", "dim"), fmt_duration(t["in_phases"]),
+                     Text("between phases", "dim"),
+                     Text(fmt_duration(t["between"]),
+                          style="yellow" if t["between"] > 0.1 * t["elapsed"] else ""))
+    cpu = t["cpu_percent"]
+    grid.add_row(Text("worker-hours", "dim"), f"{t['worker_seconds'] / 3600:,.1f}",
+                 Text("cpu", "dim"), Text(f"{cpu:.0f}%", style=f"bold {_cpu_color(cpu)}"))
+    parts.append(grid)
+
+    if t["timeline"]:
+        t0, span = t["started_at"], max(t["elapsed"], 1)
+        tl = _table("Timeline")
+        tl.add_column("phase", style="cyan", no_wrap=True)
+        tl.add_column("started", no_wrap=True)
+        tl.add_column("finished", no_wrap=True)
+        tl.add_column("wall", justify="right", no_wrap=True)
+        tl.add_column("", no_wrap=True)
+        for ph, s, e, w, done in t["timeline"]:
+            bar = Bar(size=span, begin=s - t0, end=e - t0, width=TIMELINE_WIDTH,
+                      color="cyan" if done else "yellow", bgcolor="grey23")
+            tl.add_row(ph, fmt_time(s), Text(fmt_time(e), style="" if done else "yellow"),
+                       fmt_duration(w), bar)
+        parts += [Text(""), tl]
+    for a, b, secs in t["gaps"]:
+        parts.append(Text(f"{fmt_duration(secs)} between {a} and {b} -- probably not the "
+                          f"same build", style="yellow"))
+
+    if t["bottlenecks"]:
+        bt = _table("Biggest bottlenecks")
+        bt.add_column("phase", style="cyan", no_wrap=True)
+        bt.add_column("stage", no_wrap=True)
+        bt.add_column("elapsed", justify="right", style="bold", no_wrap=True)
+        bt.add_column("% of phases", justify="right")
+        bt.add_column("", no_wrap=True)
+        for ph, name, secs, share in t["bottlenecks"]:
+            bt.add_row(ph, Text(name, style="italic dim" if name.startswith("(") else ""),
+                       fmt_duration(secs), f"{share * 100:.1f}%",
+                       _bar(share * 100, "red" if share >= 0.25 else "magenta"))
+        parts += [Text(""), bt,
+                  Text("elapsed: each phase's wall clock shared out by its stages' worker "
+                       "time; % of every phase's wall clock added up", style="dim italic")]
+
+    notes = []
+    for ph, wait, slow in t["stragglers"]:
+        notes.append(Text.assemble((ph, "cyan"), " waited ", (fmt_duration(wait), "bold red"),
+                                   " on its slowest slice",
+                                   (f" (slow: {', '.join(map(str, slow))})" if slow else "",
+                                    "red")))
+    if t["incomplete"]:
+        notes.append(Text(f"not finished: {', '.join(t['incomplete'])}", style="yellow"))
+    if t["times_estimated"]:
+        notes.append(Text(ESTIMATED_TIMES, style="dim italic"))
+    if notes:
+        parts += [Text(""), *notes]
+    return Panel(Group(*parts), title=Text(f"all {t['phases']} phases", style="bold green"),
+                 title_align="left", border_style="green", padding=(0, 1))
+
+
 # --- whole reports ----------------------------------------------------------
 
 
@@ -223,6 +299,9 @@ def render_directory(console, directory, phases, no_profiles):
         console.print(phase_panel(ph, s))
         if prof is not None:
             console.print(profile_panel(ph, prof))
+    total = overall_summary(phases)
+    if total is not None:
+        console.print(summary_panel(total))
 
 
 # for these a lower number is better; for records/s a higher one
