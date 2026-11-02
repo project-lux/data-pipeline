@@ -140,6 +140,49 @@ def shortest_path(edges, start, end):
         return None
 
 
+def graph_data(cfgs, uri_from, uri_to, reconciler_class=None):
+    """Everything `lux viz` draws, as data: reconcile the identity of two
+    URIs again with debug on and return
+
+        {"yuid", "from", "to",
+         "graph": {uri: [(uri, kind), ...]},       # the reconciler's debug graph
+         "labels": {uri: "<source>:<n>"},
+         "nodes": [{"id": label, "uri", "source"}],  # in label order
+         "edges": [{"from": label, "to": label, "kind": "eq" | "uri" | "nm"}],
+         "ends": [label or None, label or None],    # the two URIs in the graph
+         "path": [label, ...] | None}               # shortest, either direction
+
+    ValueError when a URI is unknown, not in the idmap, or the two are not
+    one identity. Needs networkx for the path (`.[ui-extras]`). Stores
+    nothing (`enable_debug` stops the collector storing what it fetches)."""
+    if reconciler_class is None:
+        from lux_pipeline.process.reconciler import Reconciler as reconciler_class
+    qua_from, qua_to = (typed_uri(cfgs, p) for p in (uri_from, uri_to))
+    idmap = cfgs.get_idmap()
+    yuid, yuid2 = idmap[qua_from], idmap[qua_to]
+    if yuid is None or yuid2 is None:
+        missing = qua_from if yuid is None else qua_to
+        raise ValueError(f"{missing} is not in the idmap")
+    if yuid != yuid2:
+        raise ValueError(f"{uri_from} is {yuid} but {uri_to} is {yuid2}: "
+                         "they are not the same identity, so nothing connects them")
+    networkmap = cfgs.instantiate_map("networkmap")["store"]
+    reconciler = reconciler_class(cfgs, idmap, networkmap)
+    enable_debug(reconciler)
+    graph = replay(cfgs, reconciler, idmap[yuid])
+    labels = node_labels(cfgs, graph) if graph else {}
+    edges = graph_edges(graph, labels) if graph else []
+    ends = [labels.get(cfgs.split_qua(q)[0]) for q in (qua_from, qua_to)]
+    path = shortest_path(edges, *ends) if graph and None not in ends else None
+    ordered = sorted(labels.items(), key=lambda x: int(x[1].rsplit(":", 1)[1]))
+    return {
+        "yuid": yuid, "from": uri_from, "to": uri_to, "graph": graph, "labels": labels,
+        "nodes": [{"id": lbl, "uri": uri, "source": lbl.rsplit(":", 1)[0]} for uri, lbl in ordered],
+        "edges": [{"from": a, "to": b, "kind": k} for a, b, k in edges],
+        "ends": ends, "path": path,
+    }
+
+
 def render(edges, labels, highlight=(), console=None):
     """The graph as a netext renderable."""
     from netext import ArrowTip, ConsoleGraph, EdgeSegmentDrawingMode
@@ -171,44 +214,27 @@ class CommandHandler(BaseHandler):
                                "pip install -e .[ui-extras]") from None
         from rich.console import Console
 
-        from lux_pipeline.process.reconciler import Reconciler
-
         parts = [p.strip() for p in args.recid.split(",")]
         if len(parts) != 2 or not all(parts):
             raise ValueError("--recid takes two URIs separated by a comma: from,to")
-        cfgs = self.configs
-        qua_from, qua_to = (typed_uri(cfgs, p) for p in parts)
-
-        idmap = cfgs.get_idmap()
-        yuid, yuid2 = idmap[qua_from], idmap[qua_to]
-        if yuid is None or yuid2 is None:
-            missing = qua_from if yuid is None else qua_to
-            raise ValueError(f"{missing} is not in the idmap")
-        if yuid != yuid2:
-            raise ValueError(f"{parts[0]} is {yuid} but {parts[1]} is {yuid2}: "
-                             "they are not the same identity, so nothing connects them")
-
-        networkmap = cfgs.instantiate_map("networkmap")["store"]
-        reconciler = Reconciler(cfgs, idmap, networkmap)
-        enable_debug(reconciler)
-        graph = replay(cfgs, reconciler, idmap[yuid])
+        data = graph_data(self.configs, *parts)
+        yuid, graph, labels = data["yuid"], data["graph"], data["labels"]
         if not graph:
             print(f"Reconciling the records of {yuid} recorded no connections")
             return None
 
-        labels = node_labels(cfgs, graph)
-        edges = graph_edges(graph, labels)
-        ends = [labels.get(cfgs.split_qua(q)[0]) for q in (qua_from, qua_to)]
+        edges = [(e["from"], e["to"], e["kind"]) for e in data["edges"]]
+        ends = data["ends"]
         console = Console()
         console.print(render(edges, labels, highlight=[e for e in ends if e], console=console))
 
         print(f"\n{yuid}: {len(labels)} URIs, {len(edges)} connections\n\nKey:")
-        for uri, lbl in sorted(labels.items(), key=lambda x: int(x[1].rsplit(":", 1)[1])):
-            print(f"  {lbl:<20}{uri}")
+        for node in data["nodes"]:
+            print(f"  {node['id']:<20}{node['uri']}")
         if None in ends:
             print(f"\n{parts[0] if ends[0] is None else parts[1]} is not in the graph")
             return graph
-        path = shortest_path(edges, *ends)
+        path = data["path"]
         print(f"\nShortest path from {parts[0]} to {parts[1]}:")
         print("  " + (" --> ".join(path) if path else "none: they are not connected in the graph"))
         return graph

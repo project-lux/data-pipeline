@@ -1,6 +1,6 @@
 # W05. Record inspection service and `lux show`
 
-**Size:** M · **Depends on:** — · **Unblocks:** W08, W12
+**Size:** M · **Depends on:** W00 · **Unblocks:** W08, W12 · **Done:** 2026-11-02
 **Read:** `lux_pipeline/cli/viz.py` (`typed_uri`, `replay`, `node_labels`,
 `graph_edges`, `shortest_path`, `enable_debug`), `lux_pipeline/cli/interactive.py`,
 `lux_pipeline/config.py` (`split_curie`, `split_uri`, `canonicalize`,
@@ -152,6 +152,58 @@ Rich when a TTY (a JSON syntax-highlighted panel), plain otherwise.
 3. `validate` (test with the schemas missing: the error names them).
 4. `viz.graph_data`; `identity_graph`.
 5. `lux show`.
+
+## As built
+
+`lux_pipeline/records.py`, `lux_pipeline/cli/show.py` and
+`viz.graph_data` as designed above, with these differences:
+
+* **`Ref`** carries the source's *name* (`source`), its `group`, the
+  `identifier`, the canonical `uri`, a `rectype` from `##qua`, and for a
+  YUID its bare `uuid`; `ref.as_dict()` for JSON. A YUID is a bare UUID
+  (with or without hyphens), any URI under `internal_uri`, or
+  `yuid:` / `merged:` / `final:` / `ml:` / `marklogic:` plus the UUID.
+* **Resolution works on a configuration that is not built.** It follows
+  `split_uri`'s rewrites and match order itself, and uses the source's
+  `fix_identifier` only when its mapper exists (`Config.fix_identifier`
+  logs an error for a source not yet built).
+* **`journey(cfgs, ref, *, mapped=False, idmap=None)`**: `mapped` is off
+  by default (the page and `lux show` opt in). The result has one more
+  stage than designed, `rewritten` (the source's recordcache2, keyed by
+  the YUID's UUID), and `identity` is `{"yuid", "uuid", "key", "members"}`
+  (`key`: the typed URI that found it; the update token is left out of
+  the members). Lookups:
+  * recordcache keys: bare first for internal and results sources, typed
+    first for external ones; with no type known, every type at once (one
+    `get_multi` query on Postgres);
+  * the type is the `##qua` one, else the stored record's `type`, else the
+    raw record's; the identity map is asked with it, or with every type;
+  * `get_cluster` (one query) where the map has it, else two lookups;
+  * a bare UUID finds the full YUID URI from the merged record's `id`,
+    else by trying each record kind's slug in the idmap.
+* **Mapping** does not go through `acquire` (that returns the stored
+  record, and its re-fetch path goes to the network): `map_record` runs
+  the source's mapper on a copy of the datacache row, then the acquirer's
+  `do_post_map(..., store=False)`; `transform_all` for a mapper that
+  returns several records. An empty result says so in the notes.
+* **`instantiate_source(cfgs, name)`**: `Config.instantiate` builds a
+  source's components afresh on every call (opening new cache
+  connections), so this builds them once. W06's `AppState.source` uses
+  it.
+* **`lux show`** needs no configuration loaded up front
+  (`needs_configs = False`) and builds only the reference's source and the
+  results (`--map` builds everything, as mappers reach other sources and
+  the globals). It prints the summary; a record's JSON only with
+  `--cache STAGE`; `--validate` exits 1 on an invalid record. Plain text,
+  no Rich.
+* **`viz.graph_data(cfgs, a, b, reconciler_class=None)`** returns
+  `{"yuid", "from", "to", "graph", "labels", "nodes", "edges", "ends",
+  "path"}`; `lux viz` draws from it, unchanged.
+
+Run against the local instance's Postgres stores: `lux show
+aat:300266319` found the datacache row, the recordcache record under its
+typed key and the nine-member identity (through `get_cluster`); `lux show
+<uuid>` found the same identity by trying the slugs.
 
 ## Tests
 

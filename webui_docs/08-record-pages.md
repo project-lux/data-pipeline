@@ -27,7 +27,8 @@ Look anything up and see its journey through the pipeline; sample a cache.
 ```python
 def resolve_data(state, q, source=None) -> dict          # asdict(records.resolve(...)); ValueError -> 400 with the message
 def journey_data(state, q, source=None, mapped=False) -> dict
-    # state.source(ref.source["name"]) first so the caches exist; idmap=state.idmap(); records.journey(...)
+    # state.source(ref.source) (and merged / marklogic) first so the caches exist; idmap=state.idmap(); records.journey(..., mapped=mapped)
+    # stages: datacache, recordcache, reconciled, mapped, identity, rewritten, merged, marklogic (W05)
     # rows serialised: data kept as objects; times as ISO strings; plus "sizes": {cache: len(json.dumps(data))}
 def sample_data(state, source, cache, typ=None, since=None, n=50) -> {"keys": [...], "cache": ..., "cost_note": "type filter scans the cache" if typ}
 def validate_data(state, q, cache) -> {"valid": bool, "errors": [...]} ; FileNotFoundError -> 409 with the schema message and the `lux initialize` hint

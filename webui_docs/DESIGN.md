@@ -325,13 +325,18 @@ know is legal (sources carry source-specific keys).
 `manage-data.py --debug-record` do by hand:
 
 ```python
-def resolve(cfgs, text, source=None) -> Ref     # Ref(kind: "yuid"|"uri"|"curie"|"identifier", source cfg or None, identifier, uri, typed_key)
-def journey(cfgs, ref) -> dict                  # {"datacache": row|None, "mapped": rec|None, "recordcache": row|None,
-                                                #  "identity": {"yuid", "members": [...]}|None, "merged": row|None, "marklogic": row|None}
+def resolve(cfgs, text, source=None) -> Ref     # Ref(kind: "yuid"|"uri"|"curie"|"identifier", source name, group, identifier, uri, rectype, uuid)
+def journey(cfgs, ref, *, mapped=False, idmap=None) -> dict
+    # {"datacache", "recordcache", "reconciled", "rewritten", "merged", "marklogic": {"key", "row"} | None,
+    #  "mapped": {"records"} | None, "identity": {"yuid", "uuid", "key", "members"} | None, "notes": [...]}
+def instantiate_source(cfgs, name) -> dict      # builds a source once (Config.instantiate rebuilds every call)
 def sample(cache, n=50, typ=None, since=None) -> list[str]
-def validate(cfgs, rec) -> list[str]
-def identity_graph(cfgs, uri_a, uri_b) -> dict  # viz.replay + node_labels + graph_edges + shortest_path, as JSON
+def validate(cfgs, row) -> list[str]
+def identity_graph(cfgs, uri_a, uri_b) -> dict  # viz.graph_data: nodes, edges, path, ...
 ```
+
+(Built in W05, 2026-11-02; see `05-record-inspection-service.md`, "As
+built".)
 
 Keys: internal record caches hold bare identifiers, external ones
 `identifier##quaType` (until `refactor_docs/42` changes that); `merged` /
@@ -355,8 +360,9 @@ while identify rewrites it). The rule:
   is what Configuration, Dashboard, Commands and Runs pages use. They
   never touch a store.
 * Records, Counts and Health pages ask `AppState.source(name)`, which
-  calls `cfgs.instantiate(name, group)` for that source only (idempotent:
-  `instantiate` returns the components already built), and
+  calls `records.instantiate_source(cfgs, name)` for that source only
+  (`Config.instantiate` itself rebuilds a source on every call, opening
+  new connections; `instantiate_source` builds it once), and
   `AppState.idmap()`, which calls `cfgs.get_idmap()` and then
   `disable_memory_cache()` so a long-lived server never answers from a
   stale in-process cache after identify rewrote the map.
