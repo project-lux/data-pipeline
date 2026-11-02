@@ -82,7 +82,7 @@ def add_profile_arg(ap):
     ap.add_argument("--profile", action="store_true",
                     help="Profile every worker with cProfile (as LUX_PROFILE=1): "
                          "profile-<phase>-<slice>.prof beside the timing JSON in log_dir; "
-                         "read with timing-report.py --profile")
+                         "read with lux timing-report --profile")
 
 
 def enable_profiling(args):

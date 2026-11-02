@@ -22,7 +22,7 @@ A fourth question needs a profiler: *which Python function* inside a stage.
 `PhaseTimer(profile=True)`, or ``LUX_PROFILE=1`` in the environment (what
 `lux reconcile|merge|export --profile` sets for its workers), runs cProfile
 from the timer's start to its finish and writes the stats as
-``profile-<phase>-<slice>.prof`` beside the timing JSON; ``timing-report.py
+``profile-<phase>-<slice>.prof`` beside the timing JSON; ``lux timing-report
 --profile`` adds them up across slices. cProfile slows python-bound code
 down considerably, so the timing numbers of a profiled run are not
 comparable with an unprofiled one.

@@ -169,9 +169,9 @@ Whatever the engine, every worker writes
 ## Where the time went
 
 Every phase writes `timing-<phase>-<slice>.json` to `log_dir`;
-`python timing-report.py` adds the slices up, stage by stage (`--compare
+`lux timing-report` adds the slices up, stage by stage (`--compare
 old/ new/` sets two runs side by side). To see which functions inside a
 stage are slow, run the phase with `--profile` (or `LUX_PROFILE=1` in the
 environment, which the legacy scripts honour too), then
-`python timing-report.py --profile`. Profiling slows the phase down, so
+`lux timing-report --profile`. Profiling slows the phase down, so
 don't compare a profiled run's timings with an unprofiled one.
