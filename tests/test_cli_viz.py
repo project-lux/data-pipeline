@@ -266,3 +266,29 @@ def test_reconcile_uris_unchanged_without_debug():
     off.reconcile_uris(rec_off)
     assert rec_on == rec_off
     assert off.debug_graph == {}
+
+
+# --- graph_data: what lux viz draws, as data (web UI item W05) ----------------
+
+
+def test_graph_data_is_what_process_draws(monkeypatch):
+    a, w, y = NS["aat"] + "1", NS["wd"] + "Q1", NS["ycba"] + "7"
+    idmap = {f"{a}##quaType": "yuid1", f"{y}##quaType": "yuid1",
+             "yuid1": [f"{y}##quaType", f"{a}##quaType", f"{w}##quaType"]}
+    monkeypatch.setattr(FakeReconciler, "links", {y: [(w, "uri")], a: [(w, "nm")]})
+    data = viz.graph_data(Cfgs(idmap), a, y, reconciler_class=FakeReconciler)
+    assert data["yuid"] == "yuid1" and (data["from"], data["to"]) == (a, y)
+    assert data["nodes"] == [{"id": "ycba:0", "uri": y, "source": "ycba"},
+                             {"id": "wd:1", "uri": w, "source": "wd"},
+                             {"id": "aat:2", "uri": a, "source": "aat"}]
+    assert data["edges"] == [{"from": "ycba:0", "to": "wd:1", "kind": "uri"},
+                             {"from": "aat:2", "to": "wd:1", "kind": "nm"}]
+    assert data["ends"] == ["aat:2", "ycba:0"] and data["path"] == ["aat:2", "wd:1", "ycba:0"]
+
+
+def test_graph_data_with_nothing_recorded(monkeypatch):
+    a, y = NS["aat"] + "1", NS["ycba"] + "7"
+    idmap = {f"{a}##quaType": "yuid1", f"{y}##quaType": "yuid1", "yuid1": [f"{a}##quaType"]}
+    monkeypatch.setattr(FakeReconciler, "links", {})
+    data = viz.graph_data(Cfgs(idmap), a, y, reconciler_class=FakeReconciler)
+    assert (data["graph"], data["nodes"], data["edges"], data["path"]) == ({}, [], [], None)

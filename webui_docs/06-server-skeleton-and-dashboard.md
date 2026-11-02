@@ -55,7 +55,7 @@ Health page, and the test harness.
 class AppState:
     def __init__(self, settings): self.settings = settings; self._cfgs = None; self._idmap = None; self.lock = threading.RLock(); self.started = time.time()
     def configs(self) -> Config          # runtime.get_configs(instantiate=False), cached here; never instantiate_all
-    def source(self, name) -> dict       # group, cfg = _targets.lookup(cfgs, name); cfgs.instantiate(name, group); returns cfg (idempotent)
+    def source(self, name) -> dict       # records.instantiate_source(cfgs, name) (W05): builds the source once; Config.instantiate itself rebuilds on every call
     def idmap(self)                      # cfgs.get_idmap(); disable_memory_cache() if it has it; cached
     def reset(self)                      # shutdown() on every instantiated cache/map that has it (swallow errors), runtime.reset_configs(), clear caches
     def log_dir(self) -> str | None
