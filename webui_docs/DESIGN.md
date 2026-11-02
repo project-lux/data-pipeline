@@ -287,12 +287,18 @@ filled in by `handle_config_record` (one new optional parameter, default
 
 ```python
 def read_record(cfgs, key) -> dict                     # the raw JSON from the file, not the live cfg dict
-def validate_record(cfgs, key, data) -> list[str]      # problems; [] means writable
-def write_record(cfgs, key, data) -> str               # path written; atomic, indent=4, trailing newline
+def validate_record(cfgs, key, data) -> list[str]      # problems; [] means writable; "warning: ..." ones do not block
+def check_record(cfgs, key) -> list[str]               # the file as it is: its text (a key twice) and its data
+def write_record(cfgs, key, data) -> (path, warnings)  # in place: only the changed keys, in the file's own layout
+def write_text(cfgs, key, text) -> (path, warnings)    # an editor's text, verbatim, once it validates
 def delete_record(cfgs, key) -> str
-def new_record(cfgs, key, data, store=None) -> str     # into the main directory or a named sub-config store
-def diff_record(cfgs, key, data) -> str                # unified diff of the file as it would be written
+def new_record(cfgs, key, data, store=None)            # into the main directory or a sub-config store, indented as its neighbours
+def diff_record(cfgs, key, data) -> str                # unified diff of what write_record would change
 ```
+
+(Built in W04, 2026-11-02. The configuration files are kept in git and
+written in four layouts, so writes never reformat a file; see
+`04-config-store-and-schema.md`, "As built".)
 
 The live `cfg` dicts are **not** what is edited: `instantiate` adds
 `datacache`, `mapper`, `all_configs` and resolved paths to them, and

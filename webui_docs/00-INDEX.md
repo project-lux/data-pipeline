@@ -16,7 +16,7 @@ more. Tick the box in the PR that lands the item.
 | W01 | [Run files: shared reader, `.run` records, `list_runs`](01-run-files-and-shared-state.md) | M | — | ☑ |
 | W02 | [Command introspection (`cli/introspect.py`)](02-command-introspection.md) | S | — | ☑ |
 | W03 | [Data functions for counts, testinstall and list](03-data-functions-counts-checks.md) | S | — | ☑ |
-| W04 | [Config store, key catalogue and `lux config`](04-config-store-and-schema.md) | M | W00 | ☐ |
+| W04 | [Config store, key catalogue and `lux config`](04-config-store-and-schema.md) | M | W00 | ☑ |
 | W05 | [Record inspection service and `lux show`](05-record-inspection-service.md) | M | W00 | ☐ |
 | W06 | [Server skeleton, `lux serve`, dashboard, health](06-server-skeleton-and-dashboard.md) | L | W00, W01, W03 | ☐ |
 | W07 | [Configuration pages](07-config-pages.md) | L | W04, W06 | ☐ |

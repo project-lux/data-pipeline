@@ -41,14 +41,15 @@ base `base_dir`.
 
 ### Record page (`/config/{key}`)
 
-`record_data(state, key) -> {"key", "type", "path", "store", "raw": read_record(...), "text": dumps(raw), "fields": [...], "unknown": [keys not in schema], "defaults": {class key: default class}, "problems": validate_record(...)}`
+`record_data(state, key) -> {"key", "type", "path", "store", "raw": read_record(...), "text": read_text(...), "fields": [...], "unknown": [keys not in schema], "defaults": config_schema.class_defaults(type), "problems": check_record(...)}`
+(`text` is the file as it is, never re-dumped: W04 keeps every file's layout)
 where `fields` is, for every key in `config_schema.keys_for(type)` that is
 present **or** is a `*Class` key with a default, `{"key", "type", "help",
 "value", "present", "default", "resolved"}` — `resolved` for a path key is
 the absolute path the live cfg has (`cfgs.internal[key][k]` after
 `instantiate` resolved it; show "(not resolved until instantiated)" if it
-is still relative), for a class key the result of `importObject` ("ok",
-"legacy path → new", or the error).
+is still relative), for a class key `config_store.resolve_class` ("ok",
+"old path → the current one", or the error).
 
 Fields tab: inputs by type (`bool` → checkbox with an "unset" option, `int`
 → number, `list`/`dict` → a small JSON textarea, `class`/`path`/`str` →
@@ -56,6 +57,11 @@ text, `enum` → select). Changing a field updates the JSON tab (the JSON is
 the source of truth; `editor.js` keeps a single object and re-renders both
 tabs from it). Unknown keys are listed under the fields with their raw
 value read-only and a "edit in JSON" link.
+
+Saving: the Fields tab saves with `write_record` (only the changed keys
+change, in the file's layout); the JSON tab saves the textarea with
+`write_text` (verbatim: the person's layout). Both return `(path,
+warnings)`.
 
 JSON tab: a `<textarea>` with the record text, a line/column error message
 on invalid JSON, *Validate* (POST `/validate`), *Diff* (POST `/diff`,
@@ -85,12 +91,10 @@ how many records were read.
   in it. `read_record` only.
 * `state.reset()` closes stores; if a Records page request is in flight
   it may fail once. Acceptable; `AppState.lock` serialises the reset.
-* `textarea` round trip must preserve the file byte for byte when
-  nothing changed: `diff_record` on unchanged text must be empty — tabs
-  and key order included. `dumps` is canonical (indent 4), so a file that
-  was hand-formatted differently shows a whitespace-only diff on first
-  save; the diff view says "formatting only" when `json.loads` of both
-  sides is equal.
+* The textarea holds the file's text (`read_text`), so an unchanged save
+  is byte for byte the file; for the Fields tab, `diff_record` of
+  unchanged data is empty and `write_record` does not touch the file
+  (W04).
 * CSRF on every POST (W06 middleware); the validate/diff XHRs send the
   header.
 * Big records (`base.json`, wikidata) are fine in a textarea; do not add a
@@ -114,8 +118,8 @@ how many records were read.
   legacy message.
 * `POST /config/aat/validate` with a bad `mapperClass` returns the problem;
   with valid text returns `[]`.
-* `POST /config/aat` with `merge_order` changed writes the file (compare
-  with `dumps`), reloads (`/api/config/aat` shows the new value, and
+* `POST /config/aat` with `merge_order` changed writes the file (one
+  changed line), reloads (`/api/config/aat` shows the new value, and
   `state.configs().external["aat"]["merge_order"]` too); with invalid JSON
   returns 400 and the response body contains the submitted text.
 * While a fake running run exists, save is 409 without `force`, 200 with.

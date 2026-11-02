@@ -146,6 +146,15 @@ def source_indexes(cfg):
     return ordered
 
 
+def record_origin(cache, key, store=None):
+    """``{"store": store, "path": <the record's file>}`` for record `key`
+    of a configuration cache; the path is None for a store that is not a
+    directory of files."""
+    path_of = getattr(cache, "_path", None)
+    path = os.path.abspath(path_of(key)) if path_of is not None else None
+    return {"store": store, "path": path}
+
+
 class IndexSpec:
     """A configured index, not yet opened: ``name``, ``path``, the store
     class and its map size. ``open(flag)`` opens it; nothing is opened at
@@ -193,6 +202,13 @@ class Config(object):
         # whose records are more configuration (item 35). Loaded after the
         # main directory, in key order; see load_subconfig_store()
         self.subconfig_stores = {}
+        # {record key: {"store": None | sub-config store key, "path": file or
+        # None}}: where each record was read from, so it can be written back
+        # (lux_pipeline.config_store). A later record with the same key
+        # replaces an earlier one here as everywhere else
+        self.record_origins = {}
+        # "system" or "base": the record the machine settings came from
+        self.base_record_key = None
         # Flattened (match, source) pairs; built lazily on first split_uri()
         self._match_pairs = None
         # canonicalize() is a pure function of the URI (the fix_identifier
@@ -232,6 +248,7 @@ class Config(object):
         for name in ("system", "base"):
             if name in configcache:
                 base = configcache[name]
+                self.base_record_key = name
                 break
         if base is None:
             raise ValueError(
@@ -292,7 +309,7 @@ class Config(object):
 
         for k in configcache.iter_keys():
             rec = configcache[k]["data"]
-            self.handle_config_record(k, rec)
+            self.handle_config_record(k, rec, origin=record_origin(configcache, k))
 
         # Sub-config stores, after every record of the main directory so the
         # defaults they may need are complete. A store may itself hold a
@@ -313,14 +330,17 @@ class Config(object):
         if self.caches and not self.defaults["cache"]:
             self.defaults["cache"] = self.caches
 
-    def handle_config_record(self, k, rec):
+    def handle_config_record(self, k, rec, origin=None):
         """File one configuration record where the rest of the code looks
-        for it, by its `type`. Sub-config stores (item 35) reuse this."""
+        for it, by its `type`. Sub-config stores (item 35) reuse this.
+        `origin` (``{"store", "path"}``) is kept in `record_origins`."""
         if type(rec) is not dict:
             raise ValueError(f"Config record {k} is a {type(rec).__name__}, not a dict")
         if "type" not in rec:
             raise ValueError(f"Config record {k} has no 'type': {rec}")
         typ = rec["type"]
+        if origin is not None:
+            self.record_origins[k] = origin
         if typ == "internal":
             self.internal[k] = rec
         elif typ == "external":
@@ -637,7 +657,7 @@ class Config(object):
         n = 0
         for k in cache.iter_keys():
             rec = cache[k]["data"]
-            self.handle_config_record(k, rec)
+            self.handle_config_record(k, rec, origin=record_origin(cache, k, key))
             n += 1
         logger.debug(f"Read {n} configuration records from sub-config store {key}")
         return n

@@ -132,7 +132,7 @@ def sample(o, tmp_path):
         one = str(f)
     if one is None:
         one = "x1"
-    if o["repeat"] or isinstance(o["nargs"], int):
+    if o["repeat"] or isinstance(o["nargs"], int) or o["nargs"] in ("*", "+"):
         return [one, one.replace("1", "2") if isinstance(one, str) else one + 1]
     return one
 

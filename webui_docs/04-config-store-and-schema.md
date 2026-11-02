@@ -1,6 +1,6 @@
 # W04. Config store, key catalogue and `lux config`
 
-**Size:** M · **Depends on:** — · **Unblocks:** W07
+**Size:** M · **Depends on:** W00 · **Unblocks:** W07 · **Done:** 2026-11-02
 **Read:** `lux_pipeline/config.py` (`Config.__init__` from the bootstrap
 `FsCache` down to the sub-config loop, `handle_config_record`,
 `process_base`, `instantiate`, `instantiate_map`, `instantiate_ml`,
@@ -197,6 +197,81 @@ problem.
    `diff_record`, `write_record`, `new_record`, `delete_record`, `set_key`.
 3. `config_schema.py`; then `validate_record` using it.
 4. `lux config`; docs rows.
+
+## As built
+
+The design above, changed where the live configuration showed it was
+wrong. Before writing anything, every record of the build machine's
+copies (37) and of pipeline-configs (44, three sub-config stores) was
+surveyed; `lux config check` reports **no errors on either**, nor on the
+local instance (whose 45 warnings are all pre-rename class paths).
+
+**Writes keep the file's layout (the biggest change).** The files are
+not in `json.dumps(indent=4)` form: 26 are 4-space, 24 2-space, 8 tab
+indented, and 23 hand-grouped with blank lines. Re-dumping a record would
+turn a one-key change into a whole-file diff in pipeline-configs. So:
+
+* `write_record(cfgs, key, data) -> (path, warnings)` changes the file
+  in place (`edit_text`): it finds each top-level member in the text and
+  rewrites only those whose value changed, in the file's own indentation;
+  an added member goes after the last one, a removed one takes its line
+  and comma and leaves a blank group-separating line alone. A change that
+  alters no data never touches the file. A file it cannot edit in place
+  (a key written twice, an edit that would not read back) is written whole
+  in its own indentation.
+* `write_text(cfgs, key, text) -> (path, warnings)` writes an editor's
+  buffer verbatim once it parses and validates: `lux config edit` uses it,
+  and so should W07's JSON tab.
+* `new_record` indents a new file as the records already in its directory
+  (2 spaces in pipeline-configs' stores).
+* `dumps(data, style)` and `file_style(text)` are the style helpers.
+
+`lux config set` on copies of both configurations changed exactly one
+line each time, in 2-space, mixed tab/space and hand-grouped files.
+
+**Checks.**
+* `validate_record` as designed, except: `name` must equal the key only
+  for sources (internal, external, results); map, MarkLogic and config
+  records are looked up by name, which must be unique among their type
+  (`map_idmap` is named `idmap`). Each type's required keys must be
+  present and non-empty: a source's `namespace`, a map's `storeClass`, a
+  MarkLogic store's endpoints and `auth`, a config store's `base_dir`, and
+  base's `base_dir`, `data_dir`, `exports_dir` and `idmap_name`.
+* Class paths are resolved without `importObject`'s logging
+  (`resolve_class` returns the class, the error, and the current path for
+  a pre-rename one). `globals` is exempt from the `*Class` check: it has a
+  taxonomic rank called `Class` (`Q37517`).
+* `file_problems(text)` and `check_record(cfgs, key)` add what only the
+  text shows: a key written twice. **Both live `globals.json` have
+  `Subgenus` twice** (the same value, `Q3238261`, so harmless); `lux config
+  check` reports it as a warning. Not fixed here: pipeline-configs is its
+  own repository.
+* `build` (refactor_docs/42) is not a record type until that item lands:
+  `Config` rejects it, so the validator does too.
+
+**The catalogue** (`config_schema.py`) lists every key the two
+configurations use, with what reads it. Two keys nothing reads are
+marked `unused`: base's `subconfigs` (pipeline-configs' `system.json`) and
+the caches' `refresh_delta`. `web` (W06) is `planned`. Class defaults
+depend on the role (`class_defaults("internal")` has the `ASHarvester`).
+`template(type, name)` gives the keys a person must fill in, empty, so a
+template never validates until they are.
+
+**`lux config`** is `lux config ACTION [KEY [PATH VALUE]]`
+(one positional list after the action, so `lux_pipeline.cli.introspect`
+round-trips it). It reads the configuration without instantiating it
+(`needs_configs = False`), so no database is needed. `new` without input
+prints the template and what to fill in, and writes nothing. `delete`
+asks for the key to be typed and refuses without a terminal unless
+`--force`. It is in `introspect.NOT_RUNNABLE` (W07 has its own pages; `edit`
+opens an editor).
+
+**Config.** `record_origins` and `base_record_key` as designed;
+`record_origin(cache, key, store)` builds an entry.
+
+**Fixture.** `tests/webui_fixtures.add_subconfig_store(root, name,
+move, indent)` gives the W00 installation a sub-config store, as
+pipeline-configs has.
 
 ## Tests
 
