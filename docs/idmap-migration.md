@@ -134,13 +134,13 @@ idmap, and merge — the longest phase — ran at 12.2% iowait with 58.9% of its
 active statements in `IO/DataFileRead` while a third of the machine sat
 unused. See `docs/performance-backlog.md` §2.2. The rule is not a fraction of
 RAM: size the pool to hold the identity map with room for merge's own writes
-to stream past it, which is what `pg-tune.py` now does by measuring the table
+to stream past it, which is what `lux pg-tune` now does by measuring the table
 rather than applying a percentage.
 
 That machine spec is measured, from a `top` during a run; this paragraph
 previously said 80 GB / 32 vCPU, which was wrong in both halves and would have
 you size `max_connections` and the parallelism settings for a smaller machine.
-Rather than trusting any figure here, run `pg-tune.py`, which reads both the
+Rather than trusting any figure here, run `lux pg-tune`, which reads both the
 machine and the database.
 
 `shared_buffers` and `max_connections` need a full restart, not a reload.
@@ -156,7 +156,7 @@ Redis it was 96, just under the old limit of 100, which is why this never bit
 before. The map stores deliberately share connections rather than taking one
 each; a connection per map would be six a worker, or 288.
 
-`pg-tune.py` works this out for you: it reads the server's
+`lux pg-tune` works this out for you: it reads the server's
 `synchronous_commit` and sizes `max_connections` to match.
 
 ### WAL, for a write-heavy phase on provisioned-IOPS storage

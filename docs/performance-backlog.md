@@ -16,7 +16,7 @@ against.
 **The machine: 36 vCPU, 72 GiB** (70,214 MiB visible), Postgres on an AWS io2
 volume, 24 worker processes. Measured from a `top` during run 3 — see §2.1.
 `docs/idmap-migration.md` used to say 32 vCPU / 80 GB, which was wrong in both
-halves; it has been corrected, but prefer `pg-tune.py`, which reads the
+halves; it has been corrected, but prefer `lux pg-tune`, which reads the
 machine rather than trusting a document.
 
 ### Run 1 (postgres only, no redis)
@@ -143,9 +143,9 @@ after.
 
 **Act on this:** `autovacuum_max_workers` is at the default 3 on a 36-core
 box and all three are busy, while `idmap` has never been vacuumed at all
-(§3.8). `pg-tune.py` recommends 8 here.
+(§3.8). `lux pg-tune` recommends 8 here.
 
-`pg-tune.py` prints the server settings this workload wants, sized to the
+`lux pg-tune` prints the server settings this workload wants, sized to the
 machine, including everything in this list that is a setting rather than a
 measurement (`pg_stat_statements`, `track_io_timing`, `log_lock_waits`,
 `log_autovacuum_min_duration`). It changes nothing -- it prints SQL to review.
@@ -227,7 +227,7 @@ So the two phases want different things, and the hardware answer splits:
 
 Merge is the longer phase, so if only one thing gets bought, buy RAM.
 
-**`pg-tune.py` now emits all three.** It measures `idmap` and `idmap_yuid`
+**`lux pg-tune` now emits all three.** It measures `idmap` and `idmap_yuid`
 with `pg_total_relation_size` and sizes `shared_buffers` to 1.75x that —
 32 GB on this box — instead of the 25% of RAM that produced the 19.5 GB
 above; it prints the `REINDEX` and reads the real index names out of
@@ -575,7 +575,7 @@ reference-queue call inside it.
 
 Per worker, **4 connections becomes 3**. At 48 workers that is 144 rather than
 192, the difference between needing `max_connections` above 100 and not.
-`pg-tune.py` reads the server's setting and sizes `max_connections` to match.
+`lux pg-tune` reads the server's setting and sizes `max_connections` to match.
 Pinned in `tests/test_refs_connection.py`.
 
 **Verify:** each worker log prints `refs: sharing the idmap connection` once at
@@ -991,7 +991,7 @@ What to watch, in the order it would break:
 * **Lock waits.** Reconcile's workers upsert the same external authority rows
   (`collector.collect()`), and that is the one thing more concurrency makes
   worse. It is at *zero* ungranted locks today, so there is real room, but
-  `log_lock_waits` (which `pg-tune.py` turns on) is what will say when it runs
+  `log_lock_waits` (which `lux pg-tune` turns on) is what will say when it runs
   out.
 * **Connections.** 32 x 3 = 96 after §3.7, or 128 without it. Check
   `max_connections` before the run, not during.
