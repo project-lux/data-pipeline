@@ -171,7 +171,9 @@ Whatever the engine, every worker writes
 Every phase writes `timing-<phase>-<slice>.json` to `log_dir`;
 `lux timing-report` adds the slices up, stage by stage, phase by phase in
 build order, and ends with all the phases together: start to end, the time
-between phases, and the stages that cost the most elapsed time (`--compare
+between phases, and the stages that cost the most elapsed time. Beside the
+workers' own cpu it shows what postgres used and how busy the machine was
+(iowait on Linux): a worker waiting on postgres looks idle from inside (`--compare
 old/ new/` sets two runs side by side; `lux --no-ui timing-report` prints
 plain text for a log or a diff). To see which functions inside a
 stage are slow, run the phase with `--profile` (or `LUX_PROFILE=1` in the

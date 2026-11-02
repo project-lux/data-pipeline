@@ -19,3 +19,4 @@ python-dotenv
 pyluach
 PyYAML
 rich
+psutil; sys_platform != 'linux'

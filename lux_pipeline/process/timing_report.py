@@ -24,6 +24,7 @@ from collections import defaultdict
 # One definition of "a dotted name is nested inside its prefix", shared with
 # the timer that writes the JSON -- see split_stages' docstring for what
 # counting them twice did to the unattributed figure.
+from lux_pipeline.process import host_cpu
 from lux_pipeline.process.timing import split_stages
 
 logger = logging.getLogger("lux_pipeline")
@@ -119,7 +120,9 @@ def summarise(runs):
     accounted = sum(s[1] for s in top.values())
     starts = [r["started_at"] for r in runs if r.get("started_at") is not None]
     ends = [r["updated_at"] for r in runs if r.get("updated_at") is not None]
+    first, last = host_window(runs)
     return {
+        "host": host_cpu.delta(first, last),
         "started_at": min(starts) if starts else None,
         "ended_at": max(ends) if ends else None,
         "times_estimated": any(r.get("times_estimated") for r in runs),
@@ -145,6 +148,43 @@ def stale_note(files):
     shown = ", ".join(files[:4]) + (f", ... ({len(files) - 4} more)" if len(files) > 4 else "")
     return (f"{len(files)} file{'s' if len(files) != 1 else ''} of an earlier run with a "
             f"different number of slices: {shown}")
+
+
+def host_window(runs):
+    """The earliest start and latest snapshot `host_cpu` readings among
+    `runs` (timing JSON), or ``(None, None)`` for files without them."""
+    readings = [r["host_cpu"] for r in runs if r.get("host_cpu")]
+    starts = [h["start"] for h in readings if h.get("start")]
+    nows = [h["now"] for h in readings if h.get("now")]
+    if not starts or not nows:
+        return None, None
+    return min(starts, key=lambda h: h["at"]), max(nows, key=lambda h: h["at"])
+
+
+def postgres_meanwhile(h):
+    """`` (postgres kept N cores busy meanwhile)`` for the off-cpu hint, or
+    nothing without a postgres reading."""
+    if not h or h.get("postgres_cores") is None:
+        return ""
+    return f" (postgres kept {h['postgres_cores']:.1f} cores busy meanwhile)"
+
+
+def host_line(h, python_cpu):
+    """Postgres's and the machine's cpu over a window, beside the workers'
+    `python_cpu` seconds, as one line; None without readings."""
+    if not h:
+        return None
+    parts = []
+    if h["postgres"] is not None:
+        parts.append(f"postgres {h['postgres'] / 3600:.1f} cpu-hours "
+                     f"({h['postgres_cores']:.1f} cores) beside the workers' "
+                     f"{python_cpu / 3600:.1f}")
+    if h["busy_percent"] is not None:
+        parts.append(f"machine {h['busy_percent']:.0f}% busy"
+                     + (f", {h['iowait_percent']:.0f}% iowait"
+                        if h["iowait_percent"] is not None else "")
+                     + (f" over {h['cpus']} cpus" if h["cpus"] else ""))
+    return "; ".join(parts)
 
 
 def slice_rates(s):
@@ -182,12 +222,15 @@ def report_lines(phase, s, stragglers=True):
                + (f", {s['skipped']:,} skipped" if s["skipped"] else ""))
     out.append(f"  {s['worker_seconds'] / 3600:.1f} worker-hours, "
                f"{s['cpu_seconds'] / 3600:.1f} cpu-hours = {s['cpu_percent']:.0f}% cpu")
+    hl = host_line(s.get("host"), s["cpu_seconds"])
+    if hl:
+        out.append(f"  {hl}")
     idle = 100 - s["cpu_percent"]
     if s.get("stale_files"):
         out.append(f"  ignored {stale_note(s['stale_files'])}")
     if idle > 20:
         out.append(f"  workers are off-cpu {idle:.0f}% of the time -- the stages below "
-                   f"say what they are waiting in")
+                   f"say what they are waiting in" + postgres_meanwhile(s.get("host")))
 
     if s["stages"]:
         out.append(f"\n  {'stage':<20} {'worker-hrs':>11} {'% worker':>9} "
@@ -409,7 +452,9 @@ def overall_summary(phases, top=TOP_BOTTLENECKS):
     * ``gaps``: ``(after, before, seconds)`` for consecutive phases more
       than `GAP_WARNING` apart, which are likely from different builds
     * ``wall``: the phases' wall clocks added up; ``worker_seconds``,
-      ``cpu_seconds``, ``cpu_percent`` across them all
+      ``cpu_seconds``, ``cpu_percent`` across them all (the workers' own)
+    * ``host``: `host_cpu.delta` from the first phase's start to the last
+      phase's end -- postgres's cpu and the machine's -- or None
     * ``bottlenecks``: the `top` largest ``(phase, stage, seconds, share)``,
       where seconds is the phase's wall clock apportioned by the stage's
       share of its worker time -- the elapsed time it accounts for -- and
@@ -445,6 +490,13 @@ def overall_summary(phases, top=TOP_BOTTLENECKS):
         if reach is None or r[2] > reach:
             reach, prev = r[2], r[0]
 
+    # the whole span at once: phases overlap (merge-refs runs while the
+    # last merge slices finish), so their own windows would count it twice
+    windows = [host_window(s["runs"]) for _, s in rows]
+    firsts = [w[0] for w in windows if w[0]]
+    lasts = [w[1] for w in windows if w[1]]
+    host = (host_cpu.delta(min(firsts, key=lambda h: h["at"]), max(lasts, key=lambda h: h["at"]))
+            if firsts and lasts else None)
     wall = sum(s["wall"] for _, s in rows)
     worker = sum(s["worker_seconds"] for _, s in rows)
     cpu = sum(s["cpu_seconds"] for _, s in rows)
@@ -482,7 +534,7 @@ def overall_summary(phases, top=TOP_BOTTLENECKS):
         "in_phases": in_phases,
         "between": elapsed - in_phases if timeline else None,
         "timeline": timeline, "gaps": gaps,
-        "wall": wall, "worker_seconds": worker, "cpu_seconds": cpu,
+        "wall": wall, "worker_seconds": worker, "cpu_seconds": cpu, "host": host,
         "cpu_percent": cpu / worker * 100 if worker else 0,
         "bottlenecks": bottlenecks, "stragglers": stragglers, "spread_out": spread_out,
         "incomplete": [ph for ph, s in rows if s["complete"] < s["slices"]],
@@ -512,6 +564,9 @@ def summary_lines(t):
     out.append(f"  {fmt_duration(t['wall'])} of phase wall clock added up, "
                f"{t['worker_seconds'] / 3600:.1f} worker-hours, "
                f"{t['cpu_percent']:.0f}% cpu")
+    hl = host_line(t["host"], t["cpu_seconds"])
+    if hl:
+        out.append(f"  start to end: {hl}")
     if t["timeline"]:
         out.append(f"\n  {'phase':<20} {'started':>16} {'finished':>16} {'wall':>9}")
         for ph, s, e, w, done in t["timeline"]:
