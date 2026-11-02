@@ -1,4 +1,4 @@
-"""`lux differents` (DifferentsManager): the wikidata process_equivs rules
+"""`lux build-differents` (DifferentsManager): the wikidata process_equivs rules
 (P1889 and disambiguation pages) written as full URI pairs, sliced parts
 merged sorted and unique into <data_dir>/differentFrom/<source>.csv, a
 missing part refused, --my-worker writing only its part, --load adding the
@@ -177,9 +177,9 @@ def test_sources_without_process_equivs_are_skipped(tmp_path):
 
 
 def test_cli_lists_and_parses(tmp_path):
-    from lux_pipeline.cli import differents as cli
+    from lux_pipeline.cli import build_differents as cli
     from lux_pipeline.cli.help import list_commands
-    assert "differents" in dict(list_commands())
+    assert "build-differents" in dict(list_commands())
     from argparse import ArgumentParser
     ap = ArgumentParser()
     cli.CommandHandler(None).add_args(ap)

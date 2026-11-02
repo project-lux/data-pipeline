@@ -62,7 +62,7 @@ class WdLoader(WdFetcher, WdConfigManager, Loader):
 
     def _load_dump(self, slicen, maxSlice):
         opener = bz2.open if self.in_path.endswith(".bz2") else gzip.open
-        # Different-from pairs are not written here: `lux differents`
+        # Different-from pairs are not written here: `lux build-differents`
         # builds them from the datacache as URIs the merged index can load
         with opener(self.in_path, "rt") as fh, \
             open(os.path.join(self.configs.temp_dir, f'wd_equivs_{slicen}.csv'), 'w') as efh:

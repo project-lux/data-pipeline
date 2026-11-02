@@ -1,6 +1,6 @@
 """`DifferentsManager`: write a source's own "different from" assertions as
 a CSV of URI pairs for the merged differents index. The manager behind
-`lux differents`; replaces the root ``make-wd-differents.py``.
+`lux build-differents`; replaces the root ``make-wd-differents.py``.
 
 A source takes part when one of its components (mapper, reconciler or
 loader, the first that has it) has ``process_equivs(record)`` returning
@@ -195,7 +195,7 @@ class DifferentsManager(TaskManager):
             out[name] = counts
             est = getattr(cache, "len_estimate", None)
             total = (est() if est else 0) // (mx if sliced else 1)
-            progress(phase="differents", description=name, total=total, completed=0)
+            progress(phase="build-differents", description=name, total=total, completed=0)
             pairs = set()
             records = cache.iter_records_slice(n, mx) if sliced else cache.iter_records()
             for rec in records:

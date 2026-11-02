@@ -1,9 +1,9 @@
 """Write sources' own different-from assertions as CSVs, and optionally load them.
 
-    lux differents --source wikidata --max-workers 24          # <data_dir>/differentFrom/wikidata.csv
-    lux differents --source wikidata --max-workers 24 --load   # ... and add it to the merged index
-    lux differents --source wikidata --max-workers 24 --my-worker 3 --engine null
-    lux differents --source wikidata --max-workers 24 --merge-only --load
+    lux build-differents --source wikidata --max-workers 24          # <data_dir>/differentFrom/wikidata.csv
+    lux build-differents --source wikidata --max-workers 24 --load   # ... and add it to the merged index
+    lux build-differents --source wikidata --max-workers 24 --my-worker 3 --engine null
+    lux build-differents --source wikidata --max-workers 24 --merge-only --load
 
 Replaces the root ``make-wd-differents.py``. Each worker reads its slice of
 the source's datacache through the source's ``process_equivs`` (wikidata:
@@ -43,7 +43,7 @@ class CommandHandler(CH):
         # called once the options are parsed, before any worker starts; a
         # --my-worker slice loads nothing
         if args.load and getattr(args, "my_worker", -1) == -1:
-            refuse_while_building(self.configs, "differents --load", args.force)
+            refuse_while_building(self.configs, "build-differents --load", args.force)
         return DifferentsManager(self.configs, wks, args)
 
     def process(self, args, rest):

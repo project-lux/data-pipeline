@@ -59,7 +59,7 @@ a running build from another terminal.
 ### 1.6. Regenerate sameAs / differentFrom tables as needed
 
  * Wikidata will have new differentFroms frequently, whereas AAT will not
- * WIKIDATA: `lux differents --source wikidata --max-workers 24` writes
+ * WIKIDATA: `lux build-differents --source wikidata --max-workers 24` writes
    `data/differentFrom/wikidata.csv` from the datacache (`P1889`, and every
    pair of items on a disambiguation page); `--load` also adds it to the
    differentFrom table, as step 1.7 does
