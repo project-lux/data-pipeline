@@ -66,15 +66,19 @@ class Check:
     the same as data in `results`, ``[{"label", "state": "OK" | "WARN" |
     "FAIL", "detail", "required"}]``. A check fails by raising."""
 
-    def __init__(self, out=None):
+    def __init__(self, out=None, on_result=None):
         self.out = out or sys.stdout
         self.failed = False
         self.detail = ""
         self.results = []
+        # called with each result as it is recorded (the web UI streams them)
+        self.on_result = on_result
 
     def record(self, label, state, detail="", required=True, line=None):
-        self.results.append({"label": label, "state": state, "detail": detail,
-                             "required": required})
+        result = {"label": label, "state": state, "detail": detail, "required": required}
+        self.results.append(result)
+        if self.on_result is not None:
+            self.on_result(result)
         if state == "FAIL":
             self.failed = True
         if line is None:
@@ -291,7 +295,7 @@ class CommandHandler(BaseHandler):
                           lambda: self.check_pg_tune(workers), False, "configs"))
         return steps
 
-    def run_checks(self, args, out=None, stop_on_fail=True, cfgs=None):
+    def run_checks(self, args, out=None, stop_on_fail=True, cfgs=None, on_result=None):
         """Run the checks and return their results, ``[{"label", "state",
         "detail", "required"}]`` (`Check.results`), writing a line per
         check to `out` (None: nowhere).
@@ -300,11 +304,12 @@ class CommandHandler(BaseHandler):
         without it every check gets a row, and one that needs what an
         earlier failure left missing reports that instead of running.
         `cfgs`, when given, is the configuration to check (the web UI's
-        own) instead of one built afresh through `lux_pipeline.runtime`."""
+        own) instead of one built afresh through `lux_pipeline.runtime`.
+        `on_result` is called with each result as it is recorded."""
         self.basepath = ""
         self.cfgs = None
         self.given_configs = cfgs
-        check = Check(out if out is not None else io.StringIO())
+        check = Check(out if out is not None else io.StringIO(), on_result)
         missing = {"basepath": "LUX_BASEPATH was not found",
                    "configs": "the configuration did not build"}
         for label, fn, required, needs in self.checks(args):

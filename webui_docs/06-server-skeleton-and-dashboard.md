@@ -1,6 +1,6 @@
 # W06. Server skeleton, `lux serve`, dashboard, health
 
-**Size:** L · **Depends on:** W00, W01, W03 · **Unblocks:** W07–W12
+**Size:** L · **Depends on:** W00, W01, W03 · **Unblocks:** W07–W12 · **Done:** 2026-11-02
 **Read:** `DESIGN.md` §2, §3 (Dashboard), §5; `lux_pipeline/cli/_handler.py`
 (`BaseHandler`, `refuse_while_building`); `lux_pipeline/cli/entry.py`
 (`NO_CONFIG_COMMANDS`, how `needs_configs` is honoured); `lux_pipeline/runtime.py`;
@@ -199,6 +199,63 @@ the suite passes where the extra is not installed.
 5. Health data + page + SSE + tests.
 6. `docs/web.md` skeleton (how to install and start; the rest comes in W13);
    `CLAUDE.md` row; README paragraph.
+
+## As built
+
+As designed above, with these differences (later items build on them):
+
+* **The server's own configuration.** `AppState.configs()` builds a
+  `Config(basepath=runtime.get_basepath())` of its own instead of using
+  `runtime.get_configs()`'s cached one: the health checks
+  (`testinstall.run_checks` with `cfgs=None`) reset and rebuild that,
+  instantiating every source, and must not take the pages' configuration
+  away or rebuild its components. `ConfigUnavailable` (a `RuntimeError`)
+  becomes the 503 page.
+* **Adding an area.** Add its name to `app.AREAS`; write
+  `web/api/<area>.py` with `router = APIRouter(prefix="/api/<area>")` and
+  the data functions, and `web/routers/<area>.py` with `router` (pages,
+  `include_in_schema=False`) and `NAV = (label, href)`. A page is
+  `page(request, "<area>/<template>.html", **context)` (`web/app.py`): it
+  adds `nav`, `settings`, `csrf_token`, `version`, `basepath`,
+  `config_ok`. The navigation lists only areas that exist, so there are no
+  links to pages not built yet; the dashboard's quick actions are left to
+  the items that add their targets (W09, W10, W11).
+* **CSRF and the token are application-wide dependencies**
+  (`FastAPI(dependencies=[...])`, `web/security.py`), not middleware:
+  every route gets them by construction (Starlette middleware cannot read
+  a form body reliably). The token check is in place already: a token is
+  required for a non-loopback bind (`Settings.check`) and checked on every
+  request but `/healthz`; `?token=` once sets a cookie. W13 adds the login
+  form and the rest of the hardening.
+* **Errors:** `ValueError` 400, `RuntimeError` 409, `ConfigUnavailable`
+  503, HTTP errors their status, anything else 500 (its text only with
+  `--debug`); JSON under `/api`, the error page elsewhere (`wants_json`).
+* **No inline scripts or styles.** Progress bars are the native
+  `<progress>` element (no value: the indeterminate bar of a total not
+  known yet), so W13's content security policy needs no `unsafe-inline`.
+  Each page's behaviour is an ES module in `web/static` (`app.js`: clock,
+  running badge, `post()` with the CSRF header; `sse.js`: `subscribe`;
+  `health.js`); data goes in `<script type="application/json">` blocks.
+* **Health** runs `testinstall`'s checks with `cfgs=None` in a thread;
+  W03's `run_checks` gained `on_result`, called with each result as it is
+  recorded, which is how rows stream (`/api/health/events`: a `result`
+  event per check, then `done`). A second run while one is going is 409.
+  The page does not start a run by itself.
+* **`lux serve`**: `--reload` runs `web.app:create_app_from_env` as a
+  uvicorn factory with the settings in `LUX_WEB_SETTINGS`. With `--token`
+  the browser is opened at `?token=...`.
+* **Packaging:** `[tool.setuptools.package-data] "lux_pipeline.web"`; a
+  built wheel carries every template and static file and declares the
+  `web` extra.
+* **Tests:** `tests/web_client.make_client(tmp_path, monkeypatch, seed=,
+  root=, settings=, postgres=)` (the W00 installation, the Postgres probe
+  stubbed) and `csrf(client)`.
+
+Run on the laptop against the local instance: `/`, `/health` and the API
+answered; while `lux validate --source aat --max-records 2000
+--max-workers 2 --no-ui` ran, `/api/dashboard/running` showed it from no
+total, through 490, 1,589 and 4,000 of 11,190, to finished (exit 0 from
+its run record).
 
 ## Tests
 

@@ -66,6 +66,10 @@ lux viz --recid <from>,<to>                  # draw how reconcile joined two rec
 lux merge --source all --profile             # cProfile each slice; `python timing-report.py --profile`
 ```
 
+`lux serve` (with `pip install -e '.[web]'`) serves a web UI at
+http://127.0.0.1:8321/: a dashboard of the installation and its runs, and
+the health checks; more pages are coming (`docs/web.md`, `webui_docs/`).
+
 `lux <command> --help` lists a command's options. Backups go to
 `backup_dir` (default `<data_dir>/backups`), each with a `manifest.json`
 written last; `lux restore` refuses one without it. `lux viz` needs the

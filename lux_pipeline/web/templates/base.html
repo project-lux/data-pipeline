@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>{% block title %}LUX{% endblock %} · LUX pipeline</title>
+  <link rel="stylesheet" href="/static/lux.css">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <script type="module" src="/static/app.js"></script>
+  {% block scripts %}{% endblock %}
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">LUX Data Pipeline</a>
+    <span class="basepath" title="LUX_BASEPATH">{{ basepath or "no installation" }}</span>
+    <a id="running-badge" class="badge state-running" href="/" hidden>running</a>
+    <span id="clock" class="clock"></span>
+  </header>
+  <div class="layout">
+    <nav class="sidenav" aria-label="Areas">
+      {% for item in nav %}
+      <a href="{{ item.href }}"{% if item.active %} class="active" aria-current="page"{% endif %}>{{ item.label }}</a>
+      {% endfor %}
+    </nav>
+    <main>
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  <footer>lux-pipeline {{ version }} · {{ settings.url }}</footer>
+</body>
+</html>
