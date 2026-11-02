@@ -84,6 +84,31 @@ def summarise(runs):
     }
 
 
+def slice_rates(s):
+    """The spread of one phase's per-slice rates, or None for two slices or
+    fewer: ``lowest``, ``highest``, ``median``, ``spread`` (% of the
+    median), the ``slow`` (>20% under the median) and ``fast`` (>20% over)
+    slice numbers, and ``even`` (no slow slice and under 25% spread)."""
+    if s["slices"] <= 2:
+        return None
+    rates = sorted((r["records_per_second"], r["slice"]) for r in s["runs"])
+    median = rates[len(rates) // 2][0]
+    slow = [sl for rt, sl in rates if median and rt < median * 0.8]
+    fast = [sl for rt, sl in rates if median and rt > median * 1.2]
+    spread = (rates[-1][0] - rates[0][0]) / median * 100 if median else 0
+    return {"lowest": rates[0][0], "highest": rates[-1][0], "median": median,
+            "spread": spread, "slow": slow, "fast": fast,
+            "even": not slow and spread < 25}
+
+
+def nested_overrun(s, parent):
+    """Worker-seconds by which `parent`'s nested stages add up to more than
+    the parent itself (time attributed from inside other stages), or 0."""
+    ptotal = s["stages"][parent][1]
+    ctotal = sum(v[1] for v in s["nested_stages"][parent].values())
+    return ctotal - ptotal if ctotal > ptotal * 1.001 else 0
+
+
 def report_lines(phase, s, stragglers=True):
     """The report on one phase's summary `s` (from `summarise`)."""
     out = []
@@ -117,32 +142,28 @@ def report_lines(phase, s, stragglers=True):
         # two stages puts time here that its nominal parent never contained.
         for parent, group in s["nested_stages"].items():
             ptotal = s["stages"][parent][1]
-            ctotal = sum(v[1] for v in group.values())
+            over = nested_overrun(s, parent)
             out.append(f"\n  inside {parent} -- already counted above, not additional:")
             for name, (calls, secs) in sorted(group.items(), key=lambda kv: -kv[1][1]):
                 out.append(f"    {name:<18} {secs / 3600:>11.2f} {'':>9} "
                            f"{calls:>14,} {secs / calls * 1e6 if calls else 0:>10,.1f}")
-            if ctotal > ptotal * 1.001:
-                out.append(f"    ...totalling {ctotal / 3600:.2f} worker-hrs against "
-                           f"{parent}'s {ptotal / 3600:.2f}, so {(ctotal - ptotal) / 3600:.2f} "
+            if over:
+                out.append(f"    ...totalling {(ptotal + over) / 3600:.2f} worker-hrs against "
+                           f"{parent}'s {ptotal / 3600:.2f}, so {over / 3600:.2f} "
                            f"of it runs inside other stages -- not a breakdown of {parent}")
 
-    if stragglers and s["slices"] > 2:
-        rates = sorted((r["records_per_second"], r["slice"]) for r in s["runs"])
-        median = rates[len(rates) // 2][0]
-        slow = [(rt, sl) for rt, sl in rates if median and rt < median * 0.8]
-        fast = [(rt, sl) for rt, sl in rates if median and rt > median * 1.2]
-        spread = (rates[-1][0] - rates[0][0]) / median * 100 if median else 0
-        out.append(f"\n  per-slice rate: {rates[0][0]:,.0f} to {rates[-1][0]:,.0f}/s "
-                   f"(median {median:,.0f}, spread {spread:.0f}%)")
-        if slow:
+    sr = slice_rates(s) if stragglers else None
+    if sr:
+        out.append(f"\n  per-slice rate: {sr['lowest']:,.0f} to {sr['highest']:,.0f}/s "
+                   f"(median {sr['median']:,.0f}, spread {sr['spread']:.0f}%)")
+        if sr["slow"]:
             out.append(f"  slow slices (>20% under median): "
-                       f"{', '.join(str(sl) for _, sl in slow)}")
-        elif spread < 25:
+                       f"{', '.join(str(sl) for sl in sr['slow'])}")
+        elif sr["even"]:
             out.append("  evenly spread -- no straggler, so the work is partitioned well")
-        if fast:
+        if sr["fast"]:
             out.append(f"  fast slices (>20% over median): "
-                       f"{', '.join(str(sl) for _, sl in fast)}")
+                       f"{', '.join(str(sl) for sl in sr['fast'])}")
 
     marks = s["runs"][0].get("marks") or []
     if marks:
@@ -206,35 +227,62 @@ def stage_functions(stats, stage):
     return [f for f, _ in sorted(found, key=lambda x: -x[1])]
 
 
-def profile_lines(phase, paths, stages=(), n=DEFAULT_TOP):
-    """The top `n` functions of one phase's profiles, added up across its
-    slices, and what each stage's same-named function spends its time on."""
+def profile_data(paths, stages=(), n=DEFAULT_TOP):
+    """One phase's profiles added up across its slices, or None if none
+    load: ``slices``, ``calls``, ``cpu_seconds``, ``top`` (``{"cumtime":
+    rows, "tottime": rows}``, rows from `top_functions`) and ``matched``:
+    ``[(stage, func, cumtime, [(callee, share %, cumtime), ...]), ...]``
+    for each stage with a function of the same name (the largest), and
+    the five callees it spends most in."""
     stats = combine(paths)
     if stats is None:
-        return []
-    out = [f"\n=== {phase} profile  ({len(paths)} slice{'s' if len(paths) != 1 else ''}, "
-           f"{stats.total_calls:,} calls, {stats.total_tt / 3600:.2f} profiled cpu-hours)"]
-    for key, title in (("cumtime", "cumulative (the function and all it calls)"),
-                       ("tottime", "internal (the function's own code)")):
-        out.append(f"\n  top {n} by {title}")
-        out.append(f"  {'calls':>12} {'own s':>10} {'cum s':>10} {'us/call':>9}  function")
-        for f, nc, tt, ct in top_functions(stats, key, n):
-            per = (ct if key == "cumtime" else tt) / nc * 1e6 if nc else 0
-            out.append(f"  {nc:>12,} {tt:>10,.1f} {ct:>10,.1f} {per:>9,.1f}  {func_label(f)}")
-
+        return None
+    out = {"slices": len(paths), "calls": stats.total_calls,
+           "cpu_seconds": stats.total_tt, "n": n,
+           "top": {key: top_functions(stats, key, n) for key in ("cumtime", "tottime")},
+           "matched": []}
     # a stage is a `with timer.stage(name)` block, which the profiler can't
     # see; where a function has the stage's name, show what it spends on
     matched = [(st, fs[0]) for st in stages if (fs := stage_functions(stats, st))]
     if matched:
         stats.calc_callees()
-        out.append("\n  stages matched to a function of the same name (the largest one):")
         for st, f in matched:
             ct = stats.stats[f][3]
-            out.append(f"\n  {st}: {func_label(f)}  {ct:,.1f}s cumulative")
             callees = stats.all_callees.get(f, {})
             rows = sorted(callees.items(), key=lambda kv: -kv[1][3])[:5]
-            for g, (cc, nc, tt, cct) in rows:
-                share = cct / ct * 100 if ct else 0
+            out["matched"].append((st, f, ct, [(g, cct / ct * 100 if ct else 0, cct)
+                                               for g, (cc, nc, tt, cct) in rows]))
+    return out
+
+
+PROFILE_TITLES = {"cumtime": "cumulative (the function and all it calls)",
+                  "tottime": "internal (the function's own code)"}
+
+
+def profile_lines(phase, paths, stages=(), n=DEFAULT_TOP):
+    """The top `n` functions of one phase's profiles, added up across its
+    slices, and what each stage's same-named function spends its time on."""
+    return profile_data_lines(phase, profile_data(paths, stages, n))
+
+
+def profile_data_lines(phase, p):
+    """`profile_data`'s result `p` for one phase, as lines."""
+    if p is None:
+        return []
+    n = p["n"]
+    out = [f"\n=== {phase} profile  ({p['slices']} slice{'s' if p['slices'] != 1 else ''}, "
+           f"{p['calls']:,} calls, {p['cpu_seconds'] / 3600:.2f} profiled cpu-hours)"]
+    for key, title in PROFILE_TITLES.items():
+        out.append(f"\n  top {n} by {title}")
+        out.append(f"  {'calls':>12} {'own s':>10} {'cum s':>10} {'us/call':>9}  function")
+        for f, nc, tt, ct in p["top"][key]:
+            per = (ct if key == "cumtime" else tt) / nc * 1e6 if nc else 0
+            out.append(f"  {nc:>12,} {tt:>10,.1f} {ct:>10,.1f} {per:>9,.1f}  {func_label(f)}")
+    if p["matched"]:
+        out.append("\n  stages matched to a function of the same name (the largest one):")
+        for st, f, ct, callees in p["matched"]:
+            out.append(f"\n  {st}: {func_label(f)}  {ct:,.1f}s cumulative")
+            for g, share, cct in callees:
                 out.append(f"      {share:>5.1f}%  {cct:>10,.1f}s  {func_label(g)}")
     return out
 
@@ -247,58 +295,98 @@ def _check_dir(directory):
         raise FileNotFoundError(f"no such directory: {directory}")
 
 
-def directory_report(directory, phase=None, profile=None):
-    """The report on every phase (or `phase`) in `directory`, as lines.
-    `profile` is the number of top functions to add from the
-    ``profile-*.prof`` files, or None for none. Raises when there is no
-    timing JSON to report on."""
+def directory_data(directory, phase=None, profile=None):
+    """``[(phase, summary, profile data or None), ...]`` for every phase (or
+    `phase`) in `directory`, in name order, and whether profiles were asked
+    for but none found. `profile` is the number of top functions to take
+    from the ``profile-*.prof`` files, or None for none. Raises when there
+    is no timing JSON to report on."""
     _check_dir(directory)
     phases = load(directory, phase)
     if not phases:
         which = f"timing-{phase}-*.json" if phase else "timing-*.json"
         raise RuntimeError(f"no {which} in {directory} -- has a phase run since "
                            f"timing was added?")
-    out = [f"# {directory}"]
     profiles = load_profiles(directory, phase) if profile else {}
-    if profile and not profiles:
-        out.append("  (no profile-*.prof found -- run the phase with --profile or LUX_PROFILE=1)")
+    out = []
     for ph in sorted(phases):
         s = summarise(phases[ph])
+        prof = (profile_data(profiles[ph], stages=list(s["stages"]), n=profile)
+                if ph in profiles else None)
+        out.append((ph, s, prof))
+    return out, bool(profile and not profiles)
+
+
+NO_PROFILES = "no profile-*.prof found -- run the phase with --profile or LUX_PROFILE=1"
+
+
+def directory_report(directory, phase=None, profile=None):
+    """The report on every phase (or `phase`) in `directory`, as lines;
+    see `directory_data`."""
+    phases, no_profiles = directory_data(directory, phase, profile)
+    out = [f"# {directory}"]
+    if no_profiles:
+        out.append(f"  ({NO_PROFILES})")
+    for ph, s, prof in phases:
         out.extend(report_lines(ph, s))
-        if ph in profiles:
-            out.extend(profile_lines(ph, profiles[ph], stages=list(s["stages"]), n=profile))
+        out.extend(profile_data_lines(ph, prof))
     return out
 
 
-def compare_lines(a_dir, b_dir, phase=None):
-    """Two runs' timing JSON side by side, phase by phase, as lines."""
+def compare_data(a_dir, b_dir, phase=None):
+    """Two runs' timing JSON side by side: one dict per phase in either,
+    in name order. A phase in only one has ``only_in`` (that directory);
+    otherwise ``metrics``, ``[(label, before, after, change %), ...]``, and
+    ``stages``, ``[(name, before hrs, after hrs, change % or None for a new
+    stage), ...]`` largest-after first."""
     _check_dir(a_dir)
     _check_dir(b_dir)
     a, b = load(a_dir, phase), load(b_dir, phase)
     out = []
     for ph in sorted(set(a) | set(b)):
         if ph not in a or ph not in b:
-            out.append(f"\n=== {ph}: only in {a_dir if ph in a else b_dir}")
+            out.append({"phase": ph, "only_in": a_dir if ph in a else b_dir})
             continue
         sa, sb = summarise(a[ph]), summarise(b[ph])
-        out.append(f"\n=== {ph}")
-        out.append(f"  {'':<20} {'before':>14} {'after':>14} {'change':>10}")
-        for label, ka, kb, fmt in (
-            ("wall minutes", sa["wall"] / 60, sb["wall"] / 60, "{:,.1f}"),
-            ("records", sa["records"], sb["records"], "{:,.0f}"),
-            ("records/s", sa["rate"], sb["rate"], "{:,.0f}"),
-            ("cpu %", sa["cpu_percent"], sb["cpu_percent"], "{:,.0f}"),
+        metrics = []
+        for label, ka, kb in (
+            ("wall minutes", sa["wall"] / 60, sb["wall"] / 60),
+            ("records", sa["records"], sb["records"]),
+            ("records/s", sa["rate"], sb["rate"]),
+            ("cpu %", sa["cpu_percent"], sb["cpu_percent"]),
         ):
-            chg = (kb / ka - 1) * 100 if ka else 0
-            out.append(f"  {label:<20} {fmt.format(ka):>14} {fmt.format(kb):>14} "
-                       f"{chg:>+9.1f}%")
+            metrics.append((label, ka, kb, (kb / ka - 1) * 100 if ka else 0))
+        stages = []
         names = set(sa["stages"]) | set(sb["stages"])
-        out.append(f"\n  {'stage':<20} {'before hrs':>11} {'after hrs':>11} {'change':>10}")
-        for name in sorted(names, key=lambda n: -sb["stages"].get(n, [0, 0])[1]):
+        # largest after first; ties by name, not by the set's hash order
+        for name in sorted(names, key=lambda n: (-sb["stages"].get(n, [0, 0])[1], n)):
             ha = sa["stages"].get(name, [0, 0.0])[1] / 3600
             hb = sb["stages"].get(name, [0, 0.0])[1] / 3600
-            chg = (hb / ha - 1) * 100 if ha else float("inf")
-            chgs = f"{chg:>+9.1f}%" if ha else "       new"
+            stages.append((name, ha, hb, (hb / ha - 1) * 100 if ha else None))
+        out.append({"phase": ph, "only_in": None, "metrics": metrics, "stages": stages})
+    return out
+
+
+METRIC_FORMATS = {"wall minutes": "{:,.1f}", "records": "{:,.0f}",
+                  "records/s": "{:,.0f}", "cpu %": "{:,.0f}"}
+
+
+def compare_lines(a_dir, b_dir, phase=None):
+    """Two runs' timing JSON side by side, phase by phase, as lines."""
+    out = []
+    for c in compare_data(a_dir, b_dir, phase):
+        if c["only_in"]:
+            out.append(f"\n=== {c['phase']}: only in {c['only_in']}")
+            continue
+        out.append(f"\n=== {c['phase']}")
+        out.append(f"  {'':<20} {'before':>14} {'after':>14} {'change':>10}")
+        for label, ka, kb, chg in c["metrics"]:
+            fmt = METRIC_FORMATS[label]
+            out.append(f"  {label:<20} {fmt.format(ka):>14} {fmt.format(kb):>14} "
+                       f"{chg:>+9.1f}%")
+        out.append(f"\n  {'stage':<20} {'before hrs':>11} {'after hrs':>11} {'change':>10}")
+        for name, ha, hb, chg in c["stages"]:
+            chgs = f"{chg:>+9.1f}%" if chg is not None else "       new"
             out.append(f"  {name:<20} {ha:>11.2f} {hb:>11.2f} {chgs}")
     if not out:
         out.append(f"  no timing json in either {a_dir} or {b_dir}")

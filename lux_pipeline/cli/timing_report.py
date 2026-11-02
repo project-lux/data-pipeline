@@ -6,6 +6,7 @@
     lux timing-report --compare old/ new/      # two runs side by side
     lux timing-report --profile                # and the top 20 functions (--profile runs)
     lux timing-report --profile 40 --phase reconcile
+    lux --no-ui timing-report                  # plain text, as timing-report.py prints it
 
 `timing-report.py` as a command. Every phase's `PhaseTimer` writes
 ``timing-<phase>-<slice>.json`` to ``log_dir``; this adds each phase's
@@ -22,6 +23,11 @@ and by own time, and what each stage's same-named function calls.
 ``--dir`` (and ``--compare``) read the given directories without loading
 the configuration; otherwise the configuration is read, not instantiated,
 for ``log_dir``. Read-only, so safe while a build runs.
+
+Rendered with Rich: a panel per phase, a bar for each stage's share of
+worker time, slow slices in red, and in ``--compare`` changes coloured by
+whether they are better or worse. ``--no-ui`` prints the plain text the
+root ``timing-report.py`` does, for logs and diffs.
 """
 
 from lux_pipeline import runtime
@@ -46,14 +52,30 @@ class CommandHandler(BaseHandler):
 
     def process(self, args, rest):
         super().process(args, rest)
+        plain = getattr(args, "no_ui", False)
         if args.compare:
-            lines = timing_report.compare_lines(args.compare[0], args.compare[1], args.phase)
-        else:
-            directory = args.dir
-            if directory is None:
-                cfgs = self.configs or runtime.get_configs(instantiate=False)
-                directory = cfgs.log_dir
-            lines = timing_report.directory_report(directory, args.phase, args.profile)
+            before, after = args.compare
+            if plain:
+                return self._print(timing_report.compare_lines(before, after, args.phase))
+            data = timing_report.compare_data(before, after, args.phase)
+            from ._timing_view import make_console, render_compare
+            render_compare(make_console(), before, after, data)
+            return data
+
+        directory = args.dir
+        if directory is None:
+            cfgs = self.configs or runtime.get_configs(instantiate=False)
+            directory = cfgs.log_dir
+        if plain:
+            return self._print(timing_report.directory_report(directory, args.phase,
+                                                              args.profile))
+        phases, no_profiles = timing_report.directory_data(directory, args.phase, args.profile)
+        from ._timing_view import make_console, render_directory
+        render_directory(make_console(), directory, phases, no_profiles)
+        return phases
+
+    @staticmethod
+    def _print(lines):
         # the report is the command's result
         for line in lines:
             print(line)
