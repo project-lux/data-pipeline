@@ -1,0 +1,27 @@
+{% macro kv(items) -%}
+<dl class="kv">
+  {% for k, v in items %}<dt>{{ k }}</dt><dd>{% if v is none or v == "" %}<span class="muted">-</span>{% else %}{{ v }}{% endif %}</dd>
+  {% endfor %}
+</dl>
+{%- endmacro %}
+
+{% macro badge(state) -%}
+<span class="badge state-{{ (state or 'unknown')|lower }}">{{ state or "unknown" }}</span>
+{%- endmacro %}
+
+{% macro bar(completed, total) -%}
+{# a native <progress>: no inline style (the content security policy), and
+   without a value it is the indeterminate bar of a total not known yet #}
+{% if total %}
+<progress class="bar" value="{{ [completed, total]|min }}" max="{{ total }}"
+          title="{{ fmt_n(completed) }} of {{ fmt_n(total) }}"></progress>
+<span class="num">{{ fmt_n(completed) }}/{{ fmt_n(total) }}</span>
+{% else %}
+<progress class="bar" title="{{ fmt_n(completed) }} so far, total not known yet"></progress>
+<span class="num">{{ fmt_n(completed) }}/-</span>
+{% endif %}
+{%- endmacro %}
+
+{% macro json_block(obj) -%}
+<pre class="json">{{ obj|tojson(indent=2) }}</pre>
+{%- endmacro %}

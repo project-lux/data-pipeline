@@ -1,0 +1,124 @@
+/* LUX pipeline web UI. One stylesheet, no framework; light and dark from
+   the system setting. The level and worker colours follow the console view
+   (cli/_view.py LEVEL_COLORS, cyan w<n>). */
+
+:root {
+  --bg: #fafafa; --fg: #1d1f21; --muted: #6b7280; --card: #ffffff; --line: #e3e5e8;
+  --accent: #1f5fbf; --accent-fg: #ffffff; --zebra: #f5f6f8; --code: #f1f2f4;
+  --ok: #1a7f37; --warn: #9a6700; --fail: #c62828; --running: #1f5fbf; --idle: #6b7280;
+  --level-debug: #6b7280; --level-info: #1a7f37; --level-warning: #9a6700;
+  --level-error: #c62828; --level-critical: #a21caf; --worker: #0e7490;
+  --bar: #1f5fbf; --bar-track: #e3e5e8;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141619; --fg: #e6e6e6; --muted: #9aa0a6; --card: #1c1f23; --line: #2e3238;
+    --accent: #6ea8fe; --accent-fg: #0b0d10; --zebra: #202429; --code: #23272d;
+    --ok: #3fb950; --warn: #d29922; --fail: #f85149; --running: #6ea8fe; --idle: #9aa0a6;
+    --level-debug: #9aa0a6; --level-info: #3fb950; --level-warning: #d29922;
+    --level-error: #f85149; --level-critical: #d2a8ff; --worker: #22d3ee;
+    --bar: #6ea8fe; --bar-track: #2e3238;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 var(--sans); }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, pre, .path, .num, .detail, .basepath { font-family: var(--mono); font-size: 0.9em; }
+h1 { font-size: 1.5rem; margin: 0 0 1rem; }
+h2 { font-size: 1.1rem; margin: 0 0 0.75rem; }
+h3 { font-size: 0.95rem; margin: 0.75rem 0 0.25rem; text-transform: capitalize; }
+.muted { color: var(--muted); }
+.lead { max-width: 60rem; color: var(--muted); }
+
+/* --- frame: top bar, side navigation, content ------------------------------ */
+.topbar {
+  display: flex; align-items: center; gap: 1rem; padding: 0.6rem 1.25rem;
+  background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10;
+}
+.brand { font-weight: 700; color: var(--fg); }
+.basepath { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.clock { font-family: var(--mono); color: var(--muted); }
+.layout { display: flex; min-height: calc(100vh - 6rem); }
+.sidenav { width: 12rem; flex: none; padding: 1rem 0.5rem; border-right: 1px solid var(--line); }
+.sidenav a { display: block; padding: 0.4rem 0.75rem; border-radius: 6px; color: var(--fg); }
+.sidenav a.active { background: var(--accent); color: var(--accent-fg); }
+.sidenav a:hover { text-decoration: none; background: var(--zebra); }
+.sidenav a.active:hover { background: var(--accent); }
+main { flex: 1; padding: 1.25rem 1.5rem; min-width: 0; }
+footer { padding: 0.75rem 1.25rem; color: var(--muted); border-top: 1px solid var(--line); font-size: 0.85em; }
+@media (max-width: 800px) {
+  .layout { flex-direction: column; }
+  .sidenav { width: auto; display: flex; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--line); }
+}
+
+/* --- cards --------------------------------------------------------------- */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 1rem 1.25rem; min-width: 0; }
+.card.wide { margin-bottom: 1rem; }
+.card.error h1 { color: var(--fail); }
+.card .names { margin: 0; overflow-wrap: anywhere; }
+
+/* --- key / value ----------------------------------------------------------- */
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; margin: 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; font-family: var(--mono); font-size: 0.9em; overflow-wrap: anywhere; }
+
+/* --- tables -------------------------------------------------------------- */
+.table { width: 100%; border-collapse: collapse; }
+.table th { text-align: left; font-weight: 600; border-bottom: 2px solid var(--line); padding: 0.4rem 0.5rem;
+            position: sticky; top: 3rem; background: var(--card); }
+.table td { border-bottom: 1px solid var(--line); padding: 0.35rem 0.5rem; vertical-align: top; }
+.table tbody tr:nth-child(even) { background: var(--zebra); }
+.table .num, .table th.num { text-align: right; white-space: nowrap; }
+.table .path { color: var(--muted); overflow-wrap: anywhere; }
+.table .detail { overflow-wrap: anywhere; }
+
+/* --- badges -------------------------------------------------------------- */
+.badge { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.8em;
+         font-weight: 600; border: 1px solid currentColor; white-space: nowrap; }
+.state-ok, .state-finished { color: var(--ok); }
+.state-warn, .state-interrupted, .state-unknown { color: var(--warn); }
+.state-fail, .state-failed, .state-killed { color: var(--fail); }
+.state-running { color: var(--running); }
+.badge[hidden] { display: none; }
+
+/* --- progress bars (native <progress>) ----------------------------------- */
+progress.bar { width: 10rem; height: 0.7rem; vertical-align: middle; appearance: none; -webkit-appearance: none;
+               border: 0; border-radius: 4px; background: var(--bar-track); overflow: hidden; }
+progress.bar::-webkit-progress-bar { background: var(--bar-track); border-radius: 4px; }
+progress.bar::-webkit-progress-value { background: var(--bar); border-radius: 4px; }
+progress.bar::-moz-progress-bar { background: var(--bar); border-radius: 4px; }
+progress.bar:not([value]) { background: linear-gradient(90deg, var(--bar-track) 0%, var(--bar) 50%, var(--bar-track) 100%);
+                            background-size: 200% 100%; animation: lux-indeterminate 1.4s linear infinite; }
+progress.bar:not([value])::-webkit-progress-bar { background: transparent; }
+progress.bar:not([value])::-moz-progress-bar { background: transparent; }
+@keyframes lux-indeterminate { from { background-position: 200% 0; } to { background-position: 0 0; } }
+
+/* --- logs and JSON ----------------------------------------------------------- */
+.log, .json { background: var(--code); border: 1px solid var(--line); border-radius: 6px; padding: 0.6rem 0.8rem;
+              font: 0.85em/1.4 var(--mono); max-height: 28rem; overflow: auto; white-space: pre-wrap; margin: 0; }
+.log .w { color: var(--worker); }
+.log .level-DEBUG { color: var(--level-debug); }
+.log .level-INFO { color: var(--level-info); }
+.log .level-WARNING { color: var(--level-warning); }
+.log .level-ERROR { color: var(--level-error); }
+.log .level-CRITICAL { color: var(--level-critical); }
+
+/* --- forms ------------------------------------------------------------------ */
+.form label { display: block; margin: 0.5rem 0 0.2rem; }
+.form.inline { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; align-items: center; margin: 1rem 0; }
+.form.inline label { display: inline-flex; gap: 0.4rem; align-items: center; margin: 0; }
+.form .help { color: var(--muted); font-size: 0.85em; }
+fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 1rem; padding: 0.75rem 1rem; }
+input[type=text], input[type=number], select, textarea {
+  font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--line);
+  border-radius: 6px; padding: 0.35rem 0.5rem; }
+textarea { font-family: var(--mono); width: 100%; }
+button { font: inherit; padding: 0.4rem 0.9rem; border-radius: 6px; border: 1px solid var(--accent);
+         background: var(--accent); color: var(--accent-fg); cursor: pointer; }
+button:disabled { opacity: 0.55; cursor: default; }
+button.secondary { background: transparent; color: var(--accent); }
