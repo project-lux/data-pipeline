@@ -1,6 +1,6 @@
 # W03. Data functions for counts, testinstall and list
 
-**Size:** S · **Depends on:** — · **Unblocks:** W06, W11
+**Size:** S · **Depends on:** — · **Unblocks:** W06, W11 · **Done:** 2026-11-02
 **Read:** `lux_pipeline/cli/counts.py`, `lux_pipeline/cli/testinstall.py`,
 `lux_pipeline/cli/list.py`, `lux_pipeline/process/timing_report.py`
 (the `*_data` / `*_lines` pattern to copy), `tests/test_cli_counts.py`,
@@ -96,6 +96,50 @@ cell) instead of raising — that is what `list_sources` prints today.
 1. counts: data function, wrappers, tests green.
 2. testinstall: `results`, `checks`, `run_checks`; `process` on top; tests.
 3. list: rows functions; tests.
+
+## As built
+
+* **counts.** `counts_data(cfgs, sources=None, caches=DEFAULT_CACHES,
+  maps=None, indexes=None, open_index=None)` returns one section per
+  kind, None when its targets are None (not asked for), empty with a
+  total of 0 when asked for with nothing in it (`lux counts --index
+  ycba` prints `Total index records: =0`):
+
+  ```python
+  {"caches":  {"rows": [{"group", "source", "cache", "count", "exact"}], "total"} | None,
+   "maps":    {"rows": [{"map", "count", "exact": False}], "total"} | None,
+   "indexes": {"rows": [{"group", "source", "index", "count" | None, "exact": True, "error"}], "total"} | None}
+  ```
+
+  An index that cannot be opened has `count` None and its reason in
+  `error`. The counting moved to module functions (`count_caches`,
+  `count_maps`, `count_indexes`, `open_index_file`); the handler's
+  methods are one-line wrappers; `process` prints from `counts_data`
+  through `sections()` (the tuples the renderers always took) and returns
+  the data.
+* **testinstall.** `Check` keeps `results` (`[{"label", "state",
+  "detail", "required"}]`) and writes the same lines. `checks(args)`
+  returns `[(label, check, required, needs)]`; `needs` is `"basepath"`
+  or `"configs"`. `run_checks(args, out=None, stop_on_fail=True,
+  cfgs=None)`: without `stop_on_fail` a check whose need is missing is
+  recorded as FAIL (WARN when not required) with "LUX_BASEPATH was not
+  found" or "the configuration did not build", without running. `cfgs`
+  replaces the configuration `check_config` would build (and it then
+  never calls `runtime.reset_configs`). Reads `skip_workers`,
+  `skip_pg_tune` and `workers` from `args` with defaults, so a bare
+  `Namespace` works.
+* **list.** `source_rows(cfgs, which)` (dicts with `group`, `source`,
+  `found`, `namespace`, `namespace_display`, `merge_order`, `order` (the
+  text shown: `str(merge_order)`, empty when absent), `classes: [{"key",
+  "label", "class", "short"}]`), `map_rows(cfgs)`, `index_rows(cfgs,
+  which)`; the tables are built from these rows. Named sources come in
+  group order, unknown names last with `found` False (printed first, as
+  before).
+* **Same output.** `lux list` (five variants), `lux counts` (plain,
+  `--table` with every section, `--map all`) and `lux testinstall` were
+  run before and after on the W00 installation with every catalogue
+  source, and `lux list --maps --indexes` on the local instance: the
+  outputs are byte-identical.
 
 ## Tests
 

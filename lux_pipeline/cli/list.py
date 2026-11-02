@@ -60,23 +60,90 @@ def _namespace_display(ns: str) -> str:
     return ns
 
 
-def _row_values(s: str, cfg: dict | None) -> tuple[str, str, str, str]:
-    """Return plain-text (source, namespace, order, classes) for width measurement."""
+# --- the listing as data -------------------------------------------------------------
+
+
+def source_row(group, name, cfg):
+    """One source as data: ``{"group", "source", "found", "namespace",
+    "namespace_display", "merge_order", "order", "classes": [{"key",
+    "label", "class", "short"}]}``. ``order`` is the text the table shows
+    (``merge_order`` as written, empty when absent). A class key set to
+    null switches that component off (merged.json and marklogic.json do it
+    for acquirerClass), so it is not listed. `cfg` None: an unknown name
+    (``found`` False)."""
     if cfg is None:
-        return s, "(not found)", "", ""
-    namespace = _namespace_display(cfg.get("namespace", ""))
-    merge_order = str(cfg.get("merge_order", ""))
-    # a key set to null in the config switches that component off
-    # (merged.json and marklogic.json do it for acquirerClass): not a class
-    class_lines = [
-        f"{label}: {_short_class(cfg[key])}" for key, label in _CLASS_KEYS if cfg.get(key)
-    ]
-    return s, namespace, merge_order, "\n".join(class_lines)
+        return {"group": None, "source": name, "found": False, "namespace": "",
+                "namespace_display": "", "merge_order": None, "order": "", "classes": []}
+    classes = [{"key": key, "label": label,
+                "class": cfg[key] if isinstance(cfg[key], str) else _short_class(cfg[key]),
+                "short": _short_class(cfg[key])}
+               for key, label in _CLASS_KEYS if cfg.get(key)]
+    namespace = cfg.get("namespace", "")
+    return {"group": group, "source": name, "found": True, "namespace": namespace,
+            "namespace_display": _namespace_display(namespace),
+            "merge_order": cfg.get("merge_order"), "order": str(cfg.get("merge_order", "")),
+            "classes": classes}
 
 
-def _measure_col_widths(
-    groups_data: list[tuple[list, dict]],
-) -> tuple[int, int, int, int]:
+def source_rows(cfgs, which=None):
+    """The sources `lux list` shows for ``--source`` `which` (None or
+    ``all``: every group; a group name; or names separated by commas), as
+    `source_row` dicts. Named sources come in group order and, within a
+    group, in the order named; unknown names follow, ``found`` False."""
+    if not which or which == "all":
+        return [source_row(g, n, c) for g in GROUPS for n, c in getattr(cfgs, g).items()]
+    if which in GROUPS:
+        return [source_row(which, n, c) for n, c in getattr(cfgs, which).items()]
+    binned = {g: [] for g in GROUPS}
+    unknown = []
+    for name in which.split(","):
+        for g in GROUPS:
+            if name in getattr(cfgs, g):
+                binned[g].append(name)
+                break
+        else:
+            unknown.append(name)
+    rows = [source_row(g, n, getattr(cfgs, g)[n]) for g in GROUPS for n in binned[g]]
+    return rows + [source_row(None, n, None) for n in unknown]
+
+
+def map_rows(cfgs):
+    """``[{"map", "class", "store"}]`` for every map store; ``store`` says
+    where it lives (`_store_details`)."""
+    return [{"map": name, "class": cfg.get("storeClass", ""), "store": _store_details(cfg)}
+            for name, cfg in cfgs.map_stores.items()]
+
+
+def index_rows(cfgs, which):
+    """``(group, source, label, path)`` for every configured index of the
+    sources `which` selects (``all``, a group, or names)."""
+    if which in GROUPS:
+        groups, names = (which,), None
+    elif not which or which == "all":
+        groups, names = GROUPS, None
+    else:
+        groups, names = GROUPS, set(which.split(","))
+    rows = []
+    for group in groups:
+        for name, cfg in getattr(cfgs, group).items():
+            if names is not None and name not in names:
+                continue
+            for idx_name, path in source_indexes(cfg).items():
+                rows.append((group, name, INDEX_LABELS.get(idx_name, idx_name), path))
+    return rows
+
+
+# --- the tables ------------------------------------------------------------------------
+
+
+def _row_values(row) -> tuple[str, str, str, str]:
+    """Plain-text (source, namespace, order, classes) of a `source_row`,
+    for width measurement and the table."""
+    classes = "\n".join(f"{c['label']}: {c['short']}" for c in row["classes"])
+    return row["source"], row["namespace_display"], row["order"], classes
+
+
+def _measure_col_widths(rows) -> tuple[int, int, int, int]:
     """Return the minimum column widths needed so every table can share the
     same layout.  Headers provide the floor for each column."""
     w_source = len("Source")
@@ -84,23 +151,20 @@ def _measure_col_widths(
     w_order = len("Order")
     w_class = len("Classes")
 
-    for sources, cfg_group in groups_data:
-        for s in sources:
-            cfg = cfg_group.get(s)
-            src, ns, order, classes = _row_values(s, cfg)
-            w_source = max(w_source, len(src))
-            w_ns = min(max(w_ns, len(ns)), 44)  # respect the 44-char cap
-            w_order = max(w_order, len(order))
-            for line in classes.splitlines():
-                w_class = max(w_class, len(line))
+    for row in rows:
+        src, ns, order, classes = _row_values(row)
+        w_source = max(w_source, len(src))
+        w_ns = min(max(w_ns, len(ns)), 44)  # respect the 44-char cap
+        w_order = max(w_order, len(order))
+        for line in classes.splitlines():
+            w_class = max(w_class, len(line))
 
     return w_source, w_ns, w_order, w_class
 
 
 def _build_table(
     title: str,
-    sources: list,
-    cfgs_group: dict,
+    rows: list,
     col_widths: tuple[int, int, int, int] | None = None,
 ) -> Table:
     w_source, w_ns, w_order, w_class = col_widths or (0, 44, 0, 0)
@@ -120,17 +184,10 @@ def _build_table(
     )
     table.add_column("Classes", style="green", min_width=w_class)
 
-    for s in sources:
-        cfg = cfgs_group.get(s)
-        src, namespace, merge_order, classes_text = _row_values(s, cfg)
-        if cfg is None:
-            table.add_row(src, Text("(not found)", style="red"), "", "")
-            continue
-        marked_lines = []
-        for line in classes_text.splitlines():
-            label, _, cls = line.partition(": ")
-            marked_lines.append(f"[dim]{label}:[/dim] {cls}")
-        table.add_row(src, namespace, merge_order, "\n".join(marked_lines))
+    for row in rows:
+        src, namespace, merge_order, _ = _row_values(row)
+        marked = "\n".join(f"[dim]{c['label']}:[/dim] {c['short']}" for c in row["classes"])
+        table.add_row(src, namespace, merge_order, marked)
 
     return table
 
@@ -148,14 +205,15 @@ def _store_details(cfg: dict) -> str:
     return ""
 
 
-def _maps_table(map_stores: dict) -> Table:
+def _maps_table(rows: list) -> Table:
+    """rows: `map_rows`"""
     table = Table(title="Maps", box=box.ROUNDED, show_lines=False, title_justify="left",
                   header_style="bold", expand=False, padding=(0, 1))
     table.add_column("Map", style="bold cyan", no_wrap=True)
     table.add_column("Class", style="green", no_wrap=True)
     table.add_column("Store", style="dim", no_wrap=True)
-    for name, cfg in map_stores.items():
-        table.add_row(name, cfg.get("storeClass", ""), _store_details(cfg))
+    for row in rows:
+        table.add_row(row["map"], row["class"], row["store"])
     return table
 
 
@@ -181,20 +239,7 @@ class CommandHandler(BaseHandler):
     def index_rows(self, which):
         """``(group, source, label, path)`` for every configured index of the
         sources `which` selects (``all``, a group, or names)."""
-        if which in GROUPS:
-            groups, names = (which,), None
-        elif not which or which == "all":
-            groups, names = GROUPS, None
-        else:
-            groups, names = GROUPS, set(which.split(","))
-        rows = []
-        for group in groups:
-            for name, cfg in getattr(self.configs, group).items():
-                if names is not None and name not in names:
-                    continue
-                for idx_name, path in source_indexes(cfg).items():
-                    rows.append((group, name, INDEX_LABELS.get(idx_name, idx_name), path))
-        return rows
+        return index_rows(self.configs, which)
 
     def process(self, args, rest):
         super().process(args, rest)
@@ -205,58 +250,23 @@ class CommandHandler(BaseHandler):
         if not only_extras:
             self.list_sources(args, console)
         if args.maps:
-            console.print(_maps_table(cfgs.map_stores))
+            console.print(_maps_table(map_rows(cfgs)))
             console.print()
         if args.indexes:
             console.print(_indexes_table(self.index_rows(args.source)))
             console.print()
 
     def list_sources(self, args, console):
-        cfgs = self.configs
-
-        # Determine which group(s) to show
-        if not args.source or args.source == "all":
-            groups = list(GROUPS)
-        elif args.source in GROUPS:
-            groups = [args.source]
-        else:
-            # Named sources — look them up and bin by group
-            named = args.source.split(",")
-            binned: dict[str, list] = {g: [] for g in GROUPS}
-            for s in named:
-                for g in GROUPS:
-                    if s in getattr(cfgs, g):
-                        binned[g].append(s)
-                        break
-                else:
-                    console.print(f"[bold red]Unknown source:[/bold red] {s}")
-            groups = [g for g in GROUPS if binned[g]]
-            col_widths = _measure_col_widths(
-                [(binned[g], getattr(cfgs, g)) for g in groups]
-            )
-            for group in groups:
-                table = _build_table(
-                    GROUP_TITLES[group],
-                    binned[group],
-                    getattr(cfgs, group),
-                    col_widths,
-                )
-                console.print(table)
-                console.print()
-            return
-
-        # Gather all groups that have content, then measure widths across all
-        # of them so every table renders with identical column widths.
-        active = [
-            (group, list(getattr(cfgs, group).keys()), getattr(cfgs, group))
-            for group in groups
-            if getattr(cfgs, group)
-        ]
-        col_widths = _measure_col_widths(
-            [(srcs, cfg_grp) for _, srcs, cfg_grp in active]
-        )
-
-        for group, sources, cfg_group in active:
-            table = _build_table(GROUP_TITLES[group], sources, cfg_group, col_widths)
-            console.print(table)
+        rows = source_rows(self.configs, args.source)
+        for row in rows:
+            if not row["found"]:
+                console.print(f"[bold red]Unknown source:[/bold red] {row['source']}")
+        found = [r for r in rows if r["found"]]
+        # every table shares the widths measured across all of them
+        col_widths = _measure_col_widths(found)
+        for group in GROUPS:
+            shown = [r for r in found if r["group"] == group]
+            if not shown:
+                continue
+            console.print(_build_table(GROUP_TITLES[group], shown, col_widths))
             console.print()

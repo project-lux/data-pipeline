@@ -198,3 +198,43 @@ def test_everything_together(capsys):
 def test_help_lists_list_with_its_docstring():
     from lux_pipeline.cli.help import list_commands
     assert ("list", "List the configured sources, maps and indexes.") in list_commands()
+
+
+# --- the listing as data (web UI item W03) -----------------------------------
+
+
+def test_source_rows_for_every_group_in_configuration_order():
+    from lux_pipeline.cli.list import source_rows
+    rows = source_rows(StubConfigs())
+    assert [(r["group"], r["source"]) for r in rows] == [
+        ("internal", "ycba"), ("external", "aat"), ("external", "wikidata"), ("results", "merged")]
+    aat = rows[1]
+    assert aat["found"] and aat["namespace"] == "http://vocab.getty.edu/aat/"
+    assert aat["merge_order"] == 10 and aat["order"] == "10"
+    assert [c["label"] for c in aat["classes"]] == [
+        "Mapper", "Downloader", "Loader", "Acquirer", "Reconciler", "IndexLoader"]
+    assert aat["classes"][0] == {"key": "mapperClass", "label": "Mapper",
+                                 "class": "sources.getty.mapper.AatMapper", "short": "AatMapper"}
+    # a component switched off with null, or an empty class, is not listed
+    assert [c["key"] for c in rows[3]["classes"]] == ["mapperClass"]
+    assert rows[2]["namespace_display"].endswith("…")
+
+
+def test_source_rows_for_a_group_and_for_names():
+    from lux_pipeline.cli.list import source_rows
+    assert [r["source"] for r in source_rows(StubConfigs(), "external")] == ["aat", "wikidata"]
+    rows = source_rows(StubConfigs(), "merged,nosuch,wikidata,ycba")
+    # group order, then the order named; unknown names last
+    assert [(r["source"], r["found"]) for r in rows] == [
+        ("ycba", True), ("wikidata", True), ("merged", True), ("nosuch", False)]
+    assert rows[-1]["group"] is None and rows[-1]["classes"] == []
+
+
+def test_map_and_index_rows_as_functions():
+    from lux_pipeline.cli.list import index_rows, map_rows
+    assert map_rows(StubConfigs()) == [
+        {"map": "idmap", "class": "storage.idmap.postgres.IdMap", "store": "table idmap"},
+        {"map": "all_refs", "class": "storage.idmap.postgres.ReferenceMap", "store": "table all_refs_tbl"},
+        {"map": "redirects", "class": "storage.idmap.redis.TransitiveMultiMap", "store": "redis-host"},
+    ]
+    assert index_rows(StubConfigs(), "aat") == CommandHandler(StubConfigs()).index_rows("aat")
