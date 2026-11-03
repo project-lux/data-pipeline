@@ -94,6 +94,14 @@ the configuration, Postgres (and Redis where configured), the idmap, the
 sources' components, the data directories, the schemas, and that worker
 processes can be started.
 
+A source's `name` starts its Postgres table names (`<name>_datacache`, ...),
+and so does a map's when it has no `tableName`. Both must be lower case
+letters, digits and `_`, starting with a letter or `_`, at most 40
+characters: `getty_aat`, not `getty-aat`. A record with any other name stops
+the configuration loading, naming the record and its file, so every `lux`
+command and the "configuration builds" check fail on it; `lux config check`
+and the web editor refuse to write one.
+
 `lux` finds its configuration through `LUX_BASEPATH`: from the
 environment, else the `.env` in the current directory, else
 `~/.lux/.env` (parent directories are not searched). `lux initialize`

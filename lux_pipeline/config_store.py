@@ -206,6 +206,13 @@ def validate_record(cfgs, key, data, *, new=False):
             problems.append(f"{k} is empty ({spec.help})")
     if typ in schema.SOURCE_TYPES and data.get("name") != key:
         problems.append(f"name is {data.get('name')!r}: a source's name must be its key {key!r}")
+    if typ in (*schema.SOURCE_TYPES, "map"):
+        # Config refuses to load a record with one of these (store_name_problem)
+        if typ != "map" or data.get("name"):
+            problems.append(_config.store_name_problem(data.get("name")))
+        if typ == "map" and "tableName" in data:
+            problems.append(_config.store_name_problem(data["tableName"], "tableName"))
+        problems = [p for p in problems if p]
     if typ in ("map", "marklogic", "config") and data.get("name"):
         clash = _same_name(cfgs, key, data)
         if clash:
