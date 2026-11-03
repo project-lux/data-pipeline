@@ -24,6 +24,7 @@ means a lookup here never leaves a transaction open holding an ACCESS SHARE
 lock.
 """
 
+import datetime
 import logging
 import os
 import random
@@ -40,6 +41,18 @@ from lux_pipeline.storage.backup import LineReader, copy_text, pg_copy_in, pg_co
 from lux_pipeline.storage.uricache import URICache
 
 logger = logging.getLogger("lux_pipeline")
+
+
+def _chunked(iterable, n):
+    """Lists of up to `n` from any iterable, for the ``= ANY(%s)`` batches."""
+    batch = []
+    for x in iterable:
+        batch.append(x)
+        if len(batch) >= n:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
 
 
 def _fmt_bytes(n):
@@ -185,9 +198,22 @@ CREATE TABLE IF NOT EXISTS {idmap} (
 CREATE TABLE IF NOT EXISTS {yuids} (
     yuid    TEXT PRIMARY KEY,
     token   TEXT,
-    minted  TIMESTAMP DEFAULT now()
+    minted  TIMESTAMP DEFAULT now(),
+    missing_since TEXT
 );
 """
+
+# The registry's presence column. Identify assigns every YUID its clusters
+# hold, and a YUID it did not assign has lost every record that carried it
+# -- deleted at the source, usually. Those YUIDs are kept for a while so
+# the record can come back to the identity it had, then expired
+# (`expire_yuids`). Recording that as "the build that last saw it" meant
+# stamping all 45M registry rows every build to say that nothing had
+# changed; `missing_since` records the complement -- the token of the
+# first build that did *not* see the YUID, NULL while it is current -- so
+# the writes are proportional to what changed. `token` keeps the build
+# that registered the YUID.
+PRESENCE_COLUMN = "missing_since"
 
 # (yuid, uri), not (yuid): get_cluster()'s member scan reads uri for every
 # member, so the second column is what makes that scan index-only instead of
@@ -264,6 +290,18 @@ class IdMap(object):
                 # waiting on them
                 cur.execute(INDEXES.format(**fmt))
                 return
+            # A map from before the presence column. ADD COLUMN of a
+            # nullable column with no default is a catalog change, but it
+            # still takes the table's ACCESS EXCLUSIVE lock for a moment,
+            # so it is only attempted when the catalog says it is missing
+            # -- the 24 merge workers must not all queue on it.
+            cur.execute("SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass(%s) "
+                        "AND attname = %s AND NOT attisdropped",
+                        (self.yuid_table, PRESENCE_COLUMN))
+            if cur.fetchone() is None:
+                logger.info(f"{self.yuid_table}: adding the {PRESENCE_COLUMN} column")
+                cur.execute(f"ALTER TABLE {self.yuid_table} ADD COLUMN IF NOT EXISTS "
+                            f"{PRESENCE_COLUMN} TEXT")
             cur.execute("SELECT 1 FROM pg_index x JOIN pg_class i "
                         "ON i.oid = x.indexrelid JOIN pg_class t "
                         "ON t.oid = x.indrelid WHERE t.relname = %s "
@@ -291,10 +329,13 @@ class IdMap(object):
         # subselect is the "fwd" lookup; the outer scan is "rev".
         "cluster": "SELECT m.yuid, m.uri FROM {t} m "
                    "WHERE m.yuid = (SELECT yuid FROM {t} WHERE uri = $1)",
-        "token_is": "SELECT 1 FROM {y} WHERE yuid = $1 AND token = $2",
+        # "seen by this build": registered by it, or current as of the last
+        # identify (see PRESENCE_COLUMN)
+        "token_is": "SELECT 1 FROM {y} WHERE yuid = $1 "
+                    "AND (token = $2 OR missing_since IS NULL)",
         "token_set": "INSERT INTO {y} (yuid, token) VALUES ($1, $2) "
-                     "ON CONFLICT (yuid) DO UPDATE SET token = EXCLUDED.token "
-                     "WHERE {y}.token IS DISTINCT FROM EXCLUDED.token",
+                     "ON CONFLICT (yuid) DO UPDATE SET missing_since = NULL "
+                     "WHERE {y}.missing_since IS NOT NULL",
         "del_uri": "DELETE FROM {t} WHERE uri = $1",
     }
 
@@ -764,13 +805,22 @@ class IdMap(object):
 
         `items` is an iterable of (yuid, members, prior) where members are full
         member URIs and prior maps a member to the YUID it currently holds, if
-        any. Every member is pointed at yuid, and yuid is stamped with the
-        current update token.
+        any. Every member is pointed at yuid, and a yuid no member held
+        before -- one identify minted -- is registered under the current
+        update token.
 
         A member whose prior already *is* yuid is skipped entirely -- see the
         comment on the member upsert below. The caller is trusted on that:
         prior comes from a get_multi() against this same map, and identify is
         the only writer, so within one run it cannot go stale.
+
+        Which YUIDs this build saw is not recorded here. It used to be: every
+        cluster's yuid was upserted with the build token, 45.5M rows per
+        build, each serialized, sent and probed against the registry's
+        primary key and -- the token being new every build -- actually
+        rewritten, for a fact nothing read. Presence is now the registry
+        diffed against the clusters once, after the apply (`dump_registry`
+        and `record_presence`), with writes proportional to what changed.
 
         Detaching a member from its old YUID needs no work here: membership is
         derived from the yuid column, so re-pointing the row *is* the removal.
@@ -782,14 +832,16 @@ class IdMap(object):
         # and a duplicate here means a clustering bug, not a load that should
         # die halfway through.
         rows = {}
-        yuids = {}
+        minted = {}
         for yuid, members, prior in items:
             iyuid = self._manage_value_in(yuid)
-            yuids[iyuid] = self.update_token
             stats["clusters"] += 1
+            held = False
             for m in members:
                 stats["set"] += 1
                 old = (prior or {}).get(m)
+                if old == yuid:
+                    held = True
                 if old and old != yuid:
                     stats["moved"] += 1
                 if old == yuid:
@@ -798,19 +850,23 @@ class IdMap(object):
                     stats["unchanged"] += 1
                     continue
                 rows[self._manage_key_in(m)] = iyuid
-        if not yuids:
+            if not held:
+                # No member held it: minted by this identify (a cluster that
+                # won a claim has voters that held it). The registry row has
+                # to exist before merge asks `yuid in idmap`.
+                minted[iyuid] = self.update_token
+        if not minted and not rows:
             return stats
         with self._cursor() as cur:
-            # Unconditional, even when every member was skipped: the token is
-            # per-build, so a cluster that did not move still has to be
-            # stamped as seen by this one. Its own guard below makes the
-            # re-run case cheap.
-            psycopg2.extras.execute_values(
-                cur,
-                f"INSERT INTO {self.yuid_table} (yuid, token) VALUES %s "
-                f"ON CONFLICT (yuid) DO UPDATE SET token = EXCLUDED.token "
-                f"WHERE {self.yuid_table}.token IS DISTINCT FROM EXCLUDED.token",
-                list(yuids.items()), page_size=1000)
+            if minted:
+                # DO NOTHING: a re-minted uuid5 that is still registered
+                # keeps its row (and its minted time); record_presence
+                # clears its missing_since if it had one.
+                psycopg2.extras.execute_values(
+                    cur,
+                    f"INSERT INTO {self.yuid_table} (yuid, token) VALUES %s "
+                    f"ON CONFLICT (yuid) DO NOTHING",
+                    list(minted.items()), page_size=1000)
             if not rows:
                 return stats
             # The WHERE is what stops a re-run rewriting the whole map.
@@ -834,8 +890,8 @@ class IdMap(object):
             #
             # No staleness argument needed, unlike merge_refs: this is one
             # atomic statement, and if the stored yuid already equals the new
-            # one there is nothing to do. Same guard as the yuid/token upsert
-            # directly above, and as token_set and merge_refs.
+            # one there is nothing to do. Same guard as token_set and
+            # merge_refs.
             psycopg2.extras.execute_values(
                 cur,
                 f"INSERT INTO {self.table} (uri, yuid) VALUES %s "
@@ -846,6 +902,105 @@ class IdMap(object):
             for uri in rows:
                 del self.memory_cache[uri]
         return stats
+
+    # ------------------------------------------------------------- presence
+    # Which YUIDs the last identify assigned, as the registry's
+    # `missing_since` column (see PRESENCE_COLUMN). Identify dumps the
+    # registry, diffs it against the clusters it just applied in its own
+    # sort pipeline, and hands back only the differences.
+
+    def dump_registry(self, fh):
+        """Stream the registry to `fh` as ``yuid<TAB>missing_since``
+        (internal short form, blank when current); the row count.
+
+        The identify-side counterpart of `dump_members`: one sequential
+        scan instead of a probe per YUID. COPY text format: see the note
+        on `dump_members`."""
+        with self._cursor() as cur:
+            cur.copy_expert(
+                f"COPY (SELECT yuid, coalesce({PRESENCE_COLUMN}, '') "
+                f"FROM {self.yuid_table}) TO STDOUT", fh)
+            return cur.rowcount
+
+    def record_presence(self, missing=(), returned=(), new=(), chunk=1000):
+        """Apply the presence diff identify computed: `missing` are
+        registered YUIDs this build assigned to no cluster (their
+        `missing_since` becomes the current token, if not already set),
+        `returned` are assigned YUIDs that had one (cleared), `new` are
+        assigned YUIDs with no registry row at all (registered). Full URIs,
+        any iterables; a count of rows changed per kind."""
+        counts = {"missing": 0, "returned": 0, "new": 0}
+        y, col = self.yuid_table, PRESENCE_COLUMN
+        for batch in _chunked((self._manage_value_in(v) for v in missing), chunk):
+            with self._cursor() as cur:
+                cur.execute(f"UPDATE {y} SET {col} = %s WHERE yuid = ANY(%s) "
+                            f"AND {col} IS NULL", (self.update_token, batch))
+                counts["missing"] += cur.rowcount
+        for batch in _chunked((self._manage_value_in(v) for v in returned), chunk):
+            with self._cursor() as cur:
+                cur.execute(f"UPDATE {y} SET {col} = NULL WHERE yuid = ANY(%s) "
+                            f"AND {col} IS NOT NULL", (batch,))
+                counts["returned"] += cur.rowcount
+        for batch in _chunked((self._manage_value_in(v) for v in new), chunk):
+            with self._cursor() as cur:
+                psycopg2.extras.execute_values(
+                    cur,
+                    f"INSERT INTO {y} (yuid, token) VALUES %s ON CONFLICT (yuid) DO NOTHING",
+                    [(v, self.update_token) for v in batch], page_size=chunk)
+                counts["new"] += max(cur.rowcount, 0)
+        return counts
+
+    @staticmethod
+    def expiry_token(days, now=None):
+        """The build token `days` before `now` (a date or datetime; default
+        today), in the ``__YYYYMMDD__`` form tokens take. Tokens compare as
+        strings: ``__20260501__`` and ``__20260501a__`` both sort before
+        ``__20260502__``, so "missing_since < this" is every YUID that went
+        missing on an earlier day."""
+        now = now or datetime.date.today()
+        day = now - datetime.timedelta(days=days)
+        return f"__{day.year}{day.month:02d}{day.day:02d}__"
+
+    def missing_summary(self):
+        """``(count, oldest token)`` of the YUIDs currently missing."""
+        with self._cursor() as cur:
+            cur.execute(f"SELECT count(*), min({PRESENCE_COLUMN}) FROM {self.yuid_table} "
+                        f"WHERE {PRESENCE_COLUMN} IS NOT NULL")
+            n, oldest = cur.fetchone()
+        return n, oldest
+
+    def expire_yuids(self, cutoff, dry_run=False, chunk=1000):
+        """Delete the YUIDs that went missing before the `cutoff` token
+        (`expiry_token`), member rows and registry rows both -- a record
+        that comes back after this mints afresh. The member rows are what
+        kept its old identity reachable (the prior lookup still found
+        them), so they go with it; `delete_empty_yuids` never reaches a
+        YUID whose members stayed. ``{"yuids", "members", "cutoff"}``;
+        with `dry_run` the counts only."""
+        y, col = self.yuid_table, PRESENCE_COLUMN
+        out = {"yuids": 0, "members": 0, "cutoff": cutoff}
+        if dry_run:
+            with self._cursor() as cur:
+                cur.execute(f"SELECT count(*) FROM {y} WHERE {col} < %s", (cutoff,))
+                out["yuids"] = cur.fetchone()[0]
+                cur.execute(f"SELECT count(*) FROM {self.table} m JOIN {y} "
+                            f"ON m.yuid = {y}.yuid WHERE {y}.{col} < %s", (cutoff,))
+                out["members"] = cur.fetchone()[0]
+            return out
+        # the list first, in full: deleting from the table a cursor is
+        # reading is not something to lean on
+        with self._streaming(f"idmap_expire_{id(self) & 0xffff:x}") as cur:
+            cur.execute(f"SELECT yuid FROM {y} WHERE {col} < %s", (cutoff,))
+            dead = [row[0] for row in cur]
+        for batch in _chunked(dead, chunk):
+            with self._cursor() as cur:
+                cur.execute(f"DELETE FROM {self.table} WHERE yuid = ANY(%s)", (batch,))
+                out["members"] += cur.rowcount
+                cur.execute(f"DELETE FROM {y} WHERE yuid = ANY(%s)", (batch,))
+                out["yuids"] += cur.rowcount
+        if dead:
+            self.memory_cache.clear()
+        return out
 
     def delete_empty_yuids(self, yuids):
         """Drop the YUIDs among `yuids` that have no members left.
@@ -1113,19 +1268,19 @@ class IdMap(object):
     # ---------------------------------------------------------- update tokens
 
     def has_update_token(self, key):
+        """Whether the YUID is current: registered by this build, or seen by
+        the last identify (`missing_since` unset). The subsidiary map asks
+        this when it copies a class in."""
         ikey = self._manage_key_in(key)
         return self._run("token_is", (ikey, self.update_token)).fetchone() is not None
 
     def add_update_token(self, key):
-        """Mark a YUID as seen in this build. A column, so setting it replaces
-        the previous build's token instead of having to find and remove it."""
+        """Mark a YUID as seen: register it under this build's token if it is
+        new, else clear its `missing_since`."""
         ikey = self._manage_key_in(key)
-        # The WHERE in the prepared statement matters more than it looks: this
-        # is called for every identity a build touches, and after a full build
-        # essentially every yuid already carries the current token (45,513,255
-        # of 45,513,275 in the production map). Without it each of those is an
-        # UPDATE that writes a new row version and leaves a dead one -- tens of
-        # millions of pointless writes and the bloat to match.
+        # The WHERE in the prepared statement matters more than it looks: a
+        # current YUID needs no write at all, and without it each call is
+        # an UPDATE that writes a new row version and leaves a dead one.
         self._run("token_set", (ikey, self.update_token))
 
     # -------------------------------------------------------------- lifecycle
@@ -1180,22 +1335,26 @@ class IdMap(object):
                 yield self._manage_key_out(uri), self._manage_value_out(yuid)
 
     def iter_yuid_registry(self):
-        """``(yuid, token, minted)`` for every minted YUID, full form."""
+        """``(yuid, token, minted, missing_since)`` for every minted YUID,
+        full form."""
         with self._streaming(f"idmap_yuids_{id(self) & 0xffff:x}") as cur:
-            cur.execute(f"SELECT yuid, token, minted FROM {self.yuid_table}")
-            for yuid, token, minted in cur:
+            cur.execute(f"SELECT yuid, token, minted, {PRESENCE_COLUMN} FROM {self.yuid_table}")
+            for yuid, token, minted, missing in cur:
                 yield (self._manage_value_out(yuid), token,
-                       minted.isoformat() if minted is not None else None)
+                       minted.isoformat() if minted is not None else None, missing)
 
     def load_portable(self, members, registry, progress=null_progress):
         """Replace both tables from a portable backup, in one transaction
-        with the indexes rebuilt after the COPY; the member count."""
+        with the indexes rebuilt after the COPY; the member count. Registry
+        rows are ``(yuid, token, minted)`` or with ``missing_since`` as a
+        fourth element (a backup from before the column has none)."""
         counts = {"members": 0}
 
         def registry_lines():
-            for yuid, token, minted in registry:
+            for yuid, token, minted, *rest in registry:
+                missing = rest[0] if rest else None
                 yield (f"{copy_text(self._manage_value_in(yuid))}\t{copy_text(token)}\t"
-                       f"{copy_text(minted)}\n")
+                       f"{copy_text(minted)}\t{copy_text(missing)}\n")
 
         def member_lines():
             for uri, yuid in members:
@@ -1206,7 +1365,8 @@ class IdMap(object):
 
         conn = self._own_connection()
         try:
-            pg_load(conn, [(self.yuid_table, ["yuid", "token", "minted"], LineReader(registry_lines())),
+            pg_load(conn, [(self.yuid_table, ["yuid", "token", "minted", PRESENCE_COLUMN],
+                            LineReader(registry_lines())),
                            (self.table, ["uri", "yuid"], LineReader(member_lines()))])
         finally:
             conn.close()

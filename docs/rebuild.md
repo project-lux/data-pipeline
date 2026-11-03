@@ -133,6 +133,15 @@ identify`), merges the metatypes (`lux metatypes`) and writes the
 referenced URIs (`lux write-refs`). With `--no-finish` those three are
 left to run by hand, in that order.
 
+Identify's last line reports the identity map's presence changes: YUIDs
+no cluster took this build (their records are gone from the sources),
+YUIDs that came back, YUIDs registered. A missing YUID keeps its member
+rows so a record that returns gets its old identity; drop the ones that
+have been missing long enough with `lux pg-maintain --expire-yuids 180`
+(`--dry-run` counts first). Identify's sorts take `25%` of memory by
+default (`LUX_SORT_BUFFER=40G` to say otherwise) and merge the slices'
+files, which each slice sorts as it finishes.
+
 ### 2.5. Reidentify and merge
 
 ```

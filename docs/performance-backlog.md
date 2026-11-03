@@ -760,7 +760,56 @@ Pinned in `tests/test_identify_progress.py`.
 
 **Worth knowing:** `LUX_SORT_BUFFER` defaults to `1G`. On a 72 GiB box with
 nothing else running, the new per-sort lines will say whether raising it is
-worth anything.
+worth anything. (Since §3.12: `25%` of physical memory.)
+
+### 3.12 identify stamped 45M registry rows per build, and sorted on one core
+
+`assign_bulk()` and the new `dump_registry()` / `record_presence()` in
+`lux_pipeline/storage/idmap/postgres.py`; `IdentityResolver` in
+`lux_pipeline/process/identity_resolver.py`.
+
+**The registry stamp.** §3.10 stopped the member rows being re-sent, but the
+statement directly above it was left unconditional on purpose: every
+cluster's YUID was upserted with the build token so the registry could say
+which build last saw it. The guard on that upsert (`token IS DISTINCT FROM`)
+only helps a re-run with the *same* token; a new build has a new token, so
+all 45.5M registry rows were serialized, sent, probed against the registry's
+primary key and actually rewritten — the same per-row cost §3.10 measured at
+~0.7 ms, plus 45.5M dead tuples for the vacuum after — to record that nothing
+had changed. The information is wanted (a YUID whose records vanish at the
+source should outlive them for a while, in case they come back, then go), so
+it is now kept as the complement: `missing_since`, the first build that did
+not assign the YUID, NULL while it is current. Identify dumps the registry
+(one COPY), sorts it, merge-joins it against the YUIDs it just assigned, and
+writes only the differences — newly missing, returned, unregistered — in
+batches. Writes are proportional to the change, which on a measured run was
+one member in 45M. `assign_bulk` registers only the YUIDs identify minted (no
+member held them; a cluster that won a claim has voters that did). The
+expiry is `lux pg-maintain --expire-yuids DAYS` (`--dry-run` counts), which
+deletes the long-missing YUIDs with their member rows; `manage-data.py
+--clean-idmap` had done this against Redis set values and could not run on
+the Postgres map at all.
+
+**The sorts.** Nine external sorts over files of a line per record, with
+`-S 1G` and no `--parallel`: every multi-GB input spilled to temporary runs
+on the disk the build is bound by, merged on one core. Now: the buffer
+defaults to `25%` of physical memory (`LUX_SORT_BUFFER`), `--parallel` is
+passed (`LUX_SORT_PARALLEL`, default the core count up to 16; GNU sort stops
+at 8 on its own); each reconcile slice sorts its own assertion file when it
+closes, on the workers' cores in parallel, and identify checks every input
+with `sort -c` and *merges* (`sort -m`, one linear pass, no buffer) when
+they all are; the key options are dropped from the sorts whose order is the
+whole line (a tab sorts below every other byte, so field order on every
+field of a tab-separated line *is* line order, and keyless `sort` compares
+with one memcmp); and the sort of the clusters file by root is gone, since
+`_build_clusters` writes it grouped and every reader wants groups, not
+order.
+
+**Verify:** `n_tup_upd` on `idmap_yuid` across an identify run should fall
+from ~45M to the number of YUIDs that actually went missing or came back,
+`apply` in `timing-identify-all.json` should be minutes, and
+`sort_assertions` should report `merge` and a rate near the disk's
+sequential read.
 
 ---
 

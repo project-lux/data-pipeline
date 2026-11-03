@@ -349,7 +349,9 @@ def pg_load(conn, loads):
 def pg_copy_in(conn, tables, src_dir, entry, progress=null_progress):
     """Restore a `pg_copy_out` entry into `tables` -- the store's own
     table names, in the order it wrote them, which need not be the names
-    in the backup (a scratch ``tableName``). The columns must match."""
+    in the backup (a scratch ``tableName``). Every column in the backup
+    must exist in the table; a column the table has gained since (the
+    registry's ``missing_since``) is left to its default."""
     specs = entry["extra"]["tables"]
     if len(specs) != len(tables):
         raise ValueError(f"backup has {len(specs)} tables, the store {len(tables)}")
@@ -359,7 +361,7 @@ def pg_copy_in(conn, tables, src_dir, entry, progress=null_progress):
     with conn.cursor() as cur:
         for table, spec in zip(tables, specs):
             have = pg_columns(cur, table)
-            if sorted(have) != sorted(spec["columns"]):
+            if not set(spec["columns"]) <= set(have):
                 raise ValueError(f"{table} has columns {have}; the backup of {spec['table']} "
                                  f"has {spec['columns']}")
     handles = [gzip.open(os.path.join(src_dir, s["file"]), "rb") for s in specs]
@@ -438,8 +440,14 @@ def backup_idmap_portable(store, dest_dir, stem, progress=null_progress):
     with gzip.open(os.path.join(dest_dir, yuids), "wt", compresslevel=GZIP_LEVEL,
                    encoding="utf-8") as fh:
         for chunk in _chunks(store.iter_yuid_registry(), CHUNK):
-            for yuid, token, minted in chunk:
-                fh.write(dumps({"yuid": yuid, "token": token, "minted": minted}))
+            for yuid, token, minted, *rest in chunk:
+                row = {"yuid": yuid, "token": token, "minted": minted}
+                if rest and rest[0] is not None:
+                    # the postgres registry's presence column; absent
+                    # from the other backends' rows and from a current
+                    # YUID's
+                    row["missing_since"] = rest[0]
+                fh.write(dumps(row))
                 fh.write("\n")
             m += len(chunk)
             progress(advance=len(chunk))
@@ -480,7 +488,7 @@ def restore_portable(store, kind, src_dir, entry, progress=null_progress):
         if not is_portable_idmap(store):
             raise BackupRefused(f"{class_path(store)} cannot load a portable idmap backup")
         members = (tuple((r["k"], r["v"])) for r in read_jsonl(os.path.join(src_dir, entry["files"][0])))
-        registry = ((r["yuid"], r.get("token"), r.get("minted"))
+        registry = ((r["yuid"], r.get("token"), r.get("minted"), r.get("missing_since"))
                     for r in read_jsonl(os.path.join(src_dir, entry["files"][1])))
         return store.load_portable(members, registry, progress=progress)
 

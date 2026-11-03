@@ -33,11 +33,19 @@ def resolve_identity(cfgs, idmap):
 
 
 def report_lines(stats):
-    """The three lines run-identify.py prints for `stats`."""
-    return [f"nodes={stats.get('nodes')} pairs={stats.get('pairs')} "
-            f"diff_pairs={stats.get('diff_pairs')} clusters={stats.get('clusters')}",
-            f"conflicts={stats.get('conflicts')} (see identity_conflicts.jsonl)",
-            f"done in {stats.get('seconds')}s"]
+    """The lines run-identify.py prints for `stats`: the three it always
+    printed, plus the registry's presence changes (YUIDs no cluster took
+    this build, ones that came back, ones registered) when the map records
+    them."""
+    lines = [f"nodes={stats.get('nodes')} pairs={stats.get('pairs')} "
+             f"diff_pairs={stats.get('diff_pairs')} clusters={stats.get('clusters')}",
+             f"conflicts={stats.get('conflicts')} (see identity_conflicts.jsonl)"]
+    if "yuids_missing" in stats:
+        lines.append(f"yuids missing={stats.get('yuids_missing')} "
+                     f"returned={stats.get('yuids_returned')} new={stats.get('yuids_new')} "
+                     f"(lux pg-maintain --expire-yuids DAYS drops the long-missing)")
+    lines.append(f"done in {stats.get('seconds')}s")
+    return lines
 
 
 def vacuum_idmap(idmap):

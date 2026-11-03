@@ -198,12 +198,23 @@ def test_restore_into_a_scratch_table(tmp_path, pg):
     assert pg.loaded == {"scratch": IDMAP_TABLES["idmap"], "scratch_yuid": IDMAP_TABLES["idmap_yuid"]}
 
 
-def test_restore_refuses_other_columns(tmp_path, pg):
+def test_restore_refuses_a_table_missing_a_backed_up_column(tmp_path, pg):
     entry = bk.backup(fake_idmap(pg), "map", "idmap", str(tmp_path))
-    pg.columns["idmap"] = ["uri", "yuid", "extra"]
+    pg.columns["idmap"] = ["uri"]
     with pytest.raises(ValueError, match="has columns"):
         bk.restore(fake_idmap(pg), str(tmp_path), entry)
     assert not pg.loaded
+
+
+def test_restore_into_a_table_that_gained_a_column(tmp_path, pg):
+    """A backup from before the registry's missing_since column loads into
+    a map that has it: COPY names the backup's columns and the new one
+    takes its default."""
+    entry = bk.backup(fake_idmap(pg), "map", "idmap", str(tmp_path))
+    pg.columns["idmap_yuid"] = ["yuid", "token", "minted", "missing_since"]
+    bk.restore(fake_idmap(pg), str(tmp_path), entry)
+    assert "COPY idmap_yuid (yuid, token, minted) FROM STDIN" in pg.log
+    assert pg.loaded == IDMAP_TABLES
 
 
 def test_native_entries_restore_only_into_their_class(tmp_path, pg):
@@ -235,11 +246,13 @@ def test_idmap_portable_backup_keeps_tokens_and_memberless_yuids(tmp_path, monke
 def test_idmap_load_portable_into_postgres_is_one_load_in_short_form(tmp_path, pg):
     members = [("http://id.loc.gov/authorities/names/n1##quaPerson", f"{LUX}aaa"),
                ("http://example.org/a\tb", f"{LUX}aaa")]
-    registry = [(f"{LUX}aaa", "__20261027__", "2026-10-27T10:00:00"), (f"{LUX}bbb", None, None)]
+    # a row with missing_since, one from before the column had one
+    registry = [(f"{LUX}aaa", "__20261027__", "2026-10-27T10:00:00", "__20261101__"),
+                (f"{LUX}bbb", None, None)]
     m = fake_idmap(pg)
     assert m.load_portable(iter(members), iter(registry)) == 2
-    assert pg.loaded["idmap_yuid"] == ("yuid:aaa\t__20261027__\t2026-10-27T10:00:00\n"
-                                       "yuid:bbb\t\\N\t\\N\n")
+    assert pg.loaded["idmap_yuid"] == ("yuid:aaa\t__20261027__\t2026-10-27T10:00:00\t__20261101__\n"
+                                       "yuid:bbb\t\\N\t\\N\t\\N\n")
     assert pg.loaded["idmap"] == ("lcnaf:n1##quaPerson\tyuid:aaa\n"
                                   "http://example.org/a\\tb\tyuid:aaa\n")
     assert "TRUNCATE idmap_yuid, idmap" in pg.log and pg.log[-1] == "COMMIT"

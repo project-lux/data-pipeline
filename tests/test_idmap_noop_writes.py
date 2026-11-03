@@ -1,4 +1,4 @@
-"""An upsert that changes nothing must not rewrite the row.
+"""An upsert that changes nothing must not rewrite the row -- or be sent.
 
 Re-running identify over unchanged data computes the same clusters, so every
 member already points at the YUID being written. Measured on a production
@@ -8,10 +8,15 @@ rewritten to the value they already hold, each costing a new tuple version, a
 WAL record and a dead tuple. That is where `_apply_stream` spent hours, and
 where `idmap`'s 9.1% dead tuples came from.
 
-The codebase had already identified this failure mode three times -- the
-token upsert in the same function, the `token_set` prepared statement, and
-`merge_refs` -- and guarded all three. `assign_bulk`'s member upsert, the
-biggest write in the build, was the one that got missed.
+The guard alone was not enough: every one of those rows was still serialized,
+sent and probed against idmap_pkey for the server to find nothing to do, so a
+member whose prior already is the YUID is now never sent at all. And the
+statement next to it -- the registry upsert that stamped every cluster's YUID
+with the build token -- had the same shape with no cure at all: the token is
+new every build, so its guard never fired and 45M registry rows were rewritten
+per build to say nothing had changed. `assign_bulk` now registers only the
+YUIDs identify minted; which YUIDs a build saw is the registry diffed against
+the clusters once, afterwards (`record_presence`, tests/test_idmap_presence.py).
 
 Two statements are *deliberately* unguarded and these tests pin that too, so
 nobody "fixes" them: `mint()` assigns the column to itself precisely so
@@ -95,30 +100,30 @@ def member_upsert(seen):
     return next(sql for sql, _ in seen if "(uri, yuid)" in sql)
 
 
-# --- the fix ----------------------------------------------------------------
+def member_rows(seen):
+    return next(args for sql, args in seen if "(uri, yuid)" in sql)
+
+
+def registry_inserts(seen):
+    return [(sql, args) for sql, args in seen if "(yuid, token)" in sql]
+
+
+PERSON_X = "https://lux.collections.yale.edu/data/person/x"
+PERSON_Y = "https://lux.collections.yale.edu/data/person/y"
+
+
+# --- the member upsert's guard ---------------------------------------------
 
 def test_assign_bulk_does_not_rewrite_an_unchanged_member(batched):
     m = idmap()
-    m.assign_bulk([("https://lux.collections.yale.edu/data/person/x",
-                    ["aat:300404670##quaPerson"], {})])
+    m.assign_bulk([(PERSON_X, ["aat:300404670##quaPerson"], {})])
     sql = member_upsert(batched)
     assert "idmap.yuid IS DISTINCT FROM EXCLUDED.yuid" in sql
 
 
-def test_both_statements_in_assign_bulk_are_guarded(batched):
-    """They have to stay consistent -- the token half was guarded from the
-    start and the member half was not, which is how this was missed."""
-    m = idmap()
-    m.assign_bulk([("https://lux.collections.yale.edu/data/person/x",
-                    ["aat:1##quaPerson"], {})])
-    assert len(batched) == 2
-    for sql, _args in batched:
-        assert "IS DISTINCT FROM" in sql, sql
-
-
 def test_add_is_guarded_too(batched):
     m = idmap()
-    m._add("https://lux.collections.yale.edu/data/person/x", "aat:1##quaPerson")
+    m._add(PERSON_X, "aat:1##quaPerson")
     assert "idmap.yuid IS DISTINCT FROM EXCLUDED.yuid" in member_upsert(batched)
 
 
@@ -126,8 +131,7 @@ def test_the_guard_names_the_table_not_excluded_twice(batched):
     """`EXCLUDED.yuid IS DISTINCT FROM EXCLUDED.yuid` is always false, which
     would silently stop the map ever being updated at all."""
     m = idmap()
-    m.assign_bulk([("https://lux.collections.yale.edu/data/person/x",
-                    ["aat:1##quaPerson"], {})])
+    m.assign_bulk([(PERSON_X, ["aat:1##quaPerson"], {})])
     sql = member_upsert(batched)
     where = sql.split("WHERE", 1)[1]
     assert where.count("EXCLUDED.yuid") == 1
@@ -135,18 +139,6 @@ def test_the_guard_names_the_table_not_excluded_twice(batched):
 
 
 # --- not sending it at all --------------------------------------------------
-
-PERSON_X = "https://lux.collections.yale.edu/data/person/x"
-PERSON_Y = "https://lux.collections.yale.edu/data/person/y"
-
-
-def member_rows(seen):
-    return next(args for sql, args in seen if "(uri, yuid)" in sql)
-
-
-def yuid_upsert(seen):
-    return next(sql for sql, _ in seen if "(yuid, token)" in sql)
-
 
 def test_a_member_already_pointing_at_the_yuid_is_never_sent(batched):
     """The guard keeps the server from writing the row. It does not keep the
@@ -161,15 +153,41 @@ def test_a_member_already_pointing_at_the_yuid_is_never_sent(batched):
     assert got["moved"] == 0      # it did not move; it did not go anywhere
 
 
-def test_an_all_unchanged_cluster_still_stamps_its_yuid(batched):
-    """The update token is per-build, so a cluster that did not move still has
-    to be marked as seen by this one -- the early return that used to skip the
-    whole statement block would have dropped it."""
+def test_an_all_unchanged_cluster_sends_nothing_at_all(batched):
+    """Its members are where they were and its YUID is registered (a member
+    held it). The build token used to be stamped on the registry row here,
+    for every cluster, every build: 45M rows rewritten to record that nothing
+    changed. Presence is recorded by the diff afterwards instead."""
     m = idmap()
-    m.assign_bulk([(PERSON_X, ["aat:1##quaPerson"],
-                    {"aat:1##quaPerson": PERSON_X})])
-    assert len(batched) == 1
-    assert "(yuid, token)" in yuid_upsert(batched)
+    got = m.assign_bulk([(PERSON_X, ["aat:1##quaPerson"],
+                          {"aat:1##quaPerson": PERSON_X})])
+    assert got["clusters"] == 1
+    assert batched == []
+    assert m.conn.executed == []
+
+
+def test_a_minted_cluster_registers_its_yuid_without_stamping(batched):
+    """No member held the YUID, so identify minted it and merge will ask
+    `yuid in idmap`: a registry row, DO NOTHING, no token guard needed."""
+    m = idmap()
+    m.assign_bulk([(PERSON_X, ["aat:1##quaPerson", "aat:2##quaPerson"],
+                    {"aat:2##quaPerson": PERSON_Y})])
+    [(sql, args)] = registry_inserts(batched)
+    assert "ON CONFLICT (yuid) DO NOTHING" in sql
+    assert "DO UPDATE" not in sql
+    assert args == [("yuid:person/x", "__20260906__")]
+    assert len(member_rows(batched)) == 2
+
+
+def test_a_cluster_that_won_its_yuid_is_not_re_registered(batched):
+    """One voter is enough to prove the registry row exists: a cluster keeps
+    a YUID only when a member held it."""
+    m = idmap()
+    m.assign_bulk([(PERSON_X,
+                    ["aat:1##quaPerson", "aat:2##quaPerson", "aat:3##quaPerson"],
+                    {"aat:1##quaPerson": PERSON_X, "aat:2##quaPerson": PERSON_Y})])
+    assert registry_inserts(batched) == []
+    assert len(member_rows(batched)) == 2
 
 
 def test_a_moved_member_is_still_sent(batched):
@@ -206,6 +224,24 @@ def test_nothing_at_all_still_does_nothing(batched):
     m = idmap()
     assert m.assign_bulk([])["clusters"] == 0
     assert batched == []
+
+
+# --- the token statements that remain ---------------------------------------
+
+def test_add_update_token_only_writes_when_something_changes():
+    """A current YUID is a no-op; a missing one is cleared; a new one is
+    registered. Nothing rewrites a row to the value it holds."""
+    m = idmap()
+    sql = IdMap.PREPARED["token_set"].format(t="idmap", y="idmap_yuid")
+    assert "ON CONFLICT (yuid) DO UPDATE SET missing_since = NULL" in sql
+    assert "WHERE idmap_yuid.missing_since IS NOT NULL" in sql
+
+
+def test_has_update_token_reads_presence_not_the_stamp():
+    """With no per-build stamp, "seen by this build" is: registered by it,
+    or current as of the last identify."""
+    sql = IdMap.PREPARED["token_is"].format(t="idmap", y="idmap_yuid")
+    assert "token = $2 OR missing_since IS NULL" in sql
 
 
 # --- the deliberate exceptions ---------------------------------------------

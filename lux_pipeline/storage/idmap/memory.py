@@ -96,7 +96,7 @@ class IdMap(object):
         self.data = {}
         self._restoring_data_state = True
         try:
-            for yuid, token, _minted in registry:
+            for yuid, token, _minted, *_rest in registry:
                 self.data[self._manage_key_in(yuid)] = set()
                 if token:
                     self._add(yuid, token)

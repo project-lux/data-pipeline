@@ -342,10 +342,14 @@ def _run_with_priors(work, clusters, seeds, rng, monkeypatch, probe):
     return _prior_file(work), idmap.forward(), stats
 
 
-def test_bulk_prior_is_byte_identical_to_probing(tmp_path, monkeypatch):
+def test_bulk_prior_is_identical_to_probing(tmp_path, monkeypatch):
     """One scan of the map merge-joined against the members has to produce
-    the same clusters.prior as a key-at-a-time get_multi, line order and all
-    -- everything downstream reads that file with _grouped()."""
+    the same clusters.prior as a key-at-a-time get_multi: the same rows in
+    the same groups. The order of the groups may differ -- the bulk path's
+    final sort puts them in root order, the probe path follows the clusters
+    file, which is grouped but no longer sorted -- and nothing downstream
+    reads order, only grouping (_grouped(); claims and detail are sorted
+    afresh), so the comparison is on sorted lines."""
     rng = random.Random(11)
     clusters = make_clusters(rng, 40)
     # a prior YUID for about half the members, some of them shared so there
@@ -359,10 +363,15 @@ def test_bulk_prior_is_byte_identical_to_probing(tmp_path, monkeypatch):
     bulk = _run_with_priors(tmp_path / "bulk", clusters, seeds,
                             random.Random(3), monkeypatch, probe=False)
 
-    assert probe[0] == bulk[0]          # the file itself
+    assert sorted(probe[0].splitlines()) == sorted(bulk[0].splitlines())   # the rows
     assert probe[1] == bulk[1]          # the resulting map
     assert probe[2] == bulk[2]          # the stats
     assert "\t" in probe[0] and probe[0].count("\n") > 40
+    # and both are grouped: no root appears in two separate runs
+    for text in (probe[0], bulk[0]):
+        roots = [line.split("\t")[0] for line in text.splitlines()]
+        runs = [r for i, r in enumerate(roots) if i == 0 or roots[i - 1] != r]
+        assert len(runs) == len(set(runs))
 
 
 def test_bulk_prior_handles_an_empty_map(tmp_path, monkeypatch):
