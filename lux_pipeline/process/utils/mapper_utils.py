@@ -300,6 +300,11 @@ def make_datetime(value, precision=""):
     if "-00T00:00:00" in value:
         value = value.split("T")[0]
 
+    # strip +0000002026-01-01 down to just 4 digit year
+    if value.startswith("+0") and value.find('-') > 4:
+        fdash = value.find('-')
+        value = value[fdash-4:]
+
     # 13.07.v100 ; 20.07.v356  (v = BC) --> -0100-07-13
     m = de_bc_abbr.match(value)
     if m:
