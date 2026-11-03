@@ -39,7 +39,6 @@ import logging
 import os
 import shutil
 import subprocess
-import sys
 import tempfile
 import time
 import uuid
@@ -524,9 +523,9 @@ class IdentityResolver(object):
             self._say(f"  {label} done in {self._hms(time.time() - t0)}")
 
     def _say(self, line):
-        """Unbuffered, because the whole point is watching it from outside."""
-        print(line)
-        sys.stdout.flush()
+        """Logged at INFO; the handler flushes each line, because the whole
+        point is watching it from outside."""
+        logger.info(line)
 
     @staticmethod
     def _hms(seconds):

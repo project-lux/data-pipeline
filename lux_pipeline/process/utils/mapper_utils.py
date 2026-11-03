@@ -11,6 +11,8 @@ from edtf import parse_edtf, struct_time_to_datetime, text_to_edtf
 from edtf.parser.parser_classes import PartialUncertainOrApproximate as PUOA
 from edtf.parser.parser_classes import UncertainOrApproximate as UOA
 
+from lux_pipeline.log import logger
+
 # Note -- MaskedPrecision was removed from edtf, so removing as fuzzy parser
 
 try:
@@ -83,7 +85,7 @@ def get_wikidata_qid(wikipedia_url):
             if qid != "-1":  # if page is not found, the key will be "-1"
                 return qid
     except Exception as e:
-        print(f"Error getting wikidata ID {e}")
+        logger.warning(f"Error getting wikidata ID for {wikipedia_url!r}: {e}")
 
     return None
 
@@ -104,7 +106,7 @@ def walk_for_timespan(nodes):
                         (b, e) = make_datetime(dt)
                     except:
                         if not dt.startswith("9999"):
-                            print(f"Failed to make a date from {dt} ; stripping")
+                            logger.warning(f"Failed to make a date from {dt}; stripping")
                         del ts[tsp]
                         continue
                     if tsp.startswith("begin"):
@@ -127,7 +129,7 @@ def walk_for_timespan(nodes):
 
 def validate_timespans(rec):
     if not rec["type"] in time_rectype:
-        print(f"Couldn't find timespan paths for {rec['type']} in mapper_utils")
+        logger.warning(f"Couldn't find timespan paths for {rec['type']} in mapper_utils")
     else:
         props = time_rectype[rec["type"]]
         for p in props:
@@ -418,7 +420,7 @@ def make_datetime(value, precision=""):
                     begin = dt.lower_strict()
                     end = dt.upper_strict()
                 except Exception as e:
-                    print(f"EDTF couldn't process {ed_value}; ignoring")
+                    logger.warning(f"EDTF couldn't process {ed_value}; ignoring: {e}")
                     return None
             # EDTF hands back +/-inf, a float, for an open-ended interval
             # ("1980/..", "../1980", an unknown section) rather than a
@@ -471,14 +473,13 @@ def make_datetime(value, precision=""):
                     begin = dt3.date_obj
                     end = begin + timedelta(days=1)
                 elif dt3:
-                    print(f"dateparser found: {dt3} from {value} ?")
+                    logger.warning(f"dateparser found: {dt3} from {value} ?")
                     return None
                 else:
-                    print(f"Failed to parse date: {initialValue} --> {value}")
+                    logger.warning(f"Failed to parse date: {initialValue} --> {value}")
                     return None
             except Exception as e:
-                print(f"Failed to parse date with dateparser: {initialValue} --> {value}")
-                print(e)
+                logger.warning(f"Failed to parse date with dateparser: {initialValue} --> {value}: {e}")
                 return None
 
     if not precision:
@@ -493,7 +494,7 @@ def make_datetime(value, precision=""):
         try:
             prec_dt = dp_parser.get_date_data(value)
         except Exception as e:
-            print(f"dateparser couldn't judge precision of {initialValue}: {e}")
+            logger.warning(f"dateparser couldn't judge precision of {initialValue}: {e}")
             prec_dt = None
         if prec_dt is not None and prec_dt.date_obj:
             prec = prec_dt.period[0].upper()

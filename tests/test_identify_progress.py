@@ -50,25 +50,24 @@ def test_sizes_are_readable():
 
 # --- the announcements ------------------------------------------------------
 
-def test_a_step_announces_itself_before_it_runs(capsys):
+def test_a_step_announces_itself_before_it_runs(caplog):
     """Announcing only on completion would leave you blind for exactly as
     long as the step takes, which is the whole problem."""
     r = resolver()
-    with r._step("sort_assertions"):
-        during = capsys.readouterr().out
-        assert "sort_assertions ..." in during
-    after = capsys.readouterr().out
-    assert "done in" in after
+    with caplog.at_level("INFO", logger="lux_pipeline"):
+        with r._step("sort_assertions"):
+            assert caplog.messages == ["  sort_assertions ..."]
+        assert "done in" in caplog.messages[-1]
 
 
-def test_a_step_reports_even_when_it_raises(capsys):
+def test_a_step_reports_even_when_it_raises(caplog):
     """A step that dies is the one you most want the elapsed time for."""
     r = resolver()
-    with pytest.raises(RuntimeError):
-        with r._step("cluster"):
-            raise RuntimeError("sort died")
-    out = capsys.readouterr().out
-    assert "cluster done in" in out
+    with caplog.at_level("INFO", logger="lux_pipeline"):
+        with pytest.raises(RuntimeError):
+            with r._step("cluster"):
+                raise RuntimeError("sort died")
+    assert "cluster done in" in caplog.text
 
 
 def test_steps_land_in_the_timing_json():
@@ -90,14 +89,15 @@ def test_the_phase_is_named_so_the_rollup_finds_it():
 
 # --- the writer path must not break ----------------------------------------
 
-def test_the_helpers_are_harmless_without_a_timer(capsys):
+def test_the_helpers_are_harmless_without_a_timer(caplog):
     """run-reconcile constructs this class purely as an assertion writer and
     never calls resolve_identity, so _timer is never set there."""
     r = resolver(with_timer=False)
     assert r._timer is None
-    with r._step("whatever"):
-        pass
-    assert "whatever done in" in capsys.readouterr().out
+    with caplog.at_level("INFO", logger="lux_pipeline"):
+        with r._step("whatever"):
+            pass
+    assert "whatever done in" in caplog.text
 
 
 def test_the_class_default_means_no_attribute_error():
