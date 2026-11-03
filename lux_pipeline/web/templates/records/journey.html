@@ -41,7 +41,7 @@
   {% elif s == "identity" %}
     <p>YUID <a href="{{ look(st.uuid) }}">{{ st.yuid }}</a>, {{ st.members|length }} member(s):</p>
     <ul class="members">
-      {% for m in st.members %}<li><a href="{{ look(m) }}">{{ m }}</a>{% if m == st.key %} <span class="badge">this record</span>{% endif %}</li>{% endfor %}
+      {% for m in st.members %}<li><a href="{{ look(m) }}">{{ m }}</a>{% if m == st.key %} <span class="badge">this record</span>{% elif st.key in st.members and not m.startswith("__") %} <a class="small" href="/graph?{{ {'a': st.key, 'b': m}|urlencode }}">Graph with this</a>{% endif %}</li>{% endfor %}
     </ul>
   {% elif s == "mapped" %}
     {% for rec in st.records %}

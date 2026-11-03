@@ -34,8 +34,8 @@ logger = logging.getLogger("lux_pipeline")
 
 HERE = Path(__file__).parent
 # the areas, in navigation order (web.api.<name> and web.routers.<name>)
-AREAS = ("dashboard", "commands", "runs", "records", "counts", "timing", "config", "maintenance",
-         "health")
+AREAS = ("dashboard", "commands", "runs", "records", "graph", "counts", "timing", "config",
+         "maintenance", "health")
 # messages kept for the page a POST redirects to (?flash=<id>)
 FLASH_LIMIT = 200
 

@@ -96,6 +96,20 @@ bind where you can.
   now* runs the source's mapper on the stored raw record (nothing is
   fetched or stored). *Browse a cache* lists keys of any source's cache,
   by type or since a time. Nothing on these pages changes anything.
+* **Graph** (`/graph?a=<uri>&b=<uri>`): `lux viz` in the browser. Give
+  two URIs (or `##qua` keys) of one identity and see how reconciliation
+  connected them. The identity's records are reconciled again in the
+  server with debug recording on, and nothing is stored. With
+  `allow_network` on, records not cached may be fetched. The drawing marks
+  each kind of connection: a solid line for an equivalent, dotted for an
+  identifier index hit, dashed for a name index hit. Nodes are coloured by
+  source and the shortest path is thicker. A node links to its record.
+  Below it are the path and a key from each label to its URI. The record
+  page's identity tab has *Graph with this* beside each other member. The
+  first graph builds every source's reconciler, so it is slower. A replay
+  that takes over two minutes is abandoned with a pointer to `lux viz`.
+  Label numbers follow the order the replay meets the URIs, so they can
+  differ from one run to the next, in the shell as here.
 * **Counts** (`/counts`): `lux counts`, run when you ask (it takes a
   while on the build machine): the caches of the sources you name (a
   group, names, or all), the maps, the indexes; rows arrive as each is
@@ -135,7 +149,7 @@ bind where you can.
 
 Everything a page shows is also JSON under `/api/` (`/api/dashboard`,
 `/api/dashboard/running`, `/api/runs`, `/api/runs/<run>` (and its `log`,
-`events`), `/api/records/journey?q=`, `/api/records/sample?source=`,
+`events`), `/api/records/journey?q=`, `/api/records/sample?source=`, `/api/graph?a=&b=`,
 `/api/counts`, `/api/timing`, `/api/maintenance/tune`,
 `/api/maintenance/bloat`,
 `/api/config`, `/api/config/<key>`, `/api/commands`, `/api/commands/<name>`
