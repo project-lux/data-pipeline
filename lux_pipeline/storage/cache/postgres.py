@@ -14,6 +14,13 @@ logger = logging.getLogger("lux_pipeline")
 # It is transient, so retry the statement rather than killing the build.
 DEADLOCK_RETRIES = 5
 DEADLOCK_BACKOFF = 0.05
+# While deferring, a deadlock rolls back the whole batch. It is replayed this
+# many times in one transaction; if it deadlocks again, its writes are
+# committed one statement at a time instead (PoolManager.commit_singly), so
+# no row lock is held across statements and nothing is lost. A batch that
+# deadlocks twice means workers are writing the same keys (duplicates in a
+# load's input), and replaying it whole again would only collide again.
+DEFERRED_REPLAYS = 2
 from psycopg2.extras import Json, RealDictCursor
 
 from lux_pipeline.progress import null_progress
@@ -93,6 +100,10 @@ class PoolManager(object):
         # be replayed. Bounded by commit_every, which is therefore also the
         # bound on how many records are held in memory at once.
         self.deferred_stmts = []
+        # deadlocked batches committed one statement at a time, and their
+        # statements: reported by resume_commits()
+        self.singly_batches = 0
+        self.singly_stmts = 0
 
     @classmethod
     def get_instance(cls):
@@ -209,6 +220,41 @@ class PoolManager(object):
                 cursor.execute(qry, params)
         self.pending_writes = len(self.deferred_stmts)
 
+    def commit_singly(self, extra=()):
+        """After a rollback: run the deferred batch, then `extra` (``(query,
+        params)`` pairs), each statement in a transaction of its own,
+        committed at once. Holding no lock past its own statement, none of
+        them can be part of a deadlock cycle for long; each is still
+        retried. Leaves nothing deferred. Returns the statements run.
+
+        Every deferred statement is an upsert, so one that had landed before
+        the rollback changes nothing when it runs again."""
+        stmts = list(self.deferred_stmts) + list(extra)
+        self.deferred_stmts.clear()
+        self.pending_writes = 0
+        for n, (qry, params) in enumerate(stmts):
+            for attempt in range(DEADLOCK_RETRIES):
+                try:
+                    with self.conn.cursor() as cursor:
+                        cursor.execute(qry, params)
+                    self.conn.commit()
+                    break
+                except psycopg2.extensions.TransactionRollbackError as e:
+                    self.conn.rollback()
+                    if attempt == DEADLOCK_RETRIES - 1:
+                        logger.error(f"Deadlock committing a deferred batch one statement at a "
+                                     f"time: {len(stmts) - n} of {len(stmts)} statements lost: {e}")
+                        raise
+                    time.sleep(DEADLOCK_BACKOFF * (attempt + 1) * (0.5 + random.random()))
+                except Exception:
+                    self.conn.rollback()
+                    logger.error(f"Committing a deferred batch one statement at a time failed: "
+                                 f"{len(stmts) - n} of {len(stmts)} statements lost")
+                    raise
+        self.singly_batches += 1
+        self.singly_stmts += len(stmts)
+        return len(stmts)
+
     def put_all(self, name):
         # Closing a connection with an open transaction rolls it back, so
         # anything deferred has to land first
@@ -308,10 +354,13 @@ class PooledCache(AbstractCache):
         `deadlock detected`. If workers can write the same key, commit per
         write so each lock lives microseconds.
 
-        A deadlock in a deferred batch is recovered from rather than lost
-        (the batch is replayed -- see PoolManager.replay_deferred), but it
-        still means two workers are writing the same rows, so treat one as a
-        bug in the partitioning rather than as normal contention.
+        A deadlock in a deferred batch is recovered from rather than lost:
+        the batch is replayed (PoolManager.replay_deferred), and if it
+        deadlocks again its writes are committed one statement at a time
+        (PoolManager.commit_singly; logged, and counted when commits
+        resume). It still means two workers are writing the same rows, so
+        treat one as a bug in the partitioning, or duplicates in the input,
+        rather than as normal contention.
 
         `every` also bounds memory: the records in the current batch are held
         until it commits, so they can be replayed.
@@ -337,6 +386,11 @@ class PooledCache(AbstractCache):
     def resume_commits(self):
         """Land anything outstanding and go back to committing per set()."""
         self.flush()
+        if self.pools.singly_batches:
+            logger.warning(f"{self.pools.singly_batches:,} deadlocked batch(es) were committed one "
+                           f"write at a time ({self.pools.singly_stmts:,} writes); none were lost, "
+                           f"but parallel workers wrote the same keys")
+            self.pools.singly_batches = self.pools.singly_stmts = 0
         self.pools.deferring = False
         self.pools.commit_every = 0
         self.pools.batch_rows = 0
@@ -938,6 +992,15 @@ class PooledCache(AbstractCache):
                 # workers upsert the same rows. Transient by definition --
                 # the statement just needs running again.
                 self.conn.rollback()
+                if self.pools.deferring and attempt >= DEFERRED_REPLAYS - 1:
+                    # the batch deadlocked again: commit it, and this write,
+                    # a statement at a time rather than lose it
+                    n = self.pools.commit_singly(extra=[(qry, params)])
+                    logger.warning(f"Deadlock in {self.name} while deferring "
+                                   f"({identifier or 'a batch'}): committed its {n} writes one "
+                                   f"at a time instead. Workers are writing the same keys -- "
+                                   f"see defer_commits()")
+                    return
                 if self.pools.deferring:
                     # the rollback threw the batch away; put it back before
                     # retrying, otherwise the retry succeeds into a hole
