@@ -92,6 +92,47 @@ def test_runs_are_sorted_and_spill_by_size(tmp_path):
     assert total == 200
 
 
+def test_read_buffer_shares_the_budget_between_the_runs(monkeypatch):
+    MB = 1024 * 1024
+    monkeypatch.delenv("LUX_LMDB_READ_MB", raising=False)
+    assert D.read_buffer(256) == 4 * MB                  # 1 GB over 256 runs
+    assert D.read_buffer(0) == D.MAX_READ_BUFFER         # few runs: the ceiling
+    assert D.read_buffer(10) == D.MAX_READ_BUFFER
+    assert D.read_buffer(100000) == D.MIN_READ_BUFFER    # many runs: the floor
+    monkeypatch.setenv("LUX_LMDB_READ_MB", "512")
+    assert D.read_buffer(256) == 2 * MB
+
+
+def test_a_run_reads_the_same_through_any_buffer(tmp_path):
+    with D.RunWriter(str(tmp_path), 0, "text", run_bytes=10 ** 9) as rw:
+        for i, u in enumerate(uuids(500)):
+            rw.add("src", u, {"id": u, **({"type": "Place"} if i % 3 else {})})
+    (fn,) = [f for f in os.listdir(tmp_path) if f.endswith(".run")]
+    default = list(D.read_run(tmp_path / fn))
+    assert len(default) == 500 and any(r[1] == b"" for r in default)
+    # a buffer smaller than one record, and one larger than the file
+    assert list(D.read_run(tmp_path / fn, buffering=7)) == default
+    assert list(D.read_run(tmp_path / fn, buffering=16 * 1024 * 1024)) == default
+
+
+def test_the_merge_reads_every_run_through_the_shared_buffer(tmp_path, monkeypatch, caplog):
+    write_runs(tmp_path / "runs", [(u, "Person") for u in uuids(300)], workers=4)
+    runs = [f for f in os.listdir(tmp_path / "runs") if f.endswith(".run")]
+    seen = []
+    real = D.read_run
+
+    def spy(path, buffering=-1):
+        seen.append(buffering)
+        return real(path, buffering)
+    monkeypatch.setattr(D, "read_run", spy)
+    monkeypatch.setenv("LUX_LMDB_READ_MB", "64")
+    with caplog.at_level("INFO", logger="lux_pipeline"):
+        stats = D.build_store(str(tmp_path / "s.lmdb"), str(tmp_path / "runs"), "uuid")
+    assert stats["records"] == 300
+    assert seen == [D.read_buffer(len(runs))] * len(runs)
+    assert f"Merging {len(runs)} runs" in caplog.text
+
+
 def test_a_rerun_slice_replaces_only_its_own_runs(tmp_path):
     write_runs(tmp_path, [(u, None) for u in uuids(60)], workers=2, run_bytes=500)
     others = D.worker_runs(str(tmp_path), 1)
@@ -183,7 +224,7 @@ def test_a_failed_build_leaves_the_old_store(tmp_path, monkeypatch):
     D.build_store(str(tmp_path / "s.lmdb"), str(tmp_path / "runs"), "uuid")
     write_runs(tmp_path / "runs", [(u, "Place") for u in uuids(50, seed=2)])
 
-    def broken(path):
+    def broken(path, buffering=-1):
         yield from []
         raise OSError("disk full")
     monkeypatch.setattr(D, "read_run", broken)
