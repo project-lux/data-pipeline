@@ -1,5 +1,14 @@
 # Index — work top to bottom
 
+**Done, 2026-11-02:** W00–W13 are merged (PRs #357–#369 and W13's), and
+`docs/web.md` is the operator's guide. Left open, for Rob on the build
+machine: a real build started from the build page (phase strip,
+completion, agreement with `lux watch`); the W12 AAT / Wikidata graph
+compared with `lux viz` in the terminal; `lux serve --host 0.0.0.0 --token
+t` reachable from a laptop with the token and 401 without. Not done, by
+design: user accounts, editing cache records, committing the configuration
+checkout.
+
 Read `DESIGN.md` first. W00 is a test fixture (a database-free
 installation) that W04 onwards build their tests on. Items W01–W05 change
 existing modules so that the console and the web read the same data; they
@@ -25,7 +34,7 @@ more. Tick the box in the PR that lands the item.
 | W10 | [Command launcher and the build page](10-command-launcher-and-build.md) | L | W02, W09 | ☑ |
 | W11 | [Timing, counts and maintenance pages](11-timing-and-maintenance-pages.md) | M | W03, W06 | ☑ |
 | W12 | [Identity graph page](12-identity-graph-page.md) | S | W05, W06 | ☑ |
-| W13 | [Security, action log, docs](13-docs-security-hardening.md) | M | W07–W12 | ☐ |
+| W13 | [Security, action log, docs](13-docs-security-hardening.md) | M | W07–W12 | ☑ |
 
 ## Dependency picture
 

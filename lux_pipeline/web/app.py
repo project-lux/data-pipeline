@@ -18,7 +18,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -26,7 +26,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from lux_pipeline import runtime
 from lux_pipeline.process.timing_report import fmt_duration, fmt_time
 
-from .security import TOKEN_COOKIE, new_csrf_token, require_csrf, require_token
+from .security import (NO_CSP_PATHS, SECURITY_HEADERS, TOKEN_COOKIE, new_csrf_token, require_csrf,
+                       require_token, safe_next, token_ok)
 from .settings import Settings
 from .state import AppState, ConfigUnavailable
 
@@ -35,7 +36,7 @@ logger = logging.getLogger("lux_pipeline")
 HERE = Path(__file__).parent
 # the areas, in navigation order (web.api.<name> and web.routers.<name>)
 AREAS = ("dashboard", "commands", "runs", "records", "graph", "counts", "timing", "config",
-         "maintenance", "health")
+         "maintenance", "health", "actions")
 # messages kept for the page a POST redirects to (?flash=<id>)
 FLASH_LIMIT = 200
 
@@ -77,8 +78,7 @@ def flash(request, message, kind="ok"):
 def redirect_with(request, url, message, kind="ok"):
     """303 to `url` (a path on this server) showing `message` there."""
     from fastapi.responses import RedirectResponse
-    if not url.startswith("/") or url.startswith("//"):
-        url = "/"
+    url = safe_next(url)          # never another host (//host, /\host)
     sep = "&" if "?" in url else "?"
     return RedirectResponse(f"{url}{sep}flash={flash(request, message, kind)}", status_code=303)
 
@@ -144,6 +144,12 @@ def create_app(settings=None):
         if getattr(pages, "NAV", None):
             app.state.nav.append(pages.NAV)
 
+    if settings.token:
+        logger.info(f"web UI at {settings.url}: every request needs the token "
+                    "(Authorization: Bearer, or the cookie /login sets)")
+    else:
+        logger.info(f"web UI at {settings.url}: no token, so it answers on {settings.host} only")
+
     # the runs this server started before a restart, still running
     try:
         app.state.runner.adopt()
@@ -157,13 +163,32 @@ def create_app(settings=None):
         return {"ok": True, "basepath": runtime.get_basepath() or None,
                 "uptime": round(time.time() - app.state.lux.started, 1)}
 
+    @app.get("/login", include_in_schema=False)
+    def login(request: Request, token: str = "", next: str = "/"):
+        """The sign-in page; with the right ``token``, the cookie and on to
+        `next` (a path on this server)."""
+        if not settings.token:
+            return RedirectResponse(safe_next(next), status_code=303)
+        if token and token_ok(request, token):
+            response = RedirectResponse(safe_next(next), status_code=303)
+            response.set_cookie(TOKEN_COOKIE, token, httponly=True, samesite="strict")
+            return response
+        return page(request, "login.html", status_code=401 if token else 200,
+                    error="That is not this server's token." if token else None,
+                    next=safe_next(next), with_configs=False)
+
     @app.middleware("http")
     async def remember_token(request: Request, call_next):
-        """``?token=...`` once: the browser keeps it as a cookie."""
+        """``?token=...`` once: the browser keeps it as a cookie. Every
+        response gets the security headers."""
         response = await call_next(request)
         token = settings.token
-        if token and request.query_params.get("token") == token:
+        if token and request.query_params.get("token") and token_ok(request, request.query_params["token"]):
             response.set_cookie(TOKEN_COOKIE, token, httponly=True, samesite="strict")
+        for k, v in SECURITY_HEADERS.items():
+            if k == "Content-Security-Policy" and request.url.path in NO_CSP_PATHS:
+                continue
+            response.headers.setdefault(k, v)
         return response
 
     @app.exception_handler(ConfigUnavailable)
@@ -181,6 +206,10 @@ def create_app(settings=None):
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error(request, exc):
+        if exc.status_code == 401 and not wants_json(request):
+            nxt = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+            return page(request, "login.html", status_code=401, error=None, next=safe_next(nxt),
+                        with_configs=False)
         return error_response(request, exc.status_code, str(exc.detail))
 
     @app.exception_handler(RequestValidationError)

@@ -13,6 +13,7 @@ answers from a map that identify has since rewritten.
 import logging
 import threading
 import time
+from contextlib import contextmanager
 
 from lux_pipeline import runtime
 from lux_pipeline.config import Config
@@ -38,6 +39,8 @@ class AppState:
         self.recent_lookups = []
         # the last `lux counts` the counts page ran
         self.last_counts = None
+        # the slow reports running now ("counts", "bloat"): one of each at a time
+        self.busy = set()
 
     # --- configuration ----------------------------------------------------------------
 
@@ -111,6 +114,27 @@ class AppState:
                             shutdown()
                         except Exception as e:
                             logger.debug(f"closing {cfg.get('name')} {key}: {e}")
+
+    # --- one at a time ----------------------------------------------------------------
+
+    def claim(self, name):
+        """Mark report `name` running; RuntimeError (409) if it is already."""
+        with self.lock:
+            if name in self.busy:
+                raise RuntimeError(f"{name} is already running: wait for it to finish")
+            self.busy.add(name)
+
+    def release(self, name):
+        with self.lock:
+            self.busy.discard(name)
+
+    @contextmanager
+    def only_one(self, name):
+        self.claim(name)
+        try:
+            yield
+        finally:
+            self.release(name)
 
     # --- runs -------------------------------------------------------------------------
 

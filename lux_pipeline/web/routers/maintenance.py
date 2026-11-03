@@ -4,7 +4,8 @@ report, both read only."""
 from fastapi import APIRouter, Request
 
 from lux_pipeline.cli.pg_maintain import RESULT_CACHES, SOURCE_CACHES
-from lux_pipeline.web.api.maintenance import iter_bloat, tune_data
+from lux_pipeline.web.actions import record
+from lux_pipeline.web.api.maintenance import bloat_rows, tune_data
 from lux_pipeline.web.app import page
 
 router = APIRouter(include_in_schema=False)
@@ -23,7 +24,8 @@ def maintenance(request: Request, workers: int | None = None, bloat: bool = Fals
     error = None
     if bloat:
         try:
-            got = list(iter_bloat(state, source, cache))
+            record(request, "bloat.run", source=source, cache=cache)
+            got = bloat_rows(state, source, cache)
             rows = [r for r in got if "skipped" not in r]
             skipped = [r["skipped"] for r in got if "skipped" in r]
         except Exception as e:

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+<section class="card login">
+  <h1>This server needs its token</h1>
+  <p class="lead">It was started with <code>--token</code> (or <code>LUX_WEB_TOKEN</code>). Give the token once:
+  this browser keeps it as a cookie. Other clients send <code>Authorization: Bearer &lt;token&gt;</code>.</p>
+  {% if error %}<div class="banner fail" role="alert">{{ error }}</div>{% endif %}
+  <form class="form" method="get" action="/login">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label for="login-token">Token</label>
+    <input id="login-token" type="password" name="token" autocomplete="current-password" required>
+    <p><button type="submit">Sign in</button></p>
+  </form>
+</section>
+{% endblock %}

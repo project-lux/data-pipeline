@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse
 
+from lux_pipeline.web.actions import record
 from lux_pipeline.web.api.health import health_data, start_health
 from lux_pipeline.web.app import page
 
@@ -18,4 +19,5 @@ def health(request: Request):
 @router.post("/health/run")
 def run(request: Request, workers: str = Form(""), pg_tune: str = Form("")):
     start_health(request.app.state.lux, workers=bool(workers), pg_tune=bool(pg_tune))
+    record(request, "health.run", workers=bool(workers), pg_tune=bool(pg_tune))
     return RedirectResponse("/health", status_code=303)

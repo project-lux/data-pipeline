@@ -13,6 +13,7 @@ from lux_pipeline.cli._handler import refuse_while_building
 from lux_pipeline.config_store import ConfigError
 from lux_pipeline.web.api.config import (config_index, data_from_fields, parse_text,
                                          record_data)
+from lux_pipeline.web import actions
 from lux_pipeline.web.app import page, redirect_with
 
 router = APIRouter(include_in_schema=False)
@@ -48,6 +49,7 @@ async def reload(request: Request):
     state = request.app.state.lux
     state.reset()
     n = len(state.configs().record_origins)
+    actions.record(request, "config.reload", records=n)
     return redirect_with(request, form.get("back") or "/config",
                          f"Reloaded the configuration: {n} records")
 
@@ -91,6 +93,7 @@ async def create(request: Request):
         path, warnings = store.new_record(cfgs, key, data, store=store_key or None)
     except ConfigError as e:
         return new_page(request, 400, error="Not written", problems=e.problems or [str(e)], **again)
+    actions.record(request, "config.new", key=key, path=path, store=store_key or None)
     state.reset()
     return redirect_with(request, f"/config/{key}", written(path, warnings))
 
@@ -130,6 +133,8 @@ async def save(request: Request, key: str):
     except ConfigError as e:
         return record_page(request, key, 400, error="Not saved", problems=e.problems or [str(e)],
                            **keep)
+    actions.record(request, "config.write", key=key, path=path, mode=mode,
+                   forced=bool(form.get("force")))
     state.reset()
     return redirect_with(request, f"/config/{key}" + ("?tab=text" if mode == "text" else ""),
                          written(path, warnings))
@@ -147,5 +152,6 @@ async def delete(request: Request, key: str):
     except RuntimeError as e:
         return record_page(request, key, 409, error=str(e))
     path = store.delete_record(cfgs, key)
+    actions.record(request, "config.delete", key=key, path=path)
     state.reset()
     return redirect_with(request, "/config", f"Deleted {key} ({path}); the configuration was reloaded")

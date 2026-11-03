@@ -50,6 +50,8 @@ class CommandHandler(BaseHandler):
         """Defaults, the configuration's ``web`` block (when the
         configuration reads), then the options."""
         from lux_pipeline.web.settings import Settings
+        # ./.env and ~/.lux/.env first, so LUX_WEB_TOKEN may be set there
+        runtime.get_basepath()
         cfgs = self.configs
         if cfgs is None:
             try:
