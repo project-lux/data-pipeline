@@ -1,0 +1,15 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "lux-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "start",
+        "--prefix",
+        "/Users/wjm55/lux-fabel/vendor/lux-frontend/client"
+      ],
+      "port": 3000
+    }
+  ]
+}

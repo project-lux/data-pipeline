@@ -1,0 +1,17 @@
+{
+    "name": "ipch",
+    "type": "internal",
+    "namespace": "https://paperbase.xyz/records/",
+    "matches": [
+        "paperbase.xyz/records/"
+    ],
+    "fetch": "https://paperbase.xyz/records/{identifier}",
+    "activitystreams": [],
+    "merge_order": 1,
+    "mapperClass": "sources.yale.ipch.mapper.IpchMapper",
+    "loaderClass": "sources.yale.ipch.loader.IpchLoader",
+    "harvesterClass": "process.base.harvester.ASHarvester",
+    "totalRecords": 8500,
+    "dumpFilePath": "ipch/all_records.jsonl",
+    "dumpFileType": "lines/json"
+}

@@ -1,0 +1,17 @@
+{
+    "name": "pmc",
+    "type": "internal",
+    "namespace": "https://data.paul-mellon-centre.ac.uk/",
+    "matches": [
+        "data.paul-mellon-centre.ac.uk/"
+    ],
+    "fetch": "https://data.paul-mellon-centre.ac.uk/{identifier}",
+    "activitystreams": [],
+    "merge_order": 1,
+    "mapperClass": "sources.yale.pmc.mapper.PmcMapper",
+    "loaderClass": "sources.yale.pmc.loader.PmcLoader",
+    "harvesterClass": "process.base.harvester.ASHarvester",
+    "totalRecords": 185000,
+    "dumpFilePath": "pmc/pmc-export.tgz",
+    "dumpFileType": "tar.gz/json"
+}

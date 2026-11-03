@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge %}
+{% block title %}Timing{% endblock %}
+{% macro hours(h) %}{{ "%.2f"|format(h) }}{% endmacro %}
+{% macro us(v) %}{% if v is none %}-{% else %}{{ "{:,.1f}".format(v) }}{% endif %}{% endmacro %}
+{% block content %}
+<h1>Timing</h1>
+<p class="lead">What every phase's <code>PhaseTimer</code> left in <code>{{ data.directory }}</code>, slice by slice, added up:
+<code>lux timing-report</code> in the browser. Phases are in build order; a phase still running shows its numbers so far.
+<a href="/timing/compare">Compare two runs</a>.</p>
+<form class="form inline" method="get" action="/timing">
+  <label>Phase <select name="phase"><option value="">every phase</option>
+    {% for p in phases %}<option value="{{ p }}"{% if p == phase %} selected{% endif %}>{{ p }}</option>{% endfor %}</select></label>
+  <label>Profiles <input type="number" name="profile" min="1" max="200" placeholder="top {{ default_top }}" value="{{ profile or '' }}"></label>
+  {% if dir %}<input type="hidden" name="dir" value="{{ dir }}">{% endif %}
+  <button type="submit" class="secondary">Show</button>
+</form>
+{% if data.error %}<p class="banner warn">{{ data.error }}</p>{% endif %}
+{% if data.no_profiles %}<p class="muted">{{ data.no_profiles }}</p>{% endif %}
+
+{% for p in data.phases %}
+<section class="card wide timing" id="phase-{{ p.phase }}">
+  <h2>{{ p.phase }} {{ badge("finished" if p.finished else "running") }}
+    <span class="muted small">{{ p.complete }}/{{ p.slices }} slices finished</span>
+    <a class="small" href="/runs?command={{ p.phase.split('-')[0] }}">its runs</a></h2>
+  <dl class="kv">
+    <dt>records</dt><dd>{{ fmt_n(p.records) }}{% if p.skipped %} ({{ fmt_n(p.skipped) }} skipped){% endif %} in {{ fmt_duration(p.wall) }} wall, {{ "{:,.0f}".format(p.rate) }}/s</dd>
+    <dt>work</dt><dd>{{ "%.1f"|format(p.worker_hours) }} worker-hours, {{ "%.1f"|format(p.cpu_hours) }} cpu-hours</dd>
+    <dt>cpu</dt><dd><meter class="share {{ p.cpu_class }}" min="0" max="100" value="{{ p.cpu_percent }}"></meter> <span class="state-{{ p.cpu_class }}">{{ "%.0f"|format(p.cpu_percent) }}%</span></dd>
+    {% if p.host %}<dt>host</dt><dd>{{ p.host }}</dd>{% endif %}
+    <dt>ran</dt><dd>{{ fmt_time(p.started_at) }} to {{ fmt_time(p.ended_at) }}</dd>
+  </dl>
+  {% if p.stale %}<p class="muted">ignored {{ p.stale }}</p>{% endif %}
+  {% if p.idle %}<p class="state-warn">{{ p.idle }}</p>{% endif %}
+  {% if p.stages %}
+  <table class="table stages">
+    <thead><tr><th>Stage</th><th class="num">Worker-hrs</th><th>Share of worker time</th><th class="num">Calls</th><th class="num">µs/call</th></tr></thead>
+    <tbody>
+    {% for s in p.stages %}
+      <tr{% if s.name == "(unattributed)" %} class="muted"{% endif %}><td>{{ s.name }}</td><td class="num">{{ hours(s.hours) }}</td>
+        <td><meter class="share" min="0" max="100" value="{{ s.share }}"></meter> {{ "%.1f"|format(s.share) }}%</td>
+        <td class="num">{{ fmt_n(s.calls) }}</td><td class="num">{{ us(s.us_per_call) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% for n in p.nested %}
+  <h3>inside {{ n.parent }} <span class="muted small">(already counted above, not additional)</span></h3>
+  <table class="table stages nested"><tbody>
+    {% for s in n.rows %}<tr><td>{{ s.name }}</td><td class="num">{{ hours(s.hours) }}</td><td class="num">{{ fmt_n(s.calls) }}</td><td class="num">{{ us(s.us_per_call) }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% if n.overrun %}<p class="muted">{{ n.overrun }}</p>{% endif %}
+  {% endfor %}
+  {% endif %}
+  {% if p.rates %}
+  <p>Per-slice rate {{ "{:,.0f}".format(p.rates.lowest) }} to {{ "{:,.0f}".format(p.rates.highest) }}/s (median {{ "{:,.0f}".format(p.rates.median) }}, spread {{ "%.0f"|format(p.rates.spread) }}%).
+    {% if p.rates.slow %}<span class="state-fail">Slow slices: {{ p.rates.slow|join(", ") }}.</span>{% elif p.rates.even %}<span class="state-ok">Evenly spread: no straggler.</span>{% endif %}
+    {% if p.rates.fast %}Fast slices: {{ p.rates.fast|join(", ") }}.{% endif %}</p>
+  {% endif %}
+  {% if p.slices > 1 %}
+  <details><summary>Slices</summary>
+  <table class="table"><thead><tr><th class="num">Slice</th><th class="num">Records</th><th class="num">Time</th><th class="num">Records/s</th><th>Finished</th></tr></thead><tbody>
+    {% for r in p.slice_rows %}<tr class="{{ r.class }}"><td class="num">{{ r.slice }}</td><td class="num">{{ fmt_n(r.records) }}</td><td class="num">{{ fmt_duration(r.seconds) }}</td><td class="num">{{ "{:,.0f}".format(r.rate or 0) }}</td><td>{{ "yes" if r.complete else "no" }}</td></tr>{% endfor %}
+  </tbody></table></details>
+  {% endif %}
+  {% if p.marks %}<p class="muted">Source boundaries (slice {{ p.marks_slice }}): {% for m in p.marks %}{{ m.source }} at {{ "%.0f"|format(m.minutes) }}m{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+  {% if p.profile %}
+  <h3>Profile <span class="muted small">{{ p.profile.slices }} slice(s), {{ fmt_n(p.profile.calls) }} calls, {{ "%.0f"|format(p.profile.cpu_seconds) }} s</span></h3>
+  {% for key in ("cumtime", "tottime") %}
+  <table class="table profile"><caption>{{ p.profile.titles[key] }}</caption>
+    <thead><tr><th>Function</th><th class="num">Calls</th><th class="num">Own s</th><th class="num">Cumulative s</th></tr></thead><tbody>
+    {% for r in p.profile.top[key] %}<tr><td class="detail">{{ r.label }}</td><td class="num">{{ fmt_n(r.calls) }}</td><td class="num">{{ "%.1f"|format(r.tottime) }}</td><td class="num">{{ "%.1f"|format(r.cumtime) }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% endfor %}
+  {% for m in p.profile.matched %}
+  <p><strong>{{ m.stage }}</strong> ({{ m.label }}, {{ "%.1f"|format(m.cumtime) }} s) spends most in:</p>
+  <ul>{% for c in m.callees %}<li class="detail">{{ c.label }}: {{ "%.0f"|format(c.share) }}% ({{ "%.1f"|format(c.cumtime) }} s)</li>{% endfor %}</ul>
+  {% endfor %}
+  {% endif %}
+</section>
+{% endfor %}
+
+{% set t = data.summary %}
+{% if t %}
+<section class="card wide">
+  <h2>All {{ t.phases }} phases</h2>
+  <dl class="kv">
+    <dt>span</dt><dd>{{ fmt_time(t.started_at) }} to {{ fmt_time(t.ended_at) }}: {{ fmt_duration(t.elapsed) }}, of which {{ fmt_duration(t.in_phases) }} in phases and {{ fmt_duration(t.between) }} between them</dd>
+    <dt>work</dt><dd>{{ fmt_duration(t.wall) }} of phase wall clock, {{ "%.1f"|format(t.worker_hours) }} worker-hours, <span class="state-{{ t.cpu_class }}">{{ "%.0f"|format(t.cpu_percent) }}% cpu</span></dd>
+    {% if t.host %}<dt>host</dt><dd>{{ t.host }}</dd>{% endif %}
+  </dl>
+  {% if t.timeline %}
+  <svg class="timeline" viewBox="-130 0 1140 {{ t.height + 4 }}" role="img" aria-label="When each phase ran">
+    {% for r in t.timeline %}
+    <text x="-8" y="{{ r.y + 15 }}" text-anchor="end">{{ r.phase }}</text>
+    <rect x="{{ r.x }}" y="{{ r.y + 3 }}" width="{{ r.w }}" height="16" rx="3" class="{{ 'done' if r.done else 'running' }}"><title>{{ r.phase }}: {{ fmt_time(r.start) }} to {{ fmt_time(r.end) }}, {{ fmt_duration(r.wall) }} wall</title></rect>
+    {% endfor %}
+  </svg>
+  {% endif %}
+  {% if t.bottlenecks %}
+  <h3>Where the time went</h3>
+  <table class="table"><thead><tr><th>Phase</th><th>Stage</th><th class="num">Elapsed it accounts for</th><th>Share</th></tr></thead><tbody>
+    {% for b in t.bottlenecks %}<tr><td>{{ b.phase }}</td><td>{{ b.stage }}</td><td class="num">{{ fmt_duration(b.seconds) }}</td><td><meter class="share" min="0" max="100" value="{{ b.share }}"></meter> {{ "%.1f"|format(b.share) }}%</td></tr>{% endfor %}
+  </tbody></table>
+  {% endif %}
+  {% for s in t.stragglers %}<p class="state-warn">{{ s.phase }} waited {{ fmt_duration(s.seconds) }} on its slowest slice{% if s.slow %} (slow: {{ s.slow|join(", ") }}){% endif %}.</p>{% endfor %}
+  {% for g in t.gaps %}<p class="state-warn">{{ fmt_duration(g.seconds) }} between {{ g.after }} and {{ g.before }}: probably different builds.</p>{% endfor %}
+  {% for s in t.spread_out %}<p class="state-warn">{{ s.note }}</p>{% endfor %}
+  {% if t.incomplete %}<p class="muted">Not every slice finished: {{ t.incomplete|join(", ") }}.</p>{% endif %}
+  {% if t.estimated %}<p class="muted">{{ t.estimated }}</p>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

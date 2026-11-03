@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_macros.html" import kv, badge, bar %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+<div class="cards">
+  <section class="card">
+    <h2>Installation</h2>
+    {% set i = data.installation %}
+    {{ kv([("configuration", i.basepath), ("record", i.base_record), ("base_dir", i.base_dir),
+           ("data_dir", i.data_dir), ("log_dir", i.log_dir), ("exports_dir", i.exports_dir),
+           ("indexes_dir", i.indexes_dir), ("temp_dir", i.temp_dir), ("max_workers", i.max_workers),
+           ("postgres", i.postgres), (".env", i.env_file)]) }}
+  </section>
+
+  <section class="card">
+    <h2>Sources</h2>
+    {% for group in ("internal", "external", "results") %}
+    <h3>{{ group }} <span class="muted">({{ data.sources[group]|length }})</span></h3>
+    <p class="names">{% for n in data.sources[group] %}<a href="/records/browse?source={{ n|urlencode }}">{{ n }}</a>{% if not loop.last %}, {% endif %}{% else %}none{% endfor %}</p>
+    {% endfor %}
+  </section>
+
+  <section class="card">
+    <h2>Running now</h2>
+    {% if data.running %}
+    <table class="table">
+      <tbody>
+      {% for r in data.running %}
+        <tr><td>{% if r.rel %}<a href="/runs/{{ r.rel }}">{{ r.command }}</a>{% else %}{{ r.command }}{% endif %}</td><td>{{ bar(r.completed, r.total) }}</td>
+            <td class="muted">{{ r.workers }} worker(s), started {{ fmt_time(r.started) }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Nothing is running.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Last build</h2>
+    {% if data.last_build %}
+    <pre class="log">{% for line in data.last_build %}{{ line }}
+{% endfor %}</pre>
+    {% else %}
+    <p class="muted">No build has written to pipeline_process_status.txt in log_dir.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Health</h2>
+    {% if data.health %}
+    {% set fails = data.health.results|selectattr("state", "equalto", "FAIL")|list %}
+    {% set warns = data.health.results|selectattr("state", "equalto", "WARN")|list %}
+    <p>{{ badge("FAIL" if fails else ("WARN" if warns else "OK")) }}
+       {{ data.health.results|length }} checks, {{ fails|length }} failed, {{ warns|length }} warnings,
+       {{ fmt_time(data.health.finished) }}</p>
+    {% else %}
+    <p class="muted">Not checked since the server started.</p>
+    {% endif %}
+    <p><a href="/health">The checks</a></p>
+  </section>
+</div>
+
+<section class="card wide">
+  <h2>Recent runs <a class="small" href="/runs">all runs</a> <a class="small" href="/runs/_latest">watch the latest</a></h2>
+  {% if data.recent %}
+  <table class="table">
+    <thead><tr><th>Command</th><th>State</th><th>Started</th><th class="num">Workers</th><th>Progress</th><th>Prefix</th></tr></thead>
+    <tbody>
+    {% for r in data.recent %}
+      <tr><td>{% if r.rel %}<a href="/runs/{{ r.rel }}">{{ r.command }}</a>{% else %}{{ r.command }}{% endif %}</td><td>{{ badge(r.state) }}</td><td>{{ fmt_time(r.started) }}</td>
+          <td class="num">{{ r.workers }}</td><td>{{ bar(r.completed, r.total) }}</td>
+          <td class="path">{{ r.prefix }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No runs under {{ data.installation.log_dir or "log_dir" }}.</p>
+  {% endif %}
+</section>
+{% endblock %}

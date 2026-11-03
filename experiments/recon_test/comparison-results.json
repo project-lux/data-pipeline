@@ -1,0 +1,100 @@
+{
+  "legacy": {
+    "cold": {
+      "identical_across_orders": false,
+      "members_differing_across_orders": 946499,
+      "members_total": 946499,
+      "fragmented_clusters": 3379,
+      "cross_cluster_merges": 0,
+      "diff_pairs_violated": 683,
+      "diff_pairs_kept_separate": 317,
+      "conflict_rec_joined_majority_side": 724,
+      "wall_s": [
+        288.4,
+        289.5
+      ],
+      "redis_ops": [
+        12554215,
+        12547685
+      ],
+      "redis_round_trips": [
+        7156285,
+        7152820
+      ]
+    },
+    "prior": {
+      "identical_across_orders": false,
+      "members_differing_across_orders": 160061,
+      "members_total": 945838,
+      "fragmented_clusters": 3379,
+      "cross_cluster_merges": 0,
+      "diff_pairs_violated": 902,
+      "diff_pairs_kept_separate": 98,
+      "conflict_rec_joined_majority_side": 114,
+      "wall_s": [
+        224.4,
+        226.4
+      ],
+      "redis_ops": [
+        9564642,
+        9564460
+      ],
+      "redis_round_trips": [
+        8155479,
+        8155903
+      ],
+      "production_yuids_kept": 843278,
+      "production_yuids_total": 920119,
+      "stability_pct": 91.649
+    }
+  },
+  "new": {
+    "cold": {
+      "identical_across_orders": true,
+      "members_differing_across_orders": 0,
+      "members_total": 972858,
+      "fragmented_clusters": 0,
+      "cross_cluster_merges": 0,
+      "diff_pairs_violated": 0,
+      "diff_pairs_kept_separate": 1000,
+      "conflict_rec_joined_majority_side": 790,
+      "wall_s": [
+        53.0,
+        52.9
+      ],
+      "redis_ops": [
+        2451338,
+        2451338
+      ],
+      "redis_round_trips": [
+        297,
+        297
+      ]
+    },
+    "prior": {
+      "identical_across_orders": true,
+      "members_differing_across_orders": 0,
+      "members_total": 972858,
+      "fragmented_clusters": 0,
+      "cross_cluster_merges": 0,
+      "diff_pairs_violated": 0,
+      "diff_pairs_kept_separate": 1000,
+      "conflict_rec_joined_majority_side": 790,
+      "wall_s": [
+        52.3,
+        51.6
+      ],
+      "redis_ops": [
+        2451338,
+        2451338
+      ],
+      "redis_round_trips": [
+        297,
+        297
+      ],
+      "production_yuids_kept": 970858,
+      "production_yuids_total": 970858,
+      "stability_pct": 100.0
+    }
+  }
+}

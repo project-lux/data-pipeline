@@ -1,0 +1,44 @@
+{
+    "name": "ypm",
+    "type": "internal",
+    "namespace": "https://images.peabody.yale.edu/data/",
+    "matches": [
+        "images.peabody.yale.edu/data/"
+    ],
+    "fetch": "https://images.peabody.yale.edu/data/{identifier}",
+    "activitystreams": [
+        "https://images.peabody.yale.edu/data/agent/ypm-as-agent.json",
+        "https://images.peabody.yale.edu/data/place/ypm-as-place.json",
+        "https://images.peabody.yale.edu/data/taxon/ypm-as-taxon.json",
+        "https://images.peabody.yale.edu/data/object/ypm-as-object.json"
+    ],
+    "merge_order": 3,
+    "mapperClass": "sources.yale.ypm.mapper.YpmMapper",
+    "loaderClass": "sources.yale.ypm.loader.YpmLoader",
+    "harvesterClass": "process.base.harvester.ASHarvester",
+    "dumps_dir": "ypm",
+    "input_files": {
+        "records": [
+            {
+                "url": "https://images.peabody.yale.edu/data/rob/agent.tar.gz",
+                "path": "agent.tar.gz",
+                "type": "tar.gz/json"
+            },
+            {
+                "url": "https://images.peabody.yale.edu/data/rob/object.tar.gz",
+                "path": "object.tar.gz",
+                "type": "tar.gz/json"
+            },
+            {
+                "url": "https://images.peabody.yale.edu/data/rob/place.tar.gz",
+                "path": "place.tar.gz",
+                "type": "tar.gz/json"
+            },
+            {
+                "url": "https://images.peabody.yale.edu/data/rob/taxon.tar.gz",
+                "path": "taxon.tar.gz",
+                "type": "tar.gz/json"
+            }
+        ]
+    }
+}

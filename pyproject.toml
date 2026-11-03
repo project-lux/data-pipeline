@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lux-pipeline"
+version = "0.1.0"
+description = "The LUX data pipeline: harvest, reconcile, merge and export Linked Art records"
+requires-python = ">=3.10"
+# Keep in step with requirements.txt (tests/test_cli_entry.py checks they agree)
+dependencies = [
+    "redis",
+    "psycopg2-binary",
+    "cromulent>=1.0.1",
+    "requests",
+    "requests_toolbelt",
+    "ujson",
+    "SPARQLWrapper",
+    "dateutils",
+    "edtf",
+    "dateparser",
+    "shapely",
+    "lxml",
+    "jsonschema",
+    "lmdb>=1.4.1",
+    "sqlitedict",
+    "numpy",
+    "bs4",
+    "python-dotenv",
+    "pyluach",
+    "PyYAML",
+    "rich",
+    # host cpu counters (lux_pipeline.process.host_cpu) where there is no /proc
+    "psutil; sys_platform != 'linux'",
+]
+
+[project.optional-dependencies]
+ray = ["ray"]
+dev = ["pytest", "coverage", "fakeredis"]
+ui-extras = ["gnureadline", "netext", "networkx"]
+google = ["google-api-python-client", "google-auth-oauthlib"]
+xlsx = ["openpyxl"]
+# lux serve: the web UI (webui_docs/)
+web = ["fastapi", "uvicorn", "jinja2", "python-multipart"]
+
+[project.scripts]
+lux = "lux_pipeline.cli.entry:main"
+
+[tool.setuptools.packages.find]
+include = ["lux_pipeline*"]
+namespaces = true
+
+[tool.setuptools.package-data]
+"lux_pipeline.web" = ["templates/*.html", "templates/*/*.html", "static/*"]

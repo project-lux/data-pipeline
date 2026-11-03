@@ -5,5 +5,15 @@
     "matches": ["/ror.org/"],
     "fetch": "https://api.ror.org/organizations/{identifier}",
     "wikidata_property": ["P6782"],
-    "merge_order": 99
+    "merge_order": 99,
+
+    "loaderClass": "sources.ror.loader.RorLoader",
+    "mapperClass": "sources.ror.mapper.RorMapper",
+    "dumpFilePath": "ror/ror-data.zip",
+    "dumpFileType": "zip/array/raw",
+
+    "downloaderClass": "sources.ror.downloader.RorDownloader",
+    "downloadMdUrl": "https://zenodo.org/api/records/6347574",
+    "downloadXPath": "files[0]/links/self",
+    "dumps_dir": "ror"
 }

@@ -6,8 +6,8 @@
     "fetch": "http://id.loc.gov/authorities/demographicTerms/{identifier}.json",
     "merge_order": 25,
     
-    "fetcherClass": "sources.authorities.lc.fetcher.LcdgtFetcher",
-    "mapperClass": "sources.authorities.lc.mapper.LcnafMapper",
+    "fetcherClass": "sources.lc.fetcher.LcdgtFetcher",
+    "mapperClass": "sources.lc.mapper.LcnafMapper",
 
     "totalRecords": 1830
 }

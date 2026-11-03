@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Records{% endblock %}
+{% block content %}
+<h1>Records</h1>
+<p class="lead">Anything you can name a record by: a URI, a typed key (<code>…##quaType</code>), a curie
+(<code>aat:300033618</code>), a YUID, or a source's own identifier with its source. You see where it is in
+every cache, its identity, and its merged record. Nothing is fetched or stored.</p>
+
+<form class="form search" method="get" action="/records/show">
+  <input type="search" name="q" value="{{ q }}" placeholder="http://vocab.getty.edu/aat/300033618" aria-label="Reference" autofocus>
+  <select name="source" aria-label="Source (for a bare identifier)">
+    <option value="">any source</option>
+    {% for g, names in options.groups.items() %}<optgroup label="{{ g }}">{% for n in names %}<option value="{{ n }}"{% if n == source %} selected{% endif %}>{{ n }}</option>{% endfor %}</optgroup>{% endfor %}
+  </select>
+  <button type="submit">Look up</button>
+</form>
+{% if error %}<div class="banner fail" role="alert">{{ error }}</div>{% endif %}
+
+<div class="cards">
+  <section class="card">
+    <h2>Browse a cache</h2>
+    <form class="form" method="get" action="/records/browse">
+      <label>Source <select name="source" required>
+        <option value="">choose…</option>
+        {% for g, names in options.groups.items() %}<optgroup label="{{ g }}">{% for n in names %}<option value="{{ n }}"{% if n == browse.source %} selected{% endif %}>{{ n }}</option>{% endfor %}</optgroup>{% endfor %}
+      </select></label>
+      <label>Cache <select name="cache">{% for c in options.caches %}<option value="{{ c }}"{% if c == (browse.cache or "recordcache") %} selected{% endif %}>{{ c }}</option>{% endfor %}</select></label>
+      <label>Type <select name="type"><option value="">any</option>{% for t in options.types %}<option value="{{ t }}"{% if t == browse.type %} selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
+      <label>Changed since <input type="datetime-local" name="since" value="{{ browse.since or '' }}"></label>
+      <label>How many <input type="number" name="n" min="1" max="1000" value="{{ browse.n or 50 }}"></label>
+      <p><button type="submit" class="secondary">List keys</button></p>
+    </form>
+    {% if sample %}
+    <h3>{{ sample.source }} {{ sample.cache }}{% if sample.type %}, {{ sample.type }}{% endif %}: {{ sample.results|length }} key(s)</h3>
+    {% if sample.cost %}<p class="muted">{{ sample.cost }}</p>{% endif %}
+    <ul class="keys">
+      {% for k in sample.results %}<li><a href="/records/show?{{ ({'q': k.q, 'source': k.source} if k.source else {'q': k.q})|urlencode }}">{{ k.key }}</a></li>{% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Looked up lately</h2>
+    {% if recent %}
+    <ul class="keys">
+      {% for r in recent %}<li><a href="/records/show?{{ ({'q': r.q, 'source': r.source} if r.source else {'q': r.q})|urlencode }}">{{ r.q }}</a>{% if r.source %} <span class="muted">({{ r.source }})</span>{% endif %}</li>{% endfor %}
+    </ul>
+    {% else %}<p class="muted">Nothing since the server started.</p>{% endif %}
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,249 @@
+"""Run a whole build: sheets, reconcile, merge, portal, export.
+
+    lux build                                  # run-all.sh --all, phase by phase
+    lux build --clear                          # clear the caches and refs, new token, then build
+    lux build --max-workers 24 --no-ui         # global options go to every phase
+    lux build --from merge                     # pick up again at a phase
+    lux build --skip sheets,portal             # leave phases out
+    lux build --dry-run                        # print the steps, run nothing
+
+`run-all.sh` (and `run-all2.sh` with ``ENGINE=mp``) as one command. The
+phases, in order:
+
+    clear      only with --clear: lux clear --source all --force,
+               lux clear --refs --force, lux new-token
+    sheets     lux sheets: read the curators' spreadsheet, load its same/different pairs
+    reconcile  lux reconcile --source <S> (and so identify, metatypes, write-refs)
+    merge      lux merge --source <S>
+    portal     lux portal: tag the records the YPM portal needs
+    export     lux export
+
+Each step is a separate ``lux`` process, so each phase loads a fresh
+configuration and gets its own status/log prefix for ``lux watch``:
+``<P>-<phase>``, where ``P`` is ``--prefix`` or the build's own
+``<log_dir>/build-<timestamp>``. The build writes ``<P>.run``: its
+command line, its phases, the one running now (``current``) and each
+step's command, prefix, start, end and exit status (``steps``); every
+phase's own record names the build as its ``parent``. Each phase's
+command removes what an earlier build left behind (metatypes slice
+files, done flags, old export slices) before its workers start. The first step to fail stops the
+build. The files the phases hand to each other (``metatypes-*.json``,
+``reference_uris.txt``) live under ``temp_dir``, so it may be run from any
+directory. Success and failure are appended, as by run-all.sh, to
+``--status-file`` (default ``<log_dir>/pipeline_process_status.txt``).
+"""
+
+import logging
+import os
+import shlex
+import subprocess
+import sys
+import time
+from datetime import datetime
+
+from lux_pipeline import runtime
+from lux_pipeline.progress import RunRecord
+
+from ._handler import (PARENT_RUN_ENV, RUN_EXTRA_ENV, BaseHandler, command_argv, default_prefix,
+                       finish_record, refuse_while_building, run_extra)
+
+logger = logging.getLogger("lux_pipeline")
+
+PHASES = ("clear", "sheets", "reconcile", "merge", "portal", "export")
+
+
+class CommandHandler(BaseHandler):
+    # the phases load their own configuration; this process only needs the
+    # directories, and must not hold the idmap open while identify rewrites it
+    needs_configs = False
+
+    def add_args(self, ap):
+        ap.add_argument("--clear", action="store_true",
+                        help="First clear every source's computed caches and the reference "
+                             "queues, and mint a new update token")
+        ap.add_argument("--from", dest="start", choices=PHASES,
+                        help="Start at this phase")
+        ap.add_argument("--to", dest="stop", choices=PHASES,
+                        help="Stop after this phase")
+        ap.add_argument("--skip", default="",
+                        help=f"Phases to leave out, separated by commas: {', '.join(PHASES)}")
+        ap.add_argument("--profile", action="store_true",
+                        help="Pass --profile to reconcile, merge and export")
+        ap.add_argument("--status-file", dest="status_file",
+                        help="Append the outcome here "
+                             "(default <log_dir>/pipeline_process_status.txt)")
+        ap.add_argument("--dry-run", "--dry_run", dest="dry_run", action="store_true",
+                        help="Print the steps and run nothing")
+        ap.add_argument("--force", action="store_true",
+                        help="Run even though a build looks to be running")
+
+    # --- planning ----------------------------------------------------------
+
+    def phases(self, args):
+        """The phases to run, in order, from --clear, --from, --to and --skip."""
+        skip = [s.strip() for s in (args.skip or "").split(",") if s.strip()]
+        for s in skip:
+            if s not in PHASES:
+                raise ValueError(f"Unknown phase in --skip: {s} (phases: {', '.join(PHASES)})")
+        start = PHASES.index(args.start) if args.start else 0
+        stop = PHASES.index(args.stop) if args.stop else len(PHASES) - 1
+        if start > stop:
+            raise ValueError(f"--from {args.start} comes after --to {args.stop}")
+        out = []
+        for p in PHASES[start:stop + 1]:
+            if p in skip or (p == "clear" and not args.clear):
+                continue
+            out.append(p)
+        if args.clear and "clear" not in out:
+            raise ValueError("--clear, but the clear phase is outside --from / --to / --skip")
+        return out
+
+    def lux(self, args, command, *opts, phase=None, workers=True, prefix=None):
+        """argv for one ``lux`` step, with the global options passed on:
+        all of them to a phase run by workers, only the log level to a
+        one-shot step, and to ``portal`` (its own process pool) the
+        worker count too. A phase run by workers gets the status/log
+        prefix ``<prefix>-<phase>``; `prefix` is the build's own (default
+        ``--prefix``)."""
+        prefix = prefix or args.prefix
+        argv = [sys.executable, "-m", "lux_pipeline.cli.entry", command, *opts]
+        if args.log:
+            argv += ["--log", args.log]
+        if args.debug:
+            argv.append("--debug")
+        if workers == "count":
+            if args.max_workers > 0:
+                argv += ["--max-workers", str(args.max_workers)]
+        elif workers:
+            if args.max_workers > 0:
+                argv += ["--max-workers", str(args.max_workers)]
+            if args.max_records > -1:
+                argv += ["--max-records", str(args.max_records)]
+            if args.engine:
+                argv += ["--engine", args.engine]
+            if args.no_ui:
+                argv.append("--no-ui")
+            if prefix:
+                argv += ["--prefix", f"{prefix}-{phase or command}"]
+            if args.profile:
+                argv.append("--profile")
+        return argv
+
+    def steps(self, args, prefix=None):
+        """``[(phase, argv)]`` for the whole run; `prefix` is the build's
+        status/log prefix (default ``--prefix``)."""
+        source = args.source or "all"
+        out = []
+        for phase in self.phases(args):
+            if phase == "clear":
+                out += [
+                    (phase, self.lux(args, "clear", "--source", "all", "--force", workers=False)),
+                    (phase, self.lux(args, "clear", "--refs", "--force", workers=False)),
+                    (phase, self.lux(args, "new-token", workers=False)),
+                ]
+            elif phase == "sheets":
+                out.append((phase, self.lux(args, "sheets", workers=False)))
+            elif phase in ("reconcile", "merge"):
+                out.append((phase, self.lux(args, phase, "--source", source, prefix=prefix)))
+            elif phase == "portal":
+                out.append((phase, self.lux(args, "portal", workers="count")))
+            elif phase == "export":
+                out.append((phase, self.lux(args, "export", prefix=prefix)))
+        return out
+
+    @staticmethod
+    def step_prefix(argv):
+        """The ``--prefix`` a step was given, or None (a one-shot step)."""
+        return argv[argv.index("--prefix") + 1] if "--prefix" in argv else None
+
+    # --- running -----------------------------------------------------------
+
+    def step_env(self):
+        """The environment a step runs in: this one, plus the build's prefix
+        as ``LUX_PARENT_RUN``, which each phase records as its parent."""
+        env = dict(os.environ)
+        # the build's own record says who started it; its phases' do not
+        env.pop(RUN_EXTRA_ENV, None)
+        if getattr(self, "build_prefix", None):
+            env[PARENT_RUN_ENV] = self.build_prefix
+        return env
+
+    def run_step(self, argv):
+        """Run one step in the foreground; its exit status."""
+        return subprocess.run(argv, env=self.step_env()).returncode
+
+    def record_step(self, phase, argv):
+        """Add a step to the build's record as it starts; returns its entry."""
+        entry = {"phase": phase, "command": argv[3] if len(argv) > 3 else None,
+                 "argv": ["lux", *argv[3:]], "prefix": self.step_prefix(argv),
+                 "started": time.time(), "finished": None, "exit": None}
+        if self.run_record is not None:
+            self.run_record.data["steps"].append(entry)
+            self.run_record.update(current=phase)
+        return entry
+
+    def end_step(self, entry, code):
+        entry["finished"] = time.time()
+        entry["exit"] = code
+        if self.run_record is not None:
+            self.run_record.update()
+
+    def record(self, path, line):
+        if not path:
+            return
+        try:
+            with open(path, "a") as fh:
+                fh.write(f"{datetime.now().strftime('%a %b %d %H:%M:%S %Y')} {line}\n")
+        except OSError as e:
+            logger.warning(f"could not write the status file {path}: {e}")
+
+    def process(self, args, rest):
+        super().process(args, rest)
+        if args.my_worker > -1:
+            raise ValueError("lux build runs every slice itself; --my-worker does not apply")
+        cfgs = self.configs or runtime.get_configs(instantiate=False)
+        if args.source and args.source not in ("all", "internal"):
+            # the phases check the names; catch a typo before clearing anything
+            known = set(cfgs.internal) | set(cfgs.external)
+            for n in (s.strip() for s in args.source.split(",")):
+                if n and n not in known:
+                    raise ValueError(f"Unknown source: {n}")
+        prefix = args.prefix or default_prefix(cfgs, "build")
+        steps = self.steps(args, prefix)
+        status_file = args.status_file
+        if status_file is None and getattr(cfgs, "log_dir", None):
+            status_file = os.path.join(cfgs.log_dir, "pipeline_process_status.txt")
+
+        if args.dry_run:
+            for phase, step in steps:
+                print(f"[{phase}] {shlex.join(step)}")
+            return steps
+
+        refuse_while_building(cfgs, "build", args.force)
+        self.build_prefix = prefix
+        self.run_prefix = None      # a build has no workers of its own to count
+        self.run_record = RunRecord(prefix, "build", command_argv(args), engine=args.engine,
+                                    workers=0, sources=[args.source or "all"],
+                                    extra={**run_extra(), "phases": self.phases(args),
+                                           "current": None, "steps": []}).start()
+        try:
+            current = None
+            for phase, step in steps:
+                if phase != current:
+                    current = phase
+                    print(f"=== {phase} ===", flush=True)
+                logger.info(f"running: {shlex.join(step)}")
+                entry = self.record_step(phase, step)
+                code = self.run_step(step)
+                self.end_step(entry, code)
+                if code != 0:
+                    self.record(status_file, f"[Error] Error in {phase}")
+                    raise RuntimeError(f"build stopped in {phase}: {shlex.join(step)} "
+                                       f"exited with {code}")
+        except BaseException as e:
+            finish_record(self.run_record, e)
+            raise
+        finish_record(self.run_record)
+        self.record(status_file, "[Success] Build was successful")
+        print("Build finished")
+        return steps

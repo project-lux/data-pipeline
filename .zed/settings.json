@@ -1,0 +1,15 @@
+{
+  "languages": {
+    "Python": {
+      "tasks": {
+        "enabled": false
+      },
+      "show_completion_documentation": false,
+      "show_completions_on_input": false,
+      "use_on_type_format": false,
+      "ensure_final_newline_on_save": false,
+      "remove_trailing_whitespace_on_save": false
+    }
+  },
+  "enable_language_server": false
+}

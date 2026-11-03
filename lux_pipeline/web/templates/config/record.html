@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% from "_macros.html" import kv, badge %}
+{% block title %}{{ r.key }}{% endblock %}
+{% block scripts %}<script type="module" src="/static/editor.js"></script>{% endblock %}
+{% block content %}
+<script type="application/json" id="config-page">{{ {"key": r.key}|tojson }}</script>
+<p class="crumbs"><a href="/config">Configuration</a> /</p>
+<h1>{{ r.key }}</h1>
+{{ kv([("type", r.type), ("name", r.name), ("file", r.path), ("store", r.store or "the configuration directory")]) }}
+
+{% if error %}<div class="banner fail" role="alert">{{ error }}</div>{% endif %}
+{% if r.building %}<div class="banner warn">{{ r.building }}. Its workers read the configuration as they start: saving now may give them a mixture.</div>{% endif %}
+{% if r.problems %}
+<ul class="problems">
+  {% for p in r.errors %}<li class="error">{{ p }}</li>{% endfor %}
+  {% for p in r.warnings %}<li class="warning">{{ p }}</li>{% endfor %}
+</ul>
+{% endif %}
+
+{% macro force_box() -%}
+{% if r.building %}<label class="force"><input type="checkbox" name="force" value="1"> I know a build is running; write anyway</label>{% endif %}
+{%- endmacro %}
+
+<div class="tabs" role="tablist">
+  <button type="button" role="tab" data-tab="fields"{% if tab == "fields" %} aria-selected="true"{% endif %}>Fields</button>
+  <button type="button" role="tab" data-tab="text"{% if tab == "text" %} aria-selected="true"{% endif %}>JSON</button>
+</div>
+
+<section class="card wide" data-panel="fields">
+  <h2>Fields</h2>
+  <p class="muted">The keys the catalogue knows. Saving changes only the keys you change, in the file's own layout.</p>
+  <form method="post" action="/config/{{ r.key|urlencode }}" class="form fields">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="mode" value="fields">
+    {% for f in r.fields %}
+    {% set name = "field:" ~ f.key %}
+    {% set value = submitted[name] if name in submitted else f.input %}
+    <div class="field{% if not f.present %} absent{% endif %}">
+      <label for="f-{{ f.key }}"><code>{{ f.key }}</code>
+        {% if f.required %}<span class="badge">required</span>{% endif %}
+        {% if f.unused %}<span class="badge state-unknown">not read</span>{% endif %}
+        {% if f.planned %}<span class="badge state-running">planned</span>{% endif %}
+        {% if f.class_state %}<span class="badge state-{{ {'ok': 'ok', 'off': 'unknown', 'legacy': 'warn', 'error': 'fail'}[f.class_state.state] }}">{{ f.class_state.state }}</span>{% endif %}
+      </label>
+      {% if f.type == "bool" %}
+      <select id="f-{{ f.key }}" name="{{ name }}">
+        <option value=""{% if value == "" %} selected{% endif %}>(not set)</option>
+        <option value="true"{% if value == "true" %} selected{% endif %}>true</option>
+        <option value="false"{% if value == "false" %} selected{% endif %}>false</option>
+      </select>
+      {% elif f.type == "int" %}
+      <input id="f-{{ f.key }}" type="number" name="{{ name }}" value="{{ value }}">
+      {% elif f.type in ("list", "dict", "any") %}
+      <textarea id="f-{{ f.key }}" name="{{ name }}" rows="{{ [3, [12, value.count("\n") + 1]|min]|max }}">{{ value }}</textarea>
+      {% else %}
+      <input id="f-{{ f.key }}" type="text" name="{{ name }}" value="{{ value }}"
+             {% if f.default %}placeholder="default: {{ f.default }}"{% endif %}>
+      {% endif %}
+      {% if f.present and f.type not in ("bool", "int", "list", "dict", "any") %}
+      <label class="unset"><input type="checkbox" name="unset:{{ f.key }}" value="1"> remove</label>
+      {% endif %}
+      <div class="help">{{ f.help }}
+        {% if f.type == "class" %} <span class="muted">null switches it off.</span>{% endif %}
+        {% if f.class_state and f.class_state.detail %}<br><span class="detail">{{ f.class_state.detail }}</span>{% endif %}
+        {% if f.resolved %}<br><span class="detail">{{ f.resolved.path }}</span> {{ badge("found" if f.resolved.exists else "missing") }}{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    {% if r.unknown %}
+    <h3>Other keys</h3>
+    <p class="muted">Keys the catalogue does not know (a source's own settings). Change them on the JSON tab.</p>
+    <table class="table"><tbody>
+      {% for k, v in r.unknown.items() %}<tr><td><code>{{ k }}</code></td><td class="detail">{{ v|tojson }}</td></tr>{% endfor %}
+    </tbody></table>
+    {% endif %}
+    {{ force_box() }}
+    <p><button type="submit">Save the fields</button></p>
+  </form>
+</section>
+
+<section class="card wide" data-panel="text">
+  <h2>JSON</h2>
+  <p class="muted">The file as it is. Saved exactly as you leave it, once it checks out.</p>
+  <form method="post" action="/config/{{ r.key|urlencode }}" class="form" id="text-form">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="mode" value="text">
+    <textarea name="text" id="record-text" rows="{{ [12, [40, r.text.count("\n") + 2]|min]|max }}" spellcheck="false">{{ r.text }}</textarea>
+    <p id="json-status" class="muted" aria-live="polite"></p>
+    <ul id="json-problems" class="problems"></ul>
+    {{ force_box() }}
+    <p class="actions">
+      <button type="button" class="secondary" id="validate-button">Check</button>
+      <button type="button" class="secondary" id="diff-button">Show what changes</button>
+      <button type="submit" id="save-text">Save the text</button>
+    </p>
+    <pre id="diff" class="diff" hidden></pre>
+  </form>
+</section>
+
+<section class="card wide danger">
+  <h2>Delete</h2>
+  <form method="post" action="/config/{{ r.key|urlencode }}/delete" class="form inline">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <label>Type <code>{{ r.key }}</code> to delete {{ r.path }}: <input type="text" name="confirm" autocomplete="off"></label>
+    {{ force_box() }}
+    <button type="submit" class="danger">Delete</button>
+  </form>
+</section>
+{% endblock %}

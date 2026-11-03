@@ -6,7 +6,7 @@ import os
 import requests
 import random
 from datetime import datetime
-from pipeline.config import Config
+from lux_pipeline.config import Config
 from dotenv import load_dotenv
 from urllib3.exceptions import InsecureRequestWarning
 from urllib3 import disable_warnings

@@ -1,0 +1,181 @@
+# Installing the LUX pipeline
+
+From a fresh machine to `lux counts`. The pipeline needs Python 3.10 or
+later and PostgreSQL. Redis is only needed if one of your map records
+still names it (the build machine's `networkmap`, `record_refs` and
+`redirects` may); `lux testinstall` says so if it is.
+
+
+## 1. System packages
+
+### Ubuntu
+
+From a brand new server (e.g. an instance in Spinup if you're at Yale), as
+root:
+
+```
+apt install postgresql          # or the latest from https://www.postgresql.org/download/linux/ubuntu/
+apt install redis               # only if a map record uses it
+apt install python3-pip python3-venv git
+su - postgres
+createuser <user>
+createdb <user>
+```
+
+### Mac
+
+* Install Postgres: https://postgresapp.com/ works well
+* Optionally pgAdmin: https://www.pgadmin.org/download/pgadmin-4-macos/
+* Install Homebrew (https://brew.sh/), then `brew update`
+* If needed, Redis: `brew install redis`
+* Set Postgres (and Redis) to start at login
+
+
+## 2. The code
+
+As your own user:
+
+```
+mkdir lux
+cd lux
+python3 -m venv ENV
+source ENV/bin/activate
+pip install --upgrade pip
+git clone https://github.com/project-lux/data-pipeline.git
+cd data-pipeline
+pip install -e .[dev]           # the lux_pipeline package, the `lux` command, and the test tools
+cd ..
+```
+
+`pip install -e .[ray]` adds the Ray engine (`--engine ray`); it is not
+needed otherwise. `pip install -e .[web]` adds the web UI (`lux serve`:
+FastAPI, uvicorn, Jinja2), and `.[ui-extras]` the identity graph (`lux
+viz`, and the web UI's graph page). `lux help` lists the commands, and
+`lux <command> --help` the options of one.
+
+The web UI's defaults may go in the base (or system) record, as an
+optional block; `lux serve`'s options win over it, and a token (for a
+bind other than loopback) comes from `--token` or `LUX_WEB_TOKEN` in the
+environment or `.env`:
+
+```json
+"web": {"host": "127.0.0.1", "port": 8321}
+```
+
+See [web.md](web.md).
+
+
+## 3. An installation
+
+`lux initialize` creates the data directories, installs a configuration,
+writes the `.env` that points `lux` at it, fetches the Linked Art schemas
+the validator reads and creates the database tables. Pick one source of
+configuration:
+
+```
+lux initialize ~/lux/data                                  # the samples in docs/sample_config
+lux initialize ~/lux/data --configs ~/lux/pipeline-configs # a pipeline-configs checkout you already have
+lux initialize ~/lux/data --clone                          # clone project-lux/pipeline-configs into it
+```
+
+Every step checks its own state, so if one fails (Postgres not running,
+no network) fix the cause and run the same command again; nothing already
+in place is overwritten. Then edit the installed `base.json` / `system.json`
+for this machine (paths, `max_workers`) if the defaults are not right, and
+check everything:
+
+```
+cd ~/lux/data
+lux testinstall
+```
+
+It prints one line per check and stops at the first failure: the `.env`,
+the configuration, Postgres (and Redis where configured), the idmap, the
+sources' components, the data directories, the schemas, and that worker
+processes can be started.
+
+`lux` finds its configuration through `LUX_BASEPATH`: from the
+environment, else the `.env` in the current directory, else
+`~/.lux/.env` (parent directories are not searched). `lux initialize`
+writes the `.env` into the installation directory, and offers to write
+`~/.lux/.env` too when there is none (`--home-dotenv` / `--no-home-dotenv`
+answer for a script), so `lux` works from any directory; a `.env` in the
+current directory still wins. To do it by hand:
+
+```
+mkdir -p ~/.lux && cp ~/lux/data/.env ~/.lux/
+```
+
+To switch between installations, give each one a named file in `~/.lux/`
+and pick it with the global `--env` option, which wins over the shell's
+`LUX_BASEPATH` and both `.env` files:
+
+```
+cp ~/lux/data/.env ~/.lux/prod.env
+cp ~/lux-test/data/.env ~/.lux/test.env
+lux --env test counts          # ~/.lux/test.env
+lux --env prod counts          # ~/.lux/prod.env
+lux --env ~/lux-test/data ...  # a directory's .env, or a file's path
+```
+
+`LUX_BASEPATH=/path lux ...` also works for a single command.
+
+
+## 4. Data
+
+Download the published LUX export (the records the last build used) and
+the sources' own dump files, then load the export into the datacaches:
+
+```
+lux download --source all --type export --max-workers 10
+lux download --source all --type records --max-workers 10
+lux load --source all --type export --max-workers 10
+```
+
+Use at least 10 workers for the downloads, more if the CPU and network
+can take it. A file that fails is logged and the rest carry on; the
+command exits non-zero at the end, and running it again with
+`--no-overwrite` fetches only what is missing.
+
+To load a source's own dump instead (`--type records`, the default), and
+to build the reconciliation indexes from the datacaches:
+
+```
+lux load --source wikidata --max-workers 24
+lux load-index --source all
+```
+
+Then see what is there:
+
+```
+lux counts
+lux list                    # the configured sources; --maps, --indexes
+```
+
+
+## 5. A first build
+
+A new identity map needs an update token and the global terms before the
+first reconcile:
+
+```
+lux new-token
+lux reconcile --baseline
+```
+
+and then a build, as described in [rebuild.md](rebuild.md), from the
+repository directory:
+
+```
+cd ~/lux/data-pipeline
+./run-all2.sh --all
+```
+
+The script writes its per-slice output to `../data/logs`, which is the
+configured `log_dir` with the layout above (`~/lux/data` next to
+`~/lux/data-pipeline`, and a pipeline-configs installation, whose
+`log_dir` is `logs`); set `LOGS=<log_dir>` when yours is elsewhere.
+
+`lux watch --latest` shows a running build from any terminal, and `lux
+serve` the same in a browser ([web.md](web.md)), where a build can also be
+started: *Commands* → *the build page*.

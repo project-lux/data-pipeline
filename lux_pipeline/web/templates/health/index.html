@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge %}
+{% block title %}Health{% endblock %}
+{% block scripts %}<script type="module" src="/static/health.js"></script>{% endblock %}
+{% block content %}
+<h1>Health</h1>
+<p class="lead">The checks <code>lux testinstall</code> runs: the .env, the configuration, the databases,
+the directories, the schemas. Each runs even when an earlier one failed; one that needs what failed says so.</p>
+
+<form class="form inline" method="post" action="/health/run">
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+  <label><input type="checkbox" name="workers" value="1"{% if health.options.workers %} checked{% endif %}> spawn worker processes</label>
+  <label><input type="checkbox" name="pg_tune" value="1"{% if health.options.pg_tune %} checked{% endif %}> compare Postgres's settings with lux pg-tune</label>
+  <button type="submit"{% if health.running %} disabled{% endif %}>{{ "Running…" if health.running else "Run the checks" }}</button>
+</form>
+
+<p id="health-status" class="muted">
+  {% if health.running %}Running since {{ fmt_time(health.started) }}…
+  {% elif health.finished %}Checked {{ fmt_time(health.finished) }}.
+  {% else %}Not checked since the server started.{% endif %}
+</p>
+
+<table class="table" id="health-table"{% if health.running %} data-running="1"{% endif %}>
+  <thead><tr><th>Check</th><th>State</th><th>Detail</th></tr></thead>
+  <tbody>
+  {% for r in health.results %}
+    <tr><td>{{ r.label }}</td><td>{{ badge(r.state) }}</td><td class="detail">{{ r.detail }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

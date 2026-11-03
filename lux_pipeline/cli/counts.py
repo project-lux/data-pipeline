@@ -1,0 +1,348 @@
+"""Count records in caches, maps and indexes."""
+
+import logging
+import sys
+
+from lux_pipeline.cli import _targets as targets
+from lux_pipeline.cli._handler import BaseHandler
+from lux_pipeline.config import INDEX_LABELS
+
+logger = logging.getLogger("lux_pipeline")
+
+DEFAULT_CACHES = ("datacache", "recordcache", "reconciledRecordcache", "recordcache2")
+# a source's indexes come from its named `indexes` block or the legacy path
+# keys (lux_pipeline.config.source_indexes); INDEX_LABELS gives the words
+# used in the output
+# below this a catalog estimate is replaced by an exact count
+EXACT_BELOW = 100_000
+
+
+def _fmt(n, exact):
+    return f"{'=' if exact else '~'}{n:,}"
+
+
+def _count(cache):
+    """``(count, exact)`` for a cache: the store's estimate when it has one
+    and is large, otherwise an exact ``len()`` -- the rule from
+    ``manage-data.py --counts``."""
+    est = getattr(cache, "len_estimate", None)
+    if est is None:
+        return len(cache), True
+    n = est()
+    if n < EXACT_BELOW:
+        return len(cache), True
+    return n, False
+
+
+class CommandHandler(BaseHandler):
+    def add_args(self, ap):
+        ap.add_argument("--cache", type=str,
+                        help="Cache types separated by commas, or 'all' "
+                             f"(default: {','.join(DEFAULT_CACHES)})")
+        ap.add_argument("--map", type=str,
+                        help="Map names separated by commas, or 'all'")
+        ap.add_argument("--index", type=str,
+                        help="Sources whose reconcile indexes to count, "
+                             "separated by commas, or 'all'")
+        ap.add_argument("--table", action="store_true",
+                        help="Render as tables (rich) instead of plain lines")
+
+    # --- targets (lux_pipeline.cli._targets) --------------------------------
+
+    def resolve_sources(self, args):
+        """``[(group, config)]`` for the caches to count.
+
+        Without ``--source`` every source in every group is counted, unless
+        only maps or indexes were asked for. ``all`` and the group names
+        work as for every other command.
+        """
+        which = getattr(args, "source", None)
+        if not which:
+            others = getattr(args, "map", None) or getattr(args, "index", None)
+            return [] if others else targets.all_sources(self.configs)
+        return targets.sources(self.configs, which)
+
+    def resolve_caches(self, args):
+        which = getattr(args, "cache", None)
+        if not which or which == "all":
+            return list(DEFAULT_CACHES)
+        return targets.split(which)
+
+    def resolve_maps(self, args):
+        which = getattr(args, "map", None)
+        if not which:
+            return []
+        return targets.maps(self.configs, which)
+
+    def resolve_indexes(self, args):
+        """``[(group, source name, label, path)]`` for every configured index
+        of the requested sources."""
+        which = getattr(args, "index", None)
+        if not which:
+            return []
+        return [(group, source, INDEX_LABELS.get(name, name), path)
+                for group, source, name, path in targets.indexes(self.configs, which)]
+
+    # --- counting (lux_pipeline.cli.counts.counts_data) ----------------------
+
+    def count_caches(self, sources, caches):
+        """``([(group, source, cache type, count, exact)], total)``"""
+        return count_caches(sources, caches)
+
+    def count_maps(self, maps):
+        """``([(map name, count)], total)``"""
+        return count_maps(self.configs, maps)
+
+    def open_index(self, path):
+        return open_index_file(path)
+
+    def count_indexes(self, indexes):
+        """``([(group, source, label, count or None)], total)``"""
+        return count_indexes(indexes, self.open_index)
+
+    # --- the command -------------------------------------------------------
+
+    def process(self, args, rest):
+        super().process(args, rest)
+        sources = self.resolve_sources(args)
+        caches = self.resolve_caches(args)
+        maps = self.resolve_maps(args)
+        indexes = self.resolve_indexes(args)
+
+        # a section is counted only when it was asked for; the totals are
+        # kept apart so the map and index totals do not include the caches
+        data = counts_data(self.configs,
+                           sources=sources or None, caches=caches,
+                           maps=maps if getattr(args, "map", None) else None,
+                           indexes=indexes if getattr(args, "index", None) else None,
+                           open_index=self.open_index)
+        cache_sec, map_sec, index_sec = sections(data)
+
+        # print is the command's result
+        if getattr(args, "table", False):
+            render_tables(cache_sec, map_sec, index_sec)
+        else:
+            render_plain(cache_sec, map_sec, index_sec)
+        return data
+
+
+# --- the counts as data -----------------------------------------------------------
+
+
+def count_caches(sources, caches):
+    """``([(group, source, cache type, count, exact)], total)`` for the
+    caches of type `caches` that each of `sources` (``[(group, cfg)]``)
+    has."""
+    rows = []
+    total = 0
+    for group, cfg in sources:
+        for c in caches:
+            cache = cfg.get(c)
+            if cache is None:
+                continue
+            n, exact = _count(cache)
+            rows.append((group, cfg["name"], c, n, exact))
+            total += n
+    return rows, total
+
+
+def count_maps(cfgs, maps):
+    """``([(map name, count)], total)``. Counts are reported as estimates:
+    the postgres idmap answers ``len()`` from the catalog."""
+    rows = []
+    total = 0
+    for m in maps:
+        n = len(targets.map_store(cfgs, m))
+        rows.append((m, n))
+        total += n
+    return rows, total
+
+
+def open_index_file(path):
+    """An index file, read-only, as the reconcilers open it."""
+    from lux_pipeline.storage.idmap.lmdb import TabLmdb
+    return TabLmdb.open(path, "r", readahead=False, writemap=True)
+
+
+def count_indexes(indexes, opener=open_index_file, errors=None):
+    """``([(group, source, label, count or None)], total)``; ``None``
+    when the index file could not be opened (not built yet, or wrong
+    path), with the reason in `errors` (``{(source, label): message}``)
+    when given."""
+    rows = []
+    total = 0
+    for group, source, label, path in indexes:
+        try:
+            idx = opener(path)
+        except Exception as e:
+            logger.warning(f"Could not open {label} index for {source} at {path}: {e}")
+            rows.append((group, source, label, None))
+            if errors is not None:
+                errors[(source, label)] = f"{type(e).__name__}: {e}"
+            continue
+        try:
+            n = len(idx)
+        finally:
+            close = getattr(idx, "close", None)
+            if close:
+                close()
+        rows.append((group, source, label, n))
+        total += n
+    return rows, total
+
+
+def counts_data(cfgs, sources=None, caches=DEFAULT_CACHES, maps=None, indexes=None,
+                open_index=None):
+    """The counts `lux counts` prints, as data, for targets already
+    resolved (`lux_pipeline.cli._targets`): `sources` ``[(group, cfg)]``
+    with the cache types `caches`, `maps` (names) and `indexes`
+    (``[(group, source, label, path)]``). A section is None when its
+    targets are None (not asked for); asked for with nothing in it, it is
+    empty with a total of 0::
+
+        {"caches":  {"rows": [{"group", "source", "cache", "count", "exact"}], "total"} | None,
+         "maps":    {"rows": [{"map", "count", "exact": False}], "total"} | None,
+         "indexes": {"rows": [{"group", "source", "index", "count" | None, "exact": True,
+                               "error" | None}], "total"} | None}
+
+    A map's count is an estimate (Postgres answers from its catalog); an
+    index's is exact, or None with the reason when the file could not be
+    opened. `open_index` replaces how an index file is opened."""
+    out = {"caches": None, "maps": None, "indexes": None}
+    if sources is not None:
+        rows, total = count_caches(sources, caches)
+        out["caches"] = {"rows": [{"group": g, "source": s, "cache": c, "count": n, "exact": e}
+                                  for g, s, c, n, e in rows], "total": total}
+    if maps is not None:
+        rows, total = count_maps(cfgs, maps)
+        out["maps"] = {"rows": [{"map": m, "count": n, "exact": False} for m, n in rows],
+                       "total": total}
+    if indexes is not None:
+        errors = {}
+        rows, total = count_indexes(indexes, open_index or open_index_file, errors)
+        out["indexes"] = {"rows": [{"group": g, "source": s, "index": label, "count": n,
+                                    "exact": True, "error": errors.get((s, label))}
+                                   for g, s, label, n in rows], "total": total}
+    return out
+
+
+def sections(data):
+    """`counts_data`'s result as the ``(rows, total)`` tuples (or None)
+    `render_plain` and `render_tables` print."""
+    def sec(name, keys):
+        part = data.get(name)
+        if part is None:
+            return None
+        return [tuple(r[k] for k in keys) for r in part["rows"]], part["total"]
+
+    return (sec("caches", ("group", "source", "cache", "count", "exact")),
+            sec("maps", ("map", "count")),
+            sec("indexes", ("group", "source", "index", "count")))
+
+
+# --- output ------------------------------------------------------------------
+
+
+def render_plain(cache_sec, map_sec, index_sec):
+    """One line per count, as ``manage-data.py --counts`` prints them."""
+    if cache_sec:
+        rows, total = cache_sec
+        for _, source, c, n, exact in rows:
+            print(f"{source} {c}: {_fmt(n, exact)}")
+        print(f"Total cache records: ~{total:,}")
+    if map_sec:
+        rows, total = map_sec
+        for m, n in rows:
+            print(f"{m}: ~{n:,}")
+        print(f"Total map records: ~{total:,}")
+    if index_sec:
+        rows, total = index_sec
+        for _, source, label, n in rows:
+            shown = "missing" if n is None else _fmt(n, True)
+            print(f"{source} {label} index: {shown}")
+        print(f"Total index records: ={total:,}")
+
+
+_TYPE_STYLE = {"internal": "bold blue", "external": "bold magenta", "results": "yellow"}
+
+
+def _source_table(title, col3, rows, total, widths, exact_total=False):
+    """A Source | Type | <col3> | Count table with a total footer.
+
+    rows: ``(group, source, col3 value, count or None, exact)``
+    """
+    from rich import box
+    from rich.table import Table
+    from rich.text import Text
+
+    w_source, w_type, w_col3, w_count = widths
+    table = Table(title=title, box=box.ROUNDED, title_justify="left",
+                  header_style="bold", expand=False, padding=(0, 1))
+    table.add_column("Source", style="bold cyan", no_wrap=True, min_width=w_source)
+    table.add_column("Type", no_wrap=True, min_width=w_type)
+    table.add_column(col3, style="green", no_wrap=True, min_width=max(w_col3, len(col3)))
+    table.add_column("Count", justify="right", style="yellow", no_wrap=True, min_width=w_count)
+    for group, source, value, n, exact in rows:
+        count = Text("missing", style="red") if n is None else _fmt(n, exact)
+        table.add_row(source, Text(group, style=_TYPE_STYLE.get(group, "")), value, count)
+    table.add_section()
+    table.add_row(Text("Total", style="bold"), "", "",
+                  Text(_fmt(total, exact_total), style="bold yellow"))
+    return table
+
+
+def _maps_table(rows, total):
+    from rich import box
+    from rich.table import Table
+    from rich.text import Text
+
+    table = Table(title="Map counts", box=box.ROUNDED, title_justify="left",
+                  header_style="bold", expand=False, padding=(0, 1))
+    table.add_column("Map", style="bold cyan", no_wrap=True)
+    table.add_column("Count", justify="right", style="yellow", no_wrap=True)
+    for name, n in rows:
+        table.add_row(name, f"~{n:,}")
+    table.add_section()
+    table.add_row(Text("Total", style="bold"), Text(f"~{total:,}", style="bold yellow"))
+    return table
+
+
+def render_tables(cache_sec, map_sec, index_sec):
+    """The same counts as rich tables; the cache and index tables share
+    column widths so they line up, and a grand total follows when more
+    than one section is shown."""
+    from rich.console import Console
+    from rich.rule import Rule
+
+    console = Console(file=sys.stdout)
+    index_rows = [(g, s, label, n, True)
+                  for g, s, label, n in index_sec[0]] if index_sec else []
+    cache_rows = cache_sec[0] if cache_sec else []
+
+    widths = [len("Source"), len("Type"), 0, len("Count")]
+    for _, source, value, n, exact in [*cache_rows, *index_rows]:
+        widths[0] = max(widths[0], len(source))
+        widths[2] = max(widths[2], len(value))
+        widths[3] = max(widths[3], len("missing" if n is None else _fmt(n, exact)))
+    widths[1] = max([widths[1], *(len(r[0]) for r in [*cache_rows, *index_rows])])
+
+    shown = []
+    grand = 0
+    if cache_sec:
+        shown.append(_source_table("Cache counts", "Cache", cache_rows, cache_sec[1], widths))
+        grand += cache_sec[1]
+    if map_sec:
+        shown.append(_maps_table(*map_sec))
+        grand += map_sec[1]
+    if index_sec:
+        shown.append(_source_table("Index counts", "Index", index_rows, index_sec[1], widths,
+                                   exact_total=True))
+        grand += index_sec[1]
+
+    for i, table in enumerate(shown):
+        if i:
+            console.print()
+        console.print(table)
+    if len(shown) > 1:
+        console.print()
+        console.print(Rule(f"[bold]Grand total: ~{grand:,}[/bold]"))

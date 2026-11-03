@@ -5,9 +5,12 @@ import time
 import datetime
 import gzip
 from dotenv import load_dotenv
-from pipeline.config import Config
-from pipeline.process.reference_manager import ReferenceManager
-from pipeline.process.update_manager import UpdateManager
+import logging
+logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
+from lux_pipeline.config import Config
+from lux_pipeline.process.phases.reconcile import new_update_token, write_refs
+from lux_pipeline.process.reference_manager import ReferenceManager
+from lux_pipeline.process.update_manager import UpdateManager
 
 load_dotenv()
 basepath = os.getenv("LUX_BASEPATH", "")
@@ -18,8 +21,32 @@ done_refs = cfgs.instantiate_map("done_refs")["store"]
 cfgs.cache_globals()
 cfgs.instantiate_all()
 
-update_mgr = UpdateManager(cfgs, idmap)
-ref_mgr = ReferenceManager(cfgs, idmap)
+#update_mgr = UpdateManager(cfgs, idmap)
+#ref_mgr = ReferenceManager(cfgs, idmap)
+
+
+if '--debug-record' in sys.argv:
+    debug_record = sys.argv[sys.argv.index('--debug-record') + 1]
+    bad = sys.argv[sys.argv.index('--debug-record') + 2]
+    print(f"Debug record (must be full LUX URI): {debug_record}")
+    print(f"Bad record: {bad}")
+    equivs = idmap[debug_record]
+    print(f"Equivalents: {equivs}")
+    if not bad in equivs:
+        print(f"Bad record not found in equivalents: {bad}")
+    else:
+        found = False
+        for eq in equivs:
+            # retrieve eq record and look in its equivs for bad
+            compared = cfgs.split_qua(eq)[0]
+            (src, ident) = cfgs.split_uri(eq)
+            rec = src['recordcache'][ident]
+            if rec is not None and compared in rec['data'].get('equivalent', []):
+                print(f"*** Found bad record in equivalents: {eq}")
+                found = True
+                break
+        if not found:
+            print(f"Bad record not found in equivalents: {compared}")
 
 
 ### LOAD DATABASES
@@ -58,6 +85,15 @@ if "--load" in sys.argv:
         my_slice = int(sys.argv[1])
         max_slice = int(sys.argv[2])
         cfgs.external["wikidata"]["loader"].load(my_slice, max_slice)
+    if "--orcid" in sys.argv:
+        # Slices are optional here: the summaries archive is one gzip stream,
+        # so a worker still walks all of it and only the per-record work is
+        # divided. Worth it via import_parallel.sh on a big machine, but a
+        # single process (no slice arguments) loads the whole thing too.
+        if len(sys.argv) > 2 and sys.argv[1].isnumeric() and sys.argv[2].isnumeric():
+            cfgs.external["orcid"]["loader"].load(int(sys.argv[1]), int(sys.argv[2]))
+        else:
+            cfgs.external["orcid"]["loader"].load()
 
 ### LOAD INDEXES
 if "--load-index" in sys.argv:
@@ -137,7 +173,7 @@ if "--validate" in sys.argv:
         my_slice = max_slice = -1
 
     v = cfgs.validator
-    for (src, cfg) in to_do:
+    for src, cfg in to_do:
         rc = cfg["recordcache"]
         for rec in rc.iter_records_slice(my_slice, max_slice):
             sys.stdout.write(".")
@@ -163,38 +199,40 @@ if "--validate" in sys.argv:
 ### WRITE NEW IDMAP TOKEN
 
 if "--new-token" in sys.argv:
-    now = datetime.datetime.now()
-    mm = f"0{now.month}" if now.month < 10 else now.month
-    dd = f"0{now.day}" if now.day < 10 else now.day
-    stok = f"__{now.year}{mm}{dd}"
-    if idmap.update_token.startswith(stok):
-        if idmap.update_token[-3].isalpha():
-            letter = chr(ord(idmap.update_token[-3]) + 1)
-        else:
-            letter = "a"
-        tok = f"{stok}{letter}__"
-    else:
-        tok = f"{stok}__"
-    fn = os.path.join(cfgs.data_dir, "idmap_update_token.txt")
-    with open(fn, "w") as fh:
-        fh.write(f"{tok}\n")
-    print(f"New update token: {tok}")
+    # logs "New update token: <token>", to stdout via basicConfig above
+    new_update_token(cfgs, idmap)
 
 
 ### EXPORT REFERENCE LIST
 if "--write-refs" in sys.argv:
-    ref_mgr = ReferenceManager(cfgs, idmap)
-    ref_mgr.write_done_refs()
-    done_refs.clear()
+    write_refs(cfgs, idmap)
 
 
 ### Quick places export
 if "--places" in sys.argv:
-    rc = cfgs.results['merged']['recordcache']
+    rc = cfgs.results["merged"]["recordcache"]
     print("Starting")
-    with open('places.jsonl', 'w') as fh:
-        for rec in rc.iter_records_type('Place'):
-            fh.write(json.dumps(rec['data'], separators=(",", ":")))
+    with open("places.jsonl", "w") as fh:
+        for rec in rc.iter_records_type("Place"):
+            fh.write(json.dumps(rec["data"], separators=(",", ":")))
+            fh.write("\n")
+    print("Done")
+
+if "--concepts" in sys.argv:
+    rc = cfgs.results["merged"]["recordcache"]
+    print("Starting")
+    with open("concepts.jsonl", "w") as fh:
+        for rec in rc.iter_records_type("Concept"):
+            fh.write(json.dumps(rec["data"], separators=(",", ":")))
+            fh.write("\n")
+    print("Done")
+
+if "--periods" in sys.argv:
+    rc = cfgs.results["merged"]["recordcache"]
+    print("Starting")
+    with open("periods.jsonl", "w") as fh:
+        for rec in rc.iter_records_type("Period"):
+            fh.write(json.dumps(rec["data"], separators=(",", ":")))
             fh.write("\n")
     print("Done")
 
@@ -208,28 +246,12 @@ if "--nt" in sys.argv:
     else:
         my_slice = max_slice = -1
 
-    from pipeline.sources.lux.qlever.mapper import QleverMapper
+    from lux_pipeline.process.phases.export import export_nt_slice
 
-    mpr = QleverMapper(cfgs.results["marklogic"])
-    rc = cfgs.results["merged"]["recordcache"]
-    # FIXME: this path should go to config
-    with gzip.open(f"/data-export/output/lux/nt/lux_{my_slice}.nt.gz", "wt", 1) as fh:
-        if my_slice == -1:
-            itr = rc.iter_keys()
-        else:
-            itr = rc.iter_keys_slice(my_slice, max_slice)
-
-        x = 0
-        start = time.time()
-        for recid in itr:
-            rec = rc[recid]
-            res = mpr.transform(rec)
-            for r in res:
-                fh.write(f"{r}\n")
-            x += 1
-            if not x % 100000:
-                print(f"{x} {time.time()-start}")
-                sys.stdout.flush()
+    # The loop is export_nt_slice (refactor_docs/25). This is where the
+    # script has always written; the phase function itself defaults to
+    # cfgs.exports_dir.
+    export_nt_slice(cfgs, my_slice, max_slice, out_dir="/data-export/output/lux/nt")
 
 
 ### CLEAN IDMAP
@@ -247,7 +269,8 @@ if "--clean-idmap" in sys.argv:
         kill = False
         for v in val:
             if v.startswith("__"):
-                if v.startswith("__2023"):
+                d = int(v[2:10])
+                if d < 20260600:
                     kill = True
                 done = True
                 break
@@ -269,7 +292,7 @@ if "--clean-idmap" in sys.argv:
                 killed[v] = 1
         if not x % 100000:
             durn = int(time.time() - start)
-            print(f"{x} in {durn} = {x/durn}/sec = {total/(x/durn)} total")
+            print(f"{x} in {durn} = {x / durn}/sec = {total / (x / durn)} total")
             print(killed)
 
     print("Cleaned idmap")
@@ -290,8 +313,8 @@ if "--test-ils-idmap" in sys.argv:
         x += 1
         if not x % 50000:
             durn = int(time.time() - start)
-            print(f"{x}/{ttl} = {x/durn}/sec = {ttl/(x/durn)}")
-            print(f"    Found old: {len(old)} = {int(len(old)/x*100)}% = {int(len(old)/x*ttl)} to go")
+            print(f"{x}/{ttl} = {x / durn}/sec = {ttl / (x / durn)}")
+            print(f"    Found old: {len(old)} = {int(len(old) / x * 100)}% = {int(len(old) / x * ttl)} to go")
     with open("old_ils_idmap.txt", "w") as fh:
         for o in old:
             fh.write(f"{o}\n")
@@ -345,22 +368,71 @@ if "--clear" in sys.argv:
         c = cfgs.results[src][ctype]
         c.clear()
 
+### MAINTAIN DATABASES
+
+
+def _maintenance_caches():
+    """Every cache the vacuum, bloat and rewrite commands walk."""
+    for cfgset, types in (
+        (cfgs.internal, ["datacache", "recordcache", "recordcache2"]),
+        (cfgs.external, ["datacache", "recordcache", "recordcache2"]),
+        (cfgs.results, ["recordcache", "recordcache2"]),
+    ):
+        for c in cfgset.values():
+            for t in types:
+                if t in c and c[t] is not None:
+                    yield c["name"], t, c[t]
+
+
+def _named_cache(name):
+    """Resolve a `<source>_<cachetype>` argument, as --clear takes."""
+    (src, ctype) = name.split("_", 1)
+    for cfgset in (cfgs.internal, cfgs.external, cfgs.results):
+        if src in cfgset and ctype in cfgset[src] and cfgset[src][ctype] is not None:
+            return cfgset[src][ctype]
+    return None
+
+
 if "--vacuum" in sys.argv or "--optimize" in sys.argv:
-    for c in cfgs.internal.values():
-        for t in ["datacache", "recordcache", "recordcache2"]:
-            if t in c and c[t] is not None:
-                print(f"{c['name']}/{t}...")
-                c[t].optimize()
-    for c in cfgs.external.values():
-        for t in ["datacache", "recordcache", "recordcache2"]:
-            if t in c and c[t] is not None:
-                print(f"{c['name']}/{t}...")
-                c[t].optimize()
-    for c in cfgs.results.values():
-        for t in ["recordcache", "recordcache2"]:
-            if t in c and c[t] is not None:
-                print(f"{c['name']}/{t}...")
-                c[t].optimize()
+    # VACUUM (ANALYZE, FREEZE) per table. Reports what each one is carrying
+    # first: vacuuming zeroes the dead tuple count, and it is the number that
+    # says whether the table wants a --rewrite as well.
+    for name, t, cache in _maintenance_caches():
+        print(f"{name}/{t}...")
+        cache.optimize()
+
+if "--bloat" in sys.argv:
+    # Report only: which tables are holding space VACUUM cannot give back
+    for name, t, cache in _maintenance_caches():
+        print(cache.bloat_line())
+
+if "--idmap-indexes" in sys.argv:
+    # One-off DDL: give the map the covering (yuid, uri) index that makes
+    # get_cluster()'s member scan index-only, and drop the (yuid) one it
+    # replaces. Builds CONCURRENTLY, so it can run against a live map -- but
+    # it still waits on SHARE UPDATE EXCLUSIVE, and an anti-wraparound
+    # autovacuum will not yield to it. Check pg_stat_progress_vacuum first.
+    idmap.ensure_covering_indexes(drop_old="--keep-old-index" not in sys.argv)
+
+if "--drop-time-indexes" in sys.argv:
+    # One-off DDL: remove the insert_time index from every cache that has no
+    # query for it. The data caches keep theirs -- latest() reads it.
+    for name, t, cache in _maintenance_caches():
+        cache.drop_time_index()
+
+if "--rewrite" in sys.argv:
+    # CLUSTER one named table, eg --rewrite orcid_datacache. Takes an
+    # exclusive lock on it for the duration and needs as much free disk as the
+    # table occupies, so it names its target rather than walking the config.
+    ridx = sys.argv.index("--rewrite")
+    if len(sys.argv) <= ridx + 1:
+        print("--rewrite needs a cache, eg --rewrite orcid_datacache")
+    else:
+        cache = _named_cache(sys.argv[ridx + 1])
+        if cache is None:
+            print(f"No such cache: {sys.argv[ridx + 1]}")
+        else:
+            cache.rewrite()
 
 
 if "--counts" in sys.argv:
@@ -396,7 +468,10 @@ if "--counts" in sys.argv:
                 print(f"{c['name']} {t}: {pref}{est}")
                 ttl += est
     print(f"Total in Postgres: {ttl}")
-    print(f"idmap: {len(idmap)}")
+    # ~ because the postgres backend answers len() from the catalog estimate:
+    # an exact count is a full scan of ~100M rows, and every other caller of
+    # len() only wants to know whether the map has anything in it
+    print(f"idmap: ~{len(idmap):,}")
     print(f"references found: {len(all_refs)}")
     print(f"references done: {len(done_refs)}")
 

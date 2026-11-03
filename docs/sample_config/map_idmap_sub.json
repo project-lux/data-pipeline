@@ -1,0 +1,14 @@
+{
+	"name": "idmap_sub",
+	"type": "map",
+	"storeClass": "storage.idmap.subsidiary.IdMap",
+
+	"masterMap": "idmap",
+
+	"tableName": "idmap_sub",
+	"memoryCacheSize": 200000,
+	"copyUpdateToken": true,
+	"logChanges": true,
+
+	"prefix_map_out": {"yuid":"https://lux.collections.yale.edu/data/"}
+}

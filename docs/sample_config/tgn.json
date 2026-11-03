@@ -8,8 +8,8 @@
     "wikidata_property": ["P1667"],
     "merge_order": 12,
     
-    "harvesterClass": "sources.authorities.getty.harvester.GettyHarvester2",
-    "fetcherClass": "sources.authorities.getty.fetcher.GettyFetcher",
-    "mapperClass": "sources.authorities.getty.mapper.TgnMapper",
+    "harvesterClass": "sources.getty.harvester.GettyHarvester2",
+    "fetcherClass": "sources.getty.fetcher.GettyFetcher",
+    "mapperClass": "sources.getty.mapper.TgnMapper",
     "cycleBreakPath": "tgn_cycle_breaks.json"
 }

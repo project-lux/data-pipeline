@@ -8,11 +8,11 @@
     "wikidata_property": ["P1014"],
     "merge_order": 10,
     
-    "harvesterClass": "sources.authorities.getty.harvester.GettyHarvester2",
-    "fetcherClass": "sources.authorities.getty.fetcher.GettyFetcher",
-    "mapperClass": "sources.authorities.getty.mapper.AatMapper",
+    "harvesterClass": "sources.getty.harvester.GettyHarvester2",
+    "fetcherClass": "sources.getty.fetcher.GettyFetcher",
+    "mapperClass": "sources.getty.mapper.AatMapper",
     "indexLoaderClass": "process.base.index_loader.IndexLoader",
-    "reconcilerClass": "sources.authorities.getty.reconciler.AatReconciler",
+    "reconcilerClass": "sources.getty.reconciler.AatReconciler",
     
     "reconcileDbPath": "label_to_aat.sqlite",
     "cycleBreakPath": "aat_cycle_breaks.json"

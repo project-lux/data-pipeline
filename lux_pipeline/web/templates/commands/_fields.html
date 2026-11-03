@@ -1,0 +1,55 @@
+{# One form field per option, from its spec (cli/introspect.command_spec). #}
+{% macro field(o, values, sources) -%}
+{% set long = o.name %}
+{% set v = values.get(o.dest) %}
+<div class="field" data-dest="{{ o.dest }}">
+{% if o.kind == "flag" %}
+  <label><input type="checkbox" name="{{ o.dest }}" value="1"{% if v is not none and v == o.flag_value %} checked{% endif %}> <code>{{ long }}</code></label>
+{% else %}
+  <label for="f-{{ o.dest }}"><code>{{ long }}</code>{% if o.required %} <span class="state-warn">required</span>{% endif %}</label>
+  {% if o.choices %}
+  <select id="f-{{ o.dest }}" name="{{ o.dest }}">
+    <option value="">{{ "(default: " ~ o.default ~ ")" if o.default is not none else "" }}</option>
+    {% for c in o.choices %}<option value="{{ c }}"{% if v is not none and v|string == c|string %} selected{% endif %}>{{ c }}</option>{% endfor %}
+  </select>
+  {% elif o.nargs is number %}
+  <span class="pair">{% for i in range(o.nargs) %}<input id="{{ 'f-' ~ o.dest if loop.first }}" type="text" name="{{ o.dest }}" value="{{ (v or [])[i] if v and v|length > i else '' }}">{% endfor %}</span>
+  {% elif o.repeat %}
+  <textarea id="f-{{ o.dest }}" name="{{ o.dest }}" rows="3" placeholder="one per line">{{ (v or [])|join("\n") }}</textarea>
+  {% elif o.kind in ("int", "float") %}
+  <input id="f-{{ o.dest }}" type="number" name="{{ o.dest }}"{% if o.kind == "float" %} step="any"{% endif %} value="{{ '' if v is none or v is sameas true else v }}" placeholder="{{ o.default if o.default not in (none, -1, 0) else '' }}">
+  {% elif o.dest == "source" %}
+  <input id="f-{{ o.dest }}" type="text" name="source" list="source-names" value="{{ v or '' }}" placeholder="all, internal, external, results, or names">
+  {% else %}
+  <input id="f-{{ o.dest }}" type="text" name="{{ o.dest }}" value="{{ '' if v is none or v is sameas true else v }}"{% if o.default not in (none, "", []) %} placeholder="{{ o.default }}"{% endif %}>
+  {% endif %}
+  {% if o.nargs == "?" and o.const is not none and not o.positional %}
+  <label class="inline"><input type="checkbox" name="{{ o.dest }}__bare" value="1"{% if v is sameas true %} checked{% endif %}> given without a value ({{ o.const }})</label>
+  {% endif %}
+{% endif %}
+  {% if o.help %}<div class="help">{{ o.help }}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro source_list(sources) -%}
+<datalist id="source-names">{% for s in sources %}<option value="{{ s }}">{% endfor %}</datalist>
+{%- endmacro %}
+
+{% macro preview_block(preview, name) -%}
+<section class="card wide preview">
+  <h2>Will run</h2>
+  <pre class="log" id="cmd-preview">{{ preview.command_line or "" }}</pre>
+  <div class="banner fail" id="cmd-error" role="alert"{% if not preview.error %} hidden{% endif %}>{{ preview.error or "" }}</div>
+  <div id="cmd-confirm"{% if not preview.confirm %} hidden{% endif %}>
+    <p class="state-warn">This run <span id="cmd-confirm-reason">{{ preview.confirm or "" }}</span>.</p>
+    <label>Type <code>{{ name }}</code> to confirm <input type="text" name="confirm" autocomplete="off"></label>
+  </div>
+</section>
+{%- endmacro %}
+
+{% macro running_banner(running) -%}
+{% if running %}
+<div class="banner warn">Running now: {% for r in running %}{% if r.rel %}<a href="/runs/{{ r.rel }}">{{ r.command }}</a>{% else %}{{ r.command }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}.
+  A build phase, or a command that rewrites what a build depends on, is refused while a build runs.</div>
+{% endif %}
+{%- endmacro %}
