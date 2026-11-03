@@ -187,6 +187,87 @@ def test_persistent_deadlock_gives_up_and_clears_the_buffer():
     assert c.pools.pending_writes == 0
 
 
+def deadlock_next(n):
+    """Make the next `n` statements executed deadlock; returns a restore."""
+    original = Cursor.execute
+    left = [n]
+
+    def flaky(self, qry, params=None):
+        if left[0] > 0:
+            left[0] -= 1
+            self.conn.attempts.append(params)
+            raise Deadlock("deadlock detected")
+        return original(self, qry, params)
+
+    Cursor.execute = flaky
+    return lambda: setattr(Cursor, "execute", original)
+
+
+def committed_ids(c):
+    return sorted(p[0].adapted["id"] for p in c.conn.committed)
+
+
+def test_a_batch_that_deadlocks_again_is_committed_a_write_at_a_time(monkeypatch, caplog):
+    """Duplicates in a load's input: workers keep colliding on the same
+    rows, so replaying the batch whole deadlocks too. Rather than lose it,
+    every write in it -- and the one that hit the deadlock -- lands in a
+    transaction of its own."""
+    monkeypatch.setattr("lux_pipeline.storage.cache.postgres.time.sleep", lambda s: None)
+    c = cache()
+    c.defer_commits(every=500)
+    for n in range(4):
+        write(c, n)
+    commits = []
+    real_commit = Conn.commit
+    monkeypatch.setattr(Conn, "commit", lambda self: (commits.append(len(self.applied)),
+                                                      real_commit(self)))
+    restore = deadlock_next(2)          # write 4, then its replay of the batch
+    try:
+        with caplog.at_level("WARNING", logger="lux_pipeline"):
+            write(c, 4)
+    finally:
+        restore()
+    assert committed_ids(c) == [0, 1, 2, 3, 4]
+    assert commits == [1, 1, 1, 1, 1]               # one statement per transaction
+    assert c.pools.deferred_stmts == [] and c.pools.pending_writes == 0
+    assert "committed its 5 writes one at a time" in caplog.text
+    # still deferring: the next write waits for the flush
+    write(c, 5)
+    assert committed_ids(c) == [0, 1, 2, 3, 4] and len(c.pools.deferred_stmts) == 1
+    c.flush()
+    assert committed_ids(c) == [0, 1, 2, 3, 4, 5]
+
+
+def test_a_write_that_deadlocks_on_its_own_is_retried(monkeypatch):
+    monkeypatch.setattr("lux_pipeline.storage.cache.postgres.time.sleep", lambda s: None)
+    c = cache()
+    c.defer_commits(every=500)
+    for n in range(3):
+        write(c, n)
+    restore = deadlock_next(3)          # write 3, its replay, and then write 0 alone
+    try:
+        write(c, 3)
+    finally:
+        restore()
+    assert committed_ids(c) == [0, 1, 2, 3]
+
+
+def test_resuming_reports_the_batches_committed_a_write_at_a_time(monkeypatch, caplog):
+    monkeypatch.setattr("lux_pipeline.storage.cache.postgres.time.sleep", lambda s: None)
+    c = cache()
+    c.defer_commits(every=500)
+    write(c, 0)
+    restore = deadlock_next(2)
+    try:
+        write(c, 1)
+    finally:
+        restore()
+    with caplog.at_level("WARNING", logger="lux_pipeline"):
+        c.resume_commits()
+    assert "1 deadlocked batch(es) were committed one write at a time (2 writes)" in caplog.text
+    assert c.pools.singly_batches == 0
+
+
 def test_non_overwrite_insert_lands_the_batch_first():
     """A UniqueViolation on a plain insert is survivable, but its rollback
     would take the open transaction with it -- so deferred writes commit
