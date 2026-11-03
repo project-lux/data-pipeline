@@ -77,3 +77,44 @@ goes: a link beside each other member to `/graph?a=<this record>&b=<member>`
 * On the build machine (Rob): the AAT / Wikidata pair from `lux viz`'s
   docstring draws the same nodes and path as the terminal.
 * Tests pass.
+
+## As built
+
+`web/api/graph.py`, `web/routers/graph.py`, `templates/graph/index.html`,
+the graph styles in `lux.css`; the Graph area in the navigation after
+Records, and *Graph with this* beside each other member on the record
+page's identity tab (only when the record looked up is a member, not for
+a YUID lookup). Differences from the design above:
+
+* **No `configs_instantiated_for`.** The replay's `Reconciler` takes every
+  external and results source's reconciler, and `typed_uri` / `replay`
+  use any source's mapper and acquirer, so `replay` calls
+  `AppState.build_all()` (each source built once) and `state.idmap()`
+  (the same store `cfgs.get_idmap()` hands `graph_data`, its memory cache
+  off). `records.identity_graph` and `viz.graph_data` are unchanged: a
+  fresh `Reconciler` and `Collector` per call, as `lux viz` builds them.
+* **The shared source reconcilers.** `viz.enable_debug` sets `debug` and
+  `debug_graph` on the source reconcilers the server keeps. One replay
+  runs at a time (`REPLAY_LOCK`), and each puts their `debug` and
+  `debug_graph` back when it ends.
+* **Layout and drawing**: `nx.spring_layout(seed=1)` scaled to 1000×700
+  with a 40 margin (a single node, or a flat axis, is centred). Edges stop
+  at the circles and have arrowheads (`<marker>`), since the debug graph
+  is directed. All coordinates are worked out in Python. Colours are
+  ten CSS classes (`.src-0` to `.src-9`) picked by `zlib.crc32` of the
+  source name, not a per-process `hash`. The kinds are CSS classes (`eq`
+  solid, `uri` dotted, `nm` dashed). The two URIs asked for are ringed.
+  `notes` says when nothing was recorded, a URI is not in the graph, or
+  the two are not connected.
+* **Errors** on the page keep the form: 400 for URIs that are not one
+  identity (or not in the idmap, or unknown), 409 without networkx (with
+  the `pip install -e .[ui-extras]` hint), 504 after `TIMEOUT` (120 s).
+  `/api/graph` gives the same codes as JSON. A replay that times out goes
+  on in its thread, holding the lock, until it ends.
+* Acceptance on the laptop (2026-11-02): the AAT / Wikidata pair from `lux
+  viz`'s docstring gives 17 URIs and 21 connections. The URIs, the
+  connections and the shortest path (aat → wikidata) are the same as
+  `viz.graph_data` in a shell, compared by URI. The label numbers differ
+  between runs, in the shell too: they follow the order the replay meets
+  URIs, which is not fixed.
+

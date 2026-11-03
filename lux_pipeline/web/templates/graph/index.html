@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Identity graph{% endblock %}
+{% macro look(target) %}/records/show?{{ {'q': target}|urlencode }}{% endmacro %}
+{% block content %}
+<h1>Identity graph</h1>
+<p class="lead"><code>lux viz</code>: how reconciliation connected two records of one identity. The identity's
+records are reconciled again here with debug recording on, internal sources first, then the smallest;
+nothing is stored.{% if network %} The installation allows the network, so records not cached may be
+fetched (and failed fetches noted in the networkmap, as in a build).{% endif %} It can take a while.</p>
+<form class="form inline" method="get" action="/graph">
+  <label>From <input type="text" name="a" value="{{ a }}" size="48" placeholder="a URI of the identity" required></label>
+  <label>To <input type="text" name="b" value="{{ b }}" size="48" placeholder="another URI of it" required></label>
+  <button type="submit">Draw</button>
+</form>
+{% if error %}<div class="banner fail" role="alert">{{ error }}</div>{% endif %}
+
+{% if g %}
+<section class="card wide">
+  <h2>{% if g.yuid %}<a href="{{ look(g.yuid) }}">{{ g.yuid }}</a>{% endif %}
+    <span class="muted small">{{ g.nodes|length }} URIs, {{ g.edges|length }} connections</span></h2>
+  {% for n in g.notes %}<p class="state-warn">{{ n }}</p>{% endfor %}
+  {% if g.nodes %}
+  <svg class="graph" viewBox="0 0 {{ g.width }} {{ g.height }}" role="img" aria-label="The identity's graph">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tip"></path></marker>
+      <marker id="arrow-path" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="tip on-path"></path></marker>
+    </defs>
+    {% for e in g.edges %}
+    <line class="edge kind-{{ e.kind }}{% if e.on_path %} on-path{% endif %}" x1="{{ e.x1 }}" y1="{{ e.y1 }}" x2="{{ e.x2 }}" y2="{{ e.y2 }}" marker-end="url(#{{ 'arrow-path' if e.on_path else 'arrow' }})"><title>{{ e.from }} → {{ e.to }}: {{ e.kind }}</title></line>
+    {% endfor %}
+    {% for n in g.nodes %}
+    <a href="{{ look(n.uri) }}" class="node{% if n.on_path %} on-path{% endif %}{% if n.is_endpoint %} end{% endif %}">
+      <title>{{ n.uri }}</title>
+      <circle cx="{{ n.x }}" cy="{{ n.y }}" r="{{ g.radius }}" class="src-{{ n.colour }}"></circle>
+      <text x="{{ n.label_x }}" y="{{ n.label_y }}">{{ n.id }}</text>
+    </a>
+    {% endfor %}
+  </svg>
+  <p class="legend"><span class="key kind-eq">eq</span> {{ kinds.eq }} · <span class="key kind-uri">uri</span> {{ kinds.uri }} ·
+    <span class="key kind-nm">nm</span> {{ kinds.nm }}. The shortest path is thicker; the two URIs are ringed.</p>
+  <h3>Shortest path</h3>
+  {% if g.path %}<p class="crumbs path">{% for p in g.path %}<code>{{ p }}</code>{% if not loop.last %} → {% endif %}{% endfor %}</p>
+  {% else %}<p class="muted">None.</p>{% endif %}
+  <h3>Key</h3>
+  <table class="table key-table">
+    <thead><tr><th>Node</th><th>Source</th><th>URI</th></tr></thead>
+    <tbody>{% for n in g.nodes %}<tr{% if n.on_path %} class="on-path"{% endif %}><td><code>{{ n.id }}</code>{% if n.is_endpoint %} <span class="badge">asked for</span>{% endif %}</td><td>{{ n.source }}</td><td><a href="{{ look(n.uri) }}">{{ n.uri }}</a></td></tr>{% endfor %}</tbody>
+  </table>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}
