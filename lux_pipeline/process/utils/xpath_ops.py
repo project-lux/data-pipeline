@@ -6,6 +6,8 @@
 
 from lxml import etree
 
+from lux_pipeline.log import logger
+
 
 def escape_xml(s):
     s = s.replace("&", "&amp;").replace('"', "&quot;").replace("'", "&apos;")
@@ -33,7 +35,7 @@ def convert(what, output):
     elif type(what) in [int, float]:
         output.append(str(what))
     else:
-        print(f"Unknown (to model) type: {type(what)} from {what}")
+        logger.warning(f"Unknown (to model) type: {type(what)} from {what}")
 
 
 def dicttoxml(what):
@@ -49,13 +51,13 @@ def xpath_on_record(what, xpath):
     try:
         dom = etree.XML(xml)
     except:
-        print(f"failed to parse XML:\n{xml}")
+        logger.warning(f"failed to parse XML:\n{xml}")
         return []
     tree = dom.getroottree()
     try:
         matches = dom.xpath("/record" + xpath)
     except:
-        print(f"Failed to compile xpath: {xpath}")
+        logger.warning(f"Failed to compile xpath: {xpath}")
         return []
     paths = []
     for m in matches:
@@ -101,9 +103,9 @@ def process_operation(what, xpath, operation, argument=None):
         elif operation == "UPDATE":
             tgt[tag] = argument
         elif operation == "APPEND":
-            print(f"Got APPEND operation from fixes, and not yet implemented")
+            logger.warning("Got APPEND operation from fixes, and not yet implemented")
         else:
-            print(f"Unknown operation: {operation}")
+            logger.warning(f"Unknown operation: {operation}")
 
     return what
 
