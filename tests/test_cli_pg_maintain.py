@@ -51,6 +51,17 @@ class IdMap:
     def ensure_covering_indexes(self, drop_old=True):
         self.log.append(("covering", drop_old))
 
+    def missing_summary(self):
+        return 12, "__20260901__"
+
+    @staticmethod
+    def expiry_token(days, now=None):
+        return f"__days{days}__"
+
+    def expire_yuids(self, cutoff, dry_run=False):
+        self.log.append(("expire", cutoff, dry_run))
+        return {"yuids": 5, "members": 9, "cutoff": cutoff}
+
 
 class StubConfigs:
     def __init__(self):
@@ -126,10 +137,39 @@ def test_maps_join_vacuum_and_bloat(run, capsys):
 
 def test_actions_run_in_order(run):
     cfgs, out, _ = run("--vacuum", "--rewrite", "--bloat", "--drop-time-indexes",
-                       "--idmap-indexes", "--cache", "recordcache", source="aat")
-    assert out["actions"] == ["bloat", "drop_time_indexes", "idmap_indexes", "rewrite", "vacuum"]
+                       "--idmap-indexes", "--expire-yuids", "180", "--cache", "recordcache",
+                       source="aat")
+    assert out["actions"] == ["bloat", "drop_time_indexes", "idmap_indexes", "rewrite",
+                              "expire_yuids", "vacuum"]
     assert [x[0] for x in cfgs.log] == ["bloat", "drop_time_index", "covering", "rewrite",
-                                        "vacuum"]
+                                        "expire", "vacuum"]
+
+
+def test_expire_yuids_reports_and_deletes(run, capsys):
+    cfgs, out, refused = run("--expire-yuids", "180")
+    assert cfgs.log == [("expire", "__days180__", False)]
+    assert out["expired"] == {"yuids": 5, "members": 9, "cutoff": "__days180__"}
+    text = capsys.readouterr().out
+    assert "12 YUIDs missing, the oldest since __20260901__" in text
+    assert "deleted 5 YUIDs missing since before __days180__ and their 9 member rows" in text
+    assert refused == [("pg-maintain", False)]
+
+
+def test_expire_yuids_dry_run(run, capsys):
+    cfgs, _, _ = run("--expire-yuids", "0", "--dry-run")
+    assert cfgs.log == [("expire", "__days0__", True)]
+    assert "would delete 5 YUIDs" in capsys.readouterr().out
+
+
+def test_expire_yuids_needs_the_postgres_idmap_and_a_sane_number(run):
+    cfgs = StubConfigs()
+    cfgs.idmap = object()
+    with pytest.raises(ValueError, match="not the Postgres one"):
+        run("--expire-yuids", "30", cfgs=cfgs)
+    with pytest.raises(ValueError, match="0 or more"):
+        run("--expire-yuids", "-1")
+    with pytest.raises(ValueError, match="--dry-run goes with --expire-yuids"):
+        run("--vacuum", "--dry-run")
 
 
 def test_bloat_alone_never_refuses(run, capsys):

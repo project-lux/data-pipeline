@@ -118,7 +118,14 @@ class IdentityResolver(object):
         self.max_slice = max_slice        
 
         self.batch_size = 5000
-        self.sort_buffer_size = os.getenv("LUX_SORT_BUFFER", "1G")
+        # `sort -S`: a share of physical memory, not a fixed 1G. The inputs
+        # are 45M-line files, several GB each; a buffer smaller than the
+        # input means temporary runs on the disk the build is already bound
+        # by, and identify runs alone on the box. `sort` takes a percentage
+        # (GNU and BSD both); LUX_SORT_BUFFER overrides.
+        self.sort_buffer_size = os.getenv("LUX_SORT_BUFFER", "25%")
+        # `sort --parallel`: GNU sort stops at 8 threads on its own
+        self.sort_parallel = os.getenv("LUX_SORT_PARALLEL") or str(min(os.cpu_count() or 1, 16))
 
         self.sorted_path = "assertions.sorted"
         self.edges_path = "edges.tsv"
@@ -140,6 +147,10 @@ class IdentityResolver(object):
         self.won_sorted_path = "won.sorted"
         self.touched_path = "touched.tsv"
         self.touched_sorted_path = "touched.sorted"
+        self.seen_path = "seen.tsv"
+        self.seen_sorted_path = "seen.sorted"
+        self.registry_dump_path = "registry.tsv"
+        self.registry_sorted_path = "registry.sorted"
 
         self.prefix_in = idmap.prefix_map_in
         self.prefix_out = idmap.prefix_map_out
@@ -224,6 +235,30 @@ class IdentityResolver(object):
         if self.fh is not None:
             self.fh.close()
             self.fh = None
+            self._presort()
+
+    def _presort(self):
+        """Sort the slice's own assertion file in place, so the resolver's
+        first and largest sort -- every slice's assertions together --
+        becomes a merge. The slices run in parallel and each file is a
+        worker's share, so the sorting happens on 24 cores during reconcile
+        instead of on one afterwards. Whole-line byte order, as the
+        resolver sorts (see `_sort`). Best effort: the resolver checks
+        every input with ``sort -c`` and sorts it itself when one is not."""
+        try:
+            subprocess.run(["sort", "-o", self.filename, self.filename],
+                           env=self._sort_env(), check=True,
+                           stderr=subprocess.PIPE)
+        except (OSError, subprocess.CalledProcessError) as e:
+            logger.warning(f"could not presort {self.filename}: {e}")
+
+    @staticmethod
+    def _sort_env():
+        """``LC_ALL=C``: byte order == Python str order for UTF-8, so the
+        on-disk order matches every in-memory min/max the code does."""
+        env = dict(os.environ)
+        env["LC_ALL"] = "C"
+        return env
 
 
     # --- merge assertion files and load clusters ---
@@ -537,9 +572,21 @@ class IdentityResolver(object):
     def _bytes(n):
         return f"{n / 1e9:.1f}GB" if n >= 1e9 else f"{n / 1e6:.0f}MB"
 
-    def _sort(self, inputs, output, keys, tmpdir):
+    def _sort(self, inputs, output, keys, tmpdir, merge=False):
         """Run ``LC_ALL=C sort`` (byte order == Python str order for UTF-8, so
         the on-disk order matches every in-memory min/max the code does).
+
+        `keys` is empty for a file whose order is its whole line. Every file
+        here is tab-separated with no tab inside a field, and a tab sorts
+        below every other byte, so field-by-field order on all the fields is
+        whole-line order -- and without keys `sort` compares lines with one
+        memcmp instead of locating fields in every comparison. Keys are
+        only given where the order really is not the line: most-voted-first
+        edges, claims, the member column of a root/member file.
+
+        `merge` is ``sort -m``: the inputs are already sorted (every one
+        checked by `_all_sorted`) and only need interleaving, one linear
+        pass with no buffer and no temporary runs.
 
         Announces itself before starting rather than after finishing: nine of
         these run per phase and one of them is usually where the time goes, so
@@ -552,13 +599,15 @@ class IdentityResolver(object):
             except OSError:
                 pass
         name = os.path.basename(str(output))
-        self._say(f"    sort -> {name} ({self._bytes(size)}, -S {self.sort_buffer_size}) ...")
+        how = "merge" if merge else f"-S {self.sort_buffer_size}"
+        self._say(f"    sort -> {name} ({self._bytes(size)}, {how}) ...")
         t0 = time.time()
         cmd = ["sort", *keys, "-t", "\t", "-T", tmpdir, "-S", self.sort_buffer_size,
-            "-o", output, *[str(i) for i in inputs]]
-        env = dict(os.environ)
-        env["LC_ALL"] = "C"
-        subprocess.run(cmd, env=env, check=True)
+               f"--parallel={self.sort_parallel}"]
+        if merge:
+            cmd.append("-m")
+        cmd += ["-o", output, *[str(i) for i in inputs]]
+        subprocess.run(cmd, env=self._sort_env(), check=True)
         el = time.time() - t0
         rate = f", {self._bytes(size / el)}/s" if el > 0.5 and size else ""
         self._say(f"    sort -> {name} done in {self._hms(el)}{rate}")
@@ -567,6 +616,22 @@ class IdentityResolver(object):
             # up -- see the note on _step_label
             prefix = self._step_label or "sort"
             self._timer.add(f"{prefix}.sort:{name}", el)
+
+    def _all_sorted(self, inputs):
+        """Whether every input is already in whole-line byte order: ``sort
+        -c`` on each, all at once (one linear read apiece, in parallel), so
+        `_sort` can merge instead of sort. A slice presorts its file when
+        it closes; this is what makes that safe to rely on, since ``sort
+        -m`` over an unsorted input silently produces nonsense."""
+        env = self._sort_env()
+        procs = [subprocess.Popen(["sort", "-c", str(i)], env=env,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                 for i in inputs]
+        unsorted = [str(i) for i, pr in zip(inputs, procs) if pr.wait() != 0]
+        if unsorted:
+            self._say(f"    {len(unsorted)} of {len(inputs)} assertion files not presorted "
+                      f"(e.g. {os.path.basename(unsorted[0])}); sorting")
+        return not unsorted
     
     
     def _iter_tsv(self, path):
@@ -665,24 +730,33 @@ class IdentityResolver(object):
     
     def _build_clusters(self, dsu_nodes, diffs):
         """Constrained union-find over the vote-ordered edge file; write
-        ``root<TAB>member`` for every non-singleton node and return the conflict
-        report (asserters not yet attached)."""
+        ``root<TAB>member`` for every non-singleton node, grouped by root,
+        and return the conflict report (asserters not yet attached).
+
+        Grouped, not sorted: everything that reads the clusters file either
+        wants its groups (`_grouped`, the probe prior path) or re-sorts it
+        by member (the bulk prior path), so writing the groups here is what
+        lets the 45M-line sort by root that used to follow go."""
         dsu = DSU()
         for n in dsu_nodes:
             dsu.add(n)
         stream = ((a, b, int(v)) for a, b, v in self._iter_tsv(self.edges_by_vote_path))
         conflicts = self._constrained_union(dsu, stream, diffs)
+        groups = defaultdict(list)
+        for node in dsu.parent:
+            groups[dsu.find(node)].append(node)
         with open(self.clusters_path, "w") as fh:
-            for node in dsu.parent:
-                fh.write(f"{dsu.find(node)}\t{node}\n")
+            for root, members in groups.items():
+                for node in members:
+                    fh.write(f"{root}\t{node}\n")
         conflicts.sort(key=lambda c: (c["pair"][0], c["pair"][1]))
         return conflicts
-    
-    
+
+
     def _append_singletons(self, dsu_nodes):
         """Every distinct self-marked node that is not in a real cluster is its
-        own singleton cluster. Appended to the clusters file (which is re-sorted
-        by root afterwards)."""
+        own singleton cluster: appended to the clusters file as a group of
+        one, so the file stays grouped by root."""
         n = 0
         prev = None
         with open(self.clusters_path, "a") as fh:
@@ -719,7 +793,7 @@ class IdentityResolver(object):
         clusters file and writes ``root<TAB>member<TAB>prior`` (prior blank when
         the member had none), preserving order so the file stays grouped."""
         with open(self.prior_path, "w") as fout:
-            for chunk in self._chunks(self._iter_tsv(self.clusters_sorted_path), self.batch_size):
+            for chunk in self._chunks(self._iter_tsv(self.clusters_path), self.batch_size):
                 got = self.idmap.get_multi([member for _root, member in chunk])
                 for (root, member) in chunk:
                     val = got.get(member)
@@ -737,23 +811,22 @@ class IdentityResolver(object):
         the map dump and the member list, a linear merge, and one sort back
         into root order for the consumer.
 
-        The last sort has to reproduce the probe version's line order exactly
-        or the two are not interchangeable. It does: `sort` falls back to
-        comparing whole lines, so -k1,1 orders by (root, member, prior), and
-        member is unique within the file, which is the order the by-root
-        clusters file had."""
+        The two versions produce the same groups with the same rows; the
+        order of the groups differs (this one's are sorted by root, the
+        probe's follow the clusters file) and nothing downstream reads
+        order, only grouping -- claims and detail are sorted afresh."""
         t0 = time.time()
         with open(self.map_dump_path, "w") as fh:
             n = self.idmap.dump_members(fh)
         self._say(f"    dumped {n:,} map rows in {self._hms(time.time() - t0)}")
         if self._timer:
             self._timer.add("fetch_prior.dump:map", time.time() - t0)
-        self._sort([self.map_dump_path], self.map_sorted_path, ["-k1,1"], tmpdir)
-        self._sort([self.clusters_sorted_path], self.members_by_member_path,
+        self._sort([self.map_dump_path], self.map_sorted_path, [], tmpdir)
+        self._sort([self.clusters_path], self.members_by_member_path,
                    ["-k2,2"], tmpdir)
         self._merge_prior(self.members_by_member_path, self.map_sorted_path,
                           self.prior_by_member_path)
-        self._sort([self.prior_by_member_path], self.prior_path, ["-k1,1"], tmpdir)
+        self._sort([self.prior_by_member_path], self.prior_path, [], tmpdir)
 
     def _merge_prior(self, members_path, map_path, out_path):
         """Merge-join two files sorted on the member column, one pass each.
@@ -808,9 +881,10 @@ class IdentityResolver(object):
     
     def _apply_stream(self):
         """Merge the by-key detail with the by-key winners, minting where a
-        cluster kept no prior YUID, and bulk-load the result into redis. Old
-        yuid keys that lost a member are appended to touched_path for the final
-        dead-set sweep."""
+        cluster kept no prior YUID, and bulk-load the result into the idmap.
+        Old yuid keys that lost a member are appended to touched_path for the
+        final dead-set sweep; every yuid assigned goes to seen_path (short
+        form, one per cluster) for the presence diff."""
         stats = {"set": 0, "moved": 0, "clusters": 0, "unchanged": 0}
 
         won = self._grouped(self.won_sorted_path)
@@ -846,13 +920,14 @@ class IdentityResolver(object):
             batch = []
             pending = 0
 
-        with open(self.touched_path, "w") as ftouched:
+        with open(self.touched_path, "w") as ftouched, open(self.seen_path, "w") as fseen:
             for full_key, rows in self._grouped(self.detail_sorted_path):
                 advance_to(full_key)
                 if won_key == full_key:
                     yuid = won_yuid
                 else:
                     yuid = self.mint_yuid(full_key)
+                fseen.write(f"{self.shorten(yuid)}\n")
                 members = []
                 prior_map = {}
                 for r in rows:
@@ -887,7 +962,83 @@ class IdentityResolver(object):
             if parts and parts[0] != prev:
                 prev = parts[0]
                 yield prev
-    
+
+    # ---------------------------------------------------------------- presence
+    # Which YUIDs this build assigned, recorded on the registry as the
+    # complement: the ones it did not. A registered YUID that no cluster took
+    # has lost every record that carried it; it is marked missing (as of this
+    # build's token), kept so a record that comes back gets its identity
+    # back, and expired by `lux pg-maintain --expire-yuids` once it has been
+    # missing long enough. Doing it this way round is what keeps the writes
+    # proportional to the change: the old form stamped every one of 45M
+    # registry rows with the build token, every build, to say "still here".
+
+    def _diff_presence(self, registry_path, seen_path):
+        """Merge-join the sorted registry dump (``yuid<TAB>missing_since``,
+        blank when current) against the sorted, unique seen list; yield
+        ``(kind, short yuid)`` for every difference: ``missing`` (registered,
+        not seen, currently marked present), ``returned`` (seen, marked
+        missing) and ``new`` (seen, not registered)."""
+        seen = (parts[0] for parts in self._iter_tsv(seen_path) if parts and parts[0])
+        cur = next(seen, None)
+        for parts in self._iter_tsv(registry_path):
+            if not parts or not parts[0]:
+                continue
+            yuid = parts[0]
+            missing = parts[1] if len(parts) > 1 else ""
+            while cur is not None and cur < yuid:
+                yield "new", cur
+                cur = next(seen, None)
+            if cur == yuid:
+                if missing:
+                    yield "returned", yuid
+                cur = next(seen, None)
+            elif not missing:
+                yield "missing", yuid
+        while cur is not None:
+            yield "new", cur
+            cur = next(seen, None)
+
+    def _record_presence(self, tmpdir):
+        """Dump, sort, diff and hand the differences to the idmap in
+        batches. Counts per kind; all zero when the backend has no
+        registry to dump (the redis-shaped ones stamp tokens in
+        assign_bulk as they always did)."""
+        counts = {"yuids_missing": 0, "yuids_returned": 0, "yuids_new": 0}
+        dump = getattr(self.idmap, "dump_registry", None)
+        record = getattr(self.idmap, "record_presence", None)
+        if dump is None or record is None:
+            return counts
+        t0 = time.time()
+        with open(self.registry_dump_path, "w") as fh:
+            n = dump(fh)
+        self._say(f"    dumped {n:,} registry rows in {self._hms(time.time() - t0)}")
+        if self._timer:
+            self._timer.add("presence.dump:registry", time.time() - t0)
+        self._sort([self.registry_dump_path], self.registry_sorted_path, [], tmpdir)
+        self._sort([self.seen_path], self.seen_sorted_path, ["-u"], tmpdir)
+        pending = {"missing": [], "returned": [], "new": []}
+        size = 0
+
+        def flush():
+            nonlocal size
+            got = record(missing=[self.expand(y) for y in pending["missing"]],
+                         returned=[self.expand(y) for y in pending["returned"]],
+                         new=[self.expand(y) for y in pending["new"]])
+            for kind in pending:
+                counts[f"yuids_{kind}"] += got.get(kind, 0)
+                pending[kind] = []
+            size = 0
+
+        for kind, yuid in self._diff_presence(self.registry_sorted_path, self.seen_sorted_path):
+            pending[kind].append(yuid)
+            size += 1
+            if size >= self.batch_size:
+                flush()
+        if size:
+            flush()
+        return counts
+
     
     def resolve_identity(self, conflicts_file="identity_conflicts.jsonl",
                         work_dir=None, keep_temp=False):
@@ -904,6 +1055,8 @@ class IdentityResolver(object):
         5. per cluster: tally prior YUIDs, resolve split contention by sort,
             mint where there is no prior
         6. bulk-load into idmap, then sweep now-empty old YUID sets
+        7. diff the registry against the YUIDs assigned: mark the ones no
+            cluster took as missing, clear the ones that came back
         """
 
         # Not built in __init__: run-reconcile constructs this class purely as
@@ -931,7 +1084,6 @@ class IdentityResolver(object):
             self.selfs_sorted_path = p("selfs.sorted")
             self.edges_by_vote_path = p("edges.byvote")
             self.clusters_path = p("clusters.tsv")
-            self.clusters_sorted_path = p("clusters.sorted")
             self.prior_path = p("clusters.prior")
             self.map_dump_path = p("map.tsv")
             self.map_sorted_path = p("map.sorted")
@@ -945,10 +1097,15 @@ class IdentityResolver(object):
             self.won_sorted_path = p("won.sorted")
             self.touched_path = p("touched.tsv")
             self.touched_sorted_path = p("touched.sorted")
-    
+            self.seen_path = p("seen.tsv")
+            self.seen_sorted_path = p("seen.sorted")
+            self.registry_dump_path = p("registry.tsv")
+            self.registry_sorted_path = p("registry.sorted")
+
             with self._step("sort_assertions"):
-                self._sort(files, self.sorted_path,
-                    ["-k1,1", "-k2,2", "-k3,3"], td)
+                # (a, b, asserter) order is whole-line order: see _sort
+                self._sort(files, self.sorted_path, [], td,
+                           merge=self._all_sorted(files))
 
             with self._step("aggregate_edges"):
                 dsu_nodes, n_edges = self._aggregate_edges()
@@ -971,9 +1128,8 @@ class IdentityResolver(object):
             self._say(f"      {len(conflicts):,} conflicts")
 
             with self._step("add_singletons"):
-                self._sort([self.selfs_path], self.selfs_sorted_path, ["-u", "-k1,1"], td)
+                self._sort([self.selfs_path], self.selfs_sorted_path, ["-u"], td)
                 n_singletons = self._append_singletons(dsu_nodes)
-                self._sort([self.clusters_path], self.clusters_sorted_path, ["-k1,1"], td)
             self._say(f"      {n_singletons:,} singletons")
 
             with self._step("fetch_prior"):
@@ -987,14 +1143,20 @@ class IdentityResolver(object):
             self._say(f"      {n_clusters:,} clusters")
 
             with self._step("apply"):
-                self._sort([self.detail_path], self.detail_sorted_path, ["-k1,1"], td)
-                self._sort([self.won_path], self.won_sorted_path, ["-k1,1"], td)
+                self._sort([self.detail_path], self.detail_sorted_path, [], td)
+                self._sort([self.won_path], self.won_sorted_path, [], td)
                 stats = self._apply_stream()
 
             with self._step("sweep_dead_yuids"):
-                self._sort([self.touched_path], self.touched_sorted_path, ["-u", "-k1,1"], td)
+                self._sort([self.touched_path], self.touched_sorted_path, ["-u"], td)
                 stats["deleted_yuids"] = self._delete_dead_yuids(self._distinct(self.touched_sorted_path))
-    
+
+            # after the sweep, so a YUID it deleted is not first marked missing
+            with self._step("presence"):
+                stats.update(self._record_presence(td))
+            self._say(f"      {stats['yuids_missing']:,} yuids newly missing, "
+                      f"{stats['yuids_returned']:,} returned, {stats['yuids_new']:,} registered")
+
             stats.update({
                 "pairs": n_edges,
                 "nodes": len(dsu_nodes) + n_singletons,

@@ -7,6 +7,7 @@
     lux pg-maintain --rewrite --source orcid --cache datacache   # CLUSTER one table: exclusive lock
     lux pg-maintain --drop-time-indexes              # one-off DDL: drop unused insert_time indexes
     lux pg-maintain --idmap-indexes [--keep-old-index]           # one-off DDL: covering (yuid, uri) index
+    lux pg-maintain --expire-yuids 180 [--dry-run]   # drop YUIDs no build has seen for 180 days
 
 The Postgres counterpart of ``lux pg-tune``: that one says how the server
 should be set, this one tidies the tables. Replaces ``manage-data.py``'s
@@ -17,6 +18,14 @@ maintenance flags:
     --rewrite <src>_<cache>     lux pg-maintain --rewrite --source <src> --cache <cache>
     --drop-time-indexes         lux pg-maintain --drop-time-indexes
     --idmap-indexes             lux pg-maintain --idmap-indexes (--keep-old-index)
+    --clean-idmap               lux pg-maintain --expire-yuids DAYS (--dry-run)
+
+``--expire-yuids DAYS`` is the identity map's retention window. Identify
+marks a registered YUID that no cluster took as missing from that build
+on (the registry's ``missing_since``), and keeps it, member rows and all,
+so a record deleted at its source gets its old identity back if it
+returns. This deletes the YUIDs that have been missing since before
+``DAYS`` days ago, with their member rows; ``--dry-run`` only counts.
 
 Without ``--source`` / ``--cache``, the tables are every source's
 ``datacache``, ``recordcache`` and ``recordcache2`` and the results'
@@ -28,8 +37,9 @@ skipped.
 
 Given several actions, they run in this order: ``--bloat`` (before any
 VACUUM, which zeroes the dead-tuple counts it reports), then the index DDL,
-then ``--rewrite``, then ``--vacuum`` (whose FREEZE is what lets the new
-covering index answer from the index alone). ``--rewrite`` holds an ACCESS
+then ``--rewrite``, then ``--expire-yuids``, then ``--vacuum`` (whose FREEZE
+is what lets the new covering index answer from the index alone, and
+which reclaims what the expiry deleted). ``--rewrite`` holds an ACCESS
 EXCLUSIVE lock on each table for as long as it runs and needs as much free
 disk as the table, so it only takes sources named one by one, never a
 group. Everything but ``--bloat`` refuses while a ``lux`` build is running
@@ -46,7 +56,7 @@ logger = logging.getLogger("lux_pipeline")
 # the tables manage-data.py's maintenance flags walked
 SOURCE_CACHES = ("datacache", "recordcache", "recordcache2")
 RESULT_CACHES = ("recordcache", "recordcache2")
-ACTIONS = ("bloat", "drop_time_indexes", "idmap_indexes", "rewrite", "vacuum")
+ACTIONS = ("bloat", "drop_time_indexes", "idmap_indexes", "rewrite", "expire_yuids", "vacuum")
 
 
 class CommandHandler(BaseHandler):
@@ -65,6 +75,11 @@ class CommandHandler(BaseHandler):
                              "drop the (yuid) one it replaces")
         ap.add_argument("--keep-old-index", dest="keep_old_index", action="store_true",
                         help="With --idmap-indexes: keep the old (yuid) index")
+        ap.add_argument("--expire-yuids", dest="expire_yuids", type=int, metavar="DAYS",
+                        help="Delete the idmap's YUIDs (and their member rows) that no build "
+                             "has seen for more than DAYS days")
+        ap.add_argument("--dry-run", dest="dry_run", action="store_true",
+                        help="With --expire-yuids: count what would be deleted, delete nothing")
         ap.add_argument("--cache", type=str,
                         help="Cache types separated by commas (default: datacache, recordcache, "
                              "recordcache2)")
@@ -140,6 +155,20 @@ class CommandHandler(BaseHandler):
                 print(f"Rewriting {name} {t}")
                 cache.rewrite()
 
+    def expire_yuids(self, days, dry_run):
+        idmap = self.configs.get_idmap()
+        if not callable(getattr(idmap, "expire_yuids", None)):
+            raise ValueError(f"the idmap ({type(idmap).__name__}) is not the Postgres one; "
+                             f"it records no missing YUIDs to expire")
+        n, oldest = idmap.missing_summary()
+        print(f"{n:,} YUIDs missing" + (f", the oldest since {oldest}" if oldest else ""))
+        cutoff = idmap.expiry_token(days)
+        got = idmap.expire_yuids(cutoff, dry_run=dry_run)
+        verb = "would delete" if dry_run else "deleted"
+        print(f"{verb} {got['yuids']:,} YUIDs missing since before {cutoff} "
+              f"and their {got['members']:,} member rows")
+        return got
+
     def vacuum(self, tables, maps, skipped):
         for name, t, cache in tables:
             if self._has(cache, "optimize", f"{name} {t}", skipped):
@@ -154,12 +183,18 @@ class CommandHandler(BaseHandler):
 
     def process(self, args, rest):
         super().process(args, rest)
-        chosen = [a for a in ACTIONS if getattr(args, a, False)]
+        days = getattr(args, "expire_yuids", None)
+        chosen = [a for a in ACTIONS
+                  if (days is not None if a == "expire_yuids" else getattr(args, a, False))]
         if not chosen:
             raise ValueError("Nothing to do: give --vacuum, --bloat, --rewrite, "
-                             "--drop-time-indexes or --idmap-indexes")
+                             "--drop-time-indexes, --idmap-indexes or --expire-yuids")
         if getattr(args, "keep_old_index", False) and not args.idmap_indexes:
             raise ValueError("--keep-old-index goes with --idmap-indexes")
+        if days is not None and days < 0:
+            raise ValueError("--expire-yuids takes a number of days, 0 or more")
+        if getattr(args, "dry_run", False) and days is None:
+            raise ValueError("--dry-run goes with --expire-yuids")
         if args.rewrite:
             which = getattr(args, "source", None)
             if not which or which in ("all", *targets.GROUPS):
@@ -182,13 +217,19 @@ class CommandHandler(BaseHandler):
             self.idmap_indexes(args.keep_old_index)
         if args.rewrite:
             self.rewrite(tables, skipped)
+        expired = None
+        if days is not None:
+            expired = self.expire_yuids(days, getattr(args, "dry_run", False))
         if args.vacuum:
             self.vacuum(tables, maps, skipped)
         skipped = sorted(set(skipped))
         if skipped:
             print(f"skipped, not Postgres tables: {', '.join(skipped)}")
-        return {"actions": chosen, "tables": [(n, t) for n, t, _ in tables],
-                "maps": [m for m, _ in maps], "skipped": skipped}
+        out = {"actions": chosen, "tables": [(n, t) for n, t, _ in tables],
+               "maps": [m for m, _ in maps], "skipped": skipped}
+        if expired is not None:
+            out["expired"] = expired
+        return out
 
 
 def _fmt(n):

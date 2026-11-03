@@ -61,10 +61,24 @@ CREATE INDEX idmap_yuid_idx ON idmap (yuid);
 
 CREATE TABLE idmap_yuid (
     yuid    TEXT PRIMARY KEY,
-    token   TEXT,            -- was a __YYYYMMDD__ pseudo-member of the set
-    minted  TIMESTAMP DEFAULT now()
+    token   TEXT,            -- the build that registered it (was a __YYYYMMDD__ pseudo-member of the set)
+    minted  TIMESTAMP DEFAULT now(),
+    missing_since TEXT       -- the first build that assigned it to no cluster; NULL while current
 );
 ```
+
+`missing_since` is the identity map's retention window. Identify assigns
+every YUID its clusters hold; a registered YUID it did not assign has lost
+every record that carried it (deleted at the source, usually). Rather than
+stamping every registry row with the build token to say "still here" -- 45M
+rows rewritten per build -- identify diffs the registry against the clusters
+once afterwards and writes only the differences: newly missing YUIDs get the
+build token in `missing_since`, YUIDs that came back have it cleared. The
+member rows of a missing YUID stay, so a returning record claims the identity
+it had. `lux pg-maintain --expire-yuids DAYS` deletes YUIDs missing since
+before `DAYS` days ago, member rows and all. An existing map gets the column
+the first time the map is opened after the upgrade (`ALTER TABLE ... ADD
+COLUMN`, attempted only when the catalog says it is missing).
 
 The reverse direction is **not stored**. A YUID's members are the rows carrying
 it, so the forward pointer and the member set cannot disagree, and the union
