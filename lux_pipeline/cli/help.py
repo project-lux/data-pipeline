@@ -56,6 +56,8 @@ def list_commands():
 class CommandHandler(BaseHandler):
     # lists modules and builds parsers: never needs the configuration
     needs_configs = False
+    # not a run: nothing to log or record under a prefix
+    uses_prefix = False
 
     def add_args(self, ap):
         ap.add_argument("topic", nargs="?", help="A command whose options to show")

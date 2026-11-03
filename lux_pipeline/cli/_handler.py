@@ -24,7 +24,7 @@ from datetime import datetime
 # this recently is taken to be running; an older one was killed without
 # reporting. Defined with the other readers of a run's files.
 from lux_pipeline.progress import (RUNNING_WINDOW, STATUS_RE, RunRecord, count_workers,
-                                   unfinished_workers)
+                                   driver_log_path, unfinished_workers)
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -134,6 +134,41 @@ def finish_record(record, exc=None, prefix=None):
         logger.debug(f"could not finish the run record: {e}")
 
 
+def driver_log_handler(prefix, log_level="INFO"):
+    """A file handler on the driver's log, ``<prefix>.log``, in the
+    workers' line format (time, level, message) so every reader of a
+    run's logs parses it the same way. Opened on the first line."""
+    lvl = (log_level or "INFO").upper()
+    if not hasattr(logging, lvl):
+        lvl = "INFO"
+    handler = logging.FileHandler(driver_log_path(prefix), delay=True)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(message)s",
+                                           datefmt="%H:%M:%S"))
+    handler.setLevel(getattr(logging, lvl))
+    # so the console view leaves it in place when it takes the handlers
+    # over, and so this can find it again
+    handler.lux_driver_log = prefix
+    return handler
+
+
+def ensure_driver_log(prefix, log_level="INFO"):
+    """Send this process's ``lux_pipeline`` log to ``<prefix>.log`` as
+    well as wherever it goes already: the driver's side of a run, which
+    `lux watch` and the web UI tail beside the workers' files. Idempotent
+    per prefix. Returns the handler, or ``None`` without a prefix."""
+    if not prefix:
+        return None
+    lg = logging.getLogger("lux_pipeline")
+    for h in lg.handlers:
+        if getattr(h, "lux_driver_log", None) == prefix:
+            return h
+    handler = driver_log_handler(prefix, log_level)
+    lg.addHandler(handler)
+    if lg.level == logging.NOTSET or lg.level > handler.level:
+        lg.setLevel(handler.level)
+    return handler
+
+
 def add_profile_arg(ap):
     """``--profile`` for the phase commands; see `enable_profiling`."""
     ap.add_argument("--profile", action="store_true",
@@ -154,6 +189,14 @@ class BaseHandler:
     # False for a command that does not need the pipeline configuration at
     # all (entry then passes cfgs=None without trying to load one)
     needs_configs = True
+    # Given --prefix, a command logs to <prefix>.log and (unless it writes
+    # its own record: the worker commands, lux build) entry writes
+    # <prefix>.run for it, so a one-shot step of a build -- sheets,
+    # identify by hand, portal -- is a run `lux watch` and the web UI can
+    # follow like any other. False for the commands that take the option
+    # to mean something else (watch) or are not runs (serve, help).
+    uses_prefix = True
+    own_record = False
 
     def __init__(self, cfgs):
         self.configs = cfgs
@@ -198,6 +241,9 @@ class BaseHandler:
 
 
 class CommandHandler(BaseHandler):
+    # start_record writes the run's record itself: it knows the manager
+    own_record = True
+
     def __init__(self, cfgs):
         super().__init__(cfgs)
         # {manager keyword: args attribute}; managers read their own options
@@ -262,8 +308,11 @@ class CommandHandler(BaseHandler):
             manager.prepare_single(s)
 
         # <prefix>.run: the command, its options and its outcome, beside the
-        # workers' status and log files (lux_pipeline.progress.list_runs)
+        # workers' status and log files (lux_pipeline.progress.list_runs);
+        # <prefix>.log: what this process logs before, between and after
+        # the workers (a defaulted prefix: entry attached one given)
         self.run_prefix = prefix
+        ensure_driver_log(prefix, getattr(args, "log", "INFO"))
         self.run_record = self.start_record(prefix, args, manager, wks)
         try:
             view = None if args.no_ui else self.make_view(prefix, wks, args)

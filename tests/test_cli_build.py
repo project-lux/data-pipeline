@@ -81,8 +81,11 @@ def test_clear_runs_first(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     hdlr = make(tmp_path)
     run(hdlr, ["--clear", "--to", "reconcile", "--skip", "sheets"])
+    base = hdlr.build_prefix
     assert [a[3:] for a in hdlr.ran[:3]] == [
-        ["clear", "--source", "all", "--force"], ["clear", "--refs", "--force"], ["new-token"]]
+        ["clear", "--source", "all", "--force", "--prefix", f"{base}-clear"],
+        ["clear", "--refs", "--force", "--prefix", f"{base}-clear-refs"],
+        ["new-token", "--prefix", f"{base}-new-token"]]
     assert [name_of(a) for a in hdlr.ran[3:]] == ["reconcile"]
 
 
@@ -132,11 +135,12 @@ def test_global_options_go_to_the_phases(tmp_path, monkeypatch):
     assert "--no-ui" in rec and "--profile" in rec
     assert by["merge"][by["merge"].index("--prefix") + 1] == "/logs/b1-merge"
     assert by["export"][by["export"].index("--prefix") + 1] == "/logs/b1-export"
-    # the one-shot steps take no worker options
-    assert "--max-workers" not in by["clear"] and "--prefix" not in by["new-token"]
+    # the one-shot steps take no worker options, but a prefix of their own
+    assert "--max-workers" not in by["clear"] and "--engine" not in by["new-token"]
+    assert by["new-token"][by["new-token"].index("--prefix") + 1] == "/logs/b1-new-token"
     assert by["clear"][by["clear"].index("--log") + 1] == "DEBUG"
-    # portal runs its own pool: the worker count, nothing else
-    assert by["portal"][4:] == ["--log", "DEBUG", "--max-workers", "8"]
+    # portal runs its own pool: the worker count and its prefix, nothing else
+    assert by["portal"][4:] == ["--log", "DEBUG", "--max-workers", "8", "--prefix", "/logs/b1-portal"]
 
 
 # --- housekeeping, failure, status -------------------------------------------
@@ -208,13 +212,17 @@ def test_every_worker_phase_gets_a_prefix_without_one_given(tmp_path, monkeypatc
     by = {}
     for a in hdlr.ran:
         by.setdefault(name_of(a), a)
-    for phase in ("reconcile", "merge", "export"):
+    for phase in ("reconcile", "merge", "export", "sheets", "portal"):
         assert by[phase][by[phase].index("--prefix") + 1] == f"{base}-{phase}"
-    for one_shot in ("clear", "new-token", "sheets", "portal"):
-        assert "--prefix" not in by[one_shot]
+    # every step has a prefix, so `lux watch <build>` can follow each in
+    # turn; the clear phase's three steps each get their own
     clears = [s for s in read_run(base)["steps"] if s["phase"] == "clear"]
     assert [s["command"] for s in clears] == ["clear", "clear", "new-token"]
-    assert all(s["prefix"] is None for s in clears)
+    assert [s["prefix"] for s in clears] == [f"{base}-clear", f"{base}-clear-refs", f"{base}-new-token"]
+    assert all(s["prefix"] for s in read_run(base)["steps"])
+    # and the build logs to its own file
+    assert os.path.exists(f"{base}.log")
+    assert "running:" in Path(f"{base}.log").read_text()
 
 
 def test_each_step_is_told_its_parent(tmp_path, monkeypatch):

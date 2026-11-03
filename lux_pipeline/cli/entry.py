@@ -10,11 +10,14 @@ orchestration can rely on it.
 import importlib
 import logging
 import multiprocessing
+import os
 import sys
 from argparse import ArgumentParser, RawDescriptionHelpFormatter
 
 from lux_pipeline import runtime
-from lux_pipeline.cli._handler import exit_code, finish_record
+from lux_pipeline.cli._handler import (PARENT_RUN_ENV, command_argv, ensure_driver_log, exit_code,
+                                       finish_record, run_extra)
+from lux_pipeline.progress import RunRecord
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -169,6 +172,14 @@ def run(argv=None):
         pass
 
     hdlr = mod.CommandHandler(cfgs)
+    # Given --prefix, the run has files to follow: the driver's log, and a
+    # record for a command that writes none of its own (a one-shot step of
+    # a build, a command the web UI started), finished here on the way out
+    own = None
+    if args.prefix and getattr(hdlr, "uses_prefix", True):
+        ensure_driver_log(args.prefix, args.log)
+        if not getattr(hdlr, "own_record", False):
+            own = start_record(hdlr, args)
     try:
         if args.debug:
             logger.debug(f"calling {type(hdlr).__name__}.process with {args} and {rest}")
@@ -179,11 +190,30 @@ def run(argv=None):
         # record says how the command ended, not how the workers did
         if not (isinstance(e, SystemExit) and exit_code(e) == 0):
             finish_record(getattr(hdlr, "run_record", None), e, getattr(hdlr, "run_prefix", None))
+        elif own is not None:
+            finish_record(own)
         # as before: only an Exception becomes a one-line error and exit 1
         if not isinstance(e, Exception) or args.debug:
             raise
         return _fail(f"lux {args.command}: {type(e).__name__}: {e}", 1)
+    if own is not None:
+        finish_record(own)
     return 0
+
+
+def start_record(hdlr, args):
+    """``<prefix>.run`` for a command with no workers and no record of its
+    own, so it is a run like the others (`lux_pipeline.progress.list_runs`);
+    set on the handler so a failure finishes it. Never raises."""
+    try:
+        record = RunRecord(args.prefix, args.command, command_argv(args), engine=None, workers=0,
+                           parent=os.environ.get(PARENT_RUN_ENV) or None, extra=run_extra()).start()
+    except Exception as e:
+        logger.debug(f"could not write the run record for {args.prefix}: {e}")
+        return None
+    hdlr.run_record = record
+    hdlr.run_prefix = args.prefix
+    return record
 
 
 def main():

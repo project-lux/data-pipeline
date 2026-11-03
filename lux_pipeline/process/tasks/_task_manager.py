@@ -151,7 +151,13 @@ def _run_worker(manager, n, prefix, log_level="INFO", capture_output=False):
     status = None
     progress = null_progress
     saved = None
+    handlers = None
     if prefix:
+        if not capture_output:
+            # the null engine: this is the driver's process, whose own
+            # handlers (its console, its <prefix>.log) come back after
+            # the worker so the driver's tail is logged like the rest
+            handlers = (list(logger.handlers), logger.level)
         attach_worker_log_handler(prefix, n, log_level)
         status = StatusWriter(status_path(prefix, n), n)
         progress = status
@@ -176,6 +182,14 @@ def _run_worker(manager, n, prefix, log_level="INFO", capture_output=False):
         if status is not None:
             status(done=True)
             status.flush()
+        if handlers is not None:
+            for h in list(logger.handlers):
+                logger.removeHandler(h)
+                if isinstance(h, logging.FileHandler):
+                    h.close()
+            for h in handlers[0]:
+                logger.addHandler(h)
+            logger.setLevel(handlers[1])
 
 
 # --------------------------------------------------------------- the manager

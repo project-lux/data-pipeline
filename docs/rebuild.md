@@ -188,8 +188,15 @@ Every parallel command runs its workers on an engine, chosen with
   `RAY_ADDRESS` names. Needs `pip install -e .[ray]`.
 
 Whatever the engine, every worker writes
-`<log_dir>/<command>-<timestamp>-w<n>.status` and `.log`; that is what
-`lux watch` reads, and the logs are where a worker's errors are.
+`<log_dir>/<command>-<timestamp>-w<n>.status` and `.log`, and the command
+itself logs to `<log_dir>/<command>-<timestamp>.log`; that is what
+`lux watch` reads, and the logs are where a worker's errors are. The
+command's own log is where its tail is: reconcile's identify, metatypes
+and write-refs run after the last worker, and `lux watch` stays on them
+until the run's record says it is over. `lux watch <log_dir>/build-<timestamp>`
+follows a `lux build` from step to step, the one-shot steps included
+(each has its own `<build prefix>-<phase>.log`); `lux watch --latest`
+picks the build when the newest run is one of its phases.
 
 
 ## Where the time went

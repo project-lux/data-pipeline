@@ -71,11 +71,55 @@ function workerRow(n) {
   return tr;
 }
 
+// --- a build's phases ---------------------------------------------------------------
+function applyPhases(data) {
+  const ol = document.getElementById("phases");
+  if (!ol || !data.phases) return;
+  ol.replaceChildren();
+  for (const p of data.phases) {
+    const li = document.createElement("li");
+    li.className = `state-${p.state.replace(" ", "-")}`;
+    li.title = p.commands.join("\n");
+    if (p.run && p.run.rel) {
+      const a = document.createElement("a");
+      a.href = `/runs/${p.run.rel}`;
+      a.textContent = p.phase;
+      li.appendChild(a);
+    } else {
+      li.appendChild(document.createTextNode(p.phase));
+    }
+    const span = document.createElement("span");
+    span.textContent = p.state;
+    li.append(" ", span);
+    ol.appendChild(li);
+  }
+  const now = document.getElementById("current-step");
+  if (!now) return;
+  now.replaceChildren();
+  const c = data.current;
+  if (c) {
+    now.append(`Now on ${c.phase}: `);
+    const code = document.createElement("code");
+    code.textContent = c.argv;
+    now.appendChild(code);
+    if (c.run && c.run.rel) {
+      const a = document.createElement("a");
+      a.href = `/runs/${c.run.rel}`;
+      a.textContent = "its run";
+      now.append(" (", a, ")");
+    }
+    now.append("; its log follows below.");
+  } else if (page.live) {
+    now.textContent = "Between steps.";
+  }
+}
+
 function applyStatus(data) {
   const badge = document.querySelector("#run-state .badge");
   if (badge) { badge.className = `badge state-${data.state}`; badge.textContent = data.state; }
   const took = document.getElementById("run-elapsed");
   if (took) took.textContent = fmtDuration(data.all.elapsed);
+  applyPhases(data);
   if (!document.getElementById("workers")) return;
   for (const row of data.rows) {
     if (!row.visible) continue;
@@ -105,12 +149,19 @@ function filter() {
   if (follow && follow.checked) log.scrollTop = log.scrollHeight;
 }
 
+// a worker's name as the page shows it: w3, driver, or "reconcile w3"
+// for a line of the step a build is on
+function who(l) {
+  const w = l.worker === "driver" ? "driver" : `w${l.worker}`;
+  return l.phase ? `${l.phase} ${w}` : w;
+}
+
 function lineEl(l) {
   const div = document.createElement("div");
-  div.className = `line level-${l.level}${l.cont ? " cont" : ""}`;
+  div.className = `line level-${l.level}${l.cont ? " cont" : ""}${l.phase ? " step" : ""}`;
   div.dataset.worker = String(l.worker);
   div.dataset.level = l.level;
-  const parts = [["t", l.time || ""], ["lvl", l.cont ? "" : l.level], ["w", `w${l.worker}`], ["msg", l.text]];
+  const parts = [["t", l.time || ""], ["lvl", l.cont ? "" : l.level], ["w", who(l)], ["msg", l.text]];
   parts.forEach(([cls, text], i) => {
     const span = document.createElement("span");
     span.className = cls;
@@ -127,6 +178,13 @@ function appendLines(lines) {
   for (const l of lines) log.appendChild(lineEl(l));
   while (log.children.length > MAX_LINES) log.removeChild(log.firstChild);
   if (follow && follow.checked) log.scrollTop = log.scrollHeight;
+}
+
+// a build passing to its next step: a line saying so, then that step's lines
+function phaseChange(c) {
+  if (!log) return;
+  const text = c ? `=== ${c.phase}: ${c.argv} ===` : "=== between steps ===";
+  appendLines([{ worker: "driver", time: "", level: "INFO", text, cont: false }]);
 }
 
 async function earlier() {
@@ -173,10 +231,23 @@ if (log) {
 
 // --- live --------------------------------------------------------------------------------
 if (page.live && path) {
-  const offsets = Object.entries(page.offsets).map(([n, off]) => `${n}:${off}`).join(",");
-  subscribe(`/api/runs/${path}/events?offsets=${encodeURIComponent(offsets)}`, {
+  const pairs = (o) => Object.entries(o || {}).map(([n, off]) => `${n}:${off}`).join(",");
+  let url = `/api/runs/${path}/events?offsets=${encodeURIComponent(pairs(page.offsets))}`;
+  if (page.child && page.child.rel) {
+    // a build on a step: the step's lines continue from where the page read them
+    const childPath = page.child.rel.split("/").map(encodeURIComponent).join("/");
+    url += `&child=${childPath}&child_offsets=${encodeURIComponent(pairs(page.child.offsets))}`;
+  }
+  let first = true;
+  subscribe(url, {
     status: applyStatus,
     log: appendLines,
+    phase: (c) => {
+      // the stream names the step it starts on; the page already shows it
+      if (first && page.child && c && c.run && c.run.rel === page.child.rel) { first = false; return; }
+      first = false;
+      phaseChange(c);
+    },
     done: applyStatus,
   });
 }

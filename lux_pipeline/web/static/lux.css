@@ -191,6 +191,7 @@ a.small { font-size: 0.8em; font-weight: normal; margin-left: 0.75rem; }
 .log .line.level-ERROR .lvl, .log .line.level-ERROR .msg { color: var(--level-error); }
 .log .line.level-CRITICAL .lvl, .log .line.level-CRITICAL .msg { color: var(--level-critical); }
 .log .line .w { color: var(--worker); }
+.log .line.step .w { color: var(--running); }
 .log .line.cont .t, .log .line.cont .lvl { visibility: hidden; }
 .log .line.flash-line { outline: 2px solid var(--warn); }
 .log { max-height: 36rem; }

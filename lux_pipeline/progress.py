@@ -59,6 +59,9 @@ __all__ = [
     "read_status",
     "status_path",
     "log_path",
+    "DRIVER",
+    "driver_log_path",
+    "current_step",
     "unfinished_workers",
     "Sliced",
     "RUNNING_WINDOW",
@@ -107,6 +110,19 @@ def status_path(prefix, worker):
 def log_path(prefix, worker):
     """Where worker `worker` of the run identified by `prefix` writes its log."""
     return f"{prefix}-w{worker}.log"
+
+
+# The driver's own log, beside the workers': ``<prefix>.log``. What the
+# driver does before, between and after its workers -- reconcile's identify,
+# metatypes and write-refs tail, a one-shot command run under `lux build`
+# -- used to go only to its stdout, so a watcher saw every worker done and
+# then nothing for hours. `LogTailer` reads it as the worker named `DRIVER`.
+DRIVER = "driver"
+
+
+def driver_log_path(prefix):
+    """Where the driver of the run identified by `prefix` writes its log."""
+    return f"{prefix}.log"
 
 
 class StatusWriter:
@@ -232,12 +248,23 @@ def unfinished_workers(log_dir):
 
 
 class LogTailer:
-    """Incrementally reads complete new lines from each worker's log file."""
+    """Incrementally reads complete new lines from each worker's log file,
+    and from the driver's (`driver_log_path`), whose lines come back as
+    worker `DRIVER`. ``offsets`` (worker number or `DRIVER` -> byte
+    offset) is where each file has been read to; set it to continue from
+    where another reader stopped."""
 
-    def __init__(self, prefix, workers):
+    def __init__(self, prefix, workers, driver=True):
         self.prefix = prefix
         self.workers = workers
+        self.driver = driver
         self.offsets = {}
+
+    def _files(self):
+        for n in range(self.workers):
+            yield n, log_path(self.prefix, n)
+        if self.driver:
+            yield DRIVER, driver_log_path(self.prefix)
 
     def read_new_lines(self):
         """``[(worker, line)]`` for every complete line written since the
@@ -246,9 +273,9 @@ class LogTailer:
         if not self.prefix:
             return []
         lines = []
-        for n in range(self.workers):
+        for n, path in self._files():
             try:
-                with open(log_path(self.prefix, n), "rb") as fh:
+                with open(path, "rb") as fh:
                     fh.seek(self.offsets.get(n, 0))
                     data = fh.read()
             except OSError:
@@ -537,6 +564,18 @@ def describe_run(prefix, now=None):
 def run_exists(prefix):
     """Whether anything of a run is on disk: its record or a status file."""
     return os.path.exists(run_path(prefix)) or count_workers(prefix) > 0
+
+
+def current_step(record):
+    """The step a ``lux build`` is on, from its record (`read_run`): the
+    first of its ``steps`` not finished, or ``None`` (between steps, done,
+    or not a build). A step is ``{"phase", "command", "argv", "prefix",
+    "started", "finished", "exit"}``; its ``prefix`` is the run to follow
+    (every step has one since the build gave the one-shot steps theirs)."""
+    for step in (record or {}).get("steps") or []:
+        if step.get("finished") is None:
+            return step
+    return None
 
 
 def list_runs(log_dir, now=None):

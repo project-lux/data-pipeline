@@ -13,7 +13,11 @@ status file yet is ``waiting``; no total is an indeterminate bar; the
 label is the description, else the phase, else ``running``; hidden
 (idle) workers are left out of the totals. Elapsed time is counted from
 the run's start; the estimate of what remains is elapsed x remaining /
-done, as Rich's column estimates it.
+done, as Rich's column estimates it. The driver's own log
+(``<prefix>.log``) is read beside the workers' as the worker named
+``driver``: a phase's tail after its workers (reconcile's identify) and a
+one-shot step's whole log are there. A ``lux build``'s page follows the
+step the build is on, passing to the next as the build does.
 """
 
 import asyncio
@@ -26,7 +30,8 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from lux_pipeline.progress import LogTailer, describe_run, list_runs, log_path, run_exists
+from lux_pipeline.progress import (DRIVER, LogTailer, current_step, describe_run, driver_log_path,
+                                   list_runs, log_path, run_exists)
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
@@ -162,6 +167,17 @@ def phase_strip(state, run):
     return out
 
 
+def current_link(state, run):
+    """For a `lux build` that is on a step: ``{"phase", "command",
+    "argv", "run": link}`` of that step, the run its page follows while
+    the build is on it; else None."""
+    step = current_step(run["record"])
+    if step is None:
+        return None
+    return {"phase": step.get("phase"), "command": step.get("command"),
+            "argv": " ".join(step.get("argv") or []), "run": link(state, step.get("prefix"))}
+
+
 def run_data(state, prefix, now=None, children=True):
     """One run, everything its page shows."""
     now = time.time() if now is None else now
@@ -174,6 +190,8 @@ def run_data(state, prefix, now=None, children=True):
         "engine": (run["record"] or {}).get("engine"), "sources": (run["record"] or {}).get("sources"),
         "rows": rows, "all": all_row(run, rows, now),
         "parent": link(state, run["parent"]), "phases": phase_strip(state, run),
+        "current": current_link(state, run),
+        "driver_log": os.path.exists(driver_log_path(prefix)),
         "stdout": os.path.exists(f"{prefix}.out"), "now": now,
     }
     if children:
@@ -254,23 +272,45 @@ def tail(path, limit=LOG_LINES, before=None, block=65536):
     return [l.decode("utf-8", errors="replace") for l in lines], start, end
 
 
-def log_data(state, prefix, worker=None, before=None, limit=LOG_LINES, level=None):
+def worker_key(worker):
+    """A worker as a URL names it: a number, or ``driver``."""
+    if worker == DRIVER:
+        return DRIVER
+    return int(worker)
+
+
+def log_file(prefix, worker):
+    return driver_log_path(prefix) if worker == DRIVER else log_path(prefix, worker)
+
+
+def log_data(state, prefix, worker=None, before=None, limit=LOG_LINES, level=None, phase=None):
     """The last lines of the run's logs, oldest first, with where each
-    worker's file was read up to (``offsets``: what the event stream goes
-    on from) and from (``starts``: what "earlier" asks before). One worker,
-    or every worker interleaved by time. `level`: that level and above."""
+    file was read up to (``offsets``: what the event stream goes on from)
+    and from (``starts``: what "earlier" asks before). One worker (a
+    number, or ``driver`` for the driver's own log), or every worker and
+    the driver interleaved by time. `level`: that level and above.
+    `phase` tags every line (the current step of a build, shown on the
+    build's page)."""
     workers = describe_run(prefix)["workers"]
-    which = [int(worker)] if worker not in (None, "") else list(range(workers))
+    if worker not in (None, ""):
+        which = [worker_key(worker)]
+    else:
+        which = list(range(workers))
+        if os.path.exists(driver_log_path(prefix)):
+            which.append(DRIVER)
     lines, offsets, starts = [], {}, {}
     floor = LEVELS.index(level) if level in LEVELS else 0
     for n in which:
-        raw, start, end = tail(log_path(prefix, n), limit, before if len(which) == 1 else None)
-        offsets[n], starts[n] = end, start
+        raw, start, end = tail(log_file(prefix, n), limit, before if len(which) == 1 else None)
+        # string keys, as JSON has them and as the stream's ?offsets= names them
+        offsets[str(n)], starts[str(n)] = end, start
         last = None
         for seq, text in enumerate(raw):
             parsed = parse_line(n, text, last)
             last = parsed
             parsed["seq"] = seq
+            if phase:
+                parsed["phase"] = phase
             lines.append(parsed)
     if len(which) > 1:
         # interleave the workers by time; a continuation line sorts with the
@@ -279,7 +319,9 @@ def log_data(state, prefix, worker=None, before=None, limit=LOG_LINES, level=Non
         for line in lines:
             if line["time"]:
                 current[line["worker"]] = line["time"]
-            keyed.append(((current.get(line["worker"], ""), line["worker"], line["seq"]), line))
+            # the driver sorts after the workers at the same second
+            order = (line["worker"] if line["worker"] != DRIVER else workers, line["seq"])
+            keyed.append(((current.get(line["worker"], ""), *order), line))
         lines = [l for _, l in sorted(keyed, key=lambda x: x[0])][-limit:]
     lines = [l for l in lines if LEVELS.index(l["level"]) >= floor]
     for l in lines:
@@ -302,24 +344,49 @@ def sse(event, data):
 
 
 def parse_offsets(text):
-    """``"0:1234,1:5678"`` -> ``{0: 1234, 1: 5678}``."""
+    """``"0:1234,1:5678,driver:90"`` -> ``{0: 1234, 1: 5678, "driver": 90}``."""
     out = {}
     for part in (text or "").split(","):
         if ":" in part:
             n, off = part.split(":", 1)
-            if n.strip().isdigit() and off.strip().isdigit():
-                out[int(n)] = int(off)
+            n, off = n.strip(), off.strip()
+            if (n.isdigit() or n == DRIVER) and off.isdigit():
+                out[worker_key(n)] = int(off)
     return out
 
 
-async def run_events(state, prefix, offsets=None, tick=None, request=None):
+def _parsed(raw, last, phase=None):
+    batch = []
+    for n, text in raw:
+        parsed = parse_line(n, text, last.get(n))
+        last[n] = parsed
+        if phase:
+            parsed["phase"] = phase
+        batch.append(parsed)
+    return batch
+
+
+async def run_events(state, prefix, offsets=None, tick=None, request=None, child=None,
+                     child_offsets=None):
     """``status`` (the run's data) every tick, ``log`` with the lines
-    written since `offsets` (each worker's file read from there; a file not
-    named, from its start), and ``done`` once the run is no longer running."""
+    written since `offsets` (each worker's file and the driver's read from
+    there; a file not named, from its start), and ``done`` once the run is
+    no longer running.
+
+    A ``lux build`` has no workers of its own: its stream also follows the
+    step it is on -- ``phase`` when the step changes (the step's phase,
+    command and run), then that run's lines in ``log`` tagged with the
+    phase, so the build's page passes from one phase to the next as the
+    build does. `child` is the step's prefix the page rendered and
+    `child_offsets` where it read its logs to; a different step is read
+    from its start (its files are new)."""
     tick = state.settings.refresh if tick is None else tick
     tailer = LogTailer(prefix, 0)
     tailer.offsets = dict(offsets or {})
     last = {}
+    following = None
+    child_tailer = None
+    child_last = {}
     while True:
         if request is not None and await request.is_disconnected():
             return
@@ -327,12 +394,25 @@ async def run_events(state, prefix, offsets=None, tick=None, request=None):
         yield sse("status", data)
         tailer.workers = data["workers"]
         raw = await asyncio.to_thread(tailer.read_new_lines)
-        if raw:
-            batch = []
-            for n, text in raw:
-                parsed = parse_line(n, text, last.get(n))
-                last[n] = parsed
-                batch.append(parsed)
+        batch = _parsed(raw, last) if raw else []
+        current = data.get("current")
+        step_prefix = (current or {}).get("run", {}).get("prefix") if current else None
+        if step_prefix != following:
+            following = step_prefix
+            child_tailer = None
+            child_last = {}
+            if step_prefix:
+                child_tailer = LogTailer(step_prefix, 0)
+                if step_prefix == child:
+                    child_tailer.offsets = dict(child_offsets or {})
+            yield sse("phase", current)
+        if child_tailer is not None:
+            child_tailer.workers = await asyncio.to_thread(
+                lambda: describe_run(child_tailer.prefix)["workers"])
+            raw = await asyncio.to_thread(child_tailer.read_new_lines)
+            if raw:
+                batch += _parsed(raw, child_last, current.get("phase"))
+        if batch:
             yield sse("log", batch)
         if data["state"] in FINISHED:
             yield sse("done", data)
@@ -349,9 +429,11 @@ def get_runs(request: Request, command: str = "", state: str = ""):
 
 
 @router.get("/{rel:path}/events")
-async def get_events(request: Request, rel: str, offsets: str = ""):
+async def get_events(request: Request, rel: str, offsets: str = "", child: str = "",
+                     child_offsets: str = ""):
     state = request.app.state.lux
     prefix = full_prefix(state, rel)
+    child_prefix = full_prefix(state, child) if child else None
     with _streams["lock"]:
         if _streams["count"] >= STREAM_LIMIT:
             raise HTTPException(status_code=429, detail="too many live pages open; close one")
@@ -359,7 +441,8 @@ async def get_events(request: Request, rel: str, offsets: str = ""):
 
     async def stream():
         try:
-            async for chunk in run_events(state, prefix, parse_offsets(offsets), request=request):
+            async for chunk in run_events(state, prefix, parse_offsets(offsets), request=request,
+                                          child=child_prefix, child_offsets=parse_offsets(child_offsets)):
                 yield chunk
         finally:
             with _streams["lock"]:
@@ -373,6 +456,8 @@ async def get_events(request: Request, rel: str, offsets: str = ""):
 def get_log(request: Request, rel: str, worker: str = "", before: int | None = None,
             limit: int = LOG_LINES, level: str = ""):
     state = request.app.state.lux
+    if worker and not (worker.isdigit() or worker == DRIVER):
+        raise HTTPException(status_code=404, detail=f"no worker {worker!r}")
     return log_data(state, full_prefix(state, rel), worker or None, before,
                     max(1, min(limit, 5000)), level or None)
 

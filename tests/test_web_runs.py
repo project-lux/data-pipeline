@@ -273,3 +273,112 @@ def test_the_dashboard_links_to_the_run(web):
     p = write_fake_run(logs, "reconcile", 1)
     assert client.get("/api/dashboard/running").json()[0]["rel"] == rel(p)
     assert f'<a href="/runs/{rel(p)}">reconcile</a>' in client.get("/").text
+
+
+# --- the driver's log, and a build's page following its steps ---------------------------
+
+
+def test_the_log_includes_the_drivers_lines(web):
+    client, _, logs = web
+    p = write_fake_run(logs, "reconcile", 2)
+    Path(p + ".log").write_text("14:15:00 INFO     worker logs: x\n14:16:00 INFO     Resolving the identity map\n")
+    d = client.get(f"/api/runs/{rel(p)}/log").json()
+    # by time; the driver after the workers at the same second
+    assert [(l["worker"], l["text"][:9]) for l in d["lines"]] == [
+        (0, "worker 0 "), ("driver", "worker lo"), (1, "worker 1 "), ("driver", "Resolving")]
+    assert d["offsets"]["driver"] == os.path.getsize(p + ".log")
+    only = client.get(f"/api/runs/{rel(p)}/log?worker=driver").json()
+    assert [l["worker"] for l in only["lines"]] == ["driver", "driver"]
+    assert client.get(f"/api/runs/{rel(p)}/log?worker=nope").status_code == 404
+    html = client.get(f"/runs/{rel(p)}").text
+    assert '<option value="driver">driver</option>' in html
+    assert '<span class="w">driver</span> <span class="msg">Resolving the identity map</span>' in html
+    assert client.get(f"/api/runs/{rel(p)}").json()["driver_log"] is True
+
+
+def test_a_one_shot_run_shows_its_log(web):
+    client, _, logs = web
+    p = str(logs / "sheets-2026-11-03-120000")
+    RunRecord(p, "sheets", ["lux", "sheets"], workers=0).start().finish(exit=0)
+    Path(p + ".log").write_text("12:00:01 INFO     read 3 tabs\n")
+    html = client.get(f"/runs/{rel(p)}").text
+    assert "read 3 tabs" in html and "no workers of its own" in html
+
+
+def fake_build(logs, step_prefix=None, finished=False):
+    b = str(logs / "build-2026-11-03-130000")
+    steps = [{"phase": "sheets", "command": "sheets", "argv": ["lux", "sheets"],
+              "prefix": f"{b}-sheets", "started": 1, "finished": 2, "exit": 0}]
+    if step_prefix:
+        steps.append({"phase": "reconcile", "command": "reconcile", "argv": ["lux", "reconcile"],
+                      "prefix": step_prefix, "started": 3, "finished": None, "exit": None})
+    rec = RunRecord(b, "build", ["lux", "build"], extra={
+        "phases": ["sheets", "reconcile", "merge"], "current": "reconcile" if step_prefix else None,
+        "steps": steps}).start()
+    if finished:
+        rec.finish(exit=0)
+    return b, rec
+
+
+def test_a_builds_page_shows_the_step_it_is_on_and_its_log(web):
+    client, _, logs = web
+    child = write_fake_run(logs, "reconcile", 1, extra={"parent": str(logs / "build-2026-11-03-130000")})
+    Path(child + ".log").write_text("14:20:00 INFO     Resolving the identity map\n")
+    b, _ = fake_build(logs, child)
+    d = client.get(f"/api/runs/{rel(b)}").json()
+    assert d["current"]["phase"] == "reconcile" and d["current"]["run"]["rel"] == rel(child)
+    assert d["current"]["argv"] == "lux reconcile"
+    html = client.get(f"/runs/{rel(b)}").text
+    assert "Now on reconcile" in html
+    assert '<span class="w">reconcile w0</span>' in html
+    assert '<span class="w">reconcile driver</span> <span class="msg">Resolving the identity map</span>' in html
+    page = json.loads(html.split('id="run-page">')[1].split("</script>")[0])
+    assert page["child"]["rel"] == rel(child)
+    assert page["child"]["offsets"] == {"0": os.path.getsize(log_path(child, 0)),
+                                        "driver": os.path.getsize(child + ".log")}
+
+
+def test_a_builds_stream_passes_to_the_next_step(web):
+    client, state, logs = web
+    b, rec = fake_build(logs)                       # between steps
+    seen = []
+    with LiveServer(client.app) as server:
+        step = 0
+        for name, data in server.events(f"/api/runs/{rel(b)}/events"):
+            seen.append(name)
+            if name == "status" and step == 0:
+                assert data["current"] is None
+                child = write_fake_run(logs, "reconcile", 1,
+                                       extra={"parent": b}, ts="2026-11-03-130100")
+                rec.data["steps"].append({"phase": "reconcile", "command": "reconcile",
+                                          "argv": ["lux", "reconcile"], "prefix": child,
+                                          "started": 3, "finished": None, "exit": None})
+                rec.update(current="reconcile")
+                step = 1
+            elif name == "phase":
+                assert data["phase"] == "reconcile" and data["run"]["rel"] == rel(child)
+                Path(child + ".log").write_text("13:01:30 INFO     Resolving the identity map\n")
+                step = 2
+            elif name == "log" and step == 2:
+                texts = [(l.get("phase"), l["worker"], l["text"]) for l in data]
+                assert ("reconcile", 0, "worker 0 started") in texts
+                assert ("reconcile", "driver", "Resolving the identity map") in texts
+                rec.finish(exit=0)
+                step = 3
+            elif name == "done":
+                break
+    assert seen.index("phase") < seen.index("log") < seen.index("done")
+
+
+def test_a_builds_stream_continues_a_known_step_from_its_offsets(web):
+    client, _, logs = web
+    child = write_fake_run(logs, "reconcile", 1, extra={"parent": str(logs / "build-2026-11-03-130000")})
+    b, rec = fake_build(logs, child)
+    page = json.loads(client.get(f"/runs/{rel(b)}").text.split('id="run-page">')[1].split("</script>")[0])
+    query = ",".join(f"{n}:{o}" for n, o in page["child"]["offsets"].items())
+    rec.finish(exit=0)
+    with client.stream("GET", f"/api/runs/{rel(b)}/events?child={rel(child)}&child_offsets={query}") as s:
+        got = list(events(s))
+    names = [n for n, _ in got]
+    # the step the page rendered: named, but its lines already shown are not re-sent
+    assert names == ["status", "phase", "done"]

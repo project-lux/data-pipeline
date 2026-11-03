@@ -111,11 +111,17 @@ HTTP: on a network you do not trust, use the tunnel.
   command or state. A run's page is `lux watch` in the browser: a row per
   worker (what it is doing, its bar, done/total, %, elapsed, remaining),
   the all-workers row, and the log, all following the run live and
-  stopping when it ends. The log can be filtered by level and worker,
-  stop following, jump to the first error, and read a worker's earlier
-  lines. A `lux build` shows its phases, each linked to its own run, and
-  each phase links back to its build. A run started from a shell slice by
-  slice shows too. `/runs/_latest` opens the newest. *Run again* opens the
+  stopping when it ends. The log holds the workers' lines and the
+  driver's own (`<prefix>.log`, shown as `driver`): what the command did
+  before, between and after its workers, so reconcile's identify,
+  metatypes and write-refs are followed after its workers have finished,
+  and a one-shot step (sheets, portal) has a log of its own. The log can
+  be filtered by level and worker, stop following, jump to the first
+  error, and read a worker's earlier lines. A `lux build` shows its
+  phases, each linked to its own run, says which step it is on, and its
+  log follows that step (lines tagged with the phase), passing to the
+  next step as the build does; each phase links back to its build. A run
+  started from a shell slice by slice shows too. `/runs/_latest` opens the newest. *Run again* opens the
   command's form filled in as the run was. A run started from the web can
   be cancelled from its page by typing `cancel`: its process and its
   workers are sent SIGTERM (SIGKILL ten seconds later if still there), and
