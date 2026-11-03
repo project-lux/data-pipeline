@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "commands/_fields.html" import field, source_list, preview_block, running_banner %}
+{% block title %}lux {{ spec.name }}{% endblock %}
+{% block scripts %}<script type="module" src="/static/cmdform.js"></script>{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="/commands">Commands</a> /</p>
+<h1>lux {{ spec.name }}</h1>
+<p class="lead">{{ spec.summary }}</p>
+{% if spec.doc and spec.doc != spec.summary %}<details><summary>More</summary><pre class="doc">{{ spec.doc }}</pre></details>{% endif %}
+{% if spec.name == "build" %}<p><a href="/commands/build">The build page</a> chooses its phases.</p>{% endif %}
+
+{% if not spec.runnable %}
+<div class="banner warn">lux {{ spec.name }} is not run from the web UI{% if spec.name == "config" %}: the <a href="/config">configuration pages</a> do what it does{% elif spec.name == "watch" %}: a <a href="/runs">run's page</a> is the same view{% endif %}.</div>
+<table class="table"><thead><tr><th>Option</th><th>Help</th></tr></thead><tbody>
+  {% for o in own %}<tr><td><code>{{ (o.flags or [o.dest])|join(", ") }}</code></td><td class="detail">{{ o.help or "" }}</td></tr>{% endfor %}
+</tbody></table>
+{% else %}
+{{ running_banner(running) }}
+{% if error %}<div class="banner fail" role="alert">{{ error }}</div>{% endif %}
+<form method="post" action="/commands/{{ spec.name }}" class="form command" data-preview="/api/commands/{{ spec.name }}/preview">
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+  {{ source_list(sources) }}
+  {% if own %}
+  <fieldset><legend>Options</legend>
+    {% for o in own %}{{ field(o, values, sources) }}{% endfor %}
+  </fieldset>
+  {% endif %}
+  <fieldset><legend>Sources and workers</legend>
+    {% for o in globals_ %}{{ field(o, values, sources) }}{% endfor %}
+  </fieldset>
+  {{ preview_block(preview, spec.name) }}
+  <p class="actions"><button type="submit">Run lux {{ spec.name }}</button></p>
+</form>
+{% endif %}
+{% endblock %}

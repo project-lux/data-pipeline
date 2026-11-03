@@ -17,6 +17,16 @@
   {% if r.exit is not none %}<dt>exit</dt><dd>{{ r.exit }}{% if r.error %}: {{ r.error }}{% endif %}</dd>{% endif %}
   {% if not r.argv %}<dt>record</dt><dd class="muted">none (started slice by slice from a shell)</dd>{% endif %}
 </dl>
+<div class="actions">
+  {% if again %}<a class="button" href="{{ again }}">Run again</a>{% endif %}
+  {% if live and cancel_why is none %}
+  <form method="post" action="/runs/{{ r.rel }}/cancel" class="form inline cancel-run">
+    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <label>Type <code>cancel</code> <input type="text" name="confirm" autocomplete="off" size="8"></label>
+    <button type="submit" class="danger">Cancel the run</button>
+  </form>
+  {% elif live and cancel_why and cancel_why != "it is not running" %}<span class="muted">Not cancellable here: {{ cancel_why }}.</span>{% endif %}
+</div>
 
 {% if r.phases %}
 <ol class="phases">

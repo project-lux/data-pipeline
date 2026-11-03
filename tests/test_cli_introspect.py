@@ -15,7 +15,7 @@ from lux_pipeline.cli import entry
 from lux_pipeline.cli.help import list_commands
 from lux_pipeline.cli.introspect import (
     CONFIRM, GROUPS, NOT_RUNNABLE, all_command_specs, argv_from_values, coerce, command_parser,
-    command_spec, confirm_needed, confirm_reason, option_name,
+    HIDDEN, command_spec, confirm_needed, confirm_reason, option_name, values_from_argv,
 )
 
 COMMANDS = [name for name, _ in list_commands()]
@@ -172,6 +172,26 @@ def test_every_option_round_trips_through_the_real_parsers(name, dest, tmp_path)
         assert argv[0] == name and len(argv) > 1, argv
         ns = parse(name, argv)
         assert getattr(ns, dest) == expected(name, o, v), (argv, v)
+
+
+@pytest.mark.parametrize("name,dest", CASES)
+def test_values_come_back_from_a_command_line(name, dest, tmp_path):
+    """values_from_argv (a run page's "run again") reads back what
+    argv_from_values wrote, through the same parsers; the options a form
+    never shows are left out."""
+    spec = command_spec(name)
+    o = by_dest(spec)[dest]
+    if dest in HIDDEN:
+        pytest.skip("not on a form")
+    required = {r["dest"]: sample(r, tmp_path) for r in spec["options"]
+                if r["required"] and r["dest"] != dest}
+    v = sample(o, tmp_path)
+    argv = argv_from_values(spec, {**required, dest: v})
+    back = values_from_argv(spec, ["lux", *argv, "--no-ui", "--prefix", "/x/y"])
+    assert "prefix" not in back and "no_ui" not in back
+    if o["kind"] == "flag" or v != o["default"]:
+        assert back[dest] == expected(name, o, v), (argv, back)
+    assert argv_from_values(spec, back) == argv
 
 
 def test_defaults_and_empty_values_are_left_out():

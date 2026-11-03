@@ -226,6 +226,20 @@ def test_each_step_is_told_its_parent(tmp_path, monkeypatch):
     assert seen == [str(tmp_path / "logs" / "b3")] * 2
 
 
+def test_the_web_tags_the_build_not_its_phases(tmp_path, monkeypatch):
+    """LUX_RUN_EXTRA (the web UI's runner) goes into the build's record;
+    the phases are not given it, so only the build reads as web-started."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("LUX_RUN_EXTRA", '{"web": true, "stdout": "x.out"}')
+    hdlr = make(tmp_path)
+    seen = []
+    hdlr.run_step = lambda argv: seen.append(hdlr.step_env().get("LUX_RUN_EXTRA")) or 0
+    run(hdlr, ["--to", "reconcile", "--prefix", str(tmp_path / "logs" / "b4")])
+    rec = read_run(str(tmp_path / "logs" / "b4"))
+    assert rec["web"] is True and rec["stdout"] == "x.out" and rec["phases"] == ["sheets", "reconcile"]
+    assert seen == [None, None]
+
+
 def test_a_dry_run_writes_no_record(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     hdlr = make(tmp_path)

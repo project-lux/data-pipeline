@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "commands/_fields.html" import field, source_list, preview_block, running_banner %}
+{% block title %}Build{% endblock %}
+{% block scripts %}<script type="module" src="/static/cmdform.js"></script>{% endblock %}
+{% set special = ("clear", "start", "stop", "skip", "dry_run") %}
+{% block content %}
+<p class="crumbs"><a href="/commands">Commands</a> /</p>
+<h1>Build</h1>
+<p class="lead"><code>lux build</code>: the phases in order, each a <code>lux</code> command of its own, as
+<code>run-all.sh</code> runs them. Its run page shows the phases as they go, each linking to its own run.</p>
+{{ running_banner(running) }}
+{% if error %}<div class="banner fail" role="alert">{{ error }}</div>{% endif %}
+<form method="post" action="/commands/build" class="form command" data-preview="/api/commands/build/preview" data-dry-run="/api/commands/build/dry-run">
+  <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+  <input type="hidden" name="phases_shown" value="1">
+  {{ source_list(sources) }}
+  <fieldset><legend>Phases</legend>
+    <div class="field"><label class="force"><input type="checkbox" name="clear" value="1"{% if values.clear %} checked{% endif %}> clear first</label>
+      <div class="help">{{ (options|selectattr("dest", "equalto", "clear")|first).help }}</div></div>
+    <div class="phase-picks">
+    {% for p in phases %}<label><input type="checkbox" name="phase" value="{{ p }}"{% if p not in skipped %} checked{% endif %}> {{ p }}</label>{% endfor %}
+    </div>
+    {% for o in options if o.dest in ("start", "stop") %}{{ field(o, values, sources) }}{% endfor %}
+  </fieldset>
+  <fieldset><legend>Sources, workers and options</legend>
+    {% for o in options if o.dest not in special %}{{ field(o, values, sources) }}{% endfor %}
+  </fieldset>
+  <section class="card wide">
+    <h2>Steps <button type="submit" class="secondary" formmethod="get" formaction="/commands/build" name="preview_steps" value="1" id="build-steps-button">Show the steps</button></h2>
+    <p class="muted">What <code>lux build --dry-run</code> prints for these choices: every command the build would run.</p>
+    <div class="banner fail" id="build-steps-error"{% if not steps_error %} hidden{% endif %}>{{ steps_error or "" }}</div>
+    <ol class="steps" id="build-steps">{% for s in steps or [] %}<li><code>{{ s }}</code></li>{% endfor %}</ol>
+  </section>
+  {{ preview_block(preview, "build") }}
+  <p class="actions"><button type="submit">Start the build</button></p>
+</form>
+{% endblock %}

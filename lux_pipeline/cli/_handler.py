@@ -31,6 +31,20 @@ logger = logging.getLogger("lux_pipeline")
 _WORKER_RE = STATUS_RE
 # set by `lux build` in each phase's environment: the build's own prefix
 PARENT_RUN_ENV = "LUX_PARENT_RUN"
+# set by whoever starts a command to add fields to its run record, as JSON
+# (the web UI's runner: {"web": true, "stdout": "<prefix>.out"})
+RUN_EXTRA_ENV = "LUX_RUN_EXTRA"
+
+
+def run_extra():
+    """The fields `RUN_EXTRA_ENV` asks for, or ``{}`` (also for a value that
+    is not a JSON object: a record must never fail a command)."""
+    import json
+    try:
+        extra = json.loads(os.environ.get(RUN_EXTRA_ENV) or "{}")
+    except ValueError:
+        return {}
+    return extra if isinstance(extra, dict) else {}
 
 
 def default_prefix(cfgs, command):
@@ -218,7 +232,8 @@ class CommandHandler(BaseHandler):
             record = RunRecord(prefix, args.command, command_argv(args), engine=args.engine,
                                workers=planned,
                                visible_workers=[n for n in range(planned) if n not in hidden],
-                               sources=names, parent=os.environ.get(PARENT_RUN_ENV) or None)
+                               sources=names, parent=os.environ.get(PARENT_RUN_ENV) or None,
+                               extra=run_extra())
             return record.start()
         except Exception as e:
             logger.debug(f"could not write the run record for {prefix}: {e}")

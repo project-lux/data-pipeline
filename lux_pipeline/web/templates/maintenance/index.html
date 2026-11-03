@@ -5,7 +5,7 @@
 <h1>Maintenance</h1>
 <p class="lead">Postgres, read only: <code>lux pg-tune</code>'s advice for this machine and the build, and
 <code>lux pg-maintain --bloat</code>'s report of what each cache table holds. Anything that changes a table is a
-<code>lux pg-maintain</code> run: the commands are shown to copy.</p>
+<code>lux pg-maintain</code> run: the links below open its form.</p>
 
 <section class="card wide">
   <h2>Tuning <span class="muted small">for {{ tune.workers if tune else "-" }} workers</span></h2>
@@ -48,9 +48,12 @@
     <tbody>{% for r in rows or [] %}<tr>{% for cell in r.cells %}<td{% if 1 < loop.index0 < 8 %} class="num"{% elif loop.last %} class="detail"{% endif %}>{{ cell }}</td>{% endfor %}</tr>{% endfor %}</tbody>
   </table>
   <h3>Commands</h3>
-  <pre class="log">lux pg-maintain --bloat                                   # this report
-lux pg-maintain --vacuum --source all                    # vacuum and analyse the cache tables
-lux pg-maintain --rewrite --source NAME --cache CACHE    # give back what VACUUM will not (locks the table)
-lux pg-maintain --idmap-indexes                          # the identity map's covering indexes</pre>
+  <ul class="commands">
+    <li><a href="/commands/pg-maintain?bloat=1">lux pg-maintain --bloat</a>: this report, as a run</li>
+    <li><a href="/commands/pg-maintain?vacuum=1&amp;source=all">lux pg-maintain --vacuum --source all</a>: vacuum and analyse the cache tables</li>
+    <li><a href="/commands/pg-maintain?rewrite=1">lux pg-maintain --rewrite --source NAME --cache CACHE</a>: give back what VACUUM will not (locks the table)</li>
+    <li><a href="/commands/pg-maintain?idmap_indexes=1">lux pg-maintain --idmap-indexes</a>: the identity map's covering indexes</li>
+    <li><a href="/commands/pg-tune">lux pg-tune</a>: the tuning report above, as a run</li>
+  </ul>
 </section>
 {% endblock %}
