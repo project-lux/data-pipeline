@@ -50,7 +50,12 @@ slices are hash partitions), so a store is built in two steps:
    (`missing_workers`).
 2. `build_store` merges every run in key order and appends to the store,
    one write transaction per `COMMIT_EVERY` records, building the index
-   blocks as it goes. It is written to ``<path>.tmp`` and moved into place
+   blocks as it goes. Every run is open at once and the merge takes a few
+   records from each in turn, so each is read through a large buffer
+   (`read_buffer`): with the default 8 kB, a merge of a few hundred runs
+   is a stream of small scattered reads, and a disk limited in operations
+   per second, not bytes, caps it at half the speed it manages from
+   memory. It is written to ``<path>.tmp`` and moved into place
    when complete, so a failed build never replaces a good store.
 
 `DistributionStore` reads one.
@@ -85,6 +90,11 @@ TEXT_BLOCK_BYTES = 500
 TEXT_SEPARATOR = b"\x00"
 # records held in memory per run before it is sorted and written
 RUN_BYTES = int(os.getenv("LUX_LMDB_RUN_MB", "256")) * 1024 * 1024
+# the merge's read buffers, all runs together (LUX_LMDB_READ_MB), shared out
+# between the runs, each between these two
+READ_MB = 1024
+MIN_READ_BUFFER = 1024 * 1024
+MAX_READ_BUFFER = 16 * 1024 * 1024
 COMMIT_EVERY = 10000
 
 _FRAME = struct.Struct(">HHI")      # key length, class length, value length
@@ -239,18 +249,31 @@ class RunWriter:
             self.close()
 
 
-def read_run(path):
-    """``(key, class, value)`` from a run file, in its (sorted) order."""
-    with open(path, "rb") as fh:
+def read_buffer(runs):
+    """The read buffer for each of `runs` run files merged at once: the
+    budget (``LUX_LMDB_READ_MB``, else `READ_MB`) shared between them,
+    no less than `MIN_READ_BUFFER` and no more than `MAX_READ_BUFFER`."""
+    total = int(float(os.getenv("LUX_LMDB_READ_MB") or READ_MB) * 1024 * 1024)
+    return max(MIN_READ_BUFFER, min(MAX_READ_BUFFER, total // max(runs, 1)))
+
+
+def read_run(path, buffering=-1):
+    """``(key, class, value)`` from a run file, in its (sorted) order.
+    `buffering` is the read buffer in bytes (-1: Python's default)."""
+    with open(path, "rb", buffering=buffering) as fh:
+        if hasattr(os, "posix_fadvise"):
+            # Linux: a larger read-ahead window for a file read start to end
+            try:
+                os.posix_fadvise(fh.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+            except OSError:
+                pass
         while True:
             head = fh.read(_FRAME.size)
             if not head:
                 return
             kl, cl, vl = _FRAME.unpack(head)
-            key = fh.read(kl)
-            cls = fh.read(cl)
-            value = fh.read(vl)
-            yield key, cls, value
+            body = fh.read(kl + cl + vl)
+            yield body[:kl], body[kl:kl + cl], body[kl + cl:]
 
 
 # --- step 2: the store ---------------------------------------------------------
@@ -307,9 +330,12 @@ def build_store(path, runs_dir, key_format, meta=None, remove_runs=True):
         raise ValueError(f"unknown key format {key_format!r}")
     runs = sorted(os.path.join(runs_dir, f) for f in _list(runs_dir) if f.endswith(".run"))
     run_bytes = sum(os.path.getsize(r) for r in runs)
+    buffering = read_buffer(len(runs))
+    logger.info(f"Merging {len(runs):,} runs ({run_bytes / 1024 ** 3:.1f} GB), reading "
+                f"{buffering / 1024 ** 2:.0f} MB at a time from each")
     tmp = f"{path}.tmp"
     shutil.rmtree(tmp, ignore_errors=True)
-    start = time.time()
+    start = last = time.time()
     env = lmdb.open(tmp, map_size=_map_size(run_bytes), max_dbs=3, metasync=False,
                     sync=False, map_async=True)
     stats = {"records": 0, "duplicates": 0, "unindexed": 0, "classes": {}}
@@ -320,7 +346,8 @@ def build_store(path, runs_dir, key_format, meta=None, remove_runs=True):
         txn = [env.begin(write=True)]
         index = _Index(txn, index_db, key_format)
         in_batch = 0
-        for key, cls, value in heapq.merge(*(read_run(r) for r in runs), key=lambda r: r[0]):
+        for key, cls, value in heapq.merge(*(read_run(r, buffering) for r in runs),
+                                           key=lambda r: r[0]):
             # in key order, so append is always true unless the key repeats
             if not txn[0].put(key, value, db=data, append=True):
                 stats["duplicates"] += 1
@@ -338,9 +365,14 @@ def build_store(path, runs_dir, key_format, meta=None, remove_runs=True):
                 txn[0] = env.begin(write=True)
                 in_batch = 0
                 if not stats["records"] % 1000000:
-                    el = time.time() - start
+                    # the rate since the start, and over the last million:
+                    # the overall one hides a step change for a long time
+                    now = time.time()
+                    el = now - start
                     logger.info(f"{stats['records']:,} records in {el:.0f}s "
-                                f"= {stats['records'] / el:,.0f}/s")
+                                f"= {stats['records'] / el:,.0f}/s "
+                                f"(last million {1000000 / max(now - last, 1e-9):,.0f}/s)")
+                    last = now
         index.flush_all()
         stats["index_blocks"] = index.blocks
         description = {

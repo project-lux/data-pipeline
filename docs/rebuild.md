@@ -164,6 +164,12 @@ distribution store (`merged.lmdb` in `distribution_dir`: every record
 under its UUID, and an index by class); `--type external` or `--cache`
 with `--format lmdb` build `<source>:<id>`-keyed stores. Run as
 `--my-worker` slices, finish with the same command and `--merge-only`.
+The workers write sorted runs (`LUX_LMDB_RUN_MB`, default 256, of records
+each); the command then merges them into the store, reading every run
+through its share of a `LUX_LMDB_READ_MB` budget (default 1024, between 1
+and 16 MB a run), so the merge reads in large pieces rather than many
+small ones. Its log gives the rate over the last million records as well
+as the overall one.
 
 
 ## Choosing an engine
