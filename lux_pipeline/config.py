@@ -181,6 +181,32 @@ class IndexSpec:
         return f"IndexSpec({self.name!r}, {self.path!r}, {getattr(self.cls, '__name__', self.cls)})"
 
 
+# A source's name starts each of its Postgres tables (<name>_datacache,
+# <name>_recordcache2, ...), and a map without a tableName is a table of its
+# name; both go into SQL unquoted. So only what Postgres reads unquoted, in
+# lower case (it folds the rest, and the table is then not found again by
+# its name), and short enough that <name>_recordcache2_time_idx stays within
+# its 63-byte names.
+STORE_NAME_RE = re.compile(r"[a-z_][a-z0-9_]*")
+MAX_STORE_NAME = 40
+
+
+def store_name_problem(name, what="name"):
+    """Why `name` cannot name a source or a map's table, as a sentence; None
+    when it can."""
+    if not isinstance(name, str) or not name:
+        return f"{what} is missing: it names the source's tables"
+    if not STORE_NAME_RE.fullmatch(name):
+        bad = sorted({c for c in name if not (c.isascii() and (c.islower() or c.isdigit() or c == "_"))})
+        why = (f"it has {', '.join(repr(c) for c in bad)}" if bad
+               else "it starts with a digit")
+        return (f"{what} {name!r} cannot name a Postgres table: {why}; use lower case letters, "
+                f"digits and _, starting with a letter or _")
+    if len(name) > MAX_STORE_NAME:
+        return f"{what} {name!r} is {len(name)} characters; at most {MAX_STORE_NAME}"
+    return None
+
+
 class Config(object):
     def __init__(self, configcache=None, basepath=None):
         self.internal = {}
@@ -339,6 +365,14 @@ class Config(object):
         if "type" not in rec:
             raise ValueError(f"Config record {k} has no 'type': {rec}")
         typ = rec["type"]
+        if typ in ("internal", "external", "results", "map"):
+            problems = [store_name_problem(rec.get("name", k))]
+            if typ == "map" and "tableName" in rec:
+                problems.append(store_name_problem(rec["tableName"], "tableName"))
+            problems = [p for p in problems if p]
+            if problems:
+                where = f" ({origin['path']})" if origin and origin.get("path") else ""
+                raise ValueError(f"Config record {k}{where}: {'; '.join(problems)}")
         if origin is not None:
             self.record_origins[k] = origin
         if typ == "internal":
