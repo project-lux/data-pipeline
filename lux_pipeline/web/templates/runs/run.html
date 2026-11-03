@@ -29,13 +29,14 @@
 </div>
 
 {% if r.phases %}
-<ol class="phases">
+<ol class="phases" id="phases">
   {% for p in r.phases %}
   <li class="state-{{ p.state|replace(' ', '-') }}" title="{{ p.commands|join('\n') }}">
     {% if p.run and p.run.rel %}<a href="/runs/{{ p.run.rel }}">{{ p.phase }}</a>{% else %}{{ p.phase }}{% endif %}
     <span>{{ p.state }}</span></li>
   {% endfor %}
 </ol>
+<p class="muted" id="current-step">{% if r.current %}Now on {{ r.current.phase }}: <code>{{ r.current.argv }}</code>{% if r.current.run and r.current.run.rel %} (<a href="/runs/{{ r.current.run.rel }}">its run</a>){% endif %}; its log follows below.{% elif live %}Between steps.{% endif %}</p>
 {% endif %}
 
 {% if r.workers %}
@@ -65,17 +66,17 @@
 <ul>{% for c in r.children %}<li>{% if c.run.rel %}<a href="/runs/{{ c.run.rel }}">{{ c.command }}</a>{% else %}{{ c.command }}{% endif %} {{ badge(c.state) }}</li>{% endfor %}</ul>
 {% endif %}
 
-{% if r.workers %}
+{% if r.workers or r.driver_log or r.phases %}
 <section class="card wide">
   <h2>Log</h2>
   <div class="form inline log-controls">
     <label>From <select id="log-level">{% for l in levels %}<option value="{{ l }}"{% if l == "INFO" %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></label>
-    <label>Worker <select id="log-worker"><option value="">all</option>{% for w in r.rows %}<option value="{{ w.n }}">w{{ w.n }}</option>{% endfor %}</select></label>
+    {% if not r.phases %}<label>Worker <select id="log-worker"><option value="">all</option>{% for w in r.rows %}<option value="{{ w.n }}">w{{ w.n }}</option>{% endfor %}{% if r.driver_log %}<option value="driver">driver</option>{% endif %}</select></label>{% endif %}
     <label><input type="checkbox" id="log-follow" checked> follow</label>
     <button type="button" class="secondary" id="log-first-error">First error</button>
     <button type="button" class="secondary" id="log-earlier" title="Choose a worker first">Earlier lines</button>
   </div>
-  <div class="log" id="log" aria-live="off">{% for l in log.lines %}<div class="line level-{{ l.level }}{% if l.cont %} cont{% endif %}" data-worker="{{ l.worker }}" data-level="{{ l.level }}"><span class="t">{{ l.time or "" }}</span> <span class="lvl">{{ l.level if not l.cont else "" }}</span> <span class="w">w{{ l.worker }}</span> <span class="msg">{{ l.text }}</span></div>{% endfor %}</div>
+  <div class="log" id="log" aria-live="off">{% for l in log.lines %}<div class="line level-{{ l.level }}{% if l.cont %} cont{% endif %}" data-worker="{{ l.worker }}" data-level="{{ l.level }}"><span class="t">{{ l.time or "" }}</span> <span class="lvl">{{ l.level if not l.cont else "" }}</span> <span class="w">{% if l.phase %}{{ l.phase }} {% endif %}{% if l.worker == "driver" %}driver{% else %}w{{ l.worker }}{% endif %}</span> <span class="msg">{{ l.text }}</span></div>{% endfor %}</div>
 </section>
 {% endif %}
 {% if r.stdout %}<p><a href="/api/runs/{{ r.rel }}/stdout">The command's own output</a></p>{% endif %}

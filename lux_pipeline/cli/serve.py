@@ -35,6 +35,8 @@ INSTALL_HINT = "lux serve needs the web extra: pip install -e '.[web]'"
 class CommandHandler(BaseHandler):
     # the server reads the configuration when a page asks, not before
     needs_configs = False
+    # not a run: nothing to log or record under a prefix
+    uses_prefix = False
 
     def add_args(self, ap):
         ap.add_argument("--host", help="Address to listen on (default 127.0.0.1)")

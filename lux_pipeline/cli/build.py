@@ -20,8 +20,11 @@ phases, in order:
 
 Each step is a separate ``lux`` process, so each phase loads a fresh
 configuration and gets its own status/log prefix for ``lux watch``:
-``<P>-<phase>``, where ``P`` is ``--prefix`` or the build's own
-``<log_dir>/build-<timestamp>``. The build writes ``<P>.run``: its
+``<P>-<phase>`` (the clear phase's three steps: ``<P>-clear``,
+``<P>-clear-refs``, ``<P>-new-token``), where ``P`` is ``--prefix`` or
+the build's own ``<log_dir>/build-<timestamp>``. A one-shot step logs to
+``<P>-<phase>.log`` and has a record too, so ``lux watch <P>`` follows the
+build from step to step. The build writes ``<P>.run``: its
 command line, its phases, the one running now (``current``) and each
 step's command, prefix, start, end and exit status (``steps``); every
 phase's own record names the build as its ``parent``. Each phase's
@@ -45,7 +48,7 @@ from lux_pipeline import runtime
 from lux_pipeline.progress import RunRecord
 
 from ._handler import (PARENT_RUN_ENV, RUN_EXTRA_ENV, BaseHandler, command_argv, default_prefix,
-                       finish_record, refuse_while_building, run_extra)
+                       ensure_driver_log, finish_record, refuse_while_building, run_extra)
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -56,6 +59,8 @@ class CommandHandler(BaseHandler):
     # the phases load their own configuration; this process only needs the
     # directories, and must not hold the idmap open while identify rewrites it
     needs_configs = False
+    # writes its own record, with its phases and steps
+    own_record = True
 
     def add_args(self, ap):
         ap.add_argument("--clear", action="store_true",
@@ -98,13 +103,16 @@ class CommandHandler(BaseHandler):
             raise ValueError("--clear, but the clear phase is outside --from / --to / --skip")
         return out
 
-    def lux(self, args, command, *opts, phase=None, workers=True, prefix=None):
+    def lux(self, args, command, *opts, phase=None, workers=True, prefix=None, name=None):
         """argv for one ``lux`` step, with the global options passed on:
         all of them to a phase run by workers, only the log level to a
         one-shot step, and to ``portal`` (its own process pool) the
-        worker count too. A phase run by workers gets the status/log
-        prefix ``<prefix>-<phase>``; `prefix` is the build's own (default
-        ``--prefix``)."""
+        worker count too. Every step gets a status/log prefix,
+        ``<prefix>-<name>`` (`name` defaults to the phase, then the
+        command), so each is a run to follow: a worker phase's workers
+        write their files under it, and every step's driver logs to
+        ``<prefix>-<name>.log`` and has a record. `prefix` is the build's
+        own (default ``--prefix``)."""
         prefix = prefix or args.prefix
         argv = [sys.executable, "-m", "lux_pipeline.cli.entry", command, *opts]
         if args.log:
@@ -123,10 +131,10 @@ class CommandHandler(BaseHandler):
                 argv += ["--engine", args.engine]
             if args.no_ui:
                 argv.append("--no-ui")
-            if prefix:
-                argv += ["--prefix", f"{prefix}-{phase or command}"]
             if args.profile:
                 argv.append("--profile")
+        if prefix:
+            argv += ["--prefix", f"{prefix}-{name or phase or command}"]
         return argv
 
     def steps(self, args, prefix=None):
@@ -137,16 +145,18 @@ class CommandHandler(BaseHandler):
         for phase in self.phases(args):
             if phase == "clear":
                 out += [
-                    (phase, self.lux(args, "clear", "--source", "all", "--force", workers=False)),
-                    (phase, self.lux(args, "clear", "--refs", "--force", workers=False)),
-                    (phase, self.lux(args, "new-token", workers=False)),
+                    (phase, self.lux(args, "clear", "--source", "all", "--force", workers=False,
+                                     prefix=prefix)),
+                    (phase, self.lux(args, "clear", "--refs", "--force", workers=False,
+                                     prefix=prefix, name="clear-refs")),
+                    (phase, self.lux(args, "new-token", workers=False, prefix=prefix)),
                 ]
             elif phase == "sheets":
-                out.append((phase, self.lux(args, "sheets", workers=False)))
+                out.append((phase, self.lux(args, "sheets", workers=False, prefix=prefix)))
             elif phase in ("reconcile", "merge"):
                 out.append((phase, self.lux(args, phase, "--source", source, prefix=prefix)))
             elif phase == "portal":
-                out.append((phase, self.lux(args, "portal", workers="count")))
+                out.append((phase, self.lux(args, "portal", workers="count", prefix=prefix)))
             elif phase == "export":
                 out.append((phase, self.lux(args, "export", prefix=prefix)))
         return out
@@ -222,6 +232,8 @@ class CommandHandler(BaseHandler):
         refuse_while_building(cfgs, "build", args.force)
         self.build_prefix = prefix
         self.run_prefix = None      # a build has no workers of its own to count
+        # <prefix>.log: which step is running, and when one failed
+        ensure_driver_log(prefix, args.log)
         self.run_record = RunRecord(prefix, "build", command_argv(args), engine=args.engine,
                                     workers=0, sources=[args.source or "all"],
                                     extra={**run_extra(), "phases": self.phases(args),

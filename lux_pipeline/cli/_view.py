@@ -2,15 +2,22 @@
 
 `BuildView` is the only place the pipeline touches Rich. It reads the
 ``<prefix>-w<n>.status`` files that `lux_pipeline.progress.StatusWriter`
-writes and tails the ``<prefix>-w<n>.log`` files the workers log to; it never
-holds a reference to a worker, and no worker knows it exists. That is what
-lets `lux watch` attach to any build -- one started by a `lux` engine, by a
-``*_parallel.sh`` loop, or by hand -- while it runs or after it finished.
+writes and tails the ``<prefix>-w<n>.log`` files the workers log to, and
+the driver's own ``<prefix>.log``; it never holds a reference to a worker,
+and no worker knows it exists. That is what lets `lux watch` attach to any
+build -- one started by a `lux` engine, by a ``*_parallel.sh`` loop, or by
+hand -- while it runs or after it finished.
 
 Screen: a header (title, prefix, clock); one `rich.progress.Progress` with a
 task per worker plus an "all workers" task; and a bounded panel of log lines
-holding this process's own log records and the tailed worker lines, prefixed
-``w<n>``.
+holding this process's own log records and the tailed lines, prefixed
+``w<n>`` for a worker and ``driver`` for the driver.
+
+A run is over when its record (``<prefix>.run``) says so; a run with no
+record -- started slice by slice from a shell -- is over when every
+worker says done. The difference is the driver's tail: reconcile's
+identify, metatypes and write-refs run after the last worker finishes,
+and the view stays on them.
 """
 
 import logging
@@ -31,7 +38,7 @@ from rich.text import Text
 
 # LogTailer lives with the other readers of a run's files; imported here
 # too, where it used to be defined
-from lux_pipeline.progress import LogTailer, read_build
+from lux_pipeline.progress import DRIVER, LogTailer, count_workers, read_build, read_run, run_state
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -94,15 +101,19 @@ class PanelLogHandler(logging.Handler):
 
 
 class Header:
-    def __init__(self, prefix):
+    def __init__(self, prefix, title=None):
         self.prefix = prefix
+        self.title = title
 
     def __rich__(self):
         grid = Table.grid(expand=True)
         grid.add_column(justify="left", ratio=1)
         grid.add_column(justify="center", ratio=1)
         grid.add_column(justify="right")
-        grid.add_row("[b]LUX Data Pipeline", self.prefix or "", datetime.now().strftime("%H:%M:%S"))
+        middle = self.prefix or ""
+        if self.title:
+            middle = f"{self.title}\n{middle}"
+        grid.add_row("[b]LUX Data Pipeline", middle, datetime.now().strftime("%H:%M:%S"))
         return Panel(grid)
 
 
@@ -115,20 +126,26 @@ class BuildView:
     """Live console display of one build, read from its files.
 
     ``with view:`` starts the display, routes the ``lux_pipeline`` logger
-    into the log panel (restoring the previous handlers on exit) and, unless
+    into the log panel (restoring the previous handlers on exit; a file
+    handler -- the driver's ``<prefix>.log`` -- stays, since the file is the
+    log of record and the panel is only a display) and, unless
     ``auto_refresh`` is off, polls the files every ``interval`` seconds. An
     engine or `lux watch` may also call `refresh` itself.
+
+    `workers` is how many worker rows to start with; a status file for a
+    worker beyond them adds a row, so a run can be watched from before its
+    workers have written anything (0), and a one-shot run has no rows.
     """
 
     def __init__(self, prefix, workers, log_level="INFO", max_log_lines=500,
-                 console=None, interval=0.5, auto_refresh=True):
+                 console=None, interval=0.5, auto_refresh=True, title=None):
         self.prefix = prefix
         self.workers = workers
         self.console = console or Console()
         self.interval = interval
         self.auto_refresh = auto_refresh
         self.log_panel = LogPanel(max_log_lines)
-        self.header = Header(prefix)
+        self.header = Header(prefix, title)
         self.progress = Progress(
             TextColumn("{task.description}"),
             BarColumn(),
@@ -149,6 +166,8 @@ class BuildView:
         self.level = getattr(logging, clamp_level(log_level))
         self.handler.setLevel(self.level)
         self.done = False
+        # the run's state as of the last refresh (lux_pipeline.progress.run_state)
+        self.state = "running"
         self.status = {}
         self.live = None
         self._saved = None
@@ -170,7 +189,10 @@ class BuildView:
     def add_worker_line(self, worker, line):
         # already formatted (time/level) by the worker's file handler
         text = Text()
-        text.append(f"w{worker} ", style="cyan")
+        if worker == DRIVER:
+            text.append("driver ", style="magenta")
+        else:
+            text.append(f"w{worker} ", style="cyan")
         text.append(line)
         self.log_panel.add_line(text)
 
@@ -178,17 +200,29 @@ class BuildView:
         """Hide a worker that has nothing to do (fewer sources than workers)."""
         self.progress.update(self.tasks[worker], visible=visible)
 
+    def _grow(self, workers):
+        """Rows for workers that have appeared since the view was built."""
+        for n in range(self.workers, workers):
+            self.tasks[n] = self.progress.add_task(f"w{n} waiting", total=None, start=False)
+        self.workers = workers
+        self.tailer.workers = workers
+        self.progress.update(self.all_task, description=f"all {workers} workers")
+
     # ----------------------------------------------------------- the files
 
     def refresh(self):
-        """Read every worker's status file and tail its log. Returns True
-        when every worker has reported ``done``."""
+        """Read every worker's status file and tail the logs. Returns True
+        when the run is over: its record finished, or, with no record,
+        every worker reported ``done``."""
         with self._lock:
             return self._refresh()
 
     def _refresh(self):
         # the files are read by lux_pipeline.progress.read_build, which every
         # view of a run shares; this only puts the numbers on the screen
+        found = count_workers(self.prefix)
+        if found > self.workers:
+            self._grow(found)
         visible = set()
         for n, tid in self.tasks.items():
             task = self._task(tid)
@@ -208,7 +242,13 @@ class BuildView:
         self.progress.update(self.all_task, completed=build["completed"], total=build["total"])
         for n, line in self.tailer.read_new_lines():
             self.add_worker_line(n, line)
-        self.done = build["done"]
+        record = read_run(self.prefix)
+        if record is None:
+            self.state = "finished" if build["done"] else "running"
+            self.done = build["done"]
+        else:
+            self.state = run_state(record, build)
+            self.done = self.state != "running"
         return self.done
 
     # ----------------------------------------------------------- lifecycle
@@ -233,7 +273,10 @@ class BuildView:
     def __enter__(self):
         self._saved = (list(logger.handlers), logger.level)
         for h in list(logger.handlers):
-            logger.removeHandler(h)
+            # the driver's log file stays: it is the log of record, and
+            # what another watcher of this run tails
+            if not isinstance(h, logging.FileHandler):
+                logger.removeHandler(h)
         logger.addHandler(self.handler)
         if logger.level == logging.NOTSET or logger.level > self.level:
             logger.setLevel(self.level)

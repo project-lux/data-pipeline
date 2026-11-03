@@ -251,7 +251,7 @@ def test_watch_latest_uses_log_dir_from_a_cheap_config_load(tmp_path, monkeypatc
 def test_watch_without_files_fails_clearly(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(runtime, "get_configs", lambda *a, **kw: None)
     assert run(["watch", str(tmp_path / "nope")], monkeypatch) == 1
-    assert "no status files found" in capsys.readouterr().err
+    assert "no run found" in capsys.readouterr().err
 
 
 def test_watch_needs_a_prefix_or_latest(tmp_path, monkeypatch, capsys):

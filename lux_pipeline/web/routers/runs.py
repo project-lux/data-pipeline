@@ -5,6 +5,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from lux_pipeline.progress import list_runs, read_run
+from lux_pipeline.web.api import runs as runs_api
 from lux_pipeline.web.api.runs import (FINISHED, LEVELS, full_prefix, log_data, log_dir, rel_prefix,
                                        run_data, runs_data)
 from lux_pipeline.web.api.commands import run_again_url
@@ -38,7 +39,14 @@ def run(request: Request, rel: str):
     log = log_data(state, prefix)
     live = data["state"] not in FINISHED
     script = {"rel": data["rel"], "live": live, "offsets": log["offsets"],
-              "starts": log["starts"], "workers": data["workers"]}
+              "starts": log["starts"], "workers": data["workers"], "child": None}
+    current = data.get("current")
+    if current and current["run"] and current["run"]["rel"]:
+        # a build on a step: the step's log so far, then the stream goes
+        # on from where it was read to
+        child_log = log_data(state, current["run"]["prefix"], phase=current["phase"])
+        log["lines"] = (log["lines"] + child_log["lines"])[-runs_api.LOG_LINES:]
+        script["child"] = {"rel": current["run"]["rel"], "offsets": child_log["offsets"]}
     record = read_run(prefix)
     cancel = request.app.state.runner.cancellable(record) if live else "it is not running"
     again = run_again_url(data["command"], data["argv"]) if data["argv"] else None
