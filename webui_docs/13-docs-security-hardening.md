@@ -88,3 +88,75 @@ documentation an operator needs.
 * All tests pass; `python -m pytest tests/ -q` runtime did not grow by
   more than a few seconds (the web tests use the filesystem fixture and
   no sleeps beyond the SSE test).
+
+## As built
+
+`web/actions.py` (with `web/api/actions.py`, `web/routers/actions.py`,
+`templates/actions/index.html`: the Actions area, last in the
+navigation), `templates/login.html`, and changes to `web/security.py`,
+`web/app.py`, `web/state.py`, `cli/serve.py` and the counts, maintenance,
+health, config and commands routes. Differences from the design above:
+
+* **Already there from earlier items**: the token check (W06, as an
+  app-wide dependency), the CSRF check (W06), `security.under` (W11, for
+  timing directories), the run-stream cap (W09, `STREAM_LIMIT`), the
+  health checks' one-at-a-time (W06), the runner's one-phase rule (W10),
+  and the confirmation phrases (W07, W10). W13 adds tests across them.
+* **Sign-in**: `GET /login` is a page with a token field (a GET form, so
+  it needs no CSRF token before there is a session), and
+  `/login?token=...&next=/path` sets the cookie (HTTP only, same site
+  strict) and goes on to `next` (a path on this server only). A browser
+  asking for any page without the token gets the sign-in page with a 401,
+  `next` set to where it was going; `/api/...` gets JSON. `?token=` on any
+  page still sets the cookie, as W06 had it. `/healthz`, `/login`,
+  `/favicon.ico` and `/static/` need no token (`OPEN_PATHS`,
+  `OPEN_PREFIXES`). `serve` reads `./.env` and `~/.lux/.env` before its
+  settings, so `LUX_WEB_TOKEN` may be in either.
+* **Redirects stay on this server.** W06's `redirect_with` (used with the
+  configuration reload form's `back` field) refused `//host` but not
+  `/\host`, which browsers also read as another host; it now goes
+  through `security.safe_next`, as `/login`'s `next` does.
+* **Start-up line**: `create_app` logs at INFO whether a token protects
+  the server or it answers on loopback only.
+* **Headers**, from the middleware on every response, errors included:
+  `Content-Security-Policy: default-src 'self'; img-src 'self' data:;
+  frame-ancestors 'none'; base-uri 'self'; form-action 'self'`,
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`,
+  `X-Frame-Options: DENY`. `/api/docs` (FastAPI's Swagger page loads its
+  scripts from a CDN and starts them inline) gets everything but the
+  CSP.
+* **Path containment**: no new checks were needed. Run names already go
+  through `api/runs.full_prefix` (relative to `log_dir`, 404 outside or
+  for an absolute path), timing directories through `under`, and record
+  keys through `config_store.KEY_RE` (a name, never a path; a new record
+  goes in its store's directory). File cache keys have their slashes
+  escaped by `FsCache`. The tests try `../`, encoded `..%2F`, and
+  absolute paths at each.
+* **One at a time**: `AppState.claim(name)` / `release` / `only_one`
+  (`state.busy`) for `counts` and `bloat`. A second request is a 409 (a
+  page shows the message), or for a stream a `failed` event; the claim
+  is taken inside the stream's generator, so a client that goes away
+  before the stream starts cannot leave it held.
+* **The action log** records `config.write` / `config.new` /
+  `config.delete` / `config.reload`, `command.start` (command, argv,
+  prefix, pid, forced) / `command.cancel`, `health.run`, `counts.run`,
+  `bloat.run`, each with `time` and `remote`; also logged at INFO. A
+  write that fails logs a warning and never fails the request.
+  `read_actions` reads the file's tail backwards (the last 200 by
+  default, `/api/actions?limit=` up to 5000).
+* **Tests**: `tests/test_web_security.py` (31): the token and sign-in
+  (and `next` refusing other hosts), the `.env` token, every mutating
+  route has both dependencies and answers 403 with no token, a wrong one
+  as a field or a header, the headers (on pages, API, static files, 404s
+  and `/healthz`), no inline script / style / handler / `javascript:` in
+  any template, no `innerHTML` / `eval` / `document.write` in any module,
+  `under` (with a symbolic link), run names, timing directories and
+  record keys, the server-side confirmations, counts / bloat / health one
+  at a time, and the action log (lines, page, API, tail of a long file).
+  The suite's time grew by about a second.
+* Acceptance on the laptop (loopback with a token, so nothing was
+  exposed): 401 without the token on pages and the API, 200 with the
+  bearer header, `/healthz` 200, `/login` with a wrong token 401, with
+  the right one a 303 to `next` and the cookie working, the headers on
+  every response, and the start-up line in the server's log.
+

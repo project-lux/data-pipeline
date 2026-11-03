@@ -114,6 +114,13 @@ prints the `lux watch <prefix>` command that shows it.
 side until builds with both have been compared, after which the old one
 goes and the new one takes its name.)
 
+Or `lux build` (the same phases, one `lux` process each), from a shell or
+from the web UI: `lux serve`, then *Commands* → *the build page*, which
+shows the steps (`lux build --dry-run`) before starting, and the build's
+run page with its phases as they go ([web.md](web.md)). Every run, from
+a shell or the web, is on the *Runs* page as `lux watch <prefix>` shows
+it in a terminal: the two read the same files under `log_dir`.
+
 ### 2.4. Or step by step: transform and reconcile
 
 ```

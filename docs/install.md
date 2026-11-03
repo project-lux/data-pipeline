@@ -48,8 +48,21 @@ cd ..
 ```
 
 `pip install -e .[ray]` adds the Ray engine (`--engine ray`); it is not
-needed otherwise. `lux help` lists the commands, and `lux <command>
---help` the options of one.
+needed otherwise. `pip install -e .[web]` adds the web UI (`lux serve`:
+FastAPI, uvicorn, Jinja2), and `.[ui-extras]` the identity graph (`lux
+viz`, and the web UI's graph page). `lux help` lists the commands, and
+`lux <command> --help` the options of one.
+
+The web UI's defaults may go in the base (or system) record, as an
+optional block; `lux serve`'s options win over it, and a token (for a
+bind other than loopback) comes from `--token` or `LUX_WEB_TOKEN` in the
+environment or `.env`:
+
+```json
+"web": {"host": "127.0.0.1", "port": 8321}
+```
+
+See [web.md](web.md).
 
 
 ## 3. An installation
@@ -163,4 +176,6 @@ configured `log_dir` with the layout above (`~/lux/data` next to
 `~/lux/data-pipeline`, and a pipeline-configs installation, whose
 `log_dir` is `logs`); set `LOGS=<log_dir>` when yours is elsewhere.
 
-`lux watch --latest` shows a running build from any terminal.
+`lux watch --latest` shows a running build from any terminal, and `lux
+serve` the same in a browser ([web.md](web.md)), where a build can also be
+started: *Commands* → *the build page*.

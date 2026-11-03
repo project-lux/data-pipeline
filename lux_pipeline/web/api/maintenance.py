@@ -19,6 +19,7 @@ from fastapi.responses import StreamingResponse
 from lux_pipeline.cli import pg_maintain
 from lux_pipeline.cli.pg_tune import pipeline_settings
 from lux_pipeline.storage import pg_tune
+from lux_pipeline.web.actions import record
 
 router = APIRouter(prefix="/api/maintenance", tags=["maintenance"])
 GB = 1024 ** 3
@@ -100,24 +101,38 @@ def sse(event, data):
     return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
 
 
+def bloat_rows(state, source="", cache=""):
+    """Every row of the report at once; one report at a time."""
+    with state.only_one("bloat"):
+        return list(iter_bloat(state, source, cache))
+
+
 async def bloat_events(state, source="", cache=""):
     started = time.time()
-    it = await asyncio.to_thread(iter_bloat, state, source, cache)
-    done = object()
-    skipped, n = [], 0
-    while True:
-        try:
-            row = await asyncio.to_thread(next, it, done)
-        except Exception as e:
-            yield sse("failed", {"error": f"{type(e).__name__}: {e}"})
-            return
-        if row is done:
-            break
-        if "skipped" in row:
-            skipped.append(row["skipped"])
-            continue
-        n += 1
-        yield sse("row", dict(row, section="bloat"))
+    try:
+        state.claim("bloat")
+    except RuntimeError as e:
+        yield sse("failed", {"error": str(e)})
+        return
+    try:
+        it = await asyncio.to_thread(iter_bloat, state, source, cache)
+        done = object()
+        skipped, n = [], 0
+        while True:
+            try:
+                row = await asyncio.to_thread(next, it, done)
+            except Exception as e:
+                yield sse("failed", {"error": f"{type(e).__name__}: {e}"})
+                return
+            if row is done:
+                break
+            if "skipped" in row:
+                skipped.append(row["skipped"])
+                continue
+            n += 1
+            yield sse("row", dict(row, section="bloat"))
+    finally:
+        state.release("bloat")
     yield sse("done", {"tables": n, "skipped": skipped, "seconds": time.time() - started})
 
 
@@ -128,7 +143,8 @@ def get_tune(request: Request, workers: int | None = None):
 
 @router.get("/bloat")
 def get_bloat(request: Request, source: str = "", cache: str = ""):
-    rows = list(iter_bloat(request.app.state.lux, source, cache))
+    record(request, "bloat.run", source=source, cache=cache)
+    rows = bloat_rows(request.app.state.lux, source, cache)
     return {"rows": [r for r in rows if "skipped" not in r],
             "skipped": [r["skipped"] for r in rows if "skipped" in r]}
 
@@ -137,5 +153,6 @@ def get_bloat(request: Request, source: str = "", cache: str = ""):
 async def get_bloat_events(request: Request, source: str = "", cache: str = ""):
     state = request.app.state.lux
     await asyncio.to_thread(bloat_targets, state, source, cache)
+    record(request, "bloat.run", source=source, cache=cache)
     return StreamingResponse(bloat_events(state, source, cache), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache"})

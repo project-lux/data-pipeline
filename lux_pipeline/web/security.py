@@ -16,8 +16,36 @@ from fastapi import HTTPException, Request
 
 SAFE_METHODS = ("GET", "HEAD", "OPTIONS")
 TOKEN_COOKIE = "lux_token"
-# paths that answer without the token (a monitor's check)
-OPEN_PATHS = ("/healthz",)
+# paths that answer without the token: a monitor's check, the sign-in
+# page, and the stylesheet, scripts and icon (nothing secret) it needs
+OPEN_PATHS = ("/healthz", "/login", "/favicon.ico")
+OPEN_PREFIXES = ("/static/",)
+# every response: scripts, styles and everything else only from this
+# server, never in a frame. /api/docs (FastAPI's Swagger page, which loads
+# its scripts from a CDN and starts them inline) is the one exception.
+SECURITY_HEADERS = {
+    "Content-Security-Policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; "
+                               "base-uri 'self'; form-action 'self'",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "same-origin",
+    "X-Frame-Options": "DENY",
+}
+NO_CSP_PATHS = ("/api/docs", "/api/docs/oauth2-redirect")
+
+
+def is_open(path):
+    return path in OPEN_PATHS or path.startswith(OPEN_PREFIXES)
+
+
+def token_ok(request, given):
+    return _same(given, request.app.state.lux.settings.token)
+
+
+def safe_next(url):
+    """A path on this server to go to after signing in, or ``/``."""
+    if not url or not url.startswith("/") or url.startswith("//") or "\\" in url:
+        return "/"
+    return url
 
 
 def new_csrf_token():
@@ -31,10 +59,11 @@ def _same(a, b):
 async def require_token(request: Request):
     """401 unless the request carries the server's token, as
     ``Authorization: Bearer <token>`` or the ``lux_token`` cookie (set by
-    opening any page once with ``?token=<token>``). Nothing to check when
-    the server has no token (loopback only: `Settings.check`)."""
+    ``/login``, or by opening any page once with ``?token=<token>``).
+    Nothing to check when the server has no token (loopback only:
+    `Settings.check`), nor for `OPEN_PATHS`."""
     token = request.app.state.lux.settings.token
-    if not token or request.url.path in OPEN_PATHS:
+    if not token or is_open(request.url.path):
         return
     auth = request.headers.get("authorization", "")
     given = auth[7:] if auth.lower().startswith("bearer ") else None

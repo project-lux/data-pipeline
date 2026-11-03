@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Actions{% endblock %}
+{% block content %}
+<h1>Actions</h1>
+<p class="lead">Everything this web UI changed or started: configuration writes, new and deleted records, reloads,
+commands started and cancelled, checks and counts run. Newest first, the last {{ shown }}{% if path %}, from
+<code>{{ path }}</code>{% endif %}.</p>
+{% if rows %}
+<table class="table actions">
+  <thead><tr><th>When</th><th>Action</th><th>From</th><th>What</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr><td>{{ fmt_time(r.time) }}</td><td><code>{{ r.action }}</code></td><td>{{ r.remote or "-" }}</td>
+      <td class="detail">{% for k, v in r.details|dictsort %}<span class="field"><span class="muted">{{ k }}</span> {% if v is string %}{{ v }}{% elif v is sequence and v is not mapping %}<code>{{ v|join(" ") }}</code>{% else %}{{ v|tojson }}{% endif %}</span>{% if not loop.last %}<br>{% endif %}{% endfor %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p class="muted">Nothing yet.</p>{% endif %}
+{% endblock %}

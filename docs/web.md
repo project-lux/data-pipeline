@@ -4,12 +4,37 @@ A browser view of an installation: its configuration, its records, its
 runs, and the `lux` commands, for one operator on the build machine (or a
 laptop with a local instance). It reads what the console reads -- the
 workers' status and log files, the configuration files -- through the
-same functions the `lux` commands print from. The plan is in
-`webui_docs/`; this page grows with it (item W13 completes it).
+same functions the `lux` commands print from, and it runs commands as
+`lux` processes of their own, exactly as a shell would. Nothing it shows
+is kept anywhere but in the installation's own files. (The plan it was
+built from is in `webui_docs/`.)
 
-Built so far: the server, the **Dashboard**, **Runs**, **Records**,
-**Counts**, **Timing**, **Configuration**, **Maintenance** and **Health**
-pages.
+## A first session
+
+1. Install the extra and start the server from the repository, with the
+   installation's `.env` in place (as for any `lux` command):
+
+   ```
+   pip install -e '.[web]'
+   lux serve
+   ```
+
+   A browser opens at `http://127.0.0.1:8321/`: the **Dashboard**, with
+   the installation's directories, its sources, and what is running.
+2. **Find a record.** *Records*: type `aat:300033618` (or any URI, a
+   `...##quaType` key, a YUID, or a source's own identifier with the
+   source picked). The tabs show it in each cache, its identity and the
+   merged record. *Graph with this* beside another member of the identity
+   draws how reconciliation joined them.
+3. **Start a build.** *Commands* → *the build page*: tick the phases,
+   pick the sources and workers, *Show the steps* to see the `lux`
+   commands it will run, then *Start the build* (with *clear first*,
+   type `build` to confirm).
+4. **Watch it.** You land on the build's run page: its phases as they go,
+   each linking to its own run with a row per worker, the bars, and the
+   log as it is written. Leave and come back from *Runs* or the header's
+   *running* badge; `lux watch --latest` in a terminal shows the same.
+   *Cancel the run* (type `cancel`) stops it and its workers.
 
 ## Install and start
 
@@ -32,16 +57,28 @@ it, so a broken installation still serves a page saying what is wrong
 
 ## Reaching it from another machine
 
-A bind other than `127.0.0.1` / `localhost` / `::1` needs a token:
+Prefer an SSH tunnel to an open bind: the server stays on loopback, with
+no token needed.
 
 ```
-lux serve --host 0.0.0.0 --token "$(openssl rand -hex 16)"      # or LUX_WEB_TOKEN in .env
+ssh -L 8321:127.0.0.1:8321 buildhost      # then http://127.0.0.1:8321/ on the laptop
 ```
 
-Open any page once as `http://host:8321/?token=<token>`; the browser
-keeps it as a cookie. Other clients send `Authorization: Bearer <token>`.
-Prefer an SSH tunnel (`ssh -L 8321:127.0.0.1:8321 buildhost`) to an open
-bind where you can.
+A bind other than `127.0.0.1` / `localhost` / `::1` is refused without a
+token:
+
+```
+lux serve --host 0.0.0.0 --token "$(openssl rand -hex 16)"
+LUX_WEB_TOKEN=... lux serve --host 0.0.0.0           # or LUX_WEB_TOKEN in ./.env or ~/.lux/.env
+```
+
+With a token, every request needs it except `/healthz`, the sign-in page
+and its stylesheet. A browser is sent to `/login`, which asks for the
+token once and keeps it as a cookie (HTTP only, same site); a link
+`http://host:8321/login?token=<token>` does the same. Other clients send
+`Authorization: Bearer <token>`. The server logs one line at start-up
+saying which way it is protected. The token travels in clear over plain
+HTTP: on a network you do not trust, use the tunnel.
 
 ## The pages
 
@@ -141,6 +178,11 @@ bind where you can.
   record is deleted by typing its key. *Reload from the files* re-reads
   the configuration after editing it elsewhere. Committing the
   configuration checkout stays in the shell.
+* **Actions** (`/actions`): everything this UI changed or started, newest
+  first: configuration writes, new and deleted records, reloads, commands
+  started (with their command lines) and cancelled, health checks, counts
+  and bloat reports run, each with the time and the address it came from.
+  The file is `<log_dir>/web_actions.log`, one JSON object per line.
 * **Health** (`/health`): `lux testinstall`'s checks, run on request in
   the background, each row arriving as its check finishes. Unlike the
   command, every check runs even after one fails; one that needs what
@@ -155,14 +197,92 @@ Everything a page shows is also JSON under `/api/` (`/api/dashboard`,
 `/api/config`, `/api/config/<key>`, `/api/commands`, `/api/commands/<name>`
 (a command's options), `POST /api/commands/<name>/preview` (a form, or
 JSON `{"values": {option: value}}`, to its command line),
-`/api/health`); `/api/docs` lists the routes.
+`/api/health`, `/api/actions`); `/api/docs` lists the routes.
+
+## How it runs commands
+
+A form's values are turned into a command line by the command's own
+parser, and the command runs as a process of its own:
+
+```
+python -m lux_pipeline.cli.entry <command> <options> --no-ui --prefix <log_dir>/<command>-<timestamp>
+```
+
+in a new session (so cancelling it reaches its workers), with
+`LUX_BASEPATH` passed on and its standard output and errors in
+`<prefix>.out`. Its record, `<prefix>.run`, is written the moment it
+starts (`"web": true`, the pid, the `.out` file) and the command's driver
+then keeps it as a shell run would. When the process ends without
+finishing its record (it failed early, or it was cancelled), the server
+finishes it with the exit code and the last line of output.
+
+* **Cancel** sends SIGTERM to the run's process group, then SIGKILL ten
+  seconds later if anything is left; the run reads as *interrupted*. Only
+  a run started from the web can be cancelled from it. A run started in a
+  shell is stopped there (its page shows the pid), and a phase of a
+  web-started build by cancelling the build.
+* **A server restart** does not stop anything: the runs are not the
+  server's threads. On start the server finds the web-started runs still
+  going and watches them again.
+* **Run again** on a run's page opens the command's form filled in as it
+  ran.
+
+## The files it reads
+
+All under the configuration's `log_dir`, as the shell's `lux` writes them:
+
+| File | What |
+|---|---|
+| `<prefix>-w<n>.status` | each worker's progress (JSON, rewritten as it goes) |
+| `<prefix>-w<n>.log` | each worker's log |
+| `<prefix>.run` | the run: command line, host, pid, workers, sources, parent build, start, finish, exit |
+| `<prefix>.out` | a web-started run's own output |
+| `timing-*.json`, `profile-*.prof` | `PhaseTimer`'s timings and profiles (the Timing page) |
+| `pipeline_process_status.txt` | `lux build`'s one line per build (the Dashboard) |
+| `web_actions.log` | the action log |
+
+The configuration pages read and write the configuration records' own
+files (and sub-config stores); the record pages read the caches and maps
+the configuration names.
 
 ## Safety
 
-Every request that changes something (a POST) carries the page's CSRF
-token, or is refused. The server never runs a pipeline phase in its own
-process: a command runs as `python -m lux_pipeline.cli.entry <command>
-... --no-ui --prefix <log_dir>/<command>-<timestamp>`, its arguments a
-list (never a shell string). `--my-worker`, `--debug`, `--prefix` and
-`--env` never come from a form. Whatever a form sends, the server checks
-it against the command's own parser and the confirmation itself.
+* **The token** (above), when the server has one.
+* **CSRF**: every request that changes something carries the page's CSRF
+  token (a new one each server start), or is refused (403) before
+  anything else is looked at.
+* **Confirmations** are typed and checked by the server: a record's key
+  to delete it, a command's name for a run that deletes or rewrites what
+  a build depends on (`clear`, `identify`, `new-token`, `restore`,
+  `build --clear`, `pg-maintain` other than `--bloat`, ...), `cancel` to
+  cancel a run.
+* **While a build runs**, configuration writes are refused (tick "write
+  anyway" to override), as are build phases and confirmed commands from
+  the Commands pages (a command with `--force` can be forced). Two phases
+  started from the web never run at once. One counts run, one bloat
+  report and one set of health checks at a time.
+* **Paths** in URLs stay inside their roots: a run is named relative to
+  `log_dir`, timing directories must be inside the installation's
+  directories, and a record key is a name (letters, digits, `_ . -`),
+  never a path.
+* **Commands** run with their arguments as a list, never through a
+  shell. `--my-worker`, `--debug`, `--prefix` and `--env` never come
+  from a form.
+* **Headers**: `Content-Security-Policy: default-src 'self'` (no inline
+  scripts or styles anywhere; data reaches the scripts in
+  `<script type="application/json">` blocks), `frame-ancestors 'none'`,
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`.
+  `/api/docs` (FastAPI's page, whose scripts come from a CDN) is served
+  without the content security policy.
+* **The action log** records every change and start (`/actions`).
+
+## Limits
+
+* One operator: there are no user accounts, and anyone with the token can
+  do everything the operator can.
+* Records are shown, never edited: caches and maps change only through
+  `lux` commands.
+* The configuration is edited in place; committing and pushing the
+  configuration checkout stays in the shell.
+* It sees runs on this machine: a run recorded by another host shows from
+  its files, but cannot be cancelled here.

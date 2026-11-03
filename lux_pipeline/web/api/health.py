@@ -16,6 +16,8 @@ from argparse import Namespace
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
+from lux_pipeline.web.actions import record
+
 router = APIRouter(prefix="/api/health", tags=["health"])
 TICK = 0.2
 
@@ -93,6 +95,7 @@ def get_health(request: Request):
 def post_run(request: Request, workers: bool = False, pg_tune: bool = False):
     state = request.app.state.lux
     start_health(state, workers, pg_tune)
+    record(request, "health.run", workers=bool(workers), pg_tune=bool(pg_tune))
     return health_data(state)
 
 

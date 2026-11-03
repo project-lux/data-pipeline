@@ -18,6 +18,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 
 from lux_pipeline.cli import counts
+from lux_pipeline.web.actions import record
 
 router = APIRouter(prefix="/api/counts", tags=["counts"])
 SECTIONS = ("caches", "maps", "indexes")
@@ -73,7 +74,8 @@ def counts_data(state, source="", cache="", map="", index=""):
     """Everything at once, as the page without scripts and the API show it;
     kept as the last count."""
     started = time.time()
-    rows = list(iter_rows(state, source, cache, map, index))
+    with state.only_one("counts"):
+        rows = list(iter_rows(state, source, cache, map, index))
     result = {"rows": rows, "totals": totals(rows), "counted_at": time.time(),
               "seconds": time.time() - started,
               "asked": {"source": source, "cache": cache, "map": map, "index": index}}
@@ -86,20 +88,30 @@ def sse(event, data):
 
 
 async def count_events(state, source="", cache="", map="", index=""):
+    """The rows as they are counted; one count at a time (a second one is
+    told so in a ``failed`` event)."""
     started = time.time()
-    it = await asyncio.to_thread(iter_rows, state, source, cache, map, index)
-    rows = []
-    done = object()
-    while True:
-        try:
-            row = await asyncio.to_thread(next, it, done)
-        except Exception as e:
-            yield sse("failed", {"error": f"{type(e).__name__}: {e}"})
-            return
-        if row is done:
-            break
-        rows.append(row)
-        yield sse("row", row)
+    try:
+        state.claim("counts")
+    except RuntimeError as e:
+        yield sse("failed", {"error": str(e)})
+        return
+    try:
+        it = await asyncio.to_thread(iter_rows, state, source, cache, map, index)
+        rows = []
+        done = object()
+        while True:
+            try:
+                row = await asyncio.to_thread(next, it, done)
+            except Exception as e:
+                yield sse("failed", {"error": f"{type(e).__name__}: {e}"})
+                return
+            if row is done:
+                break
+            rows.append(row)
+            yield sse("row", row)
+    finally:
+        state.release("counts")
     result = {"rows": rows, "totals": totals(rows), "counted_at": time.time(),
               "seconds": time.time() - started,
               "asked": {"source": source, "cache": cache, "map": map, "index": index}}
@@ -109,6 +121,7 @@ async def count_events(state, source="", cache="", map="", index=""):
 
 @router.get("")
 def get_counts(request: Request, source: str = "", cache: str = "", map: str = "", index: str = ""):
+    record(request, "counts.run", source=source, cache=cache, map=map, index=index)
     return counts_data(request.app.state.lux, source, cache, map, index)
 
 
@@ -118,5 +131,6 @@ async def get_events(request: Request, source: str = "", cache: str = "", map: s
     state = request.app.state.lux
     # resolve now, so a bad name is a 400 before the stream starts
     await asyncio.to_thread(targets, state, source, cache, map, index)
+    record(request, "counts.run", source=source, cache=cache, map=map, index=index)
     return StreamingResponse(count_events(state, source, cache, map, index),
                              media_type="text/event-stream", headers={"Cache-Control": "no-cache"})

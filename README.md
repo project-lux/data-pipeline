@@ -66,9 +66,7 @@ lux viz --recid <from>,<to>                  # draw how reconcile joined two rec
 lux merge --source all --profile             # cProfile each slice; `python timing-report.py --profile`
 ```
 
-`lux serve` (with `pip install -e '.[web]'`) serves a web UI at
-http://127.0.0.1:8321/: a dashboard of the installation and its runs, and
-the health checks; more pages are coming (`docs/web.md`, `webui_docs/`).
+`lux serve` does all of this in a browser (see [The web UI](#the-web-ui)).
 
 `lux <command> --help` lists a command's options. Backups go to
 `backup_dir` (default `<data_dir>/backups`), each with a `manifest.json`
@@ -83,6 +81,15 @@ scripts still work; retiring them is the last item (33) of the port of the
 `rob_refactor` branch, which is planned and tracked in `refactor_docs/`
 (start with its `README.md` and `00-INDEX.md`). `CLAUDE.md` describes the
 working conventions.
+
+## The web UI
+
+`lux serve` (`pip install -e .[web]`) serves a browser view of the
+installation at `http://127.0.0.1:8321/`: the configuration (read and
+edited in its own files), any record through every cache and its
+identity, every run with its workers' progress and logs live, the `lux`
+commands as forms (the whole build too), timing, counts, Postgres
+maintenance and the installation checks. See [docs/web.md](docs/web.md).
 
 ## Architecture
 

@@ -9,6 +9,7 @@ from lux_pipeline.cli.introspect import command_spec
 from lux_pipeline.web.api.commands import (build_values, catalogue, command_line, form_values,
                                            preview, shown)
 from lux_pipeline.web.api.runs import full_prefix, rel_prefix
+from lux_pipeline.web.actions import record
 from lux_pipeline.web.app import page, redirect_with
 
 router = APIRouter(include_in_schema=False)
@@ -71,6 +72,8 @@ def start(request, name, values, force):
         return again(request, values, status_code=400, error=str(e))
     except RuntimeError as e:
         return again(request, values, status_code=409, error=str(e))
+    record(request, "command.start", command=name, argv=handle.argv, prefix=handle.prefix,
+           pid=handle.pid, forced=bool(force))
     rel = rel_prefix(state, handle.prefix)
     return RedirectResponse(f"/runs/{rel}" if rel else "/runs", status_code=303)
 
@@ -128,5 +131,6 @@ async def cancel(request: Request, rel: str):
         request.app.state.runner.cancel(prefix)
     except RuntimeError as e:
         return redirect_with(request, f"/runs/{rel}", str(e), "fail")
+    record(request, "command.cancel", prefix=prefix)
     return redirect_with(request, f"/runs/{rel}", "Cancelling: the run's processes were sent SIGTERM")
 
