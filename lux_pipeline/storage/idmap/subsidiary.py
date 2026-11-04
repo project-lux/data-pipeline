@@ -618,7 +618,7 @@ class IdMap(postgres.IdMap):
     # Only possible in one statement when the master is a plain postgres map
     # on the same database (the usual set-up); anything else falls back to
     # the probe, which hydrates as it goes. Nothing is hydrated by the dump:
-    # identify's assign_bulk hydrates each batch before it writes, as every
+    # identify's assign_bulk hydrates what it is about to write, as every
     # write here does, so the origin baseline is still recorded first.
     MEMBER_DUMP = """
     COPY (
@@ -647,6 +647,40 @@ class IdMap(postgres.IdMap):
     @property
     def supports_member_dump(self):
         return self._dumpable_master() is not None
+
+    # The registry the same way, for identify's presence step: the local
+    # registry plus every master registry row for a YUID the master has
+    # never been asked about. Dumped alone, the local registry holds only
+    # the classes hydrated so far, so every YUID identify kept from the
+    # master would diff as "new" and be registered here one row at a
+    # time -- 75M of them on a first run.
+    #
+    # What the diff then finds about a master-only YUID is applied to the
+    # local registry, where it has no row: presence is left to the master
+    # for classes this map has never touched. A YUID this build moved a
+    # member out of was hydrated by assign_bulk, so is local.
+    REGISTRY_DUMP = """
+    COPY (
+      SELECT yuid, coalesce({col}, '') FROM {y}
+      UNION ALL
+      SELECT m.yuid, coalesce(m.{col}, '') FROM {my} m
+      WHERE NOT EXISTS (SELECT 1 FROM {y} l WHERE l.yuid = m.yuid)
+        AND NOT EXISTS (SELECT 1 FROM {o} o WHERE o.key = m.yuid)
+    ) TO STDOUT
+    """
+
+    def dump_registry(self, fh):
+        """`yuid<TAB>missing_since` as the master's registry overlaid with
+        this map's (see REGISTRY_DUMP); the row count. The local registry
+        alone when the master cannot be read in the same query."""
+        store = self._dumpable_master()
+        if store is None:
+            return super().dump_registry(fh)
+        with self._cursor() as cur:
+            cur.copy_expert(self.REGISTRY_DUMP.format(
+                y=self.yuid_table, my=store.yuid_table, o=self.origin_table,
+                col=postgres.PRESENCE_COLUMN), fh)
+            return cur.rowcount
 
     def dump_members(self, fh):
         """`uri<TAB>yuid` for every key this map would answer, internal
@@ -808,25 +842,48 @@ class IdMap(postgres.IdMap):
     def assign_bulk(self, items):
         """Clusters in bulk, with the master's baseline recorded first.
 
-        The hydration here is the expensive part of running an identity phase
-        against a subsidiary: every member and every YUID is looked up in the
-        master once, in batches. That is the cost of being able to say what
-        changed, and it is paid once per key for the life of the map.
+        Only what is about to be written is hydrated: the members whose
+        prior is not the YUID they are being assigned, the class each of
+        them leaves, and the class each joins (so the target is whole
+        here before a member lands in it). A member whose prior already is
+        its YUID is not written -- the parent skips it on the same test --
+        and needs no baseline: it does not diverge, and a later lookup
+        hydrates it lazily like any other key. Hydrating those too meant a
+        first identify copied the whole master through one random read at
+        a time (100M members, queue depth 1), for members that do not
+        change.
+
+        `prior` is the caller's member -> current-YUID map, as for the
+        parent (identify passes every one). A member without one counts
+        as changed, so a caller passing none hydrates everything, as
+        before.
         """
         items = list(items)
-        members = [m for (_, ms, _) in items for m in ms]
-        yuids = [y for (y, _, _) in items]
-        self._hydrate_multi(members + yuids)
+        moving, classes = [], set()
+        for yuid, ms, prior in items:
+            prior = prior or {}
+            changed = [m for m in ms if prior.get(m) != yuid]
+            if not changed:
+                continue
+            moving.extend(changed)
+            classes.add(yuid)
+            classes.update(prior[m] for m in changed if prior.get(m))
+        if moving:
+            self._hydrate_multi(moving + sorted(classes))
 
-        imembers = sorted({self._manage_key_in(m) for m in members})
-        before = self._local_yuids(imembers)
+        # the before-state of what moves, read after hydration: exact
+        # whatever the caller's prior said
+        before = self._local_yuids(sorted({self._manage_key_in(m) for m in moving}))
 
         stats = super().assign_bulk(items)
 
         rows = []
         for yuid, ms, prior in items:
+            prior = prior or {}
             iyuid = self._manage_value_in(yuid)
             for m in ms:
+                if prior.get(m) == yuid:
+                    continue
                 im = self._manage_key_in(m)
                 was = before.get(im)
                 if was != iyuid:
