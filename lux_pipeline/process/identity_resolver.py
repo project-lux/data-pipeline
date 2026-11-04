@@ -54,9 +54,17 @@ from lux_pipeline.storage.idmap.lmdb import TabLmdb
 
 logger = logging.getLogger("lux_pipeline")
 
+def assertions_pattern(configs):
+    """The glob matching every reconcile slice's assertion log,
+    ``<temp_dir>/assertions-<n>.tsv``: what identify reads, and deletes
+    once it has succeeded."""
+    return os.path.join(glob.escape(configs.temp_dir), "assertions-*.tsv")
+
+
 # ---------------------------------------------------------------------------
 # Union-find implementation
 # ---------------------------------------------------------------------------
+
 
 class DSU:
     def __init__(self):
@@ -1064,8 +1072,7 @@ class IdentityResolver(object):
         # that timing.stage() reads out from under reconcile's own timer.
         self._timer = PhaseTimer("identify", out_dir=getattr(self.configs, "log_dir", None))
 
-        flist = os.path.join(self.configs.temp_dir, "assertions-*.tsv")
-        files = sorted(glob.glob(flist))
+        files = sorted(glob.glob(assertions_pattern(self.configs)))
         if not files:
             raise ValueError("No assertions-*.tsv files found; did reconcile run?")
         total = sum(os.path.getsize(f) for f in files)
@@ -1077,6 +1084,7 @@ class IdentityResolver(object):
         self.temp_work_dir_path = td
 
         p = lambda name: os.path.join(td, name)
+        succeeded = False
         try:
             self.sorted_path = p("assertions.sorted")
             self.edges_path = p("edges.tsv")
@@ -1165,6 +1173,7 @@ class IdentityResolver(object):
                 "clusters": n_clusters,
                 "singletons": n_singletons,
             })
+            succeeded = True
             return stats
         finally:
             if self._timer:
@@ -1172,7 +1181,16 @@ class IdentityResolver(object):
                 # so timing-report.py rolls it in
                 self._timer.finish()
             if not keep_temp:
+                # The work files are derived and rebuilt by a rerun.
                 shutil.rmtree(td, ignore_errors=True)
-                # also remove assertion files
-                for f in files:
-                    os.remove(f)
+                # The assertions are the input, and only reconcile makes
+                # them: an identify that failed or was interrupted part way
+                # leaves them, so `lux identify` can be run again instead of
+                # the whole reconcile. A full reconcile removes any left
+                # over before its workers start (`ReconcileManager.clear_stale`).
+                if succeeded:
+                    for f in files:
+                        os.remove(f)
+                else:
+                    logger.warning(f"identify did not finish: kept the {len(files)} "
+                                   f"assertion files for a rerun of lux identify")

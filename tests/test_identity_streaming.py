@@ -500,3 +500,44 @@ def test_single_file_matches_sliced(tmp_path):
     assert len(sliced_names) == 4
     assert single_part == sliced_part
     assert single_stats["clusters"] == sliced_stats["clusters"] == len(clusters)
+
+
+# ---------------------------------------------------------------------------
+# an identify that fails keeps its input
+# ---------------------------------------------------------------------------
+
+def test_success_removes_the_assertions_and_the_work_dir(tmp_path):
+    rng = random.Random(21)
+    cfgs = StubConfigs(temp_dir=tmp_path)
+    write_assertions(cfgs, make_clusters(rng, 20), 2, rng)
+    resolve(cfgs, FakeIdMap(cfgs), tmp_path)
+    assert list(tmp_path.glob("assertions-*.tsv")) == []
+    assert list(tmp_path.glob("identity-*")) == []
+
+
+@pytest.mark.parametrize("exc", [RuntimeError("database went away"), KeyboardInterrupt()])
+def test_a_failed_identify_keeps_the_assertions_for_a_rerun(tmp_path, exc):
+    """Only reconcile makes the assertions, so an identify that dies part way
+    (an error, ^C) must leave them: `lux identify` again, not the whole
+    reconcile. The derived work dir still goes."""
+    rng = random.Random(22)
+    cfgs = StubConfigs(temp_dir=tmp_path)
+    clusters = make_clusters(rng, 30)
+    files = write_assertions(cfgs, clusters, 3, rng)
+    before = {f: Path(f).read_bytes() for f in files}
+
+    idmap = FakeIdMap(cfgs)
+    real = idmap.assign_bulk
+
+    def boom(items):
+        raise exc
+    idmap.assign_bulk = boom
+    with pytest.raises(type(exc)):
+        resolve(cfgs, idmap, tmp_path)
+    assert {f: Path(f).read_bytes() for f in files} == before
+    assert list(tmp_path.glob("identity-*")) == []
+
+    idmap.assign_bulk = real
+    stats = resolve(cfgs, idmap, tmp_path)
+    assert stats["clusters"] == len(clusters)
+    assert list(tmp_path.glob("assertions-*.tsv")) == []

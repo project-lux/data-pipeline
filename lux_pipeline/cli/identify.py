@@ -13,6 +13,10 @@ Runs in this process, never sliced: it is a streaming unix ``sort``
 pipeline over every slice's assertions. It refuses while a ``lux`` build is
 running (``--force`` overrides): identity resolved from part of the
 assertions would rewrite the map from part of the evidence.
+
+The assertion files are deleted only when identify succeeds: one that
+fails or is interrupted leaves them, so run ``lux identify`` again rather
+than reconcile. (Stop a running one with SIGTERM or Ctrl-C; either is safe.)
 """
 
 from lux_pipeline.process.phases.identify import report_lines, resolve_identity, vacuum_idmap
