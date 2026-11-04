@@ -15,6 +15,7 @@ sources and reports them.
 
 import logging
 import os
+import subprocess
 import sys
 import time
 from argparse import ArgumentParser
@@ -24,7 +25,7 @@ from datetime import datetime
 # this recently is taken to be running; an older one was killed without
 # reporting. Defined with the other readers of a run's files.
 from lux_pipeline.progress import (RUNNING_WINDOW, STATUS_RE, RunRecord, count_workers,
-                                   driver_log_path, unfinished_workers)
+                                   driver_log_path, read_run, run_exists, unfinished_workers)
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -53,6 +54,72 @@ def default_prefix(cfgs, command):
     log_dir = getattr(cfgs, "log_dir", None) or "."
     started = datetime.now().strftime("%Y-%m-%d-%H%M%S")
     return os.path.join(log_dir, f"{command or 'task'}-{started}")
+
+
+def free_prefix(cfgs, command, taken=()):
+    """`default_prefix`, with ``-2``, ``-3``... added while a run (or the
+    output of one) is already there, or the name is in `taken`: two runs
+    started in the same second never share files."""
+    prefix = default_prefix(cfgs, command)
+    base, n = prefix, 1
+    while run_exists(prefix) or os.path.exists(out_path(prefix)) or prefix in taken:
+        n += 1
+        prefix = f"{base}-{n}"
+    return prefix
+
+
+def out_path(prefix):
+    """``<prefix>.out``: the output of a run started detached (`lux
+    --background`, the web UI)."""
+    return f"{prefix}.out"
+
+
+def start_detached(argv, out, env=None, cwd=None):
+    """Start `argv` as a process that outlives this one, as ``nohup ... &``
+    would: in a session of its own (no controlling terminal, so closing
+    the terminal sends it no SIGHUP, and its pid is its process group, so
+    ``kill -- -<pid>`` stops its workers too), stdin from ``/dev/null``,
+    stdout and stderr appended to `out`. Returns the `subprocess.Popen`."""
+    with open(out, "ab") as fh:
+        return subprocess.Popen(argv, stdout=fh, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                start_new_session=True, env=env, cwd=cwd)
+
+
+def last_lines(path, n=1, limit=4096):
+    """The last `n` non-empty lines of a file (from its last `limit`
+    bytes), for a failed run's error; ``[]`` when there are none."""
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            size = fh.tell()
+            fh.seek(max(0, size - limit))
+            lines = [l.strip() for l in fh.read().decode("utf-8", "replace").splitlines() if l.strip()]
+    except OSError:
+        return []
+    return lines[-n:]
+
+
+def last_line(path, limit=4096):
+    """The last non-empty line of a file, or None."""
+    lines = last_lines(path, 1, limit)
+    return lines[-1] if lines else None
+
+
+def finish_file(prefix, exit, error=None):
+    """Finish the record at ``<prefix>.run`` as it is on disk now (the
+    driver may have replaced the starter's), unless it is finished
+    already: for whoever started a run detached and saw it end. True when
+    it wrote."""
+    data = read_run(prefix)
+    if data is not None and data.get("exit") is not None:
+        return False
+    rec = RunRecord(prefix, (data or {}).get("command") or "?", (data or {}).get("argv") or [])
+    if data:
+        rec.data = dict(data)
+    # the starter's record, never replaced by the driver's (`_background`)
+    rec.data.pop("provisional", None)
+    rec.finish(exit=exit, error=error, workers=count_workers(prefix))
+    return True
 
 
 def refuse_while_building(cfgs, command, force=False, window=RUNNING_WINDOW, now=None):

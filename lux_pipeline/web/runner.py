@@ -33,15 +33,16 @@ import time
 from dataclasses import dataclass, field
 
 from lux_pipeline import runtime
-from lux_pipeline.cli._handler import (PARENT_RUN_ENV, RUN_EXTRA_ENV, default_prefix,
-                                       refuse_while_building)
+from lux_pipeline.cli._handler import (PARENT_RUN_ENV, RUN_EXTRA_ENV, finish_file,  # noqa: F401
+                                       free_prefix, last_line, out_path, refuse_while_building,
+                                       start_detached)
 from lux_pipeline.cli.introspect import GROUPS, command_spec
-from lux_pipeline.progress import RunRecord, count_workers, list_runs, pid_alive, read_run, run_exists
+from lux_pipeline.progress import RunRecord, list_runs, pid_alive, read_run
 
 logger = logging.getLogger("lux_pipeline")
 
 PHASES = frozenset(GROUPS["phases"])
-FORBIDDEN = ("--my-worker", "--my_worker", "--debug", "--prefix", "--env")
+FORBIDDEN = ("--my-worker", "--my_worker", "--debug", "--prefix", "--env", "--background", "-b")
 CANCEL_ERROR = "cancelled from the web"
 DRY_RUN_TIMEOUT = 20
 REAP_EVERY = 0.5
@@ -56,32 +57,6 @@ class RunHandle:
     started: float
     stdout: str
     proc: object = field(default=None, repr=False)   # None for a run adopted after a restart
-
-
-def last_line(path, limit=4096):
-    """The last non-empty line of a file, for a failed run's error."""
-    try:
-        with open(path, "rb") as fh:
-            fh.seek(0, os.SEEK_END)
-            size = fh.tell()
-            fh.seek(max(0, size - limit))
-            lines = [l.strip() for l in fh.read().decode("utf-8", "replace").splitlines() if l.strip()]
-    except OSError:
-        return None
-    return lines[-1] if lines else None
-
-
-def finish_file(prefix, exit, error=None):
-    """Finish the record at ``<prefix>.run`` as it is on disk now (the
-    driver may have replaced the runner's), unless it is finished already."""
-    data = read_run(prefix)
-    if data is not None and data.get("exit") is not None:
-        return False
-    rec = RunRecord(prefix, (data or {}).get("command") or "?", (data or {}).get("argv") or [])
-    if data:
-        rec.data = dict(data)
-    rec.finish(exit=exit, error=error, workers=count_workers(prefix))
-    return True
 
 
 class Runner:
@@ -125,12 +100,7 @@ class Runner:
         return d if d and os.path.isdir(d) else None
 
     def new_prefix(self, cfgs, command):
-        prefix = default_prefix(cfgs, command)
-        base, n = prefix, 1
-        while run_exists(prefix) or os.path.exists(f"{prefix}.out") or prefix in self.handles:
-            n += 1
-            prefix = f"{base}-{n}"
-        return prefix
+        return free_prefix(cfgs, command, taken=self.handles)
 
     # --- starting --------------------------------------------------------------------
 
@@ -160,16 +130,13 @@ class Runner:
         cfgs = self.state.configs()
         with self.lock:
             prefix = self.new_prefix(cfgs, command)
-            stdout = f"{prefix}.out"
+            stdout = out_path(prefix)
             argv = self.argv_for(command, list(tail), prefix)
             shown = ["lux", command, *tail]
             rec = RunRecord(prefix, command, shown, workers=0,
                             extra={"web": True, "stdout": stdout})
             rec.start()
-            with open(stdout, "ab") as fh:
-                proc = subprocess.Popen(argv, stdout=fh, stderr=subprocess.STDOUT,
-                                        stdin=subprocess.DEVNULL, start_new_session=True,
-                                        env=self.env(stdout), cwd=self.cwd(cfgs))
+            proc = start_detached(argv, stdout, env=self.env(stdout), cwd=self.cwd(cfgs))
             rec.update(pid=proc.pid)
             handle = RunHandle(prefix, command, shown, proc.pid, time.time(), stdout, proc)
             self.handles[prefix] = handle

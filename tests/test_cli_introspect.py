@@ -20,7 +20,7 @@ from lux_pipeline.cli.introspect import (
 
 COMMANDS = [name for name, _ in list_commands()]
 GLOBAL_DESTS = ["log", "debug", "env", "source", "max_records", "max_workers", "my_worker",
-                "engine", "no_ui", "prefix"]
+                "engine", "no_ui", "prefix", "background"]
 
 
 @pytest.fixture(autouse=True)

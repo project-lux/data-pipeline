@@ -126,7 +126,8 @@ HTTP: on a network you do not trust, use the tunnel.
   be cancelled from its page by typing `cancel`: its process and its
   workers are sent SIGTERM (SIGKILL ten seconds later if still there), and
   the run reads as interrupted. A run started in a shell cannot be: stop
-  it there (its pid is shown); a phase of a web-started build is stopped
+  it there (its pid is shown; one started with `lux --background` stops
+  with `kill -- -<pid>`, which reaches its workers too); a phase of a web-started build is stopped
   by cancelling the build.
 * **Records** (`/records`): type anything you can name a record by (a
   URI, a `…##quaType` key, a curie like `aat:300033618`, a YUID, or a
