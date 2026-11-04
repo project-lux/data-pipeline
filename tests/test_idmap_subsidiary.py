@@ -139,6 +139,8 @@ class FakeCursor:
             for (uri, yuid) in pairs:
                 if clobber or uri not in self.state["rows"]:
                     self.state["rows"][uri] = yuid
+        elif sql.startswith("SELECT key FROM sub_origin WHERE key = ANY"):
+            self._out = [(key,) for key in params[0] if key in self.state["origin"]]
         elif sql.startswith("SELECT uri FROM sub WHERE yuid"):
             (yuid, skip) = params
             self._out = [(u,) for u, y in sorted(self.state["rows"].items())
@@ -412,13 +414,185 @@ def test_a_master_on_another_server_does_not_trip_the_guard():
     m._guard_distinct(master)
 
 
-def test_subsidiary_declines_the_bulk_member_dump():
-    """identify's fetch_prior takes one scan of the map instead of probing
-    per key, but only where the table *is* the map. Here it is a cache of the
-    master, so a member not yet hydrated would dump as absent -- and absent
-    reads as "never had a YUID", which mints a second one over the master's."""
-    from lux_pipeline.storage.idmap import postgres as master
-    from lux_pipeline.storage.idmap import subsidiary as sub
+# ----------------------------------------------------- identify against a subsidiary
 
-    assert master.IdMap.supports_member_dump is True
-    assert sub.IdMap.supports_member_dump is False
+def k(i):
+    return f"{AAT}30000{i}##quaPerson"
+
+
+def k_in(i):
+    return f"aat:30000{i}##quaPerson"
+
+
+def y(i):
+    return f"{INTERNAL}person/{i}"
+
+
+def y_in(i):
+    return f"yuid:person/{i}"
+
+
+class PgMultiMaster(PgShapedMaster):
+    """A postgres master that answers the token question for a batch."""
+
+    def has_update_token_multi(self, keys, chunk=1000):
+        keys = list(keys)
+        self.calls.append(f"tokens:{len(keys)}")
+        return {key for key in keys if key in self.tokens}
+
+
+def three_classes(cls=PgMultiMaster):
+    return cls({k(1): y(1), k(2): y(1), k(3): y(2), k(4): y(3)},
+               {y(1): {k(1), k(2)}, y(2): {k(3)}, y(3): {k(4)}},
+               tokens={y(1), y(3)})
+
+
+def inserts(m, table):
+    return [s for (s, _) in m.state["sql"]
+            if s.startswith(f"INSERT INTO {table} ")]
+
+
+def test_hydrating_a_batch_is_one_insert_per_table_not_per_class():
+    """identify hydrates every member of every cluster before it writes: one
+    round trip per class was days for a first run against a full master."""
+    master = three_classes()
+    m = submap(master)
+    asked = m._hydrate_multi([k(1), k(3), k(4)])
+    assert sorted(asked) == sorted([k(1), k(3), k(4)])
+    assert m.state["rows"] == {k_in(1): y_in(1), k_in(2): y_in(1),
+                               k_in(3): y_in(2), k_in(4): y_in(3)}
+    assert len(inserts(m, "sub_yuid")) == 1
+    assert len(inserts(m, "sub")) == 1
+    # the tokens in one question, not one per class
+    assert [c for c in master.calls if c.startswith("token")] == ["tokens:3"]
+    assert m.state["yuids"] == {y_in(1): TOKEN, y_in(2): None, y_in(3): TOKEN}
+    # every member and every class has its baseline
+    assert m.state["origin"][k_in(2)][2] == y_in(1)
+    assert m.state["origin"][y_in(1)][3] == 2
+
+
+def test_a_master_without_the_batch_token_question_is_asked_per_class():
+    master = three_classes(PgShapedMaster)
+    m = submap(master)
+    m._hydrate_multi([k(1), k(3)])
+    assert sorted(c for c in master.calls if c.startswith("token")) == \
+        [f"token:{y(1)}", f"token:{y(2)}"]
+    assert m.state["yuids"] == {y_in(1): TOKEN, y_in(2): None}
+
+
+def test_a_batch_copy_never_overwrites_a_local_decision():
+    m = submap(three_classes(), rows={k_in(1): OTHER_IN})
+    m._hydrate_multi([k(2)])
+    assert m.state["rows"][k_in(1)] == OTHER_IN
+    assert m.state["rows"][k_in(2)] == y_in(1)
+
+
+def test_a_member_pointing_at_a_class_that_does_not_list_it_joins_it():
+    """The union _master_cluster does, now grouped in one pass."""
+    master = three_classes()
+    master.fwd[k(5)] = y(2)     # forward pointer only, not in y(2)'s set
+    m = submap(master)
+    m._hydrate_multi([k(5), k(4)])
+    assert m.state["rows"][k_in(5)] == y_in(2)
+    assert m.state["rows"][k_in(3)] == y_in(2)
+    assert k_in(1) not in m.state["rows"]
+
+
+def test_misses_are_recorded_in_a_batch_too():
+    master = three_classes()
+    m = submap(master)
+    m._hydrate_multi([STRANGER, OTHER])
+    assert m.state["origin"][STRANGER_IN][2] is None
+    assert m.state["origin"][OTHER_IN][1] == "y"
+    assert m.state["rows"] == {}
+
+
+def pg_store(**kw):
+    store = object.__new__(subsidiary.postgres.IdMap)
+    store.table = "idmap"
+    store.yuid_table = "idmap_yuid"
+    store._conn_kw = {"dbname": "lux"}
+    store.prefix_map_in = {INTERNAL: "yuid", AAT: "aat"}
+    for (a, v) in kw.items():
+        setattr(store, a, v)
+    return store
+
+
+def dump_submap(store):
+    m = submap(store)
+    m._conn_kw = {"dbname": "lux"}
+    return m
+
+
+def test_the_member_dump_is_offered_with_a_postgres_master_on_the_same_database():
+    """identify's fetch_prior takes one scan instead of a probe per member
+    when the map can be dumped. A subsidiary can, as the overlay of its own
+    rows on the master's, when one query can read both."""
+    assert subsidiary.postgres.IdMap.supports_member_dump is True
+    assert dump_submap(pg_store()).supports_member_dump is True
+
+
+@pytest.mark.parametrize("why, store", [
+    ("another server", lambda: pg_store(_conn_kw={"dbname": "lux", "host": "other"})),
+    ("other curies", lambda: pg_store(prefix_map_in={INTERNAL: "yuid"})),
+    ("a subsidiary master", lambda: object.__new__(IdMap)),
+    ("not postgres", lambda: pg_master()),
+])
+def test_the_member_dump_is_declined_otherwise(why, store):
+    s = store()
+    if isinstance(s, IdMap):
+        s._conn_kw = {"dbname": "lux"}
+        s.prefix_map_in = {INTERNAL: "yuid", AAT: "aat"}
+    m = dump_submap(s)
+    assert m.supports_member_dump is False, why
+    with pytest.raises(NotImplementedError):
+        m.dump_members(None)
+
+
+def test_the_member_dump_overlays_local_rows_on_the_master():
+    m = dump_submap(pg_store())
+    seen = {}
+
+    class Cur:
+        rowcount = 7
+
+        def copy_expert(self, sql, fh):
+            seen["sql"] = " ".join(sql.split())
+            seen["fh"] = fh
+
+    @contextmanager
+    def cursor():
+        yield Cur()
+
+    m._cursor = cursor
+    assert m.dump_members("FH") == 7
+    sql = seen["sql"]
+    assert seen["fh"] == "FH"
+    assert sql.startswith("COPY ( SELECT uri, yuid FROM sub UNION ALL")
+    assert "FROM idmap m" in sql
+    assert "NOT EXISTS (SELECT 1 FROM sub l WHERE l.uri = m.uri)" in sql
+    assert "NOT EXISTS (SELECT 1 FROM sub_origin o WHERE o.key = m.uri)" in sql
+
+
+def test_has_update_token_multi_answers_in_full_form_per_chunk():
+    store = pg_store(update_token=TOKEN)
+    store.prefix_map_out = {v: key for (key, v) in store.prefix_map_in.items()}
+    sent = []
+
+    class Cur:
+        def execute(self, sql, params):
+            sent.append(params)
+            self.rows = [(ik,) for ik in params[0] if ik != y_in(2)]
+
+        def fetchall(self):
+            return self.rows
+
+    @contextmanager
+    def cursor():
+        yield Cur()
+
+    store._cursor = cursor
+    got = store.has_update_token_multi([y(1), y(2), y(3)], chunk=2)
+    assert got == {y(1), y(3)}
+    assert [p[0] for p in sent] == [[y_in(1), y_in(2)], [y_in(3)]]
+    assert all(p[1] == TOKEN for p in sent)

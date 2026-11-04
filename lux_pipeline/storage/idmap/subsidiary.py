@@ -99,6 +99,7 @@ _MASTER_READS = frozenset({
     "has_item",
     "count",
     "has_update_token",
+    "has_update_token_multi",
 })
 
 
@@ -403,27 +404,38 @@ class IdMap(postgres.IdMap):
         CONFLICT DO NOTHING. The reverse order would leave it marked and
         empty, which reads as "the master has nothing" forever.
         """
-        iyuid = self._manage_value_in(yuid)
-        imembers = sorted({self._manage_key_in(m)
-                           for m in members if not _is_token(m)})
+        self._absorb_many([(yuid, members)])
 
-        # Redis hands the token back as a member of the set, so it is already
-        # here; postgres keeps it in a column and has to be asked.
-        token = next((m for m in members if _is_token(m)), None)
-        if token is None and self.copy_update_token:
-            try:
-                if self.master.has_update_token(yuid):
-                    token = self.update_token
-            except (AttributeError, ReadOnlyMasterError):
-                pass
-            except Exception as e:
-                logger.warning(f"subsidiary idmap: master update token for {yuid}: {e}")
+    def _absorb_many(self, classes):
+        """`_absorb` for a batch of ``(yuid, members)`` classes: one insert
+        of registry rows, one of member rows and one of origin rows for the
+        whole batch, instead of three or four round trips per class.
+
+        This is what an identify against a subsidiary spends its time on:
+        every member of every cluster is hydrated before it is written, so
+        a first run copies the master in -- tens of millions of classes,
+        which one at a time is days of round trips."""
+        classes = [(y, ms) for (y, ms) in classes]
+        if not classes:
+            return
+        tokens = self._master_tokens(classes)
+        yuid_rows, member_rows, origin_rows = [], [], []
+        for yuid, members in classes:
+            iyuid = self._manage_value_in(yuid)
+            imembers = sorted({self._manage_key_in(m)
+                               for m in members if not _is_token(m)})
+            yuid_rows.append((iyuid, tokens.get(yuid)))
+            member_rows.extend((m, iyuid) for m in imembers)
+            origin_rows.append((iyuid, "y", None, len(imembers)))
+            origin_rows.extend((m, "u", iyuid, None) for m in imembers)
 
         with self._cursor() as cur:
-            cur.execute(f"INSERT INTO {self.yuid_table} (yuid, token) "
-                        f"VALUES (%s, %s) ON CONFLICT (yuid) DO NOTHING",
-                        (iyuid, token))
-            if imembers:
+            psycopg2.extras.execute_values(
+                cur,
+                f"INSERT INTO {self.yuid_table} (yuid, token) VALUES %s "
+                f"ON CONFLICT (yuid) DO NOTHING",
+                yuid_rows, page_size=1000)
+            if member_rows:
                 # DO NOTHING, emphatically not DO UPDATE: if a row is already
                 # here it carries a decision made in this map, and the master
                 # does not get to overwrite it.
@@ -431,10 +443,41 @@ class IdMap(postgres.IdMap):
                     cur,
                     f"INSERT INTO {self.table} (uri, yuid) VALUES %s "
                     f"ON CONFLICT (uri) DO NOTHING",
-                    [(m, iyuid) for m in imembers], page_size=1000)
+                    member_rows, page_size=1000)
 
-        self._mark_origin([(iyuid, "y", None, len(imembers))]
-                          + [(m, "u", iyuid, None) for m in imembers])
+        self._mark_origin(origin_rows)
+
+    def _master_tokens(self, classes):
+        """{yuid: token} for the classes whose YUID is current in the master.
+
+        Redis hands the token back as a member of the set, so it is already
+        here; postgres keeps it in a column and has to be asked -- for the
+        whole batch at once where the master can answer that
+        (`has_update_token_multi`), else a class at a time."""
+        out = {}
+        ask = []
+        for yuid, members in classes:
+            token = next((m for m in members if _is_token(m)), None)
+            if token is not None:
+                out[yuid] = token
+            else:
+                ask.append(yuid)
+        if not ask or not self.copy_update_token:
+            return out
+        try:
+            if hasattr(self.master, "has_update_token_multi"):
+                current = self.master.has_update_token_multi(ask)
+            else:
+                current = {y for y in ask if self.master.has_update_token(y)}
+        except (AttributeError, ReadOnlyMasterError):
+            return out
+        except Exception as e:
+            logger.warning(f"subsidiary idmap: master update tokens for "
+                           f"{len(ask)} YUID(s): {e}")
+            return out
+        for y in current:
+            out[y] = self.update_token
+        return out
 
     def _mark_origin(self, rows):
         """Record the master's answer. First answer wins, always.
@@ -500,17 +543,28 @@ class IdMap(postgres.IdMap):
             logger.warning(f"subsidiary idmap: {e}")
             return [k for (k, _) in todo]
 
+        # The members that pointed at each YUID, grouped in one pass: asking
+        # every URI of the batch about every YUID of the batch was quadratic,
+        # 25M comparisons per 5,000-key identify batch.
+        pointed = {}
+        for (k, _) in uris:
+            y = fwd.get(k)
+            if y:
+                pointed.setdefault(y, set()).add(k)
+
+        classes, misses = [], []
         for y in want:
             members = mem.get(y)
             if members is None:
-                self._mark_origin([(self._manage_value_in(y), "y", None, None)])
+                misses.append((self._manage_value_in(y), "y", None, None))
                 continue
             # Union in the members that pointed here, for the same reason
             # _master_cluster does.
-            self._absorb(y, set(members) | {k for (k, _) in uris if fwd.get(k) == y})
+            classes.append((y, set(members) | pointed.get(y, set())))
+        self._absorb_many(classes)
 
-        self._mark_origin([(ik, "u", None, None)
-                           for (k, ik) in uris if not fwd.get(k)])
+        self._mark_origin(misses + [(ik, "u", None, None)
+                                    for (k, ik) in uris if not fwd.get(k)])
         return [k for (k, _) in todo]
 
     def _local_yuids(self, ikeys, chunk=1000):
@@ -551,12 +605,63 @@ class IdMap(postgres.IdMap):
             (yuid, members) = super().get_cluster(key)
         return (yuid, members)
 
-    # No. The local table holds only what has been hydrated so far, so a
-    # dump of it is missing every key that still lives only in the master --
+    # The local table holds only what has been hydrated so far, so a dump of
+    # it alone is missing every key that still lives only in the master --
     # and a blank prior does not read as "not here yet", it reads as "never
     # had a YUID", which would mint a second one over the top of the
-    # master's. get_multi() below is the one that knows to go and ask.
-    supports_member_dump = False
+    # master's. So the dump is the overlay get_multi() answers from: every
+    # local row, plus every master row for a key the master has never been
+    # asked about (no local row, no origin row). A key with an origin row
+    # and no local row is absent, as get_multi() says: the master had
+    # nothing, or the mapping was deleted here.
+    #
+    # Only possible in one statement when the master is a plain postgres map
+    # on the same database (the usual set-up); anything else falls back to
+    # the probe, which hydrates as it goes. Nothing is hydrated by the dump:
+    # identify's assign_bulk hydrates each batch before it writes, as every
+    # write here does, so the origin baseline is still recorded first.
+    MEMBER_DUMP = """
+    COPY (
+      SELECT uri, yuid FROM {t}
+      UNION ALL
+      SELECT m.uri, m.yuid FROM {mt} m
+      WHERE NOT EXISTS (SELECT 1 FROM {t} l WHERE l.uri = m.uri)
+        AND NOT EXISTS (SELECT 1 FROM {o} o WHERE o.key = m.uri)
+    ) TO STDOUT
+    """
+
+    def _dumpable_master(self):
+        """The master's postgres.IdMap when one query can read both maps,
+        else None."""
+        store = self.master.store
+        if not isinstance(store, postgres.IdMap) or isinstance(store, IdMap):
+            # not postgres, or itself a partial view of some other master
+            return None
+        if getattr(store, "_conn_kw", None) != getattr(self, "_conn_kw", None):
+            return None
+        if getattr(store, "prefix_map_in", None) != self.prefix_map_in:
+            # the two would store the same uri under different curies
+            return None
+        return store
+
+    @property
+    def supports_member_dump(self):
+        return self._dumpable_master() is not None
+
+    def dump_members(self, fh):
+        """`uri<TAB>yuid` for every key this map would answer, internal
+        short form, as the master overlaid with the local decisions (see
+        MEMBER_DUMP); the row count."""
+        store = self._dumpable_master()
+        if store is None:
+            raise NotImplementedError(
+                f"subsidiary idmap: master '{self.master_name}' is not a "
+                f"postgres map on the same database, so it cannot be dumped "
+                f"with this one")
+        with self._cursor() as cur:
+            cur.copy_expert(self.MEMBER_DUMP.format(
+                t=self.table, mt=store.table, o=self.origin_table), fh)
+            return cur.rowcount
 
     def backup_refused(self):
         """Not backed up or restored: the table is a partial view of the

@@ -1274,6 +1274,22 @@ class IdMap(object):
         ikey = self._manage_key_in(key)
         return self._run("token_is", (ikey, self.update_token)).fetchone() is not None
 
+    def has_update_token_multi(self, keys, chunk=1000):
+        """`has_update_token` for many YUIDs: the set of `keys` that are
+        current, one statement per chunk. The subsidiary map asks this
+        for a whole batch of classes as it copies them in, rather than a
+        round trip per class."""
+        by_ikey = {self._manage_key_in(k): k for k in keys}
+        ikeys = list(by_ikey)
+        out = set()
+        for i in range(0, len(ikeys), chunk):
+            with self._cursor() as cur:
+                cur.execute(f"SELECT yuid FROM {self.yuid_table} WHERE yuid = ANY(%s) "
+                            f"AND (token = %s OR {PRESENCE_COLUMN} IS NULL)",
+                            (ikeys[i:i + chunk], self.update_token))
+                out.update(by_ikey[r[0]] for r in cur.fetchall())
+        return out
+
     def add_update_token(self, key):
         """Mark a YUID as seen: register it under this build's token if it is
         new, else clear its `missing_since`."""
