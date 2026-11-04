@@ -1,9 +1,10 @@
-"""Run a whole build: sheets, reconcile, merge, portal, export.
+"""Run a whole build: sheets, reconcile, identify, merge, portal, export.
 
     lux build                                  # run-all.sh --all, phase by phase
     lux build --clear                          # clear the caches and refs, new token, then build
     lux build --max-workers 24 --no-ui         # global options go to every phase
     lux build --from merge                     # pick up again at a phase
+    lux build --from identify                  # after a reconcile whose identify failed
     lux build --skip sheets,portal             # leave phases out
     lux build --dry-run                        # print the steps, run nothing
 
@@ -13,7 +14,10 @@ phases, in order:
     clear      only with --clear: lux clear --source all --force,
                lux clear --refs --force, lux new-token
     sheets     lux sheets: read the curators' spreadsheet, load its same/different pairs
-    reconcile  lux reconcile --source <S> (and so identify, metatypes, write-refs)
+    reconcile  lux reconcile --source <S> --no-finish
+    identify   lux identify, lux metatypes, lux write-refs: resolve the
+               identity map from reconcile's assertions (and vacuum it),
+               merge the metatypes, write the referenced URIs for merge
     merge      lux merge --source <S>
     portal     lux portal: tag the records the YPM portal needs
     export     lux export
@@ -21,7 +25,8 @@ phases, in order:
 Each step is a separate ``lux`` process, so each phase loads a fresh
 configuration and gets its own status/log prefix for ``lux watch``:
 ``<P>-<phase>`` (the clear phase's three steps: ``<P>-clear``,
-``<P>-clear-refs``, ``<P>-new-token``), where ``P`` is ``--prefix`` or
+``<P>-clear-refs``, ``<P>-new-token``; the identify phase's:
+``<P>-identify``, ``<P>-metatypes``, ``<P>-write-refs``), where ``P`` is ``--prefix`` or
 the build's own ``<log_dir>/build-<timestamp>``. A one-shot step logs to
 ``<P>-<phase>.log`` and has a record too, so ``lux watch <P>`` follows the
 build from step to step. The build writes ``<P>.run``: its
@@ -52,7 +57,12 @@ from ._handler import (PARENT_RUN_ENV, RUN_EXTRA_ENV, BaseHandler, command_argv,
 
 logger = logging.getLogger("lux_pipeline")
 
-PHASES = ("clear", "sheets", "reconcile", "merge", "portal", "export")
+# identify is a phase of its own, not reconcile's tail (`lux reconcile`
+# without --no-finish): it runs for hours after the last reconcile worker,
+# and `lux watch` and the run page should say identify while it does. Run
+# alone, `lux build --from identify` is also how a build carries on after
+# an identify that failed: the assertions are kept for exactly that.
+PHASES = ("clear", "sheets", "reconcile", "identify", "merge", "portal", "export")
 
 
 class CommandHandler(BaseHandler):
@@ -153,8 +163,14 @@ class CommandHandler(BaseHandler):
                 ]
             elif phase == "sheets":
                 out.append((phase, self.lux(args, "sheets", workers=False, prefix=prefix)))
-            elif phase in ("reconcile", "merge"):
-                out.append((phase, self.lux(args, phase, "--source", source, prefix=prefix)))
+            elif phase == "reconcile":
+                out.append((phase, self.lux(args, "reconcile", "--source", source, "--no-finish",
+                                            prefix=prefix)))
+            elif phase == "identify":
+                out += [(phase, self.lux(args, command, workers=False, prefix=prefix))
+                        for command in ("identify", "metatypes", "write-refs")]
+            elif phase == "merge":
+                out.append((phase, self.lux(args, "merge", "--source", source, prefix=prefix)))
             elif phase == "portal":
                 out.append((phase, self.lux(args, "portal", workers="count", prefix=prefix)))
             elif phase == "export":

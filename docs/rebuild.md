@@ -204,9 +204,13 @@ Whatever the engine, every worker writes
 `<log_dir>/<command>-<timestamp>-w<n>.status` and `.log`, and the command
 itself logs to `<log_dir>/<command>-<timestamp>.log`; that is what
 `lux watch` reads, and the logs are where a worker's errors are. The
-command's own log is where its tail is: reconcile's identify, metatypes
-and write-refs run after the last worker, and `lux watch` stays on them
-until the run's record says it is over. `lux watch <log_dir>/build-<timestamp>`
+command's own log is where its tail is: run alone, `lux reconcile`'s
+identify, metatypes and write-refs run after the last worker, and `lux
+watch` stays on them until the run's record says it is over. In a `lux
+build` they are a phase of their own, `identify` (reconcile runs with
+`--no-finish`), so watch and the run page say identify while it runs, and
+`lux build --from identify` carries a build on after an identify that
+failed. `lux watch <log_dir>/build-<timestamp>`
 follows a `lux build` from step to step, the one-shot steps included
 (each has its own `<build prefix>-<phase>.log`); `lux watch --latest`
 picks the build when the newest run is one of its phases.
