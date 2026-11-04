@@ -139,6 +139,8 @@ class FakeCursor:
             for (uri, yuid) in pairs:
                 if clobber or uri not in self.state["rows"]:
                     self.state["rows"][uri] = yuid
+        elif sql.startswith("SELECT uri, yuid FROM sub WHERE uri = ANY"):
+            self._out = [(u, self.state["rows"][u]) for u in params[0] if u in self.state["rows"]]
         elif sql.startswith("SELECT key FROM sub_origin WHERE key = ANY"):
             self._out = [(key,) for key in params[0] if key in self.state["origin"]]
         elif sql.startswith("SELECT uri FROM sub WHERE yuid"):
@@ -596,3 +598,94 @@ def test_has_update_token_multi_answers_in_full_form_per_chunk():
     assert got == {y(1), y(3)}
     assert [p[0] for p in sent] == [[y_in(1), y_in(2)], [y_in(3)]]
     assert all(p[1] == TOKEN for p in sent)
+
+
+# ------------------------------------------------- apply: only what is written
+
+def asked(master):
+    """The keys the master was asked about, tokens aside."""
+    return {c for c in master.calls if not c.startswith("token")}
+
+
+def test_assign_bulk_hydrates_only_what_it_writes():
+    """identify passes every member's prior. A member already on its YUID is
+    not written, so it needs no baseline: hydrating those copied the whole
+    master into the subsidiary, one random read at a time."""
+    master = three_classes()
+    m = submap(master)
+    items = [
+        # unchanged: both members already on y(1)
+        (y(1), [k(1), k(2)], {k(1): y(1), k(2): y(1)}),
+        # k(4) leaves y(3) for y(2); k(3) stays
+        (y(2), [k(3), k(4)], {k(3): y(2), k(4): y(3)}),
+    ]
+    m.assign_bulk(items)
+    # asked about the mover and both classes it touches, nothing of y(1)
+    assert asked(master) == {k(4), y(2), y(3)}
+    assert k_in(1) not in m.state["origin"] and y_in(1) not in m.state["origin"]
+    assert m.state["rows"] == {k_in(3): y_in(2), k_in(4): y_in(2)}
+    # the old class's baseline is recorded before the move
+    assert m.state["origin"][k_in(4)][2] == y_in(3)
+    assert [r[1:] for r in m.state["log"]] == [(k_in(4), y_in(3), y_in(2))]
+
+
+def test_a_new_member_hydrates_its_target_class():
+    """No prior: it is written, and the class it lands in is copied whole
+    first, so the YUID's members here are not just the newcomer."""
+    master = three_classes()
+    m = submap(master)
+    m.assign_bulk([(y(1), [k(1), k(2), STRANGER], {k(1): y(1), k(2): y(1)})])
+    assert asked(master) == {STRANGER, y(1)}
+    assert m.state["rows"] == {k_in(1): y_in(1), k_in(2): y_in(1), STRANGER_IN: y_in(1)}
+    assert m.state["origin"][STRANGER_IN][2] is None
+
+
+def test_without_priors_everything_is_hydrated_as_before():
+    master = three_classes()
+    m = submap(master)
+    m.assign_bulk([(y(1), [k(1), k(2)], None)])
+    assert {k(1), k(2), y(1)} <= asked(master)
+    assert m.state["origin"][k_in(2)][2] == y_in(1)
+
+
+def test_nothing_changed_asks_the_master_nothing():
+    master = three_classes()
+    m = submap(master)
+    m.assign_bulk([(y(1), [k(1), k(2)], {k(1): y(1), k(2): y(1)}),
+                   (y(3), [k(4)], {k(4): y(3)})])
+    assert master.calls == [] and m.state["origin"] == {} and m.state["log"] == []
+
+
+def copy_cursor(seen, rowcount=5):
+    class Cur:
+        def copy_expert(self, sql, fh):
+            seen.append(" ".join(sql.split()))
+            self.rowcount = rowcount
+
+    @contextmanager
+    def cursor():
+        yield Cur()
+    return cursor
+
+
+def test_the_registry_dump_overlays_the_masters():
+    """identify's presence step diffs the registry against every YUID it
+    assigned. The local registry alone holds only hydrated classes, so each
+    YUID kept from the master would come out "new" and be registered here."""
+    m = dump_submap(pg_store())
+    seen = []
+    m._cursor = copy_cursor(seen)
+    assert m.dump_registry(None) == 5
+    sql = seen[0]
+    assert sql.startswith("COPY ( SELECT yuid, coalesce(missing_since, '') FROM sub_yuid UNION ALL")
+    assert "FROM idmap_yuid m" in sql
+    assert "NOT EXISTS (SELECT 1 FROM sub_yuid l WHERE l.yuid = m.yuid)" in sql
+    assert "NOT EXISTS (SELECT 1 FROM sub_origin o WHERE o.key = m.yuid)" in sql
+
+
+def test_the_registry_dump_is_local_only_without_a_dumpable_master():
+    m = dump_submap(pg_master())
+    seen = []
+    m._cursor = copy_cursor(seen)
+    m.dump_registry(None)
+    assert seen == ["COPY (SELECT yuid, coalesce(missing_since, '') FROM sub_yuid) TO STDOUT"]
