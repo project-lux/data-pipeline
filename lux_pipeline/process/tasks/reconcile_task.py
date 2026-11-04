@@ -35,6 +35,7 @@ of the evidence, and delete the YUIDs it no longer saw.
 
 import logging
 
+from lux_pipeline.process.identity_resolver import assertions_pattern
 from lux_pipeline.process.phases.identify import report_lines, resolve_identity, vacuum_idmap
 from lux_pipeline.process.phases.reconcile import (new_update_token, reconcile_slice, select_sources,
                                                    write_refs)
@@ -147,12 +148,15 @@ class ReconcileManager(TaskManager):
     def clear_stale(self):
         """Before a run over every slice: the ``metatypes-*.json`` slice
         files under ``temp_dir``, which the finish (or ``lux metatypes``)
-        would merge into this build's, and the phase's done flags
+        would merge into this build's, the ``assertions-*.tsv`` an identify
+        that failed kept (a slice this run does not have would otherwise be
+        read with this run's), and the phase's done flags
         (run-all.sh's ``rm``). A single slice, ``--recid`` or ``--baseline``
         run leaves them: they may be another run's."""
         if self.my_slice > -1 or self.recids or self.baseline:
             return 0
-        return remove_stale(metatypes_pattern(self.configs), flags_pattern(self.configs, "reconcile"))
+        return remove_stale(metatypes_pattern(self.configs), flags_pattern(self.configs, "reconcile"),
+                            assertions_pattern(self.configs))
 
     def process(self, engine="mp", prefix=None, view=None):
         """Check the selection, mint the token if asked, clear what an

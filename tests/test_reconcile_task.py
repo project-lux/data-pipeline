@@ -550,6 +550,8 @@ def stale_files(tmp_path, cfgs):
     temp.mkdir(parents=True, exist_ok=True)
     for fn in ("metatypes-0.json", "metatypes-single.json", "metatypes.json"):
         (temp / fn).write_text("{}")
+    # an identify that failed keeps its input; a slice this run lacks
+    (temp / "assertions-23.tsv").write_text("a\tb\ta\n")
     (flags / "reconcile_is_done-3.txt").write_text("1")
     (flags / "merge_is_done-3.txt").write_text("1")
     return flags
@@ -560,9 +562,11 @@ def test_a_full_run_clears_what_an_earlier_one_left(harness, tmp_path):
     flags = stale_files(tmp_path, h.configure())
     m = h.manager(workers=2)
     removed = []
-    m.finish = lambda: removed.append(sorted(p.name for p in Path(h.cfgs.temp_dir).glob("metatypes*")))
+    m.finish = lambda: removed.append(sorted(p.name for p in Path(h.cfgs.temp_dir).glob("metatypes*"))
+                                      + sorted(p.name for p in Path(h.cfgs.temp_dir).glob("assertions-23*")))
     m.process("null")
-    # the slice files went before the workers started; metatypes.json is the merged one
+    # the slice files went before the workers started; metatypes.json is the
+    # merged one, and identify will not read the old run's extra slice
     assert removed == [["metatypes.json"]]
     assert sorted(p.name for p in flags.iterdir()) == ["merge_is_done-3.txt"]
 
@@ -574,4 +578,5 @@ def test_a_partial_run_leaves_them(harness, tmp_path, options):
     m = h.manager(sources=("ycba",), workers=1 if "my_worker" not in options else 2, **options)
     assert m.clear_stale() == 0
     assert len(list(Path(h.cfgs.temp_dir).glob("metatypes-*.json"))) == 2
+    assert (Path(h.cfgs.temp_dir) / "assertions-23.tsv").exists()
     assert len(list(flags.iterdir())) == 2
