@@ -68,11 +68,13 @@ def test_default_plan_is_run_all_order(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     hdlr = make(tmp_path)
     run(hdlr, [])
-    assert [name_of(a) for a in hdlr.ran] == ["sheets", "reconcile", "merge", "portal", "export"]
+    assert [name_of(a) for a in hdlr.ran] == ["sheets", "reconcile", "identify", "metatypes",
+                                              "write-refs", "merge", "portal", "export"]
     reconcile = next(a for a in hdlr.ran if name_of(a) == "reconcile")
     assert reconcile[4:6] == ["--source", "all"]
-    # reconcile runs its finishing steps: identify, metatypes, write-refs
-    assert "--no-finish" not in reconcile
+    # identify, metatypes and write-refs are the identify phase's, not
+    # reconcile's tail
+    assert "--no-finish" in reconcile
     export = next(a for a in hdlr.ran if name_of(a) == "export")
     assert "--source" not in export
 
@@ -92,8 +94,9 @@ def test_clear_runs_first(tmp_path, monkeypatch):
 @pytest.mark.parametrize("argv,phases", [
     (["--from", "merge"], ["merge", "portal", "export"]),
     (["--to", "reconcile"], ["sheets", "reconcile"]),
+    (["--from", "identify"], ["identify", "merge", "portal", "export"]),
     (["--from", "merge", "--to", "merge"], ["merge"]),
-    (["--skip", "sheets,portal"], ["reconcile", "merge", "export"]),
+    (["--skip", "sheets,portal"], ["reconcile", "identify", "merge", "export"]),
     (["--clear"], list(build.PHASES)),
 ])
 def test_phase_selection(tmp_path, argv, phases):
@@ -151,7 +154,8 @@ def test_failure_stops_and_is_recorded(tmp_path, monkeypatch):
     hdlr = make(tmp_path, {"merge": 3})
     with pytest.raises(RuntimeError, match=r"build stopped in merge: .* exited with 3"):
         run(hdlr, ["--skip", "sheets"])
-    assert [name_of(a) for a in hdlr.ran] == ["reconcile", "merge"]
+    assert [name_of(a) for a in hdlr.ran] == ["reconcile", "identify", "metatypes", "write-refs",
+                                              "merge"]
     status = Path(hdlr.configs.log_dir, "pipeline_process_status.txt").read_text()
     assert status.strip().endswith("[Error] Error in merge")
 
@@ -183,11 +187,12 @@ def test_the_build_records_its_phases_and_steps(tmp_path, monkeypatch):
     run(hdlr, ["--skip", "sheets,portal", "--prefix", str(tmp_path / "logs" / "b1")])
     rec = read_run(str(tmp_path / "logs" / "b1"))
     assert rec["command"] == "build" and rec["exit"] == 0 and rec["workers"] == 0
-    assert rec["phases"] == ["reconcile", "merge", "export"] and rec["current"] == "export"
+    assert rec["phases"] == ["reconcile", "identify", "merge", "export"] and rec["current"] == "export"
     assert [(s["phase"], s["command"], s["exit"]) for s in rec["steps"]] == [
-        ("reconcile", "reconcile", 0), ("merge", "merge", 0), ("export", "export", 0)]
-    assert rec["steps"][1]["prefix"] == str(tmp_path / "logs" / "b1-merge")
-    assert rec["steps"][1]["argv"][:2] == ["lux", "merge"]
+        ("reconcile", "reconcile", 0), ("identify", "identify", 0), ("identify", "metatypes", 0),
+        ("identify", "write-refs", 0), ("merge", "merge", 0), ("export", "export", 0)]
+    assert rec["steps"][4]["prefix"] == str(tmp_path / "logs" / "b1-merge")
+    assert rec["steps"][4]["argv"][:2] == ["lux", "merge"]
     assert all(s["started"] <= s["finished"] for s in rec["steps"])
 
 
@@ -198,7 +203,8 @@ def test_a_failed_step_is_in_the_record(tmp_path, monkeypatch):
         run(hdlr, ["--skip", "sheets", "--prefix", str(tmp_path / "logs" / "b2")])
     rec = read_run(str(tmp_path / "logs" / "b2"))
     assert rec["exit"] == 1 and "build stopped in merge" in rec["error"]
-    assert [(s["phase"], s["exit"]) for s in rec["steps"]] == [("reconcile", 0), ("merge", 3)]
+    assert [(s["phase"], s["exit"]) for s in rec["steps"]] == [
+        ("reconcile", 0), ("identify", 0), ("identify", 0), ("identify", 0), ("merge", 3)]
     assert rec["current"] == "merge"
 
 
@@ -220,6 +226,12 @@ def test_every_worker_phase_gets_a_prefix_without_one_given(tmp_path, monkeypatc
     assert [s["command"] for s in clears] == ["clear", "clear", "new-token"]
     assert [s["prefix"] for s in clears] == [f"{base}-clear", f"{base}-clear-refs", f"{base}-new-token"]
     assert all(s["prefix"] for s in read_run(base)["steps"])
+    # so do the identify phase's, and the build's record says identify
+    # while they run, not reconcile
+    idents = [s for s in read_run(base)["steps"] if s["phase"] == "identify"]
+    assert [s["command"] for s in idents] == ["identify", "metatypes", "write-refs"]
+    assert [s["prefix"] for s in idents] == [f"{base}-identify", f"{base}-metatypes",
+                                             f"{base}-write-refs"]
     # and the build logs to its own file
     assert os.path.exists(f"{base}.log")
     assert "running:" in Path(f"{base}.log").read_text()
@@ -268,3 +280,24 @@ def test_refuses_while_a_build_runs(tmp_path, monkeypatch):
 def test_listed_by_help():
     from lux_pipeline.cli.help import list_commands
     assert "build" in dict(list_commands())
+
+
+def test_the_identify_phase_steps_are_one_shot(tmp_path, monkeypatch):
+    """identify, metatypes and write-refs run in one process each: the log
+    level and a prefix, no worker options."""
+    monkeypatch.chdir(tmp_path)
+    hdlr = make(tmp_path)
+    run(hdlr, ["--from", "identify", "--to", "identify", "--max-workers", "8", "--engine", "mp",
+               "--no-ui", "--prefix", "/logs/b2", "--log", "DEBUG"])
+    assert [a[3:] for a in hdlr.ran] == [
+        ["identify", "--log", "DEBUG", "--prefix", "/logs/b2-identify"],
+        ["metatypes", "--log", "DEBUG", "--prefix", "/logs/b2-metatypes"],
+        ["write-refs", "--log", "DEBUG", "--prefix", "/logs/b2-write-refs"]]
+
+
+def test_a_failed_identify_stops_before_metatypes(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    hdlr = make(tmp_path, {"identify": 1})
+    with pytest.raises(RuntimeError, match=r"build stopped in identify"):
+        run(hdlr, ["--skip", "sheets"])
+    assert [name_of(a) for a in hdlr.ran] == ["reconcile", "identify"]

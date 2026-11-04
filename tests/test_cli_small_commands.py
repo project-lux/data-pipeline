@@ -287,25 +287,28 @@ def resolver(monkeypatch):
     return calls
 
 
-def test_identify_resolves_prints_and_vacuums(tmp_path, cwd, resolver, capsys):
+def test_identify_resolves_logs_and_vacuums(tmp_path, cwd, resolver, caplog):
+    caplog.set_level("INFO", logger="lux_pipeline")
     cfgs = StubConfigs(tmp_path, token="__20261027__")
     stats = run(identify.CommandHandler, cfgs)
     assert cfgs.log == ["get_idmap", "IdentityResolver", "optimize"]
     # the whole map, unsliced, stamped with the idmap's token
     assert resolver[0] == ("IdentityResolver", "__20261027__", -1)
     assert stats["clusters"] == 2 and "seconds" in stats
-    out = capsys.readouterr().out.splitlines()
-    assert out[:3] == ["nodes=5 pairs=4 diff_pairs=1 clusters=2",
-                       "conflicts=0 (see identity_conflicts.jsonl)",
-                       f"done in {stats['seconds']}s"]
-    assert out[3:] == ["", "Vacuuming the identity map..."]
+    # logged, so they are in the step's log a build's watch shows
+    out = [r.getMessage() for r in caplog.records]
+    assert out == ["nodes=5 pairs=4 diff_pairs=1 clusters=2",
+                   "conflicts=0 (see identity_conflicts.jsonl)",
+                   f"done in {stats['seconds']}s",
+                   "Vacuuming the identity map", "Vacuumed"]
 
 
-def test_identify_no_vacuum(tmp_path, cwd, resolver, capsys):
+def test_identify_no_vacuum(tmp_path, cwd, resolver, caplog):
+    caplog.set_level("INFO", logger="lux_pipeline")
     cfgs = StubConfigs(tmp_path)
     run(identify.CommandHandler, cfgs, "--no-vacuum")
     assert "optimize" not in cfgs.log
-    assert "Vacuuming" not in capsys.readouterr().out
+    assert "Vacuuming" not in caplog.text
 
 
 def test_identify_through_the_entry_point(tmp_path, cwd, resolver, monkeypatch, capsys):
@@ -397,12 +400,13 @@ def ref_mgr(monkeypatch):
     return made
 
 
-def test_write_refs_writes_then_clears(tmp_path, cwd, ref_mgr, capsys):
+def test_write_refs_writes_then_clears(tmp_path, cwd, ref_mgr, caplog):
+    caplog.set_level("INFO", logger="lux_pipeline")
     cfgs = StubConfigs(tmp_path)
     path = run(write_refs.CommandHandler, cfgs)
     assert cfgs.log == ["get_idmap", "ReferenceManager", "write_done_refs", "clear"]
     assert path == os.path.join(cfgs.temp_dir, "reference_uris.txt")
-    assert capsys.readouterr().out == f"wrote {path}\n"
+    assert f"Wrote {path}" in caplog.text
     assert list(cwd.iterdir()) == []
 
 

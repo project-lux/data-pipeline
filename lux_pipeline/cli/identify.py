@@ -6,7 +6,8 @@
 `python run-identify.py` as a command, and the first of the three steps
 between reconcile and merge that `lux reconcile` runs itself unless told
 not to (``--no-finish``, ``--my-worker``): ``lux identify``, then ``lux
-metatypes``, then ``lux write-refs``. Run it from the directory reconcile
+metatypes``, then ``lux write-refs``. ``lux build`` runs them as its
+``identify`` phase. Run it from the directory reconcile
 ran in; refused conflicts go to ``identity_conflicts.jsonl`` there.
 
 Runs in this process, never sliced: it is a streaming unix ``sort``
@@ -15,9 +16,13 @@ running (``--force`` overrides): identity resolved from part of the
 assertions would rewrite the map from part of the evidence.
 """
 
+import logging
+
 from lux_pipeline.process.phases.identify import report_lines, resolve_identity, vacuum_idmap
 
 from ._handler import BaseHandler, refuse_while_building
+
+logger = logging.getLogger("lux_pipeline")
 
 
 class CommandHandler(BaseHandler):
@@ -33,9 +38,12 @@ class CommandHandler(BaseHandler):
         refuse_while_building(cfgs, "identify", args.force)
         idmap = cfgs.get_idmap()
         stats = resolve_identity(cfgs, idmap)
+        # logged, not printed: the step's log is what `lux watch` and the
+        # run page show for a build's identify phase
         for line in report_lines(stats):
-            print(line)
+            logger.info(line)
         if not args.no_vacuum:
-            print("\nVacuuming the identity map...")
+            logger.info("Vacuuming the identity map")
             vacuum_idmap(idmap)
+            logger.info("Vacuumed")
         return stats

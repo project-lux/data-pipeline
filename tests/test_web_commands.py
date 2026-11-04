@@ -256,7 +256,7 @@ def test_a_real_run_from_the_form(web):
 def test_the_build_page(web, monkeypatch):
     client, _ = web
     html = client.get("/commands/build").text
-    for p in ("sheets", "reconcile", "merge", "portal", "export"):
+    for p in ("sheets", "reconcile", "identify", "merge", "portal", "export"):
         assert f'name="phase" value="{p}" checked' in html
     assert 'name="clear"' in html and 'name="start"' in html and 'name="stop"' in html
     assert 'name="skip"' not in html and 'name="dry_run"' not in html
@@ -264,17 +264,18 @@ def test_the_build_page(web, monkeypatch):
     monkeypatch.setattr(client.app.state.runner, "dry_run",
                         lambda tail: seen.append(tail) or ["[1] lux sheets", "[2] lux merge", "[3] lux export"])
     html = client.get("/commands/build?phases_shown=1&phase=merge&phase=export&preview_steps=1").text
-    assert "<code>[2] lux merge</code>" in html and seen == [["--skip", "sheets,reconcile,portal"]]
+    assert "<code>[2] lux merge</code>" in html and seen == [["--skip", "sheets,reconcile,identify,portal"]]
     assert 'value="reconcile" checked' not in html and 'value="merge" checked' in html
     r = client.post("/api/commands/build/dry-run", headers={"X-CSRF-Token": csrf(client)},
-                    data={"phases_shown": "1", "phase": ["reconcile", "merge"]})
+                    data={"phases_shown": "1", "phase": ["reconcile", "identify", "merge"]})
     assert r.json()["steps"][0] == "[1] lux sheets"
     assert seen[-1] == ["--skip", "sheets,portal,export"]
 
 
 def test_starting_a_build(web, started):
     client, _ = web
-    form = {"phases_shown": "1", "phase": ["reconcile", "merge", "portal", "export"], "start": "merge"}
+    form = {"phases_shown": "1", "phase": ["reconcile", "identify", "merge", "portal", "export"],
+            "start": "merge"}
     r = post(client, "/commands/build", form)
     assert r.status_code == 303
     assert started[0]["command"] == "build" and started[0]["tail"] == ["--from", "merge", "--skip", "sheets"]
@@ -287,9 +288,10 @@ def test_starting_a_build(web, started):
 def test_build_values_from_the_phase_boxes():
     form = FormData([("phases_shown", "1"), ("phase", "reconcile"), ("phase", "merge"),
                      ("skip", "ignored"), ("dry_run", "1")])
-    assert build_values(form) == {"skip": "sheets,portal,export"}
+    assert build_values(form) == {"skip": "sheets,identify,portal,export"}
     every = FormData([("phases_shown", "1")] + [("phase", p) for p in
-                                                ("sheets", "reconcile", "merge", "portal", "export")])
+                                                ("sheets", "reconcile", "identify", "merge",
+                                                 "portal", "export")])
     assert build_values(every) == {}
 
 
@@ -298,7 +300,10 @@ def test_run_again_for_a_build_ticks_its_phases():
                                   "--prefix", "/l/b"])
     query = dict(parse_qsl(urlsplit(url).query))
     assert url.startswith("/commands/build?") and query["source"] == "ycba"
-    assert [v for k, v in parse_qsl(urlsplit(url).query) if k == "phase"] == ["reconcile", "merge", "export"]
+    # a build from before identify was a phase: its --skip did not name
+    # identify, so the box comes back ticked and it runs
+    assert [v for k, v in parse_qsl(urlsplit(url).query) if k == "phase"] == [
+        "reconcile", "identify", "merge", "export"]
     assert run_again_url("serve", ["lux", "serve"]) is None
 
 

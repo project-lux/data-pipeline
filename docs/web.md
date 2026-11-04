@@ -113,9 +113,10 @@ HTTP: on a network you do not trust, use the tunnel.
   the all-workers row, and the log, all following the run live and
   stopping when it ends. The log holds the workers' lines and the
   driver's own (`<prefix>.log`, shown as `driver`): what the command did
-  before, between and after its workers, so reconcile's identify,
-  metatypes and write-refs are followed after its workers have finished,
-  and a one-shot step (sheets, portal) has a log of its own. The log can
+  before, between and after its workers, so a lone `lux reconcile`'s
+  identify, metatypes and write-refs are followed after its workers have
+  finished, and a one-shot step (sheets, portal, and a build's identify
+  phase: identify, metatypes, write-refs) has a log of its own. The log can
   be filtered by level and worker, stop following, jump to the first
   error, and read a worker's earlier lines. A `lux build` shows its
   phases, each linked to its own run, says which step it is on, and its

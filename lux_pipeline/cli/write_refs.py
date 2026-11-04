@@ -15,12 +15,15 @@ refused (``--force`` writes it anyway). Refuses while a ``lux`` build is
 running too: the reconcile workers fill the queue this clears.
 """
 
+import logging
 import os
 
 from lux_pipeline.process.phases.reconcile import write_refs
 from lux_pipeline.process.reference_manager import ReferenceManager, references_path
 
 from ._handler import BaseHandler, refuse_while_building
+
+logger = logging.getLogger("lux_pipeline")
 
 
 def _is_empty(store):
@@ -50,5 +53,5 @@ class CommandHandler(BaseHandler):
                                f"{out}, which merge reads. Already written? Pass --force "
                                f"to write it anyway")
         path = write_refs(cfgs, idmap, ref_mgr)
-        print(f"wrote {path}")
+        logger.info(f"Wrote {path}")
         return path
