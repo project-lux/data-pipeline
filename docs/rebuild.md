@@ -5,7 +5,10 @@ Every step is a `lux` command (`lux help` lists them, `lux <command>
 `~/.lux/` or the directory they run from (see [install.md](install.md)). Parallel
 commands take `--max-workers N` (default: `max_workers` in the base
 configuration) and show a console view; `lux watch --latest` attaches to
-a running build from another terminal.
+a running build from another terminal. Any of them takes `--background`
+(`-b`): it starts as a process of its own, survives the terminal closing,
+and `lux` returns at once with the `lux watch` command that follows it and
+the `kill` that stops it; its output goes to `<prefix>.out`.
 
 
 ## 1. Ensure data caches are up to date
@@ -114,7 +117,8 @@ prints the `lux watch <prefix>` command that shows it.
 side until builds with both have been compared, after which the old one
 goes and the new one takes its name.)
 
-Or `lux build` (the same phases, one `lux` process each), from a shell or
+Or `lux build` (the same phases, one `lux` process each), from a shell
+(`lux build --background` to leave it running, rather than `nohup`) or
 from the web UI: `lux serve`, then *Commands* → *the build page*, which
 shows the steps (`lux build --dry-run`) before starting, and the build's
 run page with its phases as they go ([web.md](web.md)). Every run, from

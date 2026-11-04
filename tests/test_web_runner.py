@@ -103,7 +103,7 @@ def test_what_the_runner_sets_cannot_come_from_a_form(runner, bad):
 
 
 def test_a_second_run_in_the_same_second_gets_its_own_prefix(runner, monkeypatch):
-    from lux_pipeline.web import runner as mod
+    from lux_pipeline.cli import _handler as mod
     monkeypatch.setattr(mod, "default_prefix", lambda cfgs, cmd: os.path.join(cfgs.log_dir, f"{cmd}-T"))
     cfgs = runner.state.configs()
     first = runner.new_prefix(cfgs, "list")

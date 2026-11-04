@@ -345,7 +345,7 @@ def values_from_argv(spec, argv):
 
 
 # what a form never shows: the runner sets them, or they make no sense from a page
-HIDDEN = frozenset({"no_ui", "prefix", "my_worker", "debug", "help", "env"})
+HIDDEN = frozenset({"no_ui", "prefix", "my_worker", "debug", "help", "env", "background"})
 
 
 def confirm_reason(spec, values):

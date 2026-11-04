@@ -23,6 +23,8 @@ logger = logging.getLogger("lux_pipeline")
 
 ENGINES = ("mp", "ray", "null")
 DEFAULT_ENGINE = "mp"
+# set in a process `--background` started (`_background.child_env`)
+BACKGROUND_CHILD_ENV = "LUX_BACKGROUND_CHILD"
 # Commands that may run without a working installation
 NO_CONFIG_COMMANDS = ("initialize", "testinstall", "help")
 
@@ -51,6 +53,9 @@ def build_parser():
                     help="Plain output instead of the console view")
     ap.add_argument("--prefix", help="Status/log file prefix for this run "
                                      "(default <log_dir>/<command>-<timestamp>)")
+    ap.add_argument("-b", "--background", action="store_true",
+                    help="Start the command in the background and return: output in "
+                         "<prefix>.out, follow it with lux watch <prefix>")
     return ap
 
 
@@ -149,6 +154,12 @@ def run(argv=None):
     if mod is None:
         return _fail(f"lux: {err}", 2)
 
+    if args.background:
+        if not os.environ.get(BACKGROUND_CHILD_ENV):
+            return start_background(mod, args)
+        # a started command never starts itself again
+        logger.warning("--background ignored: this is the background process")
+
     cfgs = None
     try:
         # A handler that says needs_configs = False (watch) runs without
@@ -199,6 +210,25 @@ def run(argv=None):
     if own is not None:
         finish_record(own)
     return 0
+
+
+def start_background(mod, args):
+    """``--background``: start this command line again as a process of its
+    own (`_background.start`) and return. Needs only the log directory, so
+    the configuration is read, not instantiated."""
+    from lux_pipeline.cli import _background
+    if not getattr(mod.CommandHandler, "uses_prefix", True):
+        return _fail(f"lux {args.command}: --background does not apply: it is not a run", 2)
+    try:
+        cfgs = runtime.get_configs(instantiate=False)
+    except Exception as e:
+        if args.command not in NO_CONFIG_COMMANDS:
+            return _fail(f"lux: could not load the pipeline configuration: {e}", 1)
+        cfgs = None
+    try:
+        return _background.start(args, cfgs)
+    except OSError as e:
+        return _fail(f"lux {args.command}: could not start it in the background: {e}", 1)
 
 
 def start_record(hdlr, args):

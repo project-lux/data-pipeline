@@ -27,7 +27,15 @@ lux build --clear --max-workers 24     # clear caches and refs, new token, then 
 lux build --from merge                 # pick up again at a phase
 lux build --skip sheets,portal         # leave phases out
 lux build --dry-run                    # print the steps, run nothing
+lux build --clear --background         # start it, return, and leave it running
 ```
+
+`--background` (`-b`) works for any command that is a run: instead of
+`nohup lux ... &`, `lux` starts the command as a process of its own
+(closing the terminal does not stop it) and prints where its output goes
+(`<prefix>.out`), the `lux watch <prefix>` that follows it, and the
+`kill -- -<pid>` that stops it with its workers. A mistake on the command
+line is still reported at once, with its exit status.
 
 The phases are `clear` (only with `--clear`), `sheets`, `reconcile` (with
 identify, metatypes, write-refs), `merge`, `portal` and `export`, and each
@@ -177,5 +185,5 @@ maintenance and the installation checks. See [docs/web.md](docs/web.md).
 `lux download --source <name>` fetches the files a source's configuration
 names (`remoteDumpFile` and `dumpFilePath`, or its `input_files` block)
 into place; `--source all --max-workers 10` fetches every source's, and
-`--no-overwrite` keeps what is already there. Wikidata's is huge: run it
-under `nohup` (or in `tmux`) and get on with life in the mean time.
+`--no-overwrite` keeps what is already there. Wikidata's is huge: start it
+with `--background` and get on with life in the mean time.
