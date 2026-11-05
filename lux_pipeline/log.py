@@ -2,8 +2,55 @@
 
 Use ``from lux_pipeline.log import logger`` or
 ``logging.getLogger("lux_pipeline")``; they are the same object.
+
+`timing_logger` (``lux_pipeline.timing``) carries `PhaseTimer`'s reports:
+rates, cpu, the share of each stage. A run sends it to its own file
+(`send_timing_to`) so the run's log stays readable; otherwise it
+propagates to ``lux_pipeline`` like any child logger.
 """
 
 import logging
 
 logger = logging.getLogger("lux_pipeline")
+timing_logger = logging.getLogger("lux_pipeline.timing")
+
+
+def timing_state():
+    """What `send_timing_to` changes, for `restore_timing`."""
+    return list(timing_logger.handlers), timing_logger.propagate, timing_logger.level
+
+
+def restore_timing(state):
+    """Put `timing_logger` back as `timing_state` found it, closing the
+    file handlers it has now that it did not have then."""
+    handlers, propagate, level = state
+    for h in list(timing_logger.handlers):
+        if h not in handlers:
+            timing_logger.removeHandler(h)
+            h.close()
+    for h in handlers:
+        if h not in timing_logger.handlers:
+            timing_logger.addHandler(h)
+    timing_logger.propagate = propagate
+    timing_logger.setLevel(level)
+
+
+def send_timing_to(path):
+    """Write `timing_logger`'s records to `path` only, whatever the run's
+    log level (the reports are INFO, and a run at ``--log WARNING`` still
+    wants them); ``None``: no file, propagate to ``lux_pipeline`` again.
+    Replaces the file it wrote to before. Returns the handler or None."""
+    for h in list(timing_logger.handlers):
+        timing_logger.removeHandler(h)
+        h.close()
+    if not path:
+        timing_logger.propagate = True
+        timing_logger.setLevel(logging.NOTSET)
+        return None
+    handler = logging.FileHandler(path, delay=True)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", datefmt="%H:%M:%S"))
+    handler.lux_timing_file = path
+    timing_logger.addHandler(handler)
+    timing_logger.propagate = False
+    timing_logger.setLevel(logging.INFO)
+    return handler
