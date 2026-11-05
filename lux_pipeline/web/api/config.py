@@ -1,12 +1,13 @@
 """The configuration as the pages show it: every record, by type and file;
 one record with a form field per key the catalogue knows; and checking,
-diffing and writing, through `lux_pipeline.config_store` (W04), which
-writes exactly what `lux config` writes.
+diffing and writing, through the configuration's `ConfigStore`
+(``cfgs.config_store``, `lux_pipeline.config_store`), which writes exactly
+what `lux config` writes.
 
-Two ways to save, as `lux config` has: the fields, saved with
-`write_record` (only the changed keys change, in the file's own layout),
-and the record's text, saved verbatim with `write_text` (the person's
-layout). After a write the server's configuration is rebuilt
+Two ways to save, as `lux config` has: the fields (`ConfigStore.write`)
+and the record's text (`ConfigStore.write_text`). Either way the record is
+stored as its store writes JSON: normalized (2-space indent) unless the
+store says otherwise. After a write the server's configuration is rebuilt
 (`AppState.reset`). Every write is refused while a build runs, unless
 forced, as `lux config` refuses it.
 """
@@ -71,11 +72,11 @@ def building(cfgs):
 
 def config_index(state):
     cfgs = state.configs()
-    rows = store.all_records(cfgs)
+    rows = cfgs.config_store.records()
     by_type = {}
     for row in rows:
         try:
-            data = store.read_record(cfgs, row["key"]) if not row["error"] else {}
+            data = cfgs.config_store.read(row["key"]) if not row["error"] else {}
         except store.ConfigError:
             data = {}
         row["summary"] = summary(data)
@@ -178,8 +179,8 @@ def record_data(state, key, text=None):
     cfgs = state.configs()
     origin = cfgs.record_origins.get(key)
     if origin is None:
-        raise HTTPException(status_code=404, detail=str(store._unknown(cfgs, key)))
-    file_text = store.read_text(cfgs, key)
+        raise HTTPException(status_code=404, detail=str(cfgs.config_store.unknown(key)))
+    file_text = cfgs.config_store.text(key)
     raw = json.loads(file_text)
     known = schema.keys_for(raw)
     return {
@@ -189,7 +190,7 @@ def record_data(state, key, text=None):
         "fields": fields(cfgs, raw),
         "unknown": {k: v for k, v in raw.items() if k not in known and "*" not in known},
         "defaults": schema.class_defaults(raw.get("type")) if raw.get("type") in schema.KEYS else {},
-        "problems": store.check_record(cfgs, key),
+        "problems": cfgs.config_store.check(key),
         "building": building(cfgs),
     }
 
@@ -219,7 +220,7 @@ def data_from_fields(cfgs, key, form):
     """The record with the fields form's values applied: ``field:<key>``
     holds a value, ``unset:<key>`` removes the key. Keys the form has no
     field for keep their value. ``(data, problems)``."""
-    raw = store.read_record(cfgs, key)
+    raw = cfgs.config_store.read(key)
     data = dict(raw)
     problems = []
     keys = schema.keys_for(raw)
@@ -303,23 +304,25 @@ async def post_validate(request: Request, key: str):
             return {"json_error": error, "problems": [], "errors": 1, "warnings": 0}
     else:
         data = body["data"]
-    problems = store.validate_record(cfgs, key, data)
+    problems = cfgs.config_store.validate(key, data)
     return {"json_error": None, "problems": problems,
             "errors": len(store.errors_only(problems)), "warnings": len(store.warnings_only(problems))}
 
 
 @router.post("/{key}/diff")
 async def post_diff(request: Request, key: str):
-    """What saving would change, as a unified diff: of the text, saved
-    verbatim, or of the data, saved key by key."""
+    """What saving would change, as a unified diff of the stored text: the
+    record is written as its store writes JSON, from the text or the data.
+    Text that is not JSON is diffed as it is."""
     cfgs = request.app.state.lux.configs()
     body = await _submitted(request)
-    path = store.record_path(cfgs, key)
+    data = body.get("data")
     if "text" in body:
-        old = store.read_text(cfgs, key)
-        new = body["text"] if body["text"].endswith("\n") else body["text"] + "\n"
-        diff = "".join(difflib.unified_diff(old.splitlines(True), new.splitlines(True),
-                                            fromfile=path, tofile=path))
-    else:
-        diff = store.diff_record(cfgs, key, body["data"])
-    return {"diff": diff}
+        data, error = parse_text(body["text"])
+        if error:
+            path = cfgs.config_store.path(key)
+            old = cfgs.config_store.text(key)
+            new = body["text"] if body["text"].endswith("\n") else body["text"] + "\n"
+            return {"diff": "".join(difflib.unified_diff(old.splitlines(True), new.splitlines(True),
+                                                         fromfile=path, tofile=path))}
+    return {"diff": cfgs.config_store.diff(key, data)}

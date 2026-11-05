@@ -1,33 +1,39 @@
-"""Read, check and write configuration records in the files they came from.
+"""Read, check and write configuration records in the stores they came from.
 
-`Config` keeps, for every record, the file it was read from
-(``Config.record_origins``: the configuration directory or a sub-config
-store). This module edits those files:
+`Config` reads its records from caches: the configuration directory
+(``Config.configcache``) and then each sub-config store (a ``"config"``
+record), a later store's record replacing an earlier one with the same key;
+``Config.record_origins`` remembers where each came from. A `ConfigStore`
+(``cfgs.config_store``) works on those same caches:
 
-    read_record(cfgs, "aat")                      # the file's JSON, not the live dict
-    validate_record(cfgs, "aat", data)            # problems; "warning: ..." ones do not block
-    diff_record(cfgs, "aat", data)                # what write_record would change, as a diff
-    write_record(cfgs, "aat", data)               # -> (path, warnings)
-    write_text(cfgs, "aat", text)                 # an editor's text, verbatim, once it validates
-    new_record(cfgs, "wd2", data, store="sources")
-    delete_record(cfgs, "wd2")
+    store = cfgs.config_store
+    store.read("aat")                         # the stored JSON, not the live dict
+    store.validate("aat", data)               # problems; "warning: ..." ones do not block
+    store.diff("aat", data)                   # what write() would change, as a diff
+    store.write("aat", data)                  # -> (path, warnings)
+    store.write_text("aat", text)             # an editor's text, once it parses and validates
+    store.create("wd2", data, store="sources")
+    store.delete("wd2")
+    store.locations("aat")                    # every store holding "aat", the winner last
 
 **Never the live dict.** ``cfgs.external["aat"]`` holds resolved absolute
-paths, built components and ``all_configs``; the file holds what a person
-wrote. Everything here reads and writes the file.
+paths, built components and ``all_configs``; the store holds what a person
+wrote. Everything here reads and writes the store.
 
-**Minimal diffs.** The configuration files are kept in git
-(pipeline-configs) and written by hand in four styles: 4-space, 2-space
-and tab indents, and hand-grouped with blank lines. `write_record`
-changes only the top-level members whose value changed, in place, in the
-file's own indentation; a new member goes after the last one, a removed
-one goes with its line. Everything else stays byte for byte. If the
-result would not read back as the new data (a file with a key twice, or
-written on one line), the record is written whole in the file's
-indentation instead.
+**Normalized files.** The caches write records as their ``json_format``
+says; configuration stores default to ``normalized`` (2-space indent, "/"
+and non-ASCII as written), so a record written here is laid out like every
+other and a diff in git shows what changed. A hand-formatted file is
+reformatted the first time it is written.
 
-**Reload after writing.** Nothing here changes `cfgs`: a process that
-goes on using the configuration must build it again
+**Checked twice.** Each configuration cache carries a JSON Schema generated
+from `lux_pipeline.config_schema` (``json_schema``; a store record may name
+its own) and logs what a record written to it breaks. `validate` phrases
+those problems for people and adds what a schema cannot say: classes that
+import, a source named as its key, map names unique, indexes that resolve.
+
+**Reload after writing.** Nothing here changes `cfgs`' records: a process
+that goes on using the configuration must build it again
 (``runtime.reset_configs()``). Writing while a build runs is the caller's
 decision (`lux config` refuses without ``--force``): its workers read the
 configuration when they start.
@@ -47,8 +53,6 @@ KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 # path_types may name these even when base does not set them: Config gives
 # them defaults
 DEFAULTED_DIRS = ("temp_dir", "indexes_dir", "nt_dir", "distribution_dir", "backup_dir")
-_JSON_TYPES = {"str": (str,), "path": (str,), "class": (str,), "url": (str,), "int": (int,),
-               "bool": (bool,), "list": (list,), "dict": (dict,)}
 
 
 class ConfigError(ValueError):
@@ -61,58 +65,12 @@ class ConfigError(ValueError):
         super().__init__(message)
 
 
-# --- where records are -------------------------------------------------------------------
+def errors_only(problems):
+    return [p for p in problems if not p.startswith("warning:")]
 
 
-def _unknown(cfgs, key):
-    near = difflib.get_close_matches(key, list(cfgs.record_origins), n=3)
-    hint = f" (did you mean {', '.join(near)}?)" if near else ""
-    return ConfigError(f"no configuration record {key!r}{hint}")
-
-
-def record_path(cfgs, key):
-    """The file record `key` was read from."""
-    origin = cfgs.record_origins.get(key)
-    if origin is None:
-        raise _unknown(cfgs, key)
-    if not origin.get("path"):
-        raise ConfigError(f"record {key!r} is not in a file (store {origin.get('store')!r})")
-    return origin["path"]
-
-
-def read_text(cfgs, key):
-    with open(record_path(cfgs, key), encoding="utf-8") as fh:
-        return fh.read()
-
-
-def read_record(cfgs, key):
-    """Record `key` as its file holds it."""
-    text = read_text(cfgs, key)
-    try:
-        data = json.loads(text)
-    except ValueError as e:
-        raise ConfigError(f"{record_path(cfgs, key)} is not JSON: {e}") from None
-    return data
-
-
-def all_records(cfgs):
-    """``[{"key", "type", "name", "store", "path", "error"}]`` for every
-    record, in the order Config read them (a later one with the same key
-    replaced an earlier one, and only it is listed)."""
-    out = []
-    for key, origin in cfgs.record_origins.items():
-        row = {"key": key, "type": None, "name": None, "store": origin.get("store"),
-               "path": origin.get("path"), "error": None}
-        try:
-            data = read_record(cfgs, key)
-            row["type"], row["name"] = data.get("type"), data.get("name")
-        except (OSError, ConfigError) as e:
-            row["error"] = str(e)
-        out.append(row)
-    return out
-
-
-# --- checking --------------------------------------------------------------------------------
+def warnings_only(problems):
+    return [p for p in problems if p.startswith("warning:")]
 
 
 def resolve_class(path):
@@ -151,409 +109,360 @@ def resolve_class(path):
     return None, last or f"cannot import {path}", legacy
 
 
-def _type_ok(spec, value):
-    if value is None:
-        return spec.nullable or spec.type == "any"
-    if spec.type == "any":
-        return True
-    types = _JSON_TYPES[spec.type]
-    if bool in types:
-        return isinstance(value, bool)
-    if int in types:
-        return isinstance(value, int) and not isinstance(value, bool)
-    return isinstance(value, types)
+def text_problems(text):
+    """Problems a record's text has that its data cannot show: not JSON,
+    or a key written twice in one object (JSON keeps the last value, so the
+    first is silently ignored; a warning)."""
+    twice = []
+
+    def pairs(items):
+        seen = set()
+        for k, _ in items:
+            if k in seen:
+                twice.append(k)
+            seen.add(k)
+        return dict(items)
+
+    try:
+        json.loads(text, object_pairs_hook=pairs)
+    except ValueError as e:
+        return [f"not JSON: {e}"]
+    return [f"warning: {k} appears twice in the file; only the last value counts"
+            for k in dict.fromkeys(twice)]
 
 
-def _same_name(cfgs, key, data):
-    """Other records of the same type with the same name (maps and
-    MarkLogic stores are looked up by name, not key)."""
-    clash = []
-    for row in all_records(cfgs):
-        if row["key"] != key and row["type"] == data.get("type") and row["name"] == data.get("name"):
-            clash.append(row["key"])
-    return clash
-
-
-def validate_record(cfgs, key, data, *, new=False):
-    """Problems with writing `data` as record `key`, as sentences; ``[]``
-    when there are none. One starting ``warning:`` does not stop a write.
-
-    Checks: a JSON object whose ``type`` Config accepts; the keys its type
-    needs, filled in; ``name`` equal to the key for a source (the caches
-    are named after it) and unique among its type's records for a map or a
-    MarkLogic store (they are looked up by name); every ``*Class`` value
-    importable, with a warning for a pre-rename path; the type of every key
-    the catalogue knows; ``indexes`` resolving; for base / system, the
-    directories ``path_types`` names and a positive ``max_workers``; for a
-    new record, a key free in every store and on disk. A key the catalogue
-    does not know is never a problem."""
-    problems = []
-    if not KEY_RE.match(key or ""):
-        problems.append(f"{key!r} is not a usable record key (letters, digits, _ . -)")
-    if not isinstance(data, dict):
-        return problems + [f"a record is a JSON object, not {type(data).__name__}"]
-    typ = data.get("type")
-    if typ not in schema.RECORD_TYPES:
-        return problems + [f"type {typ!r} is not one of {', '.join(schema.RECORD_TYPES)}"]
+def schema_problem(error, data):
+    """A jsonschema error from the catalogue's schema as sentences."""
     keys = schema.keys_for(data)
-
-    for k, spec in keys.items():
-        if k == "*" or not spec.required:
-            continue
-        if k not in data:
-            problems.append(f"{k} is missing ({spec.help})")
-        elif data[k] in ("", None, {}, []) and k not in ("name", "type"):
-            problems.append(f"{k} is empty ({spec.help})")
-    if typ in schema.SOURCE_TYPES and data.get("name") != key:
-        problems.append(f"name is {data.get('name')!r}: a source's name must be its key {key!r}")
-    if typ in (*schema.SOURCE_TYPES, "map"):
-        # Config refuses to load a record with one of these (store_name_problem)
-        if typ != "map" or data.get("name"):
-            problems.append(_config.store_name_problem(data.get("name")))
-        if typ == "map" and "tableName" in data:
-            problems.append(_config.store_name_problem(data["tableName"], "tableName"))
-        problems = [p for p in problems if p]
-    if typ in ("map", "marklogic", "config") and data.get("name"):
-        clash = _same_name(cfgs, key, data)
-        if clash:
-            problems.append(f"name {data['name']!r} is also the name of {', '.join(clash)}")
-    if typ == "default" and data.get("name") not in schema.DEFAULT_KINDS:
-        problems.append(f"a default record's name is one of {', '.join(schema.DEFAULT_KINDS)}, "
-                        f"not {data.get('name')!r}")
-
-    for k, value in data.items():
+    path = list(error.path)
+    if error.validator == "required":
+        have = error.instance if isinstance(error.instance, dict) else {}
+        return [f"{k} is missing ({keys[k].help})" if k in keys else f"{k} is missing"
+                for k in error.validator_value if k not in have]
+    if len(path) == 1:
+        k = path[0]
         spec = keys.get(k) or keys.get("*")
-        if spec is not None and not _type_ok(spec, value):
-            problems.append(f"{k} should be {'null or ' if spec.nullable else ''}"
-                            f"{spec.type}, not {type(value).__name__} ({value!r})")
-        # globals' values are terms (it has a taxonomic rank called Class)
-        if typ != "globals" and k.endswith("Class") and isinstance(value, str):
-            if not value:
-                problems.append(f"{k} is empty (null switches the component off)")
-                continue
-            _, error, modern = resolve_class(value)
-            if error:
-                problems.append(f"{k}: {error}")
-            elif modern:
-                problems.append(f"warning: {k} uses the old path {value}; write {modern}")
-
-    if isinstance(data.get("indexes"), dict):
-        try:
-            cfgs.resolve_indexes(copy.deepcopy(data))
-        except Exception as e:
-            problems.append(f"indexes: {type(e).__name__}: {e}")
-
-    if typ in ("base", "system"):
-        mw = data.get("max_workers")
-        # (a value that is not an integer at all is the type check's)
-        if isinstance(mw, int) and not isinstance(mw, bool) and mw < 1:
-            problems.append(f"max_workers should be at least 1, not {mw}")
-        for pkey, dir_key in (data.get("path_types") or {}).items():
-            if dir_key not in data and dir_key not in DEFAULTED_DIRS:
-                problems.append(f"path_types maps {pkey} to {dir_key}, which this record "
-                                f"does not set")
-
-    if new:
-        if key in cfgs.record_origins:
-            origin = cfgs.record_origins[key]
-            where = f"store {origin['store']}" if origin.get("store") else "the configuration directory"
-            problems.append(f"record {key!r} already exists in {where}")
-    return problems
+        if spec is not None and error.validator == "not":
+            return [f"{k} is empty ({spec.help})"]
+        if spec is not None and error.validator == "type":
+            v = error.instance
+            return [f"{k} should be {'null or ' if spec.nullable else ''}{spec.type}, "
+                    f"not {type(v).__name__} ({v!r})"]
+        if k == "name" and data.get("type") == "default" and error.validator == "enum":
+            return [f"a default record's name is one of {', '.join(schema.DEFAULT_KINDS)}, "
+                    f"not {data.get('name')!r}"]
+    return [f"{'.'.join(str(p) for p in path) or 'record'}: {error.message}"]
 
 
-def file_problems(text):
-    """Problems a record's text has that its data cannot show: a key
-    written twice at the top level (JSON keeps the last value, so the
-    first is silently ignored). Warnings."""
-    try:
-        members, _ = _members(text)
-    except ValueError as e:
-        return [f"not a JSON object: {e}"]
-    seen, out = set(), []
-    for key, *_ in members:
-        if key in seen:
-            out.append(f"warning: {key} appears twice in the file; only the last value counts")
-        seen.add(key)
-    return out
+_catalogue_validator = None
 
 
-def check_record(cfgs, key):
-    """Every problem with record `key` as it is on disk: its text
-    (`file_problems`) and its data (`validate_record`)."""
-    try:
-        text = read_text(cfgs, key)
-    except OSError as e:
-        return [f"cannot read {record_path(cfgs, key)}: {e}"]
-    problems = file_problems(text)
-    try:
-        data = json.loads(text)
-    except ValueError as e:
-        return problems + [f"not JSON: {e}"]
-    return problems + validate_record(cfgs, key, data)
+def catalogue_validator():
+    """The validator for `config_schema.json_schema`."""
+    global _catalogue_validator
+    if _catalogue_validator is None:
+        from jsonschema import Draft202012Validator
+        _catalogue_validator = Draft202012Validator(schema.json_schema())
+    return _catalogue_validator
 
 
-def errors_only(problems):
-    return [p for p in problems if not p.startswith("warning:")]
+class ConfigStore:
+    """The configuration records of `cfgs`, in the caches they came from."""
 
+    def __init__(self, cfgs):
+        self.cfgs = cfgs
 
-def warnings_only(problems):
-    return [p for p in problems if p.startswith("warning:")]
+    # --- the stores, and finding a record in them ----------------------------------------
 
-
-# --- the file's style and in-place edits --------------------------------------------------
-
-
-_WS = " \t\r\n"
-
-
-def _skip(text, i):
-    while i < len(text) and text[i] in _WS:
-        i += 1
-    return i
-
-
-def _members(text):
-    """``([(key, key_start, value_start, value_end)], closing_brace)`` of
-    the top-level object in `text`; ValueError if it is not one."""
-    dec = json.JSONDecoder()
-    i = _skip(text, 0)
-    if i >= len(text) or text[i] != "{":
-        raise ValueError("not a JSON object")
-    i = _skip(text, i + 1)
-    out = []
-    if text[i] == "}":
-        return out, i
-    while True:
-        key, kend = dec.raw_decode(text, i)
-        if not isinstance(key, str):
-            raise ValueError("a key is not a string")
-        j = _skip(text, kend)
-        if text[j] != ":":
-            raise ValueError("expected ':'")
-        vstart = _skip(text, j + 1)
-        _, vend = dec.raw_decode(text, vstart)
-        out.append((key, i, vstart, vend))
-        k = _skip(text, vend)
-        if text[k] == ",":
-            i = _skip(text, k + 1)
-        elif text[k] == "}":
-            return out, k
-        else:
-            raise ValueError("expected ',' or '}'")
-
-
-def _line_start(text, pos):
-    """Start of `pos`'s line when only whitespace comes before it there,
-    else `pos`."""
-    start = text.rfind("\n", 0, pos) + 1
-    return start if not text[start:pos].strip() else pos
-
-
-def file_style(text):
-    """``{"indent": str, "newline": bool}`` of a record's text: the indent
-    of its top-level members (4 spaces when it cannot be told) and whether
-    it ends with a newline."""
-    indent = "    "
-    try:
-        members, _ = _members(text)
-    except ValueError:
-        members = []
-    if members:
-        start = _line_start(text, members[0][1])
-        if start != members[0][1]:
-            indent = text[start:members[0][1]] or indent
-    return {"indent": indent, "newline": text.endswith("\n")}
-
-
-def dumps(data, style=None):
-    """`data` as a whole file in `style` (default 4 spaces, trailing
-    newline)."""
-    style = style or {"indent": "    ", "newline": True}
-    indent = style["indent"]
-    text = json.dumps(data, ensure_ascii=False,
-                      indent=indent if indent.strip(" ") else len(indent))
-    return text + ("\n" if style["newline"] else "")
-
-
-def _value_text(value, indent):
-    """`value` as the text of a top-level member's value: nested lines
-    one `indent` deeper than the member."""
-    text = json.dumps(value, ensure_ascii=False, indent=indent if indent.strip(" ") else len(indent))
-    return text.replace("\n", "\n" + indent)
-
-
-def _canon(value):
-    return json.dumps(value, sort_keys=True, ensure_ascii=False)
-
-
-def edit_text(text, new):
-    """The file text `text` changed to hold `new` (a dict), touching only
-    the top-level members whose value changed, were added or were removed.
-    Falls back to the whole record in the file's style when the text
-    cannot be edited in place (or the edit would not read back as `new`)."""
-    style = file_style(text)
-    try:
-        if _canon(json.loads(text)) == _canon(new):
-            return text            # nothing changed: never touch the file
-    except ValueError:
-        pass
-    try:
-        members, close = _members(text)
-        keys = [m[0] for m in members]
-        if len(set(keys)) != len(keys):
-            raise ValueError("a key appears twice")
-        old = json.loads(text)
-        indent = style["indent"]
-        sep = ": "
-        if members:
-            key, kstart, vstart, _ = members[0]
-            kend = json.JSONDecoder().raw_decode(text, kstart)[1]
-            sep = text[kend:vstart] or ": "
-        edits = []         # (start, end, replacement)
-        for n, (key, kstart, vstart, vend) in enumerate(members):
-            if key not in new:
-                if n + 1 < len(members):
-                    # this member's own line, up to and with its comma; a blank
-                    # line after it (a hand-made group break) stays
-                    start = _line_start(text, kstart)
-                    comma = _skip(text, vend)
-                    end = comma + 1
-                    if start != kstart:
-                        nl = text.find("\n", end)
-                        if nl != -1 and not text[end:nl].strip():
-                            end = nl + 1
-                    else:
-                        end = _skip(text, end)
-                    edits.append((start, end, ""))
-                elif n > 0:
-                    edits.append((members[n - 1][3], vend, ""))
-                else:
-                    edits.append((_line_start(text, kstart), vend, ""))
-            elif _canon(new[key]) != _canon(old[key]):
-                edits.append((vstart, vend, _value_text(new[key], indent)))
-        added = [k for k in new if k not in old]
-        if added:
-            tail = "".join(f",\n{indent}{json.dumps(k, ensure_ascii=False)}{sep}"
-                           f"{_value_text(new[k], indent)}" for k in added)
-            survivors = [m for m in members if m[0] in new]
-            if survivors:
-                edits.append((survivors[-1][3], survivors[-1][3], tail))
-            else:
-                start = text.index("{") + 1
-                edits.append((start, start, "\n" + tail[2:] + "\n"))
-        out = text
-        for start, end, rep in sorted(edits, key=lambda e: e[0], reverse=True):
-            out = out[:start] + rep + out[end:]
-        if _canon(json.loads(out)) != _canon(new):
-            raise ValueError("the edit does not read back")
-        return out
-    except ValueError:
-        return dumps(new, style)
-
-
-def _write_atomic(path, text):
-    tmp = f"{path}.{os.getpid()}.tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        fh.write(text)
-    os.replace(tmp, path)
-
-
-# --- writing --------------------------------------------------------------------------------
-
-
-def _check(cfgs, key, data, new=False):
-    problems = validate_record(cfgs, key, data, new=new)
-    errors = errors_only(problems)
-    if errors:
-        raise ConfigError(f"not writing {key}", errors)
-    return warnings_only(problems)
-
-
-def diff_record(cfgs, key, data):
-    """What `write_record` would change, as a unified diff (empty when
-    nothing would)."""
-    path = record_path(cfgs, key)
-    text = read_text(cfgs, key)
-    return "".join(difflib.unified_diff(text.splitlines(True), edit_text(text, data).splitlines(True),
-                                        fromfile=path, tofile=path))
-
-
-def write_record(cfgs, key, data):
-    """Write `data` as record `key`, changing only the members that
-    changed. ConfigError listing the problems if it does not validate.
-    Returns ``(path, warnings)``."""
-    warnings = _check(cfgs, key, data)
-    path = record_path(cfgs, key)
-    text = read_text(cfgs, key)
-    new_text = edit_text(text, data)
-    if new_text != text:
-        _write_atomic(path, new_text)
-    return path, warnings
-
-
-def write_text(cfgs, key, text):
-    """Write `text` verbatim as record `key` (an editor's buffer: its
-    layout is the person's), once it parses and validates. Returns
-    ``(path, warnings)``."""
-    try:
-        data = json.loads(text)
-    except ValueError as e:
-        raise ConfigError(f"not writing {key}: not JSON: {e}") from None
-    warnings = _check(cfgs, key, data)
-    path = record_path(cfgs, key)
-    _write_atomic(path, text if text.endswith("\n") else text + "\n")
-    return path, warnings
-
-
-def new_record_path(cfgs, key, store=None):
-    """Where a new record `key` goes: the configuration directory, or the
-    directory of sub-config store `store`."""
-    if store is None:
-        cache = getattr(cfgs, "configcache", None)
-    else:
-        if store not in cfgs.subconfig_stores:
+    def cache(self, store=None):
+        """The cache of sub-config store `store`, or of the configuration
+        directory (None)."""
+        if store is None:
+            cache = getattr(self.cfgs, "configcache", None)
+            if cache is None:
+                raise ConfigError("the configuration has no store of its own")
+            return cache
+        if store not in self.cfgs.subconfig_stores:
             raise ConfigError(f"no sub-config store {store!r} "
-                              f"(stores: {', '.join(cfgs.subconfig_stores) or 'none'})")
-        cache = cfgs.instantiate_config(store)["datacache"]
-    path_of = getattr(cache, "_path", None)
-    if path_of is None:
-        raise ConfigError(f"{'store ' + store if store else 'the configuration'} is not a "
-                          f"directory of files")
-    return os.path.abspath(path_of(key))
-
-
-def _sibling_style(directory):
-    """The style of the first record in `directory`, so a new one matches."""
-    try:
-        names = sorted(n for n in os.listdir(directory) if n.endswith(".json"))
-    except OSError:
-        names = []
-    for n in names:
+                              f"(stores: {', '.join(self.cfgs.subconfig_stores) or 'none'})")
         try:
-            with open(os.path.join(directory, n), encoding="utf-8") as fh:
-                return file_style(fh.read())
-        except OSError:
-            continue
-    return None
+            return self.cfgs.instantiate_config(store)["datacache"]
+        except ValueError as e:
+            raise ConfigError(f"sub-config store {store!r}: {e}") from None
 
+    def stores(self):
+        """None (the configuration directory), then every sub-config store,
+        in the order Config reads them: a later one's record replaces an
+        earlier one's with the same key."""
+        order = list(getattr(self.cfgs, "subconfig_order", []))
+        return [None] + order + [k for k in sorted(self.cfgs.subconfig_stores) if k not in order]
 
-def new_record(cfgs, key, data, store=None):
-    """Create record `key` in the configuration directory or sub-config
-    store `store`, indented as the records already there. Returns
-    ``(path, warnings)``."""
-    warnings = _check(cfgs, key, data, new=True)
-    path = new_record_path(cfgs, key, store)
-    if os.path.exists(path):
-        raise ConfigError(f"not writing {key}: {path} exists")
-    _write_atomic(path, dumps(data, _sibling_style(os.path.dirname(path))))
-    return path, warnings
+    @staticmethod
+    def where(store):
+        return f"store {store}" if store else "the configuration directory"
 
+    def locations(self, key):
+        """Every store holding a record `key`, in reading order: the last
+        is the one Config uses, any before it are replaced by it."""
+        out = []
+        for store in self.stores():
+            try:
+                cache = self.cache(store)
+            except ConfigError:
+                continue
+            if key in cache:
+                out.append(store)
+        return out
 
-def delete_record(cfgs, key):
-    """Delete record `key`'s file. Returns its path."""
-    path = record_path(cfgs, key)
-    os.remove(path)
-    return path
+    def unknown(self, key):
+        near = difflib.get_close_matches(key, list(self.cfgs.record_origins), n=3)
+        hint = f" (did you mean {', '.join(near)}?)" if near else ""
+        return ConfigError(f"no configuration record {key!r}{hint}")
+
+    def find(self, key):
+        """The store record `key` was read from (None: the configuration
+        directory). ConfigError for a key Config did not read."""
+        origin = self.cfgs.record_origins.get(key)
+        if origin is None:
+            raise self.unknown(key)
+        return origin.get("store")
+
+    def path(self, key):
+        """The file record `key` is kept in."""
+        store = self.find(key)
+        path_of = getattr(self.cache(store), "path", None)
+        if path_of is None:
+            raise ConfigError(f"record {key!r} is not in a file ({self.where(store)})")
+        return os.path.abspath(path_of(key))
+
+    # --- reading ---------------------------------------------------------------------------
+
+    def text(self, key):
+        """Record `key` as stored: its file's text, or for a store that is
+        not a directory of files the record as that store would write it."""
+        cache = self.cache(self.find(key))
+        read_text = getattr(cache, "read_text", None)
+        if read_text is not None:
+            text = read_text(key)
+        else:
+            row = cache.get(key)
+            text = None if row is None else self._dumps(cache, row["data"])
+        if text is None:
+            raise ConfigError(f"record {key!r} is no longer in {self.where(self.find(key))}")
+        return text
+
+    def read(self, key):
+        """Record `key` as stored (a fresh dict, not the live one)."""
+        try:
+            return json.loads(self.text(key))
+        except ValueError as e:
+            raise ConfigError(f"record {key!r} is not JSON: {e}") from None
+
+    def records(self):
+        """``[{"key", "type", "name", "store", "path", "error"}]`` for every
+        record, in the order Config read them (a later one with the same
+        key replaced an earlier one, and only it is listed)."""
+        out = []
+        for key, origin in self.cfgs.record_origins.items():
+            row = {"key": key, "type": None, "name": None, "store": origin.get("store"),
+                   "path": origin.get("path"), "error": None}
+            try:
+                data = self.read(key)
+                row["type"], row["name"] = data.get("type"), data.get("name")
+            except (OSError, ConfigError) as e:
+                row["error"] = str(e)
+            out.append(row)
+        return out
+
+    def dumps(self, data, store=None):
+        """`data` as `store` writes it."""
+        return self._dumps(self.cache(store), data)
+
+    @staticmethod
+    def _dumps(cache, data):
+        dumps = getattr(cache, "dumps", None)
+        return dumps(data) if dumps else json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+
+    # --- checking --------------------------------------------------------------------------
+
+    def _same_name(self, key, data):
+        """Other records of the same type with the same name (maps and
+        MarkLogic stores are looked up by name, not key)."""
+        return [row["key"] for row in self.records()
+                if row["key"] != key and row["type"] == data.get("type")
+                and row["name"] == data.get("name")]
+
+    def validate(self, key, data, *, new=False, store=None):
+        """Problems with writing `data` as record `key` (a new one in
+        `store` when `new`), as sentences; ``[]`` when there are none. One
+        starting ``warning:`` does not stop a write.
+
+        The catalogue's JSON Schema checks the record's type, the keys its
+        type needs, filled in, and the type of every key it knows; a store
+        that names a schema of its own (``json_schema``) adds that. Then: ``name`` equal to the key
+        for a source (the caches are named after it) and unique among its
+        type's records for a map or a MarkLogic store (they are looked up
+        by name); every ``*Class`` value importable, with a warning for a
+        pre-rename path; ``indexes`` resolving; for base / system, the
+        directories ``path_types`` names and a positive ``max_workers``; for
+        a new record, a key free in every store. A key the catalogue does
+        not know is never a problem."""
+        problems = []
+        if not KEY_RE.match(key or ""):
+            problems.append(f"{key!r} is not a usable record key (letters, digits, _ . -)")
+        if not isinstance(data, dict):
+            return problems + [f"a record is a JSON object, not {type(data).__name__}"]
+        typ = data.get("type")
+        if typ not in schema.RECORD_TYPES:
+            return problems + [f"type {typ!r} is not one of {', '.join(schema.RECORD_TYPES)}"]
+
+        # the catalogue's schema always; a store that names a schema of its
+        # own adds it
+        validators = [catalogue_validator()]
+        if not new and key in self.cfgs.record_origins:
+            store = self.cfgs.record_origins[key].get("store")
+        try:
+            cache = self.cache(store)
+            own = cache.schema_validator() if hasattr(cache, "schema_validator") else None
+        except (ConfigError, ValueError) as e:
+            problems.append(f"the store's schema: {e}")
+            own = None
+        if own is not None and own.schema is not schema.json_schema():
+            validators.append(own)
+        for validator in validators:
+            for error in sorted(validator.iter_errors(data), key=lambda e: [str(p) for p in e.path]):
+                problems.extend(p for p in schema_problem(error, data) if p not in problems)
+
+        if typ in schema.SOURCE_TYPES and data.get("name") != key:
+            problems.append(f"name is {data.get('name')!r}: a source's name must be its key {key!r}")
+        if typ in (*schema.SOURCE_TYPES, "map"):
+            # Config refuses to load a record with one of these (store_name_problem)
+            found = []
+            if typ != "map" or data.get("name"):
+                found.append(_config.store_name_problem(data.get("name")))
+            if typ == "map" and "tableName" in data:
+                found.append(_config.store_name_problem(data["tableName"], "tableName"))
+            problems.extend(p for p in found if p)
+        if typ in ("map", "marklogic", "config") and data.get("name"):
+            clash = self._same_name(key, data)
+            if clash:
+                problems.append(f"name {data['name']!r} is also the name of {', '.join(clash)}")
+
+        # globals' values are terms (it has a taxonomic rank called Class)
+        if typ != "globals":
+            for k, value in data.items():
+                if not k.endswith("Class") or not isinstance(value, str):
+                    continue
+                if not value:
+                    problems.append(f"{k} is empty (null switches the component off)")
+                    continue
+                _, error, modern = resolve_class(value)
+                if error:
+                    problems.append(f"{k}: {error}")
+                elif modern:
+                    problems.append(f"warning: {k} uses the old path {value}; write {modern}")
+
+        if isinstance(data.get("indexes"), dict):
+            try:
+                self.cfgs.resolve_indexes(copy.deepcopy(data))
+            except Exception as e:
+                problems.append(f"indexes: {type(e).__name__}: {e}")
+
+        if typ in ("base", "system"):
+            mw = data.get("max_workers")
+            # (a value that is not an integer at all is the schema's)
+            if isinstance(mw, int) and not isinstance(mw, bool) and mw < 1:
+                problems.append(f"max_workers should be at least 1, not {mw}")
+            for pkey, dir_key in (data.get("path_types") or {}).items():
+                if dir_key not in data and dir_key not in DEFAULTED_DIRS:
+                    problems.append(f"path_types maps {pkey} to {dir_key}, which this record "
+                                    f"does not set")
+
+        if new and key in self.cfgs.record_origins:
+            problems.append(f"record {key!r} already exists in "
+                            f"{self.where(self.cfgs.record_origins[key].get('store'))}")
+        return problems
+
+    def check(self, key):
+        """Every problem with record `key` as it is stored: its text
+        (`text_problems`), its data (`validate`), and a warning when it
+        replaces a record of the same key in an earlier store."""
+        try:
+            text = self.text(key)
+        except OSError as e:
+            return [f"cannot read record {key!r}: {e}"]
+        problems = text_problems(text)
+        if problems and not problems[0].startswith("warning:"):
+            return problems
+        problems += self.validate(key, json.loads(text))
+        stores = self.locations(key)
+        if len(stores) > 1:
+            replaced = ", ".join(self.where(s) for s in stores[:-1])
+            problems.append(f"warning: {key} in {self.where(stores[-1])} replaces the record "
+                            f"of the same key in {replaced}")
+        return problems
+
+    # --- writing ---------------------------------------------------------------------------
+
+    def _check(self, key, data, new=False, store=None):
+        problems = self.validate(key, data, new=new, store=store)
+        errors = errors_only(problems)
+        if errors:
+            raise ConfigError(f"not writing {key}", errors)
+        return warnings_only(problems)
+
+    def _location(self, cache, key):
+        path_of = getattr(cache, "path", None)
+        return os.path.abspath(path_of(key)) if path_of else None
+
+    def diff(self, key, data):
+        """What `write` would change, as a unified diff (empty when nothing
+        would)."""
+        name = self.path(key) if self._location(self.cache(self.find(key)), key) else key
+        old = self.text(key)
+        new = self.dumps(data, self.find(key))
+        return "".join(difflib.unified_diff(old.splitlines(True), new.splitlines(True),
+                                            fromfile=name, tofile=name))
+
+    def write(self, key, data):
+        """Write `data` as record `key` in the store it came from, as that
+        store writes JSON. ConfigError listing the problems if it does not
+        validate; nothing is written when the stored text would not change.
+        Returns ``(path, warnings)`` (path None for a store that is not a
+        directory of files)."""
+        warnings = self._check(key, data)
+        cache = self.cache(self.find(key))
+        if self._dumps(cache, data) != self.text(key):
+            cache.set(data, identifier=key)
+        return self._location(cache, key), warnings
+
+    def write_text(self, key, text):
+        """Write an editor's `text` as record `key`, once it parses and
+        validates; stored as the store writes JSON. Returns ``(path,
+        warnings)``, a key the text has twice among the warnings."""
+        problems = text_problems(text)
+        if errors_only(problems):
+            raise ConfigError(f"not writing {key}: {problems[0]}")
+        path, warnings = self.write(key, json.loads(text))
+        return path, problems + warnings
+
+    def create(self, key, data, store=None):
+        """Create record `key` in the configuration directory or sub-config
+        store `store`. Returns ``(path, warnings)``."""
+        warnings = self._check(key, data, new=True, store=store)
+        cache = self.cache(store)
+        if key in cache:
+            where = self._location(cache, key) or self.where(store)
+            raise ConfigError(f"not writing {key}: {where} exists")
+        cache.set(data, identifier=key)
+        return self._location(cache, key), warnings
+
+    def delete(self, key):
+        """Delete record `key` from its store. Returns its path."""
+        cache = self.cache(self.find(key))
+        where = self._location(cache, key)
+        cache.delete(key)
+        return where
 
 
 # --- editing values ---------------------------------------------------------------------------

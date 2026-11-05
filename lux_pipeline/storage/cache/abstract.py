@@ -22,10 +22,20 @@ would make every backend appear to have it:
 * Postgres maintenance: ``optimize``, ``bloat``, ``bloat_line``,
   ``rewrite``, ``drop_time_index``;
 * ``get_like(prefix)``.
+
+Optional on any backend: ``json_schema`` in the cache's configuration (a
+JSON Schema object, or the path of a schema file, relative to the cache's
+``base_dir``). `record_problems` checks a record against it, and a
+backend's `set` may log what it finds (`FsCache` does); the record is
+written regardless. Configuration stores get the schema generated from
+`lux_pipeline.config_schema`.
 """
 
 import datetime
 import logging
+import os
+
+import ujson as json
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -37,12 +47,66 @@ WRITABLE_METADATA_FIELDS = ["record_time", "refresh_time", "valid", "change"]
 CONCEPT_TYPES = ["Type", "Currency", "Language", "Material", "MeasurementUnit"]
 
 
+def load_schema_validator(config):
+    """The validator for a cache configuration's ``json_schema``: None
+    when it has none; ValueError when the schema cannot be read or is not
+    a valid schema."""
+    schema = config.get("json_schema")
+    if not schema:
+        return None
+    from jsonschema import Draft202012Validator, exceptions, validators
+    if isinstance(schema, str):
+        path = schema
+        if not os.path.isabs(path) and config.get("base_dir"):
+            path = os.path.join(config["base_dir"], path)
+        try:
+            with open(path) as fh:
+                schema = json.load(fh)
+        except (OSError, ValueError) as e:
+            raise ValueError(f"cannot read the JSON Schema {path}: {e}") from None
+    cls = validators.validator_for(schema, default=Draft202012Validator)
+    try:
+        cls.check_schema(schema)
+    except exceptions.SchemaError as e:
+        raise ValueError(f"not a valid JSON Schema: {e.message}") from None
+    return cls(schema)
+
+
 class AbstractCache(object):
     key = "identifier"
 
     def __init__(self, config):
         self.config = config
         self.name = config["name"] + "_" + config["tabletype"]
+
+    # --- checking records against a JSON Schema (optional) ---
+
+    def schema_validator(self):
+        """A jsonschema validator for ``json_schema`` in the configuration,
+        or None when there is none. Built on first use."""
+        if "_schema_validator" not in self.__dict__:
+            self._schema_validator = load_schema_validator(getattr(self, "config", None) or {})
+        return self._schema_validator
+
+    def schema_errors(self, data):
+        """`data`'s jsonschema ``ValidationError``s, in path order; ``[]``
+        when it is valid or the cache has no schema."""
+        validator = self.schema_validator()
+        if validator is None:
+            return []
+        return sorted(validator.iter_errors(data), key=lambda e: [str(p) for p in e.path])
+
+    def record_problems(self, data):
+        """`schema_errors` as ``"<path>: <message>"`` sentences."""
+        return [f"{'.'.join(str(p) for p in e.path) or 'record'}: {e.message}"
+                for e in self.schema_errors(data)]
+
+    def warn_problems(self, key, data):
+        """Log `record_problems` as warnings; returns them."""
+        problems = self.record_problems(data)
+        for p in problems:
+            logger.warning(f"{self.name}: {key}: {p}")
+        return problems
 
     # --- connections and write batching ---
     #

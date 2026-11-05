@@ -3,6 +3,7 @@ import re
 import logging
 import importlib
 import multiprocessing
+from . import config_schema
 from .storage.cache.filesystem import FsCache
 from .storage.uricache import URICache, _MISSING
 
@@ -207,6 +208,12 @@ def store_name_problem(name, what="name"):
     return None
 
 
+# How the caches holding configuration records write them (with the schema
+# generated from config_schema): normalized JSON, so a diff in git shows
+# just what changed. A "config" record may set its own.
+CONFIG_STORE_SETTINGS = {"json_format": "normalized"}
+
+
 class Config(object):
     def __init__(self, configcache=None, basepath=None):
         self.internal = {}
@@ -228,6 +235,9 @@ class Config(object):
         # whose records are more configuration (item 35). Loaded after the
         # main directory, in key order; see load_subconfig_store()
         self.subconfig_stores = {}
+        # the order they were read in: a later store's record replaces an
+        # earlier one with the same key (ConfigStore.locations)
+        self.subconfig_order = []
         # {record key: {"store": None | sub-config store key, "path": file or
         # None}}: where each record was read from, so it can be written back
         # (lux_pipeline.config_store). A later record with the same key
@@ -259,9 +269,11 @@ class Config(object):
                 "datacacheClass": "storage.cache.filesystem.FsCache",
                 "base_dir": basepath,
                 "tabletype": "cache",
+                **CONFIG_STORE_SETTINGS,
             }
+            bootstrap["json_schema"] = config_schema.json_schema()
             configcache = FsCache(bootstrap)
-            self.configcache = configcache
+        self.configcache = configcache
         # The directory the configuration was read from: what a sub-config
         # store's relative base_dir resolves against
         self.config_dir = os.path.abspath(
@@ -649,6 +661,17 @@ class Config(object):
         cfg["store"] = clso(tmp_cfg)
         return cfg
 
+    @property
+    def config_store(self):
+        """The `lux_pipeline.config_store.ConfigStore` over this
+        configuration's records: read, check and write them in the stores
+        they came from."""
+        store = self.__dict__.get("_config_store")
+        if store is None:
+            from .config_store import ConfigStore
+            store = self.__dict__["_config_store"] = ConfigStore(self)
+        return store
+
     def instantiate_config(self, key):
         """Build the cache behind sub-config store `key` as its
         ``datacache``. The store's ``base_dir``, when relative, is taken
@@ -678,6 +701,13 @@ class Config(object):
                                  f"does not exist: {directory}")
         cls = importObject(cfg.get("datacacheClass") or "storage.cache.filesystem.FsCache")
         tmp_cfg = self.merge_configs(cfg, self.defaults["cache"])
+        # configuration files are written normalized and checked against
+        # the catalogue's schema, unless the store record says otherwise
+        for k, v in CONFIG_STORE_SETTINGS.items():
+            if k not in cfg:
+                tmp_cfg[k] = v
+        if "json_schema" not in cfg:
+            tmp_cfg["json_schema"] = config_schema.json_schema()
         cfg["datacache"] = cls(tmp_cfg)
         return cfg
 
@@ -688,6 +718,8 @@ class Config(object):
         as one already read replaces it (later wins). Returns the number of
         records read."""
         cache = self.instantiate_config(key)["datacache"]
+        if key not in self.subconfig_order:
+            self.subconfig_order.append(key)
         n = 0
         for k in cache.iter_keys():
             rec = cache[k]["data"]

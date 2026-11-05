@@ -62,7 +62,24 @@ def test_templates_ask_only_for_what_a_person_must_fill_in(typ, tmp_path):
     name = {"default": "cache"}.get(typ, "newone")
     data = schema.template(typ, name)
     assert data["type"] == typ
-    problems = store.validate_record(cfgs, "newone", data, new=True)
+    problems = cfgs.config_store.validate("newone", data, new=True)
     assert all(("is empty" in p or "is missing" in p) for p in problems), problems
     with pytest.raises(ValueError):
         schema.template("base", "base")
+
+
+def test_the_catalogue_as_a_json_schema(tmp_path):
+    from jsonschema import Draft202012Validator
+    js = schema.json_schema()
+    Draft202012Validator.check_schema(js)
+    v = Draft202012Validator(js)
+    cfgs = Config(basepath=str(make_installation(tmp_path / "inst")))
+    for key in cfgs.record_origins:
+        assert list(v.iter_errors(cfgs.config_store.read(key))) == [], key
+    errors = lambda r: sorted((list(e.path), e.validator) for e in v.iter_errors(r))
+    assert errors({"type": "map", "name": "m", "storeClass": None}) == [(["storeClass"], "not")]
+    assert errors({"type": "external", "name": "x", "merge_order": "1", "extra": 1}) == [
+        ([], "required"), (["merge_order"], "type")]                 # extra keys are allowed
+    assert errors({"type": "globals", "Class": 3}) == [(["Class"], "type")]
+    assert errors({"type": "default", "name": "nope"}) == [(["name"], "enum")]
+    assert errors({"type": "default", "name": "cache", "port": "1"}) == [(["port"], "type")]

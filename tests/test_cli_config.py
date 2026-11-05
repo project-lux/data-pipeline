@@ -110,12 +110,12 @@ def editor(tmp_path, monkeypatch, body):
     monkeypatch.setenv("EDITOR", f"{sys.executable} {script}")
 
 
-def test_edit_saves_the_editors_text_verbatim(root, tmp_path, monkeypatch, capsys):
+def test_edit_saves_the_editors_text_normalized(root, tmp_path, monkeypatch, capsys):
     editor(tmp_path, monkeypatch, "open(path, 'w').write(text.replace('\"merge_order\": 10', '\"merge_order\":12'))\n")
     before = aat_file(root).read_text()
     code, out, _ = lux(capsys, "edit", "aat")
     assert code == 0 and "wrote" in out
-    assert aat_file(root).read_text() == before.replace('"merge_order": 10', '"merge_order":12')
+    assert aat_file(root).read_text() == before.replace('"merge_order": 10', '"merge_order": 12')
 
 
 def test_edit_without_a_change_and_with_a_broken_one(root, tmp_path, monkeypatch, capsys):

@@ -14,13 +14,16 @@
     lux config new wd2 --store sources --file wd2.json
     lux config delete wd2                    # asks for the key to be typed; --force does not
 
-Records are read from and written to the files they came from: the
-configuration directory, or the sub-config store that held them. A
-change touches only the keys that changed and keeps the file's layout
-(`lux_pipeline.config_store`). Before anything is written the record is
-checked: its type, the keys it needs, that every ``*Class`` imports, the
-types of the keys the catalogue knows (`lux_pipeline.config_schema`); a
-class path from before the package rename is a warning. ``set``,
+Records are read from and written to the stores they came from: the
+configuration directory, or the sub-config store that held them
+(``cfgs.config_store``, `lux_pipeline.config_store`). They are written as
+normalized JSON (2-space indent), whatever the file looked like before.
+Before anything is written the record is checked: against the JSON Schema
+generated from the catalogue (`lux_pipeline.config_schema`: its type, the
+keys it needs, the types of the keys the catalogue knows), then that every
+``*Class`` imports, a source's name is its key, and map names are unique;
+a class path from before the package rename is a warning, as is a record
+that replaces one of the same key in an earlier store. ``set``,
 ``unset``, ``edit``, ``new`` and ``delete`` refuse while a build runs (its
 workers read the configuration as they start); ``--force`` writes anyway.
 The configuration is read, never instantiated: nothing connects to a
@@ -110,11 +113,11 @@ class CommandHandler(BaseHandler):
         print(f"wrote {path}")
 
     def write(self, cfgs, key, data):
-        diff = store.diff_record(cfgs, key, data)
+        diff = cfgs.config_store.diff(key, data)
         if not diff:
             print("no change")
             return None
-        path, warnings = store.write_record(cfgs, key, data)
+        path, warnings = cfgs.config_store.write(key, data)
         sys.stdout.write(diff)
         self.say_written(path, warnings)
         return path
@@ -122,7 +125,7 @@ class CommandHandler(BaseHandler):
     # --- the actions ------------------------------------------------------------------
 
     def do_list(self, cfgs, args):
-        rows = store.all_records(cfgs)
+        rows = cfgs.config_store.records()
         cols = [("KEY", "key"), ("TYPE", "type"), ("NAME", "name"), ("STORE", "store")]
         widths = [max([len(h)] + [len(str(r[k] or "")) for r in rows]) for h, k in cols]
         print("  ".join(h.ljust(w) for (h, _), w in zip(cols, widths)) + "  FILE")
@@ -134,9 +137,9 @@ class CommandHandler(BaseHandler):
     def do_show(self, cfgs, args):
         (key,) = self.one_key(args, "show")
         if args.only_path:
-            print(store.record_path(cfgs, key))
-            return store.record_path(cfgs, key)
-        text = store.read_text(cfgs, key)
+            print(cfgs.config_store.path(key))
+            return cfgs.config_store.path(key)
+        text = cfgs.config_store.text(key)
         sys.stdout.write(text if text.endswith("\n") else text + "\n")
         return text
 
@@ -145,8 +148,8 @@ class CommandHandler(BaseHandler):
         errors = warnings = 0
         found = {}
         for key in keys:
-            problems = store.check_record(cfgs, key) if key in cfgs.record_origins else \
-                [str(store._unknown(cfgs, key))]
+            problems = cfgs.config_store.check(key) if key in cfgs.record_origins else \
+                [str(cfgs.config_store.unknown(key))]
             found[key] = problems
             for p in problems:
                 print(f"{key}: {p}")
@@ -161,12 +164,12 @@ class CommandHandler(BaseHandler):
 
     def do_set(self, cfgs, args):
         key, path, value = self.one_key(args, "set", 2)
-        data = store.set_key(store.read_record(cfgs, key), path, store.parse_value(value))
+        data = store.set_key(cfgs.config_store.read(key), path, store.parse_value(value))
         return self.write(cfgs, key, data)
 
     def do_unset(self, cfgs, args):
         key, path = self.one_key(args, "unset", 1)
-        data = store.unset_key(store.read_record(cfgs, key), path)
+        data = store.unset_key(cfgs.config_store.read(key), path)
         return self.write(cfgs, key, data)
 
     def edit_file(self, path):
@@ -176,7 +179,7 @@ class CommandHandler(BaseHandler):
 
     def do_edit(self, cfgs, args):
         (key,) = self.one_key(args, "edit")
-        text = store.read_text(cfgs, key)
+        text = cfgs.config_store.text(key)
         fd, tmp = tempfile.mkstemp(prefix=f"lux-config-{key}-", suffix=".json")
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(text)
@@ -188,7 +191,7 @@ class CommandHandler(BaseHandler):
             print("no change")
             return None
         try:
-            path, warnings = store.write_text(cfgs, key, edited)
+            path, warnings = cfgs.config_store.write_text(key, edited)
         except ConfigError as e:
             raise ConfigError(f"{e}. Your edit is kept in {tmp}") from None
         os.remove(tmp)
@@ -198,9 +201,9 @@ class CommandHandler(BaseHandler):
     def do_diff(self, cfgs, args):
         (key,) = self.one_key(args, "diff")
         data = self.parse(self.read_input(args))
-        diff = store.diff_record(cfgs, key, data)
+        diff = cfgs.config_store.diff(key, data)
         sys.stdout.write(diff or "no change\n")
-        for p in store.validate_record(cfgs, key, data):
+        for p in cfgs.config_store.validate(key, data):
             print(p if p.startswith("warning:") else f"error: {p}")
         return diff
 
@@ -212,8 +215,8 @@ class CommandHandler(BaseHandler):
             if not typ:
                 raise ValueError("give --type for a template, or the record with --file or on stdin")
             data = config_schema.template(typ, key)
-            print(store.dumps(data), end="")
-            missing = store.errors_only(store.validate_record(cfgs, key, data, new=True))
+            print(cfgs.config_store.dumps(data, args.store), end="")
+            missing = store.errors_only(cfgs.config_store.validate(key, data, new=True, store=args.store))
             if missing:
                 print("Fill in: " + "; ".join(missing), file=sys.stderr)
             print(f"Then: lux config new {key}"
@@ -223,7 +226,7 @@ class CommandHandler(BaseHandler):
         data = self.parse(text)
         if args.record_type and isinstance(data, dict) and data.get("type") != args.record_type:
             raise ValueError(f"--type {args.record_type}, but the record says {data.get('type')!r}")
-        path, warnings = store.new_record(cfgs, key, data, store=args.store)
+        path, warnings = cfgs.config_store.create(key, data, store=args.store)
         self.say_written(path, warnings)
         return path
 
@@ -235,11 +238,11 @@ class CommandHandler(BaseHandler):
 
     def do_delete(self, cfgs, args):
         (key,) = self.one_key(args, "delete")
-        path = store.record_path(cfgs, key)
+        path = cfgs.config_store.path(key)
         if not args.force and not self.confirm(key, path):
             print("not deleted")
             return None
-        store.delete_record(cfgs, key)
+        cfgs.config_store.delete(key)
         print(f"deleted {path}")
         return path
 

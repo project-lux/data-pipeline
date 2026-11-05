@@ -210,3 +210,47 @@ def test_a_yuid_keyed_cache(tmp_path):
     row = c.get(y)
     assert (row["yuid"], row["data"]) == (y, {"id": "x"})
     assert list(c.iter_items()) == [(y, c.get(y))]
+
+
+# --- json_format and json_schema ---------------------------------------------------------------
+
+
+def fs_with(tmp_path, **cfg):
+    return FsCache({"name": "cfg", "tabletype": "cache", "base_dir": str(tmp_path), **cfg})
+
+
+REC = {"id": "http://x/é", "n": [1]}
+
+
+@pytest.mark.parametrize("fmt,text", [
+    (None, '{"id":"http:\\/\\/x\\/\\u00e9","n":[1]}'),               # ujson's defaults, as before
+    ("compact", '{"id":"http://x/é","n":[1]}'),
+    ("normalized", '{\n  "id": "http://x/é",\n  "n": [\n    1\n  ]\n}\n'),
+    ({"indent": 4, "escape_forward_slashes": False}, '{\n    "id": "http://x/\\u00e9",\n    "n": [\n        1\n    ]\n}\n'),
+])
+def test_json_format(tmp_path, fmt, text):
+    c = fs_with(tmp_path, **({} if fmt is None else {"json_format": fmt}))
+    c.set(REC, identifier="r")
+    assert Path(c.path("r")).read_text(encoding="utf-8") == text == c.read_text("r")
+    assert c["r"]["data"] == REC
+
+
+def test_an_unknown_json_format_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="json_format 'pretty' is not one of compact, normalized"):
+        fs_with(tmp_path, json_format="pretty")
+
+
+def test_json_schema_warns_on_set_and_writes_anyway(tmp_path, caplog):
+    schema = {"type": "object", "required": ["id"], "properties": {"n": {"type": "array"}}}
+    (tmp_path / "s.json").write_text(__import__("json").dumps(schema))
+    for c in (fs_with(tmp_path, json_schema=schema), fs_with(tmp_path, json_schema="s.json")):
+        assert c.record_problems(REC) == []
+        assert c.record_problems({"n": 1}) == ["record: 'id' is a required property",
+                                               "n: 1 is not of type 'array'"]
+        with caplog.at_level(logging.WARNING, logger="lux_pipeline"):
+            c.set({"n": 1}, identifier="bad")
+        assert "cfg_cache: bad: n: 1 is not of type 'array'" in caplog.text
+        assert c["bad"]["data"] == {"n": 1}
+    assert fs_with(tmp_path).record_problems({"n": 1}) == []        # no schema, no checks
+    with pytest.raises(ValueError, match="not a valid JSON Schema"):
+        fs_with(tmp_path, json_schema={"type": 12}).schema_validator()

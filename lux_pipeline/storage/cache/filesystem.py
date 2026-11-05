@@ -17,6 +17,29 @@ logger = logging.getLogger("lux_pipeline")
 # metadata kept in the .meta file rather than in the file's time
 SIDECAR_FIELDS = ["refresh_time", "valid", "change"]
 
+# How records are written ("json_format" in the cache's configuration): a
+# name here, or the ujson.dumps parameters themselves. Without the key,
+# ujson's defaults (one line, "/" escaped), as data caches always have been.
+# Both named formats leave "/" and non-ASCII alone, so URIs read as written.
+JSON_FORMATS = {
+    "compact": {"escape_forward_slashes": False, "ensure_ascii": False},
+    "normalized": {"indent": 2, "escape_forward_slashes": False, "ensure_ascii": False},
+}
+
+
+def dumps_params(json_format):
+    """The ujson.dumps keyword arguments for a ``json_format`` value."""
+    if json_format is None:
+        return {}
+    if isinstance(json_format, str):
+        if json_format not in JSON_FORMATS:
+            raise ValueError(f"json_format {json_format!r} is not one of "
+                             f"{', '.join(JSON_FORMATS)} or an object of ujson.dumps parameters")
+        return dict(JSON_FORMATS[json_format])
+    if isinstance(json_format, dict):
+        return dict(json_format)
+    raise ValueError(f"json_format should be a name or an object, not {json_format!r}")
+
 
 def _as_datetime(value):
     """A naive local datetime, as file times are, from a datetime or an ISO
@@ -42,6 +65,7 @@ class FsCache(AbstractCache):
         self.source = config['name']
         self.slash_replacement = "___"
         self.key = "identifier"
+        self.dumps_params = dumps_params(config.get("json_format"))
 
         if not os.path.exists(self.directory):
             os.mkdir(self.directory)
@@ -60,6 +84,24 @@ class FsCache(AbstractCache):
 
     def _path(self, key):
         return os.path.join(self.directory, self._filename(key))
+
+    def path(self, key):
+        """The file record `key` is (or would be) kept in."""
+        return self._path(key)
+
+    def read_text(self, key):
+        """Record `key`'s file as text; None when there is none."""
+        try:
+            with open(self._path(key), encoding="utf-8") as fh:
+                return fh.read()
+        except FileNotFoundError:
+            return None
+
+    def dumps(self, value):
+        """`value` as this cache writes it (`json_format`); an indented
+        file ends with a newline."""
+        text = json.dumps(value, **self.dumps_params)
+        return text + "\n" if self.dumps_params.get("indent") else text
 
     def _file_to_key(self, file):
         # same transform iter_keys() yields; passing the raw filename to
@@ -140,7 +182,7 @@ class FsCache(AbstractCache):
     def _read_file(self, fn):
         fn = os.path.join(self.directory, fn)
         if os.path.exists(fn):
-            with open(fn) as fh:
+            with open(fn, encoding="utf-8") as fh:
                 data = fh.read()
             try:
                 js = json.loads(data)
@@ -185,10 +227,12 @@ class FsCache(AbstractCache):
         if 'data' in value and 'identifier' in value:
             value = value['data']
 
+        self.warn_problems(key, value)
+
         # atomic write: a crash mid-write must not leave a truncated record
         tmp = fn + ".tmp"
-        with open(tmp, "w") as fh:
-            fh.write(json.dumps(value))
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(self.dumps(value))
         os.replace(tmp, fn)
         if record_time is not None:
             t = _as_datetime(record_time).timestamp()
