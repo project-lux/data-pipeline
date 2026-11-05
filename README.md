@@ -44,7 +44,9 @@ loads its same-as / different-from pairs and fixes (`--fetch-only`,
 `--load-only`). By default that is the Google Sheet (`pip install -e
 '.[google]'`); `--file` reads the same tabs from an `.xlsx` workbook
 (`.[xlsx]`) or a directory of `<tab name>.csv` files instead. And `lux portal` tags
-the merged records the YPM portal needs. A full `lux reconcile`, `merge`
+the merged records the portals need: a portal is an internal source with
+`"portal": true` in its configuration (tagged with its name) or `"portal":
+"<tag>"` (a renamed source keeps the tag the exports know, e.g. `"ypm"`). A full `lux reconcile`, `merge`
 or `export` first removes what an earlier run left (metatypes slice files,
 done flags, old export slices); one `--my-worker` slice never does. The
 files the phases hand to each other (`metatypes-*.json`,

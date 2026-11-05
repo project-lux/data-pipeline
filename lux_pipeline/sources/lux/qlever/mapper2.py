@@ -10,6 +10,7 @@ import lxml.html
 from shapely.wkt import loads
 
 from lux_pipeline.process.base.mapper import Mapper
+from lux_pipeline.process.phases.portal import portal_tags
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -159,6 +160,9 @@ class QleverMapper(Mapper):
     def __init__(self, config):
         Mapper.__init__(self, config)
         self.configs = config["all_configs"]
+        # the tags `change` may carry: these units, plus every portal's tag
+        self.change_sources = ["ipch", "pmc", "ils", "yuag", "ycba", "ypm"]
+        self.change_sources += sorted(portal_tags(self.configs) - set(self.change_sources))
         self.idmap = self.configs.get_idmap()
         self.globals = self.configs.globals
 
@@ -299,7 +303,7 @@ class QleverMapper(Mapper):
         # meta-metadata -- sources for the record
         if "change" in record and record["change"]:
             sources = record["change"].split("|")
-            okay = ["ipch", "pmc", "ils", "yuag", "ycba", "ypm"]
+            okay = self.change_sources
             t["predicate"] = f"{luxns}source"
             for s in sources[:]:
                 if s in okay:

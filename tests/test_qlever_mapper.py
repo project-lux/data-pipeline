@@ -263,3 +263,22 @@ def test_classification_without_id_is_not_treated_as_a_match(mapper):
 def test_export_filename_matches_run_source_build(mapper):
     assert mapper.make_export_filename("qlever", 7) == "sources_7.nt"
     assert mapper.extract_index_data({}) == {}
+
+
+def test_change_keeps_unit_and_portal_tags_only():
+    class PortalConfigs(StubConfigs):
+        internal = {"peabody": {"portal": "peabody"}, "ycba": {}}
+
+    m = QleverMapper({"all_configs": PortalConfigs(), "namespace": "urn:ns/", "name": "qlever"})
+    data = {"id": LUX + "person/p1", "type": "Person", "_label": "P"}
+    got = m.transform(rec(data, change="peabody|ypm|elsewhere"))
+    sources = sorted(l for l in got if f"<{NS}source>" in l)
+    assert sources == [f"<{LUX}person/p1> <{NS}source> <{NS}PEABODY> .",
+                       f"<{LUX}person/p1> <{NS}source> <{NS}YPM> ."]
+
+
+def test_change_without_portals_keeps_the_units_tags(mapper):
+    data = {"id": LUX + "person/p1", "type": "Person", "_label": "P"}
+    got = mapper.transform(rec(data, change="peabody|ypm"))
+    assert [l for l in got if f"<{NS}source>" in l] == [
+        f"<{LUX}person/p1> <{NS}source> <{NS}YPM> ."]

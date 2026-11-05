@@ -1,14 +1,20 @@
 """The post-build portal step: post-build-portal.py's body as functions.
 
-Tags every merged record a YPM record leads to, within a few hops, with
-``change = "ypm"`` in the merged recordcache's metadata, so the export can
-mark the records the YPM portal needs. Runs after merge, before export.
+Which sources get a portal is configuration: an internal source whose
+record has ``"portal": true`` is one, tagged with its own name, and
+``"portal": "<tag>"`` names the tag instead (so a renamed source can keep
+the tag the exports already know, e.g. ``"ypm"``). Every merged record a
+portal source's records lead to, within a few hops, gets the tag in the
+merged recordcache's ``change`` metadata, so the export can mark the
+records the portal needs. A record within reach of several portals gets
+their tags joined with ``|``, which is how the MarkLogic and QLever
+mappers read ``change``. Runs after merge, before export.
 
-The YPM records (the keys of its ``recordcache2``) are distance 0. Their
-merged records are walked in parallel for the records they reference
-(distance 1); from those the walk carries on in this process, to distance
-5. ``equivalent``, ``access_point`` and ``conforms_to`` are not followed.
-Finally the metadata is set, in parallel again.
+A portal source's records (the keys of its ``recordcache2``) are distance
+0. Their merged records are walked in parallel for the records they
+reference (distance 1); from those the walk carries on in this process,
+to distance 5. ``equivalent``, ``access_point`` and ``conforms_to`` are
+not followed. Finally the metadata is set, in parallel again.
 
 Called by ``lux portal`` (and so ``lux build``'s ``portal`` phase).
 """
@@ -21,10 +27,40 @@ from lux_pipeline import runtime
 
 logger = logging.getLogger("lux_pipeline")
 
-SOURCE = "ypm"
-PORTAL = "ypm"
+PORTAL_KEY = "portal"  # the source configuration key
 MAX_DISTANCE = 4  # a reference found from a record at this distance is the last one walked
 SKIP_KEYS = ("equivalent", "access_point", "conforms_to")
+
+
+def portal_sources(cfgs):
+    """``{source name: tag}`` for every source configured with ``portal``.
+
+    ``true`` tags with the source's name, a string with that string. Only
+    internal sources have the ``recordcache2`` the walk starts from; the
+    key on any other source is reported and ignored."""
+    out = {}
+    for kind in ("internal", "external", "results"):
+        for name, src in (getattr(cfgs, kind, None) or {}).items():
+            value = src.get(PORTAL_KEY) if hasattr(src, "get") else None
+            if not value:
+                continue
+            if kind != "internal":
+                logger.warning(f"{name}: '{PORTAL_KEY}' is only read on internal sources; "
+                               f"this one is {kind}")
+                continue
+            if isinstance(value, str):
+                out[name] = value
+            else:
+                if value is not True:
+                    logger.warning(f"{name}: '{PORTAL_KEY}' should be true or a tag, "
+                                   f"not {value!r}; using the source's name")
+                out[name] = name
+    return out
+
+
+def portal_tags(cfgs):
+    """The tags the portal step can write, for the exporters' allowed lists."""
+    return set(portal_sources(cfgs).values())
 
 
 def default_workers():
@@ -75,13 +111,13 @@ def process_recids(recids):
     return local_dists, local_added
 
 
-def set_portal(portal_ids, portal=PORTAL):
-    """Worker: set ``change`` to `portal` on these merged records."""
+def set_portal(tagged):
+    """Worker: set ``change`` on these ``(recid, tags)`` merged records."""
     merged = _merged()
     done = 0
-    for recid in portal_ids:
+    for recid, tags in tagged:
         try:
-            merged.set_metadata(recid, "change", portal)
+            merged.set_metadata(recid, "change", tags)
             done += 1
         except Exception:
             logger.warning(f"Failed to set metadata on {recid}")
@@ -102,20 +138,20 @@ def _parallel(fn, slices, workers, *extra):
             yield future.result()
 
 
-def portal_distances(cfgs, workers=None, source=SOURCE):
+def portal_distances(cfgs, source, workers=None):
     """``{yuid: distance}`` for every record within reach of `source`'s."""
     workers = workers or default_workers()
     rc = cfgs.internal[source]["recordcache2"]
     all_distances = {k: 0 for k in rc.iter_keys()}
     recids = list(all_distances.keys())
-    logger.info(f"dist=0, {workers} processes, {len(recids)} keys")
+    logger.info(f"{source}: dist=0, {workers} processes, {len(recids)} keys")
 
     added_refs = {}
     for local_dists, local_added in _parallel(process_recids, chunks(recids, workers), workers):
         all_distances.update(local_dists)
         added_refs.update(local_added)
 
-    logger.info(f"Added refs: {len(added_refs)} base")
+    logger.info(f"{source}: added refs: {len(added_refs)} base")
     merged = cfgs.results["merged"]["recordcache"]
     while added_refs:
         (k, d) = added_refs.popitem()
@@ -128,11 +164,21 @@ def portal_distances(cfgs, workers=None, source=SOURCE):
     return all_distances
 
 
-def tag_portal(cfgs, workers=None, source=SOURCE, portal=PORTAL):
-    """The whole step. Returns ``(records in reach, records tagged)``."""
+def tag_portal(cfgs, workers=None, sources=None):
+    """The whole step, for `sources` (``{source: tag}``; default: every
+    source configured with ``portal``). Returns ``(records in reach,
+    records tagged)``; ``(0, 0)`` when no source is a portal."""
     workers = workers or default_workers()
-    distances = portal_distances(cfgs, workers, source)
-    portal_ids = list(distances.keys())
-    logger.info(f"Setting metadata: {workers} processes, {len(portal_ids)}")
-    done = sum(_parallel(set_portal, chunks(portal_ids, workers), workers, portal))
-    return len(portal_ids), done
+    sources = portal_sources(cfgs) if sources is None else sources
+    if not sources:
+        logger.warning(f"No source has '{PORTAL_KEY}' set; nothing to tag")
+        return 0, 0
+    tags = {}
+    for source, tag in sorted(sources.items()):
+        logger.info(f"Portal {tag!r} from source {source}")
+        for yuid in portal_distances(cfgs, source, workers):
+            tags.setdefault(yuid, set()).add(tag)
+    tagged = [(yuid, "|".join(sorted(t))) for yuid, t in tags.items()]
+    logger.info(f"Setting metadata: {workers} processes, {len(tagged)}")
+    done = sum(_parallel(set_portal, chunks(tagged, workers), workers))
+    return len(tagged), done
