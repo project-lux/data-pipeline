@@ -121,6 +121,23 @@ RECORD_EXTENSIONS = (".json", ".jsonld", ".xml", ".rdf", ".ttl", ".nt", ".txt")
 COUNT_LINES_BELOW = 100_000_000
 
 
+# files an operating system leaves in a directory or archive, never records:
+# macOS's __MACOSX/ tree and ._<name> AppleDouble files, Finder's .DS_Store,
+# Windows' Thumbs.db and desktop.ini
+OS_METADATA_DIRS = ("__MACOSX",)
+OS_METADATA_FILES = (".DS_Store", "Thumbs.db", "desktop.ini")
+UTF8_BOM = b"\xef\xbb\xbf"
+
+
+def is_os_metadata(name):
+    """Whether a file or member name is an operating system's metadata."""
+    parts = [p for p in str(name).replace("\\", "/").split("/") if p]
+    if not parts:
+        return False
+    return (any(p in OS_METADATA_DIRS for p in parts[:-1])
+            or parts[-1] in OS_METADATA_FILES or parts[-1].startswith("._"))
+
+
 # extract_identifier's answer for a value outside the source's namespace
 _OUTSIDE = object()
 
@@ -333,7 +350,7 @@ class Loader(Sliced):
     # --- containers ----------------------------------------------------------
 
     def iterate_directory(self, path, comp, remaining):
-        files = sorted(os.listdir(path))
+        files = [f for f in sorted(os.listdir(path)) if not is_os_metadata(f)]
         if len(remaining) == 1:
             self._add_total(len(files))
         for f in files:
@@ -343,6 +360,8 @@ class Loader(Sliced):
 
     def iterate_directories(self, path, comp, remaining):
         for f in sorted(os.listdir(path)):
+            if f in OS_METADATA_DIRS or is_os_metadata(f):
+                continue
             full = os.path.join(path, f)
             if os.path.isfile(full):
                 if len(remaining) == 1:
@@ -359,7 +378,7 @@ class Loader(Sliced):
         else:
             compression = zipfile.ZIP_STORED
         with zipfile.ZipFile(path, compression=compression) as zh:
-            names = [n for n in zh.namelist() if not n.endswith("/")]
+            names = [n for n in zh.namelist() if not n.endswith("/") and not is_os_metadata(n)]
             if len(remaining) == 1:
                 self._add_total(len(names))
             for n in names:
@@ -376,7 +395,7 @@ class Loader(Sliced):
         with th:
             ti = th.next()
             while ti is not None:
-                if ti.isfile():
+                if ti.isfile() and not is_os_metadata(ti.name):
                     yield TarPointer(th, ti)
                 ti = th.next()
 
@@ -549,7 +568,15 @@ class Loader(Sliced):
             data = path
         else:
             with self.file_opener(path, comp) as fh:
-                data = json.load(fh)
+                raw = fh.read()
+            if raw.startswith(UTF8_BOM):
+                raw = raw[len(UTF8_BOM):]
+            try:
+                data = json.loads(raw)
+            except ValueError as e:
+                what = f"{self.member_name(path, parent)} ({len(raw)} bytes)"
+                raise ValueError(f"{self.name}: {what} is not JSON: {e}; it starts "
+                                 f"{bytes(raw[:60])!r}") from e
         try:
             data = self._post_process_json(data, ident)
         except Exception:
@@ -564,6 +591,18 @@ class Loader(Sliced):
             if not ident:
                 raise ValueError(f"Could not get an identifier in {self.name} while in {parent}/{path}")
         return {"identifier": ident, "data": data}
+
+    def member_name(self, path, parent):
+        """A record's file or archive member, for messages; a line or
+        item has none, so its container step is named instead."""
+        if isinstance(path, Pointer):
+            return path.get_name()
+        if isinstance(path, (str, os.PathLike)):
+            return os.fspath(path)
+        name = getattr(path, "name", None)
+        if isinstance(name, str):
+            return name
+        return f"a record (in {parent[0] if parent else 'the file'})"
 
     def make_tabjson(self, path, comp, parent):
         """``<identifier><TAB><JSON>``: the identifier is the text before
