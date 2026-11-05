@@ -325,3 +325,18 @@ def test_set_unset_and_parse_value():
         store.set_key(data, "a.b", 1)
     assert [store.parse_value(v) for v in ("12", "true", "null", '["a"]', '"12"', "plain text")] == \
         [12, True, None, ["a"], "12", "plain text"]
+
+
+def test_a_record_that_is_not_json_names_its_file_and_the_place(root):
+    # a stray "}" at the end of a line, as a hand edit leaves it
+    path = root / "subs" / "sources_cache" / "aat.json"
+    lines = path.read_text().splitlines()
+    i = next(n for n, l in enumerate(lines) if '"merge_order"' in l)
+    lines[i] = lines[i].rstrip(",") + "},"
+    path.write_text("\n".join(lines) + "\n")
+    with pytest.raises(ConfigError) as e:
+        Config(basepath=str(root))
+    message = str(e.value)
+    assert message.startswith(f"configuration record aat ({path}) is not JSON: ")
+    assert f"line {i + 2}" in message or f"line {i + 1}" in message
+    assert "has no 'type'" not in message
