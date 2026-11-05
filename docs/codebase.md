@@ -126,7 +126,7 @@ kind that does not set them itself. An instance without them keeps using the sin
 
 ### process/phases/
 
-The bodies of the build phases, moved out of the old `run-*.py` scripts unchanged so that `lux` and the legacy scripts run the same code: `reconcile.reconcile_slice`, `identify.resolve_identity`, `merge.merge_slice`, `export.export_slice` (and `export_nt_slice`, `export_sources_slice`, `export_external`). Each takes the configuration, the slice (`my_slice`, `max_slice`) and a `progress=` callable; reconcile and merge also take the sources chosen by their `select_sources`. The loops inside them are timed by `process/timing.PhaseTimer`.
+The bodies of the build phases, moved out of the old `run-*.py` scripts unchanged so that `lux` and the legacy scripts run the same code: `reconcile.reconcile_slice`, `identify.resolve_identity`, `merge.merge_slice`, `export.export_slice` (and `export_nt_slice`, `export_sources_slice`, `export_external`). Each takes the configuration, the slice (`my_slice`, `max_slice`) and a `progress=` callable; reconcile and merge also take the sources chosen by their `select_sources`. The loops inside them are timed by `process/utils/timing.PhaseTimer`.
 
 
 ### The loader's input_files grammar

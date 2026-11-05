@@ -1,5 +1,5 @@
 """The timing report as the page shows it: `lux timing-report`'s numbers
-(`process/timing_report.directory_data`, `overall_summary`,
+(`process/utils/timing_report.directory_data`, `overall_summary`,
 `compare_data`), shaped so the template does no arithmetic: a card per
 phase in build order, its stages with their share of worker time, the
 nested stages, the slices, the profiles; the all-phases summary with a
@@ -14,7 +14,7 @@ import os
 
 from fastapi import APIRouter, HTTPException, Request
 
-from lux_pipeline.process import timing_report as tr
+from lux_pipeline.process.utils import timing_report as tr
 from lux_pipeline.web.security import under
 
 router = APIRouter(prefix="/api/timing", tags=["timing"])

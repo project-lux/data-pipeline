@@ -7,7 +7,7 @@
 #   python timing-report.py --profile             # and the top functions (LUX_PROFILE=1 runs)
 #
 # `lux timing-report` does the same, with the same options; the report itself
-# is lux_pipeline.process.timing_report, which both print.
+# is lux_pipeline.process.utils.timing_report, which both print.
 
 import argparse
 import os
@@ -16,7 +16,7 @@ import sys
 from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lux_pipeline.process.timing_report import (  # noqa: E402,F401  (re-exported)
+from lux_pipeline.process.utils.timing_report import (  # noqa: E402,F401  (re-exported)
     DEFAULT_TOP, combine, compare_lines, directory_report, func_label, load,
     load_profiles, profile_lines, report_lines, stage_functions, summarise,
     top_functions)

@@ -48,7 +48,7 @@ from contextlib import contextmanager
 
 import ujson as json
 
-from lux_pipeline.process.timing import PhaseTimer
+from lux_pipeline.process.utils.timing import PhaseTimer
 from lux_pipeline.config import index_path
 from lux_pipeline.storage.idmap.lmdb import TabLmdb
 

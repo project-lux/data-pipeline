@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Request
 
-from lux_pipeline.process.timing_report import DEFAULT_TOP, PHASE_ORDER
+from lux_pipeline.process.utils.timing_report import DEFAULT_TOP, PHASE_ORDER
 from lux_pipeline.web.api.timing import compare_view, timing_data
 from lux_pipeline.web.app import page
 

@@ -34,7 +34,7 @@ import os
 import sys
 import time
 
-from lux_pipeline.process import host_cpu
+from lux_pipeline.process.utils import host_cpu
 from lux_pipeline.progress import null_progress
 
 

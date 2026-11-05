@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from lux_pipeline.progress import (
     StatusWriter, Sliced, log_path, null_progress, read_status, status_path,
 )
-from lux_pipeline.process.timing import PhaseTimer
+from lux_pipeline.process.utils.timing import PhaseTimer
 
 
 class Recorder:

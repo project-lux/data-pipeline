@@ -122,7 +122,7 @@ maintenance and the installation checks. See [docs/web.md](docs/web.md).
 * progress, runtime, log: the worker status protocol (`.status` files, `null_progress`), configuration loading and logging setup. Library code logs to the `lux_pipeline` logger and never prints.
 * process/tasks/: the managers that run a phase's workers on an engine (`mp`, `null`, `ray`), one per parallel command.
 * process/phases/: the body of each build phase (reconcile, identify, merge, export), shared by `lux` and the legacy scripts.
-* process/timing: `PhaseTimer`, the per-stage timings (and, with `--profile`, cProfile output) that `timing-report.py` reads.
+* process/utils/timing: `PhaseTimer`, the per-stage timings (and, with `--profile`, cProfile output) that `timing-report.py` reads.
 * process/Collector: Recursively collects identifiers for a given record.
 * process/Reconciler: Reconcile records
 * process/Merger: Merges two Linked Art records representing the same entity together.

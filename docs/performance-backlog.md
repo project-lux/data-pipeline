@@ -503,7 +503,7 @@ COMMIT call counts collapse.
 
 ### 3.6 The report double-counted nested stages (was §2.0)
 
-`split_stages()` in `lux_pipeline/process/timing.py`, used by `PhaseTimer.summary()`,
+`split_stages()` in `lux_pipeline/process/utils/timing.py`, used by `PhaseTimer.summary()`,
 `.report()`, `.finish()` and by `timing-report.py`.
 
 `timing.stage("acquire.map")` runs inside `timer.stage("acquire")`, so summing

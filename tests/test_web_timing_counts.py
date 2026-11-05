@@ -15,8 +15,8 @@ import pytest
 pytest.importorskip("fastapi")
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lux_pipeline.process import timing_report as tr
-from lux_pipeline.process.timing import PhaseTimer
+from lux_pipeline.process.utils import timing_report as tr
+from lux_pipeline.process.utils.timing import PhaseTimer
 from lux_pipeline.storage import pg_tune
 from web_client import make_client
 from webui_fixtures import make_configs, seed_records

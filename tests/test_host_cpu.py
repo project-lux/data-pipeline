@@ -1,5 +1,5 @@
 """Postgres's and the machine's cpu beside the workers' own: the counters
-(`lux_pipeline.process.host_cpu`) from a fake /proc and from a stub psutil,
+(`lux_pipeline.process.utils.host_cpu`) from a fake /proc and from a stub psutil,
 the difference between two readings, PhaseTimer recording them, and the
 report taking a phase's earliest and latest readings rather than adding
 slices up."""
@@ -16,8 +16,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lux_pipeline.cli import entry
-from lux_pipeline.process import host_cpu, timing_report
-from lux_pipeline.process.timing import PhaseTimer
+from lux_pipeline.process.utils import host_cpu, timing_report
+from lux_pipeline.process.utils.timing import PhaseTimer
 
 TICKS = 100
 

@@ -26,7 +26,7 @@ from lux_pipeline.process.merge_batch import MERGE_BATCH, prefetched
 from lux_pipeline.process.merger import MergeHandler
 from lux_pipeline.process.reference_manager import ReferenceManager
 from lux_pipeline.process.reidentifier import Reidentifier
-from lux_pipeline.process.timing import PhaseTimer
+from lux_pipeline.process.utils.timing import PhaseTimer
 from lux_pipeline.progress import null_progress
 from lux_pipeline.storage.cache.postgres import PoolManager
 
