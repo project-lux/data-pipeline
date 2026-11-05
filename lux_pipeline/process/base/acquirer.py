@@ -2,7 +2,7 @@ import logging
 import os
 import traceback
 
-from lux_pipeline.process import timing
+from lux_pipeline.process.utils import timing
 
 logger = logging.getLogger("lux_pipeline")
 

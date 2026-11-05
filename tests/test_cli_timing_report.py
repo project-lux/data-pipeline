@@ -19,8 +19,8 @@ sys.path.insert(0, str(ROOT))
 from lux_pipeline import runtime
 from lux_pipeline.cli import _timing_view, entry
 from lux_pipeline.cli.help import list_commands
-from lux_pipeline.process import timing_report
-from lux_pipeline.process.timing import PhaseTimer
+from lux_pipeline.process.utils import timing_report
+from lux_pipeline.process.utils.timing import PhaseTimer
 
 
 def write_timing(d, phase, slice_n, records, seconds, cpu, stages, complete=True, marks=None,
@@ -293,7 +293,7 @@ def test_bar_is_clamped():
 
 def test_the_view_shares_the_numbers_with_the_text(tmp_path):
     """Both renderers read the same helpers: the straggler and overrun
-    figures are computed once, in lux_pipeline.process.timing_report."""
+    figures are computed once, in lux_pipeline.process.utils.timing_report."""
     merge_run(tmp_path, slow_seconds=7200)
     s = timing_report.summarise(timing_report.load(str(tmp_path))["merge"])
     sr = timing_report.slice_rates(s)

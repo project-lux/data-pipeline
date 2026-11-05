@@ -14,8 +14,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import pytest
 
 from lux_pipeline.cli._handler import add_profile_arg, enable_profiling
-from lux_pipeline.process import timing
-from lux_pipeline.process.timing import PhaseTimer, profiling_requested
+from lux_pipeline.process.utils import timing
+from lux_pipeline.process.utils.timing import PhaseTimer, profiling_requested
 
 
 def busy(n=2000):

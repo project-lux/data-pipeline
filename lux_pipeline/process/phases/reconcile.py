@@ -22,7 +22,7 @@ from lux_pipeline.process.identity_resolver import IdentityResolver
 from lux_pipeline.process.phases.merge import read_update_token
 from lux_pipeline.process.reconciler import Reconciler
 from lux_pipeline.process.reference_manager import ReferenceManager, references_path
-from lux_pipeline.process.timing import PhaseTimer
+from lux_pipeline.process.utils.timing import PhaseTimer
 from lux_pipeline.progress import null_progress
 from lux_pipeline.storage.cache.postgres import PoolManager
 

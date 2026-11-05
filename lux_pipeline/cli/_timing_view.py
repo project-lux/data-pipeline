@@ -1,6 +1,6 @@
 """Rich rendering of `lux timing-report`.
 
-The numbers come from `lux_pipeline.process.timing_report` (`directory_data`,
+The numbers come from `lux_pipeline.process.utils.timing_report` (`directory_data`,
 `compare_data`, `slice_rates`, `nested_overrun`), which also renders them as
 plain text for ``--no-ui`` and the root ``timing-report.py``; this only
 lays them out: a panel per phase with its summary, a stage table with a bar
@@ -20,7 +20,7 @@ from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
 
-from lux_pipeline.process.timing_report import (
+from lux_pipeline.process.utils.timing_report import (
     ESTIMATED_TIMES, METRIC_FORMATS, NO_PROFILES, PROFILE_TITLES, fmt_duration, fmt_time,
     nested_overrun, overall_summary, postgres_meanwhile, slice_rates, spread_note, stale_note)
 

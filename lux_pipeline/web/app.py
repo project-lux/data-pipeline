@@ -24,7 +24,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from lux_pipeline import runtime
-from lux_pipeline.process.timing_report import fmt_duration, fmt_time
+from lux_pipeline.process.utils.timing_report import fmt_duration, fmt_time
 
 from .security import (NO_CSP_PATHS, SECURITY_HEADERS, TOKEN_COOKIE, new_csrf_token, require_csrf,
                        require_token, safe_next, token_ok)

@@ -24,8 +24,8 @@ from collections import defaultdict
 # One definition of "a dotted name is nested inside its prefix", shared with
 # the timer that writes the JSON -- see split_stages' docstring for what
 # counting them twice did to the unattributed figure.
-from lux_pipeline.process import host_cpu
-from lux_pipeline.process.timing import split_stages
+from lux_pipeline.process.utils import host_cpu
+from lux_pipeline.process.utils.timing import split_stages
 
 logger = logging.getLogger("lux_pipeline")
 

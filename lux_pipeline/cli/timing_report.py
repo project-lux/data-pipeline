@@ -38,7 +38,7 @@ root ``timing-report.py`` does, for logs and diffs.
 """
 
 from lux_pipeline import runtime
-from lux_pipeline.process import timing_report
+from lux_pipeline.process.utils import timing_report
 
 from ._handler import BaseHandler
 
