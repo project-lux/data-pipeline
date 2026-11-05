@@ -136,6 +136,18 @@ class ConfigCache(FsCache):
     def where(self):
         return store_label(self.store_key)
 
+    def get(self, key, _key_type=None, raw=False):
+        """`FsCache.get`, but a file that is not JSON is a `ConfigError`
+        naming the file and where the JSON breaks: FsCache would hand it
+        back as ``{"data": <text>}``, which Config can only report as a
+        record with no type."""
+        text = self.read_text(key)
+        if text is not None:
+            broken = errors_only(text_problems(text))
+            if broken:
+                raise ConfigError(f"configuration record {key} ({self.path(key)}) is {broken[0]}")
+        return super().get(key, _key_type, raw)
+
     def schema_validators(self):
         """The catalogue's schema always; a store that names its own adds it."""
         own = super().schema_validators()
