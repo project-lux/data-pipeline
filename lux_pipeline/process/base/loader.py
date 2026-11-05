@@ -85,6 +85,7 @@ load manager which path a source takes.
 """
 
 import bz2
+import collections
 import gzip
 import inspect
 import io
@@ -127,6 +128,29 @@ COUNT_LINES_BELOW = 100_000_000
 OS_METADATA_DIRS = ("__MACOSX",)
 OS_METADATA_FILES = (".DS_Store", "Thumbs.db", "desktop.ini")
 UTF8_BOM = b"\xef\xbb\xbf"
+# the json step reads a file or member found in a container (a zip, tar or
+# directory) only when its name has one of these extensions, or none (after
+# a compression suffix): the .csv or README.txt beside the records in a zip
+# is not a record. A file an entry names itself is read whatever its name.
+JSON_EXTENSIONS = (".json", ".jsonl", ".jsonc", ".jsonld")
+NAME_COMPRESSIONS = (".gz", ".bz2", ".z")
+
+
+def name_extension(name):
+    """The extension of a file or member name, lower case with its dot,
+    after any compression suffix; "" when it has none. Only a letter
+    followed by up to five letters or digits counts, so ``1.2.3`` has
+    none."""
+    base = str(name).replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+    lower = base.lower()
+    for suffix in NAME_COMPRESSIONS:
+        if lower.endswith(suffix) and len(lower) > len(suffix):
+            lower = lower[: -len(suffix)]
+            break
+    stem, dot, ext = lower.rpartition(".")
+    if not dot or not stem or not ext[:1].isalpha() or len(ext) > 6 or not ext.isalnum():
+        return ""
+    return "." + ext
 
 
 def is_os_metadata(name):
@@ -236,6 +260,7 @@ class Loader(Sliced):
         self._ppj_takes_identifier = None
         self._identifier_rule = None   # the current entry's "identifier", parsed
         self.outside_namespace = 0     # records skipped: identifier outside the namespace
+        self.not_json_names = collections.Counter()   # extension -> files the json step skipped
         self.step_functions = {
             "dir": self.iterate_directory,
             "dirs": self.iterate_directories,
@@ -563,6 +588,11 @@ class Loader(Sliced):
         return {"identifier": ident, "data": data}
 
     def make_json(self, path, comp, parent):
+        # a file the entry names itself is JSON because the entry says so;
+        # what a container holds is read only when its name could be
+        if parent is not None and not self.json_name(path):
+            self.not_json_names[name_extension(self.member_name(path, parent))] += 1
+            return None
         ident = self.name_identifier(path)
         if isinstance(path, dict):
             data = path
@@ -591,6 +621,22 @@ class Loader(Sliced):
             if not ident:
                 raise ValueError(f"Could not get an identifier in {self.name} while in {parent}/{path}")
         return {"identifier": ident, "data": data}
+
+    json_extensions = JSON_EXTENSIONS
+
+    def json_name(self, path):
+        """Whether the json step reads `path`: anything without a name (a
+        line, a parsed item), and a named file or member whose name has
+        no extension or one of `json_extensions`. A subclass may widen
+        or narrow `json_extensions`."""
+        if isinstance(path, Pointer):
+            name = path.get_name()
+        elif isinstance(path, (str, os.PathLike)):
+            name = os.fspath(path)
+        else:
+            return True
+        ext = name_extension(name)
+        return not ext or ext in self.json_extensions
 
     def member_name(self, path, parent):
         """A record's file or archive member, for messages; a line or
@@ -1096,6 +1142,11 @@ class Loader(Sliced):
             for env in self._lmdb_envs.values():
                 env.close()
             self._lmdb_envs = {}
+        if self.not_json_names:
+            counts = ", ".join(f"{n} {ext}" for ext, n in sorted(self.not_json_names.items()))
+            logger.warning(f"{self.name}: skipped {sum(self.not_json_names.values())} file(s) "
+                           f"whose names are not JSON ({counts}); the json step reads names "
+                           f"ending {', '.join(self.json_extensions)} or with no extension")
         if self.outside_namespace:
             logger.warning(f"{self.name}: {self.outside_namespace} record(s) skipped: their "
                            f"identifier is not under the namespace {self.config.get('namespace')!r}")

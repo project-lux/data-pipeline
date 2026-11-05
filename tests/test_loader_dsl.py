@@ -863,3 +863,57 @@ def test_a_member_that_is_not_json_is_named(tmp_path, caplog):
             load(z, "zip/json")
     assert ("test: objects/b.json (22 bytes) is not JSON: Expected object or value; "
             "it starts b'<html>not found</html>'") in caplog.text
+
+
+def test_the_json_step_reads_only_names_that_could_be_json(tmp_path, caplog):
+    import zipfile
+    z = tmp_path / "mixed.zip"
+    with zipfile.ZipFile(z, "w") as zh:
+        zh.writestr("objects/a.json", json.dumps({"id": "a"}))
+        zh.writestr("objects/b.JSONL", json.dumps({"id": "b"}))
+        zh.writestr("objects/c.jsonld.gz", json.dumps({"id": "c"}))     # name only: stored plain
+        zh.writestr("objects/1.2.3", json.dumps({"id": "d"}))           # no extension: read
+        zh.writestr("objects/index.csv", "id\na\n")
+        zh.writestr("README.txt", "Peabody export")
+        zh.writestr("notes.txt", "more")
+    with caplog.at_level("WARNING", logger="lux_pipeline"):
+        ldr, _ = load(z, "zip/json")
+    assert sorted(ldr.out_cache) == ["1", "a", "b", "c"]
+    assert ldr.not_json_names == {".csv": 1, ".txt": 2}
+    assert "skipped 3 file(s) whose names are not JSON (1 .csv, 2 .txt)" in caplog.text
+
+
+def test_a_file_the_entry_names_is_read_whatever_its_name(tmp_path):
+    f = tmp_path / "dump.data"
+    f.write_text(json.dumps({"id": "x"}))
+    ldr, _ = load(f, "json")
+    assert ldr.out_cache == {"dump": {"id": "x"}}      # keyed by its name, as any file is
+
+
+class OnlyJson(Loader):
+    json_extensions = (".json",)
+
+
+def test_a_loader_may_narrow_the_extensions(tmp_path):
+    d = tmp_path / "recs"
+    d.mkdir()
+    (d / "a.json").write_text(json.dumps({"id": "a"}))
+    (d / "b.jsonld").write_text(json.dumps({"id": "b"}))
+    ldr, _ = load(d, "dir/json", cls=OnlyJson)
+    assert list(ldr.out_cache) == ["a"] and ldr.not_json_names == {".jsonld": 1}
+
+
+def test_a_directory_of_records_skips_the_manifest(tmp_path, caplog):
+    d = tmp_path / "recs"
+    (d / "sub").mkdir(parents=True)
+    (d / "a.json").write_text(json.dumps({"id": "a"}))
+    (d / "manifest.csv").write_text("id\na\nb\n")
+    (d / "sub" / "b.json").write_text(json.dumps({"id": "b"}))
+    (d / "sub" / "checksums.md5").write_text("...")
+    ldr, _ = load(d, "dir/json")
+    assert list(ldr.out_cache) == ["a"] and ldr.not_json_names == {".csv": 1}
+    with caplog.at_level("WARNING", logger="lux_pipeline"):
+        ldr, _ = load(d, "dirs/json")
+    assert sorted(ldr.out_cache) == ["a", "b"]
+    assert ldr.not_json_names == {".csv": 1, ".md5": 1}
+    assert "skipped 2 file(s) whose names are not JSON (1 .csv, 1 .md5)" in caplog.text
