@@ -3,7 +3,7 @@
 A catalogue for people and forms: each key's type, what reads it, and the
 default a missing class key falls back to. It describes; it never
 forbids. A key not listed here is legal (a source's mapper may read keys
-only it knows), and `lux_pipeline.config_store.ConfigStore.validate` only
+only it knows), and `lux_pipeline.config_store.ConfigCache.validate` only
 checks the type of a key that is listed.
 
 Written from the configurations in use (the build machine's copies and
@@ -310,7 +310,7 @@ TEMPLATES = {
 def template(record_type, name):
     """A starting point for a new record: its name and type and the keys
     the record must have, empty where only a person can fill them in
-    (`ConfigStore.validate` says which). ValueError for base and
+    (`ConfigCache.validate` says which). ValueError for base and
     system (one per installation) and unknown types."""
     if record_type not in TEMPLATES:
         raise ValueError(f"no template for a {record_type!r} record")

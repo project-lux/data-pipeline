@@ -3,8 +3,6 @@ import re
 import logging
 import importlib
 import multiprocessing
-from . import config_schema
-from .storage.cache.filesystem import FsCache
 from .storage.uricache import URICache, _MISSING
 
 
@@ -208,10 +206,12 @@ def store_name_problem(name, what="name"):
     return None
 
 
-# How the caches holding configuration records write them (with the schema
-# generated from config_schema): normalized JSON, so a diff in git shows
-# just what changed. A "config" record may set its own.
-CONFIG_STORE_SETTINGS = {"json_format": "normalized"}
+# The class a configuration directory or sub-config store is read with
+# (lux_pipeline.config_store.ConfigCache: an FsCache writing normalized JSON
+# checked against the catalogue's schema). A "config" record naming plain
+# FsCache, or no class, gets it.
+CONFIG_CACHE_CLASS = "lux_pipeline.config_store.ConfigCache"
+PLAIN_FS_CACHES = ("storage.cache.filesystem.FsCache", "lux_pipeline.storage.cache.filesystem.FsCache")
 
 
 class Config(object):
@@ -236,7 +236,7 @@ class Config(object):
         # main directory, in key order; see load_subconfig_store()
         self.subconfig_stores = {}
         # the order they were read in: a later store's record replaces an
-        # earlier one with the same key (ConfigStore.locations)
+        # earlier one with the same key (config_store.locations)
         self.subconfig_order = []
         # {record key: {"store": None | sub-config store key, "path": file or
         # None}}: where each record was read from, so it can be written back
@@ -266,13 +266,13 @@ class Config(object):
                 basepath = os.path.dirname(__file__)
             bootstrap = {
                 "name": "config",
-                "datacacheClass": "storage.cache.filesystem.FsCache",
+                "datacacheClass": CONFIG_CACHE_CLASS,
                 "base_dir": basepath,
                 "tabletype": "cache",
-                **CONFIG_STORE_SETTINGS,
+                "all_configs": self,
             }
-            bootstrap["json_schema"] = config_schema.json_schema()
-            configcache = FsCache(bootstrap)
+            from .config_store import ConfigCache
+            configcache = ConfigCache(bootstrap)
         self.configcache = configcache
         # The directory the configuration was read from: what a sub-config
         # store's relative base_dir resolves against
@@ -661,24 +661,14 @@ class Config(object):
         cfg["store"] = clso(tmp_cfg)
         return cfg
 
-    @property
-    def config_store(self):
-        """The `lux_pipeline.config_store.ConfigStore` over this
-        configuration's records: read, check and write them in the stores
-        they came from."""
-        store = self.__dict__.get("_config_store")
-        if store is None:
-            from .config_store import ConfigStore
-            store = self.__dict__["_config_store"] = ConfigStore(self)
-        return store
-
     def instantiate_config(self, key):
         """Build the cache behind sub-config store `key` as its
         ``datacache``. The store's ``base_dir``, when relative, is taken
         from the directory this configuration was read from
         (``config_dir``), so a checkout can point at a sibling directory
         with ``"base_dir": "../subs"``; an absolute one is left alone. The
-        store class defaults to `FsCache` with ``tabletype`` ``cache``, so
+        store class defaults to `ConfigCache` (an `FsCache`; a record naming
+        plain FsCache gets it too) with ``tabletype`` ``cache``, so
         ``{"name": "sources", "base_dir": "../subs"}`` reads
         ``../subs/sources_cache/*.json``. A directory that does not exist
         is an error (FsCache would otherwise create an empty one)."""
@@ -699,15 +689,18 @@ class Config(object):
             if not os.path.isdir(directory):
                 raise ValueError(f"Sub-config store {key} points at a directory that "
                                  f"does not exist: {directory}")
-        cls = importObject(cfg.get("datacacheClass") or "storage.cache.filesystem.FsCache")
+        cls_name = cfg.get("datacacheClass")
+        if not cls_name or cls_name in PLAIN_FS_CACHES:
+            from .config_store import ConfigCache as cls
+        else:
+            cls = importObject(cls_name)
         tmp_cfg = self.merge_configs(cfg, self.defaults["cache"])
-        # configuration files are written normalized and checked against
-        # the catalogue's schema, unless the store record says otherwise
-        for k, v in CONFIG_STORE_SETTINGS.items():
+        # how the records are written and checked is the store's to say,
+        # not the data caches' defaults
+        for k in ("json_format", "json_schema"):
             if k not in cfg:
-                tmp_cfg[k] = v
-        if "json_schema" not in cfg:
-            tmp_cfg["json_schema"] = config_schema.json_schema()
+                tmp_cfg.pop(k, None)
+        tmp_cfg["store_key"] = key
         cfg["datacache"] = cls(tmp_cfg)
         return cfg
 

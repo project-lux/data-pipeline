@@ -93,8 +93,8 @@ def test_testinstall_fails_on_it(tmp_path, monkeypatch):
 def test_the_validator_refuses_it_before_writing(tmp_path):
     cfgs = make_configs(tmp_path)
     rec = dict(json.loads((Path(tmp_path) / "config_cache" / "aat.json").read_text()))
-    problems = cfgs.config_store.validate("aat", {**rec, "name": "a-at"})
+    problems = config_store.find(cfgs, "aat").validate("aat", {**rec, "name": "a-at"})
     assert any("'a-at' cannot name a Postgres table" in p for p in problems)
-    assert not [p for p in cfgs.config_store.validate("aat", rec) if "Postgres" in p]
-    new = cfgs.config_store.validate("my-src", {**rec, "name": "my-src"}, new=True)
+    assert not [p for p in config_store.find(cfgs, "aat").validate("aat", rec) if "Postgres" in p]
+    new = config_store.store_cache(cfgs).validate("my-src", {**rec, "name": "my-src"}, new=True)
     assert any("'my-src' cannot name a Postgres table" in p for p in new)

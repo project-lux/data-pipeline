@@ -1,36 +1,41 @@
-"""Read, check and write configuration records in the stores they came from.
+"""Configuration records, read, checked and written in the stores they came from.
 
 `Config` reads its records from caches: the configuration directory
 (``Config.configcache``) and then each sub-config store (a ``"config"``
 record), a later store's record replacing an earlier one with the same key;
-``Config.record_origins`` remembers where each came from. A `ConfigStore`
-(``cfgs.config_store``) works on those same caches:
+``Config.record_origins`` remembers where each came from. Each of those
+caches is a `ConfigCache`: an `FsCache`, which already reads, checks and
+writes JSON records as files (`FsCache.read`, `validate`, `check`, `diff`,
+`write`, `write_text`, `create`, `delete`), with the configuration's own
+checks added. The functions here find the cache a record is in:
 
-    store = cfgs.config_store
-    store.read("aat")                         # the stored JSON, not the live dict
-    store.validate("aat", data)               # problems; "warning: ..." ones do not block
-    store.diff("aat", data)                   # what write() would change, as a diff
-    store.write("aat", data)                  # -> (path, warnings)
-    store.write_text("aat", text)             # an editor's text, once it parses and validates
-    store.create("wd2", data, store="sources")
-    store.delete("wd2")
-    store.locations("aat")                    # every store holding "aat", the winner last
+    from lux_pipeline import config_store as store
+    cache = store.find(cfgs, "aat")           # the store the record Config uses is in
+    cache.read("aat")                         # the file's JSON, not the live dict
+    cache.validate("aat", data)               # problems; "warning: ..." ones do not block
+    cache.diff("aat", data)                   # what write() would change, as a diff
+    cache.write("aat", data)                  # -> (path, warnings)
+    cache.write_text("aat", text)             # an editor's text, once it parses and validates
+    store.store_cache(cfgs, "sources").create("wd2", data)
+    cache.delete("aat")
+    store.locations(cfgs, "aat")              # every store holding "aat", the winner last
+    store.records(cfgs)                       # every record: key, type, name, store, file
 
 **Never the live dict.** ``cfgs.external["aat"]`` holds resolved absolute
-paths, built components and ``all_configs``; the store holds what a person
-wrote. Everything here reads and writes the store.
+paths, built components and ``all_configs``; the file holds what a person
+wrote. Everything here reads and writes the file.
 
-**Normalized files.** The caches write records as their ``json_format``
-says; configuration stores default to ``normalized`` (2-space indent, "/"
-and non-ASCII as written), so a record written here is laid out like every
-other and a diff in git shows what changed. A hand-formatted file is
-reformatted the first time it is written.
+**Normalized files.** A `ConfigCache` writes ``json_format`` ``normalized``
+(2-space indent, "/" and non-ASCII as written) unless its store record
+says otherwise, so a record written here is laid out like every other and
+a diff in git shows what changed. A hand-formatted file is reformatted the
+first time it is written.
 
-**Checked twice.** Each configuration cache carries a JSON Schema generated
-from `lux_pipeline.config_schema` (``json_schema``; a store record may name
-its own) and logs what a record written to it breaks. `validate` phrases
-those problems for people and adds what a schema cannot say: classes that
-import, a source named as its key, map names unique, indexes that resolve.
+**Checked.** Each `ConfigCache` checks against the JSON Schema generated
+from `lux_pipeline.config_schema` (a store record may add its own with
+``json_schema``), worded from the catalogue (`schema_problem`), then what a
+schema cannot say: classes that import, a source named as its key, map
+names unique, indexes that resolve.
 
 **Reload after writing.** Nothing here changes `cfgs`' records: a process
 that goes on using the configuration must build it again
@@ -43,11 +48,12 @@ import copy
 import difflib
 import importlib
 import json
-import os
 import re
 
 from lux_pipeline import config as _config
 from lux_pipeline import config_schema as schema
+from lux_pipeline.storage.cache.filesystem import (FsCache, RecordError, errors_only,  # noqa: F401
+                                                   text_problems, warnings_only)
 
 KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 # path_types may name these even when base does not set them: Config gives
@@ -55,22 +61,9 @@ KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 DEFAULTED_DIRS = ("temp_dir", "indexes_dir", "nt_dir", "distribution_dir", "backup_dir")
 
 
-class ConfigError(ValueError):
-    """A record that cannot be read or written; `problems` lists why."""
-
-    def __init__(self, message, problems=()):
-        self.problems = list(problems)
-        if self.problems:
-            message = message + ": " + "; ".join(self.problems)
-        super().__init__(message)
-
-
-def errors_only(problems):
-    return [p for p in problems if not p.startswith("warning:")]
-
-
-def warnings_only(problems):
-    return [p for p in problems if p.startswith("warning:")]
+class ConfigError(RecordError):
+    """A configuration record that cannot be read or written; `problems`
+    lists why."""
 
 
 def resolve_class(path):
@@ -109,28 +102,6 @@ def resolve_class(path):
     return None, last or f"cannot import {path}", legacy
 
 
-def text_problems(text):
-    """Problems a record's text has that its data cannot show: not JSON,
-    or a key written twice in one object (JSON keeps the last value, so the
-    first is silently ignored; a warning)."""
-    twice = []
-
-    def pairs(items):
-        seen = set()
-        for k, _ in items:
-            if k in seen:
-                twice.append(k)
-            seen.add(k)
-        return dict(items)
-
-    try:
-        json.loads(text, object_pairs_hook=pairs)
-    except ValueError as e:
-        return [f"not JSON: {e}"]
-    return [f"warning: {k} appears twice in the file; only the last value counts"
-            for k in dict.fromkeys(twice)]
-
-
 def schema_problem(error, data):
     """A jsonschema error from the catalogue's schema as sentences."""
     keys = schema.keys_for(data)
@@ -166,147 +137,60 @@ def catalogue_validator():
     return _catalogue_validator
 
 
-class ConfigStore:
-    """The configuration records of `cfgs`, in the caches they came from."""
+class ConfigCache(FsCache):
+    """A directory of configuration records: the configuration directory
+    (``Config.configcache``) or a sub-config store. An `FsCache` (which
+    reads, checks and writes JSON records as files) that writes normalized
+    JSON and checks against the catalogue's JSON Schema by default
+    (``json_format`` / ``json_schema`` in its configuration override
+    either), words schema errors from the catalogue, and adds the checks
+    that need the configuration: classes that import, a source named as its
+    key, unique map names, indexes that resolve, a new key free in every
+    store, a record that shadows one in an earlier store.
 
-    def __init__(self, cfgs):
-        self.cfgs = cfgs
+    ``all_configs`` in its configuration is the `Config` it belongs to;
+    ``store_key`` is the sub-config store's key (None: the configuration
+    directory)."""
 
-    # --- the stores, and finding a record in them ----------------------------------------
+    error_class = ConfigError
 
-    def cache(self, store=None):
-        """The cache of sub-config store `store`, or of the configuration
-        directory (None)."""
-        if store is None:
-            cache = getattr(self.cfgs, "configcache", None)
-            if cache is None:
-                raise ConfigError("the configuration has no store of its own")
-            return cache
-        if store not in self.cfgs.subconfig_stores:
-            raise ConfigError(f"no sub-config store {store!r} "
-                              f"(stores: {', '.join(self.cfgs.subconfig_stores) or 'none'})")
-        try:
-            return self.cfgs.instantiate_config(store)["datacache"]
-        except ValueError as e:
-            raise ConfigError(f"sub-config store {store!r}: {e}") from None
+    def __init__(self, config):
+        config = dict(config)
+        config.setdefault("json_format", "normalized")
+        if "json_schema" not in config:
+            config["json_schema"] = schema.json_schema()
+        super().__init__(config)
+        self.configs = config.get("all_configs")
+        self.store_key = config.get("store_key")
 
-    def stores(self):
-        """None (the configuration directory), then every sub-config store,
-        in the order Config reads them: a later one's record replaces an
-        earlier one's with the same key."""
-        order = list(getattr(self.cfgs, "subconfig_order", []))
-        return [None] + order + [k for k in sorted(self.cfgs.subconfig_stores) if k not in order]
+    @property
+    def where(self):
+        return store_label(self.store_key)
 
-    @staticmethod
-    def where(store):
-        return f"store {store}" if store else "the configuration directory"
+    def schema_validators(self):
+        """The catalogue's schema always; a store that names its own adds it."""
+        own = super().schema_validators()
+        return [catalogue_validator()] + [v for v in own if v.schema is not schema.json_schema()]
 
-    def locations(self, key):
-        """Every store holding a record `key`, in reading order: the last
-        is the one Config uses, any before it are replaced by it."""
-        out = []
-        for store in self.stores():
-            try:
-                cache = self.cache(store)
-            except ConfigError:
-                continue
-            if key in cache:
-                out.append(store)
-        return out
+    def describe_error(self, error, data):
+        return schema_problem(error, data)
 
-    def unknown(self, key):
-        near = difflib.get_close_matches(key, list(self.cfgs.record_origins), n=3)
-        hint = f" (did you mean {', '.join(near)}?)" if near else ""
-        return ConfigError(f"no configuration record {key!r}{hint}")
+    def validate(self, key, data, *, new=False):
+        """Problems with writing `data` as record `key` here (a new record
+        when `new`), as sentences; ``[]`` when there are none. One starting
+        ``warning:`` does not stop a write.
 
-    def find(self, key):
-        """The store record `key` was read from (None: the configuration
-        directory). ConfigError for a key Config did not read."""
-        origin = self.cfgs.record_origins.get(key)
-        if origin is None:
-            raise self.unknown(key)
-        return origin.get("store")
-
-    def path(self, key):
-        """The file record `key` is kept in."""
-        store = self.find(key)
-        path_of = getattr(self.cache(store), "path", None)
-        if path_of is None:
-            raise ConfigError(f"record {key!r} is not in a file ({self.where(store)})")
-        return os.path.abspath(path_of(key))
-
-    # --- reading ---------------------------------------------------------------------------
-
-    def text(self, key):
-        """Record `key` as stored: its file's text, or for a store that is
-        not a directory of files the record as that store would write it."""
-        cache = self.cache(self.find(key))
-        read_text = getattr(cache, "read_text", None)
-        if read_text is not None:
-            text = read_text(key)
-        else:
-            row = cache.get(key)
-            text = None if row is None else self._dumps(cache, row["data"])
-        if text is None:
-            raise ConfigError(f"record {key!r} is no longer in {self.where(self.find(key))}")
-        return text
-
-    def read(self, key):
-        """Record `key` as stored (a fresh dict, not the live one)."""
-        try:
-            return json.loads(self.text(key))
-        except ValueError as e:
-            raise ConfigError(f"record {key!r} is not JSON: {e}") from None
-
-    def records(self):
-        """``[{"key", "type", "name", "store", "path", "error"}]`` for every
-        record, in the order Config read them (a later one with the same
-        key replaced an earlier one, and only it is listed)."""
-        out = []
-        for key, origin in self.cfgs.record_origins.items():
-            row = {"key": key, "type": None, "name": None, "store": origin.get("store"),
-                   "path": origin.get("path"), "error": None}
-            try:
-                data = self.read(key)
-                row["type"], row["name"] = data.get("type"), data.get("name")
-            except (OSError, ConfigError) as e:
-                row["error"] = str(e)
-            out.append(row)
-        return out
-
-    def dumps(self, data, store=None):
-        """`data` as `store` writes it."""
-        return self._dumps(self.cache(store), data)
-
-    @staticmethod
-    def _dumps(cache, data):
-        dumps = getattr(cache, "dumps", None)
-        return dumps(data) if dumps else json.dumps(data, indent=2, ensure_ascii=False) + "\n"
-
-    # --- checking --------------------------------------------------------------------------
-
-    def _same_name(self, key, data):
-        """Other records of the same type with the same name (maps and
-        MarkLogic stores are looked up by name, not key)."""
-        return [row["key"] for row in self.records()
-                if row["key"] != key and row["type"] == data.get("type")
-                and row["name"] == data.get("name")]
-
-    def validate(self, key, data, *, new=False, store=None):
-        """Problems with writing `data` as record `key` (a new one in
-        `store` when `new`), as sentences; ``[]`` when there are none. One
-        starting ``warning:`` does not stop a write.
-
-        The catalogue's JSON Schema checks the record's type, the keys its
-        type needs, filled in, and the type of every key it knows; a store
-        that names a schema of its own (``json_schema``) adds that. Then: ``name`` equal to the key
-        for a source (the caches are named after it) and unique among its
-        type's records for a map or a MarkLogic store (they are looked up
-        by name); every ``*Class`` value importable, with a warning for a
-        pre-rename path; ``indexes`` resolving; for base / system, the
-        directories ``path_types`` names and a positive ``max_workers``; for
-        a new record, a key free in every store. A key the catalogue does
-        not know is never a problem."""
+        The schemas (`schema_validators`) check the record's type, the keys
+        its type needs, filled in, and the type of every key the catalogue
+        knows. Then:
+        ``name`` equal to the key for a source (the caches are named after
+        it) and unique among its type's records for a map or a MarkLogic
+        store (they are looked up by name); every ``*Class`` value
+        importable, with a warning for a pre-rename path; ``indexes``
+        resolving; for base / system, the directories ``path_types`` names
+        and a positive ``max_workers``; for a new record, a key free in
+        every store. A key the catalogue does not know is never a
+        problem."""
         problems = []
         if not KEY_RE.match(key or ""):
             problems.append(f"{key!r} is not a usable record key (letters, digits, _ . -)")
@@ -316,22 +200,9 @@ class ConfigStore:
         if typ not in schema.RECORD_TYPES:
             return problems + [f"type {typ!r} is not one of {', '.join(schema.RECORD_TYPES)}"]
 
-        # the catalogue's schema always; a store that names a schema of its
-        # own adds it
-        validators = [catalogue_validator()]
-        if not new and key in self.cfgs.record_origins:
-            store = self.cfgs.record_origins[key].get("store")
-        try:
-            cache = self.cache(store)
-            own = cache.schema_validator() if hasattr(cache, "schema_validator") else None
-        except (ConfigError, ValueError) as e:
-            problems.append(f"the store's schema: {e}")
-            own = None
-        if own is not None and own.schema is not schema.json_schema():
-            validators.append(own)
-        for validator in validators:
-            for error in sorted(validator.iter_errors(data), key=lambda e: [str(p) for p in e.path]):
-                problems.extend(p for p in schema_problem(error, data) if p not in problems)
+        # the schemas (FsCache.validate: the catalogue's and the store's
+        # own); whether a new key is free is decided across every store below
+        problems.extend(p for p in super().validate(key, data) if p not in problems)
 
         if typ in schema.SOURCE_TYPES and data.get("name") != key:
             problems.append(f"name is {data.get('name')!r}: a source's name must be its key {key!r}")
@@ -343,8 +214,9 @@ class ConfigStore:
             if typ == "map" and "tableName" in data:
                 found.append(_config.store_name_problem(data["tableName"], "tableName"))
             problems.extend(p for p in found if p)
-        if typ in ("map", "marklogic", "config") and data.get("name"):
-            clash = self._same_name(key, data)
+        if typ in ("map", "marklogic", "config") and data.get("name") and self.configs is not None:
+            clash = [row["key"] for row in records(self.configs)
+                     if row["key"] != key and row["type"] == typ and row["name"] == data["name"]]
             if clash:
                 problems.append(f"name {data['name']!r} is also the name of {', '.join(clash)}")
 
@@ -362,9 +234,9 @@ class ConfigStore:
                 elif modern:
                     problems.append(f"warning: {k} uses the old path {value}; write {modern}")
 
-        if isinstance(data.get("indexes"), dict):
+        if isinstance(data.get("indexes"), dict) and self.configs is not None:
             try:
-                self.cfgs.resolve_indexes(copy.deepcopy(data))
+                self.configs.resolve_indexes(copy.deepcopy(data))
             except Exception as e:
                 problems.append(f"indexes: {type(e).__name__}: {e}")
 
@@ -378,91 +250,111 @@ class ConfigStore:
                     problems.append(f"path_types maps {pkey} to {dir_key}, which this record "
                                     f"does not set")
 
-        if new and key in self.cfgs.record_origins:
-            problems.append(f"record {key!r} already exists in "
-                            f"{self.where(self.cfgs.record_origins[key].get('store'))}")
+        if new:
+            origins = self.configs.record_origins if self.configs is not None else {}
+            if key in origins:
+                problems.append(f"record {key!r} already exists in "
+                                f"{store_label(origins[key].get('store'))}")
+            elif key in self:
+                problems.append(f"record {key!r} already exists in {self.where}")
         return problems
 
     def check(self, key):
-        """Every problem with record `key` as it is stored: its text
-        (`text_problems`), its data (`validate`), and a warning when it
-        replaces a record of the same key in an earlier store."""
-        try:
-            text = self.text(key)
-        except OSError as e:
-            return [f"cannot read record {key!r}: {e}"]
-        problems = text_problems(text)
-        if problems and not problems[0].startswith("warning:"):
+        """`FsCache.check`, and a warning when the record replaces one of
+        the same key in an earlier store."""
+        problems = super().check(key)
+        if errors_only(problems) or self.configs is None:
             return problems
-        problems += self.validate(key, json.loads(text))
-        stores = self.locations(key)
+        stores = locations(self.configs, key)
         if len(stores) > 1:
-            replaced = ", ".join(self.where(s) for s in stores[:-1])
-            problems.append(f"warning: {key} in {self.where(stores[-1])} replaces the record "
-                            f"of the same key in {replaced}")
+            replaced = ", ".join(store_label(s) for s in stores[:-1])
+            problems.append(f"warning: {key} in {store_label(stores[-1])} replaces the "
+                            f"record of the same key in {replaced}")
         return problems
 
-    # --- writing ---------------------------------------------------------------------------
 
-    def _check(self, key, data, new=False, store=None):
-        problems = self.validate(key, data, new=new, store=store)
-        errors = errors_only(problems)
-        if errors:
-            raise ConfigError(f"not writing {key}", errors)
-        return warnings_only(problems)
+# --- the stores of a configuration, and finding a record in them -----------------------------
 
-    def _location(self, cache, key):
-        path_of = getattr(cache, "path", None)
-        return os.path.abspath(path_of(key)) if path_of else None
 
-    def diff(self, key, data):
-        """What `write` would change, as a unified diff (empty when nothing
-        would)."""
-        name = self.path(key) if self._location(self.cache(self.find(key)), key) else key
-        old = self.text(key)
-        new = self.dumps(data, self.find(key))
-        return "".join(difflib.unified_diff(old.splitlines(True), new.splitlines(True),
-                                            fromfile=name, tofile=name))
+def store_label(store):
+    return f"store {store}" if store else "the configuration directory"
 
-    def write(self, key, data):
-        """Write `data` as record `key` in the store it came from, as that
-        store writes JSON. ConfigError listing the problems if it does not
-        validate; nothing is written when the stored text would not change.
-        Returns ``(path, warnings)`` (path None for a store that is not a
-        directory of files)."""
-        warnings = self._check(key, data)
-        cache = self.cache(self.find(key))
-        if self._dumps(cache, data) != self.text(key):
-            cache.set(data, identifier=key)
-        return self._location(cache, key), warnings
 
-    def write_text(self, key, text):
-        """Write an editor's `text` as record `key`, once it parses and
-        validates; stored as the store writes JSON. Returns ``(path,
-        warnings)``, a key the text has twice among the warnings."""
-        problems = text_problems(text)
-        if errors_only(problems):
-            raise ConfigError(f"not writing {key}: {problems[0]}")
-        path, warnings = self.write(key, json.loads(text))
-        return path, problems + warnings
+def stores(cfgs):
+    """None (the configuration directory), then every sub-config store, in
+    the order Config reads them: a later one's record replaces an earlier
+    one's with the same key."""
+    order = list(getattr(cfgs, "subconfig_order", []))
+    return [None] + order + [k for k in sorted(cfgs.subconfig_stores) if k not in order]
 
-    def create(self, key, data, store=None):
-        """Create record `key` in the configuration directory or sub-config
-        store `store`. Returns ``(path, warnings)``."""
-        warnings = self._check(key, data, new=True, store=store)
-        cache = self.cache(store)
+
+def store_cache(cfgs, store=None):
+    """The `ConfigCache` of sub-config store `store`, or of the
+    configuration directory (None). ConfigError when there is no such
+    store, or its class is not a ConfigCache (it can be read, not
+    written here)."""
+    if store is None:
+        cache = getattr(cfgs, "configcache", None)
+        if cache is None:
+            raise ConfigError("the configuration has no store of its own")
+    else:
+        if store not in cfgs.subconfig_stores:
+            raise ConfigError(f"no sub-config store {store!r} "
+                              f"(stores: {', '.join(cfgs.subconfig_stores) or 'none'})")
+        try:
+            cache = cfgs.instantiate_config(store)["datacache"]
+        except ValueError as e:
+            raise ConfigError(f"sub-config store {store!r}: {e}") from None
+    if not isinstance(cache, ConfigCache):
+        raise ConfigError(f"{store_label(store)} is a {type(cache).__name__}, not a ConfigCache: "
+                          f"its records cannot be checked or written here")
+    return cache
+
+
+def locations(cfgs, key):
+    """Every store holding a record `key`, in reading order: the last is
+    the one Config uses, any before it are replaced by it."""
+    out = []
+    for store in stores(cfgs):
+        try:
+            cache = store_cache(cfgs, store)
+        except ConfigError:
+            continue
         if key in cache:
-            where = self._location(cache, key) or self.where(store)
-            raise ConfigError(f"not writing {key}: {where} exists")
-        cache.set(data, identifier=key)
-        return self._location(cache, key), warnings
+            out.append(store)
+    return out
 
-    def delete(self, key):
-        """Delete record `key` from its store. Returns its path."""
-        cache = self.cache(self.find(key))
-        where = self._location(cache, key)
-        cache.delete(key)
-        return where
+
+def unknown(cfgs, key):
+    near = difflib.get_close_matches(key, list(cfgs.record_origins), n=3)
+    hint = f" (did you mean {', '.join(near)}?)" if near else ""
+    return ConfigError(f"no configuration record {key!r}{hint}")
+
+
+def find(cfgs, key):
+    """The `ConfigCache` holding the record `key` Config uses.
+    ConfigError for a key Config did not read."""
+    origin = cfgs.record_origins.get(key)
+    if origin is None:
+        raise unknown(cfgs, key)
+    return store_cache(cfgs, origin.get("store"))
+
+
+def records(cfgs):
+    """``[{"key", "type", "name", "store", "path", "error"}]`` for every
+    record, in the order Config read them (a later one with the same key
+    replaced an earlier one, and only it is listed)."""
+    out = []
+    for key, origin in cfgs.record_origins.items():
+        row = {"key": key, "type": None, "name": None, "store": origin.get("store"),
+               "path": origin.get("path"), "error": None}
+        try:
+            data = find(cfgs, key).read(key)
+            row["type"], row["name"] = data.get("type"), data.get("name")
+        except (OSError, ConfigError) as e:
+            row["error"] = str(e)
+        out.append(row)
+    return out
 
 
 # --- editing values ---------------------------------------------------------------------------

@@ -21,14 +21,18 @@ would make every backend appear to have it:
   back to a portable JSONL copy without them);
 * Postgres maintenance: ``optimize``, ``bloat``, ``bloat_line``,
   ``rewrite``, ``drop_time_index``;
-* ``get_like(prefix)``.
+* ``get_like(prefix)``;
+* `FsCache`'s operations on records as files (``text``, ``read``,
+  ``validate``, ``check``, ``diff``, ``write``, ``write_text``,
+  ``create``): what configuration, or any directory of JSON records
+  people maintain, needs.
 
 Optional on any backend: ``json_schema`` in the cache's configuration (a
 JSON Schema object, or the path of a schema file, relative to the cache's
 ``base_dir``). `record_problems` checks a record against it, and a
 backend's `set` may log what it finds (`FsCache` does); the record is
-written regardless. Configuration stores get the schema generated from
-`lux_pipeline.config_schema`.
+written regardless. Configuration stores (`config_store.ConfigCache`) get
+the schema generated from `lux_pipeline.config_schema`.
 """
 
 import datetime

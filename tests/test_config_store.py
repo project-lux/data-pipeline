@@ -1,5 +1,5 @@
 """Configuration records read, checked and written through the caches they
-came from (lux_pipeline.config_store.ConfigStore, ``cfgs.config_store``),
+came from (lux_pipeline.config_store: each a ConfigCache, an FsCache),
 written as normalized JSON and checked against the schema generated from
 the catalogue. Built on the W00 installation, with a sub-config store
 added; no database."""
@@ -60,15 +60,15 @@ def test_config_remembers_each_records_file_and_store(root, cfgs):
 
 
 def test_read_record_is_the_file_not_the_live_dict(root, cfgs):
-    data = cfgs.config_store.read("aat")
+    data = store.find(cfgs, "aat").read("aat")
     assert data == json.loads((root / "subs" / "sources_cache" / "aat.json").read_text())
     assert data is not cfgs.external["aat"] and "all_configs" not in data
     with pytest.raises(ConfigError, match="no configuration record 'aatt'.*did you mean aat"):
-        cfgs.config_store.read("aatt")
+        store.find(cfgs, "aatt").read("aatt")
 
 
 def test_all_records_lists_type_name_and_store(cfgs):
-    rows = {r["key"]: r for r in cfgs.config_store.records()}
+    rows = {r["key"]: r for r in store.records(cfgs)}
     assert (rows["aat"]["type"], rows["aat"]["name"], rows["aat"]["store"]) == ("external", "aat", "sources")
     assert (rows["map_idmap"]["type"], rows["map_idmap"]["name"]) == ("map", "idmap")
     assert rows["caches"]["store"] is None and rows["caches"]["error"] is None
@@ -79,13 +79,13 @@ def test_all_records_lists_type_name_and_store(cfgs):
 
 def test_the_installation_has_no_problems(cfgs):
     for key in cfgs.record_origins:
-        assert cfgs.config_store.check(key) == [], key
+        assert store.find(cfgs, key).check(key) == [], key
 
 
 def with_(cfgs, key, **changes):
-    data = cfgs.config_store.read(key)
+    data = store.find(cfgs, key).read(key)
     data.update(changes)
-    return cfgs.config_store.validate(key, data)
+    return store.find(cfgs, key).validate(key, data)
 
 
 @pytest.mark.parametrize("key,changes,expect", [
@@ -128,17 +128,19 @@ def test_globals_values_are_terms_even_one_called_class(cfgs):
 
 
 def test_default_records_and_new_keys(cfgs):
-    assert "a default record's name is one of" in cfgs.config_store.validate("default_x", {"type": "default", "name": "caches"})[0]
-    assert cfgs.config_store.validate("default_cache", {"type": "default", "name": "cache",
-                                                         "port": 5432}) == []
-    assert any("already exists in store sources" in p for p in cfgs.config_store.validate("aat", cfgs.config_store.read("aat"), new=True))
-    assert any("not a usable record key" in p for p in cfgs.config_store.validate("a/b", {"type": "globals"}))
+    here = store.store_cache(cfgs)
+    assert "a default record's name is one of" in here.validate(
+        "default_x", {"type": "default", "name": "caches"})[0]
+    assert here.validate("default_cache", {"type": "default", "name": "cache", "port": 5432}) == []
+    aat = store.find(cfgs, "aat").read("aat")
+    assert any("already exists in store sources" in p for p in here.validate("aat", aat, new=True))
+    assert any("not a usable record key" in p for p in here.validate("a/b", {"type": "globals"}))
 
 
 def test_a_key_written_twice_is_a_warning_from_the_file(root, cfgs):
     path = Path(cfgs.record_origins["globals"]["path"])
     path.write_text('{\n    "type": "globals",\n    "Subgenus": "Q3238261",\n    "Subgenus": "Q3238261"\n}\n')
-    assert cfgs.config_store.check("globals") == [
+    assert store.find(cfgs, "globals").check("globals") == [
         "warning: Subgenus appears twice in the file; only the last value counts"]
 
 
@@ -166,9 +168,9 @@ def normalized(data):
 def test_write_normalizes_the_file_and_config_sees_it(root, cfgs):
     path = Path(cfgs.record_origins["caches"]["path"])
     assert path.read_text().startswith('{\n    "name"')            # hand-formatted, 4-space
-    data = cfgs.config_store.read("caches")
+    data = store.find(cfgs, "caches").read("caches")
     data["port"] = 5433
-    assert cfgs.config_store.write("caches", data) == (str(path), [])
+    assert store.find(cfgs, "caches").write("caches", data) == (str(path), [])
     assert path.read_text() == normalized(data)
     assert sorted(p.name for p in path.parent.iterdir() if p.name.startswith("caches")) == ["caches.json"]
     assert Config(basepath=str(root)).caches["port"] == 5433
@@ -177,9 +179,9 @@ def test_write_normalizes_the_file_and_config_sees_it(root, cfgs):
 def test_a_store_record_keeps_its_slashes_and_is_one_line_changed(root, cfgs):
     path = Path(cfgs.record_origins["aat"]["path"])
     before = path.read_text()
-    data = cfgs.config_store.read("aat")
+    data = store.find(cfgs, "aat").read("aat")
     data["merge_order"] = 11
-    cfgs.config_store.write("aat", data)
+    store.find(cfgs, "aat").write("aat", data)
     after = path.read_text()
     assert "\\/" not in after and "http://vocab.getty.edu/aat/" in after
     assert changed_lines(before, after) == ['-  "merge_order": 10,', '+  "merge_order": 11,']
@@ -192,34 +194,34 @@ def changed_lines(a, b):
 
 
 def test_a_no_op_write_leaves_the_file_alone(cfgs):
-    data = cfgs.config_store.read("aat")
+    data = store.find(cfgs, "aat").read("aat")
     path = Path(cfgs.record_origins["aat"]["path"])
     os.utime(path, (1, 1))
-    cfgs.config_store.write("aat", data)
+    store.find(cfgs, "aat").write("aat", data)
     assert path.stat().st_mtime == 1
-    assert cfgs.config_store.diff("aat", data) == ""
+    assert store.find(cfgs, "aat").diff("aat", data) == ""
 
 
 def test_an_invalid_record_is_not_written(cfgs):
     path = Path(cfgs.record_origins["base"]["path"])
     before = path.read_text()
-    data = cfgs.config_store.read("base")
+    data = store.find(cfgs, "base").read("base")
     data["max_workers"] = "lots"
     with pytest.raises(ConfigError, match="not writing base: max_workers should be int") as e:
-        cfgs.config_store.write("base", data)
+        store.find(cfgs, "base").write("base", data)
     assert e.value.problems and path.read_text() == before
 
 
 def test_warnings_are_returned_and_do_not_block(cfgs):
-    data = cfgs.config_store.read("aat")
+    data = store.find(cfgs, "aat").read("aat")
     data["mapperClass"] = "pipeline.sources.authorities.getty.mapper.AatMapper"
-    path, warnings = cfgs.config_store.write("aat", data)
+    path, warnings = store.find(cfgs, "aat").write("aat", data)
     assert warnings and warnings[0].startswith("warning: mapperClass uses the old path")
 
 
 def test_diff_is_against_what_would_be_written(cfgs):
-    data = cfgs.config_store.read("caches")
-    diff = cfgs.config_store.diff("caches", data)
+    data = store.find(cfgs, "caches").read("caches")
+    diff = store.find(cfgs, "caches").diff("caches", data)
     path = cfgs.record_origins["caches"]["path"]
     assert diff.startswith(f"--- {path}\n+++ {path}\n")
     # the hand-formatted file would be normalized even with no value changed
@@ -228,36 +230,36 @@ def test_diff_is_against_what_would_be_written(cfgs):
 
 def test_write_text_is_stored_normalized(cfgs):
     text = '{"name":"aat","type":"external","namespace":"http://vocab.getty.edu/aat/","merge_order":3}'
-    path, warnings = cfgs.config_store.write_text("aat", text)
+    path, warnings = store.find(cfgs, "aat").write_text("aat", text)
     assert Path(path).read_text() == normalized(json.loads(text)) and warnings == []
-    path, warnings = cfgs.config_store.write_text("aat", text[:-1] + ',"merge_order":4}')
+    path, warnings = store.find(cfgs, "aat").write_text("aat", text[:-1] + ',"merge_order":4}')
     assert json.loads(Path(path).read_text())["merge_order"] == 4
     assert warnings == ["warning: merge_order appears twice in the file; only the last value counts"]
     with pytest.raises(ConfigError, match="not JSON"):
-        cfgs.config_store.write_text("aat", "{nope")
+        store.find(cfgs, "aat").write_text("aat", "{nope")
 
 
 def test_create_in_the_directory_and_in_a_store(root, cfgs):
     ulan = {"name": "ulan", "type": "external", "namespace": "http://vocab.getty.edu/ulan/",
             "matches": ["vocab.getty.edu/ulan/"]}
-    path, _ = cfgs.config_store.create("ulan", ulan, store="sources")
+    path, _ = store.store_cache(cfgs, "sources").create("ulan", ulan)
     assert path == str(root / "subs" / "sources_cache" / "ulan.json")
     assert Path(path).read_text() == normalized(ulan)
-    path2, _ = cfgs.config_store.create("map_extra", {"name": "extra", "type": "map",
-                                                      "storeClass": "storage.idmap.filesystem.FsMap",
-                                                      "base_dir": str(root / "data" / "files")})
+    path2, _ = store.store_cache(cfgs).create("map_extra", {"name": "extra", "type": "map",
+                                                           "storeClass": "storage.idmap.filesystem.FsMap",
+                                                           "base_dir": str(root / "data" / "files")})
     assert path2 == str(root / "config_cache" / "map_extra.json")
     rebuilt = Config(basepath=str(root))
     assert "ulan" in rebuilt.external and "extra" in rebuilt.map_stores
     assert rebuilt.record_origins["ulan"]["store"] == "sources"
     with pytest.raises(ConfigError, match="already exists"):
-        cfgs.config_store.create("ycba", cfgs.config_store.read("ycba"))
+        store.store_cache(cfgs, "sources").create("ycba", store.find(cfgs, "ycba").read("ycba"))
     with pytest.raises(ConfigError, match="no sub-config store 'nope'"):
-        cfgs.config_store.create("x", {"type": "globals"}, store="nope")
+        store.store_cache(cfgs, "nope").create("x", {"type": "globals"})
 
 
 def test_delete(root, cfgs):
-    path = cfgs.config_store.delete("aat")
+    path = store.find(cfgs, "aat").delete("aat")
     assert not os.path.exists(path)
     assert "aat" not in Config(basepath=str(root)).external
 
@@ -266,17 +268,17 @@ def test_delete(root, cfgs):
 
 
 def test_stores_and_locations(root, cfgs):
-    st = cfgs.config_store
-    assert st.stores() == [None, "sources"]
-    assert st.locations("aat") == ["sources"] and st.find("aat") == "sources"
-    assert st.locations("ycba") == [None] and st.find("ycba") is None
+    assert store.stores(cfgs) == [None, "sources"]
+    assert store.locations(cfgs, "aat") == ["sources"]
+    assert store.find(cfgs, "aat") is store.store_cache(cfgs, "sources")
+    assert store.locations(cfgs, "ycba") == [None] and store.find(cfgs, "ycba") is cfgs.configcache
     # a copy left in the configuration directory is replaced by the store's
     shadow = root / "config_cache" / "aat.json"
     shadow.write_text((root / "subs" / "sources_cache" / "aat.json").read_text())
     cfgs = Config(basepath=str(root))
-    assert cfgs.config_store.locations("aat") == [None, "sources"]
+    assert store.locations(cfgs, "aat") == [None, "sources"]
     assert cfgs.record_origins["aat"]["store"] == "sources"
-    assert cfgs.config_store.check("aat") == [
+    assert store.find(cfgs, "aat").check("aat") == [
         "warning: aat in store sources replaces the record of the same key in the "
         "configuration directory"]
 
@@ -286,7 +288,8 @@ def test_stores_and_locations(root, cfgs):
 
 def test_config_caches_carry_the_catalogue_schema_and_warn_on_set(cfgs, caplog):
     from lux_pipeline import config_schema
-    for cache in (cfgs.configcache, cfgs.config_store.cache("sources")):
+    for cache in (cfgs.configcache, store.store_cache(cfgs, "sources")):
+        assert isinstance(cache, store.ConfigCache)
         assert cache.config["json_schema"] is config_schema.json_schema()
         assert cache.config["json_format"] == "normalized"
     with caplog.at_level("WARNING", logger="lux_pipeline"):
@@ -302,13 +305,13 @@ def test_a_store_record_can_name_its_own_format_and_schema(root):
     rec.update(json_format="compact", json_schema="only-names.json")
     sources.write_text(json.dumps(rec))
     cfgs = Config(basepath=str(root))
-    cache = cfgs.config_store.cache("sources")
+    cache = store.store_cache(cfgs, "sources")
     assert cache.dumps({"a": "http://x/"}) == '{"a":"http://x/"}'
     assert cache.record_problems({"type": "external"}) == ["record: 'name' is a required property"]
-    # the store's schema does not stop ConfigStore's own checks
-    data = cfgs.config_store.read("aat")
+    # the store's schema adds to the catalogue's, it does not replace it
+    data = store.find(cfgs, "aat").read("aat")
     data["namespace"] = ""
-    assert any("namespace is empty" in p for p in cfgs.config_store.validate("aat", data))
+    assert any("namespace is empty" in p for p in store.find(cfgs, "aat").validate("aat", data))
 
 
 def test_set_unset_and_parse_value():

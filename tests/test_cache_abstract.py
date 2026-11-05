@@ -254,3 +254,38 @@ def test_json_schema_warns_on_set_and_writes_anyway(tmp_path, caplog):
     assert fs_with(tmp_path).record_problems({"n": 1}) == []        # no schema, no checks
     with pytest.raises(ValueError, match="not a valid JSON Schema"):
         fs_with(tmp_path, json_schema={"type": 12}).schema_validator()
+
+
+# --- FsCache's record operations, for any directory of JSON records ----------------------------
+
+
+def test_fs_record_operations(tmp_path):
+    from lux_pipeline.storage.cache.filesystem import RecordError
+    schema = {"type": "object", "required": ["id"], "properties": {"n": {"type": "integer"}}}
+    c = fs_with(tmp_path, json_format="normalized", json_schema=schema)
+    path, warnings = c.create("r", {"id": "a", "n": 1})
+    assert (path, warnings) == (str(tmp_path / "cfg_cache" / "r.json"), [])
+    assert c.text("r") == '{\n  "id": "a",\n  "n": 1\n}\n' and c.read("r") == {"id": "a", "n": 1}
+    with pytest.raises(RecordError, match="already exists"):
+        c.create("r", {"id": "b"})
+    assert c.validate("r", {"n": "x"}) == ["record: 'id' is a required property",
+                                           "n: 'x' is not of type 'integer'"]
+    with pytest.raises(RecordError, match="not writing r: record: 'id' is a required") as e:
+        c.write("r", {"n": 2})
+    assert len(e.value.problems) == 1 and c.read("r")["n"] == 1
+    assert c.diff("r", {"id": "a", "n": 2}).endswith('-  "n": 1\n+  "n": 2\n }\n')
+    os.utime(path, (1, 1))
+    c.write("r", {"id": "a", "n": 1})                     # unchanged: the file is left alone
+    assert os.stat(path).st_mtime == 1
+    path, warnings = c.write_text("r", '{"id": "a", "n": 3, "n": 4}')
+    assert c.read("r") == {"id": "a", "n": 4}
+    assert warnings == ["warning: n appears twice in the file; only the last value counts"]
+    Path(path).write_text('{"id": "a", "id": "b"}')
+    assert c.check("r") == ["warning: id appears twice in the file; only the last value counts"]
+    Path(path).write_text("{nope")
+    assert c.check("r")[0].startswith("not JSON")
+    with pytest.raises(RecordError, match="is not JSON"):
+        c.read("r")
+    assert c.delete("r") == path and not os.path.exists(path)
+    with pytest.raises(RecordError, match="record 'r' is not in"):
+        c.text("r")

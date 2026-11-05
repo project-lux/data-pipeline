@@ -1,11 +1,11 @@
 """The configuration as the pages show it: every record, by type and file;
 one record with a form field per key the catalogue knows; and checking,
-diffing and writing, through the configuration's `ConfigStore`
-(``cfgs.config_store``, `lux_pipeline.config_store`), which writes exactly
-what `lux config` writes.
+diffing and writing, through the `ConfigCache` each record is in
+(`lux_pipeline.config_store.find`), which writes exactly what `lux config`
+writes.
 
-Two ways to save, as `lux config` has: the fields (`ConfigStore.write`)
-and the record's text (`ConfigStore.write_text`). Either way the record is
+Two ways to save, as `lux config` has: the fields (`write`) and the
+record's text (`write_text`). Either way the record is
 stored as its store writes JSON: normalized (2-space indent) unless the
 store says otherwise. After a write the server's configuration is rebuilt
 (`AppState.reset`). Every write is refused while a build runs, unless
@@ -72,11 +72,11 @@ def building(cfgs):
 
 def config_index(state):
     cfgs = state.configs()
-    rows = cfgs.config_store.records()
+    rows = store.records(cfgs)
     by_type = {}
     for row in rows:
         try:
-            data = cfgs.config_store.read(row["key"]) if not row["error"] else {}
+            data = store.find(cfgs, row["key"]).read(row["key"]) if not row["error"] else {}
         except store.ConfigError:
             data = {}
         row["summary"] = summary(data)
@@ -179,8 +179,8 @@ def record_data(state, key, text=None):
     cfgs = state.configs()
     origin = cfgs.record_origins.get(key)
     if origin is None:
-        raise HTTPException(status_code=404, detail=str(cfgs.config_store.unknown(key)))
-    file_text = cfgs.config_store.text(key)
+        raise HTTPException(status_code=404, detail=str(store.unknown(cfgs, key)))
+    file_text = store.find(cfgs, key).text(key)
     raw = json.loads(file_text)
     known = schema.keys_for(raw)
     return {
@@ -190,7 +190,7 @@ def record_data(state, key, text=None):
         "fields": fields(cfgs, raw),
         "unknown": {k: v for k, v in raw.items() if k not in known and "*" not in known},
         "defaults": schema.class_defaults(raw.get("type")) if raw.get("type") in schema.KEYS else {},
-        "problems": cfgs.config_store.check(key),
+        "problems": store.find(cfgs, key).check(key),
         "building": building(cfgs),
     }
 
@@ -220,7 +220,7 @@ def data_from_fields(cfgs, key, form):
     """The record with the fields form's values applied: ``field:<key>``
     holds a value, ``unset:<key>`` removes the key. Keys the form has no
     field for keep their value. ``(data, problems)``."""
-    raw = cfgs.config_store.read(key)
+    raw = store.find(cfgs, key).read(key)
     data = dict(raw)
     problems = []
     keys = schema.keys_for(raw)
@@ -304,7 +304,7 @@ async def post_validate(request: Request, key: str):
             return {"json_error": error, "problems": [], "errors": 1, "warnings": 0}
     else:
         data = body["data"]
-    problems = cfgs.config_store.validate(key, data)
+    problems = store.find(cfgs, key).validate(key, data)
     return {"json_error": None, "problems": problems,
             "errors": len(store.errors_only(problems)), "warnings": len(store.warnings_only(problems))}
 
@@ -320,9 +320,9 @@ async def post_diff(request: Request, key: str):
     if "text" in body:
         data, error = parse_text(body["text"])
         if error:
-            path = cfgs.config_store.path(key)
-            old = cfgs.config_store.text(key)
+            path = store.find(cfgs, key).path(key)
+            old = store.find(cfgs, key).text(key)
             new = body["text"] if body["text"].endswith("\n") else body["text"] + "\n"
             return {"diff": "".join(difflib.unified_diff(old.splitlines(True), new.splitlines(True),
                                                          fromfile=path, tofile=path))}
-    return {"diff": cfgs.config_store.diff(key, data)}
+    return {"diff": store.find(cfgs, key).diff(key, data)}

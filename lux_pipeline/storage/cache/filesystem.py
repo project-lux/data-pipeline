@@ -1,4 +1,6 @@
 import datetime
+import difflib
+import json as stdjson
 import logging
 import os
 import ujson as json
@@ -25,6 +27,47 @@ JSON_FORMATS = {
     "compact": {"escape_forward_slashes": False, "ensure_ascii": False},
     "normalized": {"indent": 2, "escape_forward_slashes": False, "ensure_ascii": False},
 }
+
+
+class RecordError(ValueError):
+    """A record that cannot be read or written; `problems` lists why."""
+
+    def __init__(self, message, problems=()):
+        self.problems = list(problems)
+        if self.problems:
+            message = message + ": " + "; ".join(self.problems)
+        super().__init__(message)
+
+
+# Problems are sentences; one starting "warning:" does not stop a write.
+def errors_only(problems):
+    return [p for p in problems if not p.startswith("warning:")]
+
+
+def warnings_only(problems):
+    return [p for p in problems if p.startswith("warning:")]
+
+
+def text_problems(text):
+    """Problems a record's text has that its data cannot show: not JSON,
+    or a key written twice in one object (JSON keeps the last value, so the
+    first is silently ignored; a warning)."""
+    twice = []
+
+    def pairs(items):
+        seen = set()
+        for k, _ in items:
+            if k in seen:
+                twice.append(k)
+            seen.add(k)
+        return dict(items)
+
+    try:
+        stdjson.loads(text, object_pairs_hook=pairs)
+    except ValueError as e:
+        return [f"not JSON: {e}"]
+    return [f"warning: {k} appears twice in the file; only the last value counts"
+            for k in dict.fromkeys(twice)]
 
 
 def dumps_params(json_format):
@@ -55,6 +98,21 @@ def _as_datetime(value):
 
 
 class FsCache(AbstractCache):
+    """One JSON record per file in a directory.
+
+    Besides the cache interface, the record-level operations a directory
+    of hand-maintained JSON files (configuration, say) needs, all built on
+    the cache's ``json_format`` and ``json_schema``: `text` and `read`
+    (strictly: a file that is not JSON is an error, not a string),
+    `validate` and `check`, `diff`, and `write` / `write_text` / `create`
+    / `delete`, which refuse a record with errors (`RecordError`, or the
+    subclass's `error_class`). `set` stays the plain cache write: it logs
+    schema problems and writes anyway. A subclass adds its own checks by
+    extending `validate` and `check`, and its own wording of schema errors
+    with `describe_error`."""
+
+    error_class = RecordError
+
     def __init__(self, config):
 
         self.config = config
@@ -86,8 +144,13 @@ class FsCache(AbstractCache):
         return os.path.join(self.directory, self._filename(key))
 
     def path(self, key):
-        """The file record `key` is (or would be) kept in."""
-        return self._path(key)
+        """The (absolute) file record `key` is, or would be, kept in."""
+        return os.path.abspath(self._path(key))
+
+    @property
+    def where(self):
+        """The cache, for messages."""
+        return self.directory
 
     def read_text(self, key):
         """Record `key`'s file as text; None when there is none."""
@@ -102,6 +165,106 @@ class FsCache(AbstractCache):
         file ends with a newline."""
         text = json.dumps(value, **self.dumps_params)
         return text + "\n" if self.dumps_params.get("indent") else text
+
+    # --- records as files: read, check and write them --------------------------------------
+
+    def text(self, key):
+        """Record `key`'s file as text; `error_class` when there is none."""
+        text = self.read_text(key)
+        if text is None:
+            raise self.error_class(f"record {key!r} is not in {self.where}")
+        return text
+
+    def read(self, key):
+        """Record `key` as its file holds it, parsed strictly."""
+        try:
+            return stdjson.loads(self.text(key))
+        except ValueError as e:
+            raise self.error_class(f"record {key!r} is not JSON: {e}") from None
+
+    def schema_validators(self):
+        """The validators `validate` applies: the cache's ``json_schema``,
+        when it has one."""
+        validator = self.schema_validator()
+        return [validator] if validator is not None else []
+
+    def describe_error(self, error, data):
+        """A jsonschema error as sentences."""
+        return [f"{'.'.join(str(p) for p in error.path) or 'record'}: {error.message}"]
+
+    def validate(self, key, data, *, new=False):
+        """Problems with writing `data` as record `key` (a new one when
+        `new`), as sentences; ``[]`` when there are none. Here: the
+        ``json_schema`` (`schema_validators`), and for a new record a key
+        not already taken."""
+        problems = []
+        try:
+            validators = self.schema_validators()
+        except ValueError as e:
+            problems.append(f"the schema: {e}")
+            validators = []
+        for validator in validators:
+            for error in sorted(validator.iter_errors(data), key=lambda e: [str(p) for p in e.path]):
+                problems.extend(p for p in self.describe_error(error, data) if p not in problems)
+        if new and key in self:
+            problems.append(f"record {key!r} already exists in {self.where}")
+        return problems
+
+    def check(self, key):
+        """Every problem with record `key` as it is on disk: its text
+        (`text_problems`) and its data (`validate`)."""
+        try:
+            text = self.text(key)
+        except OSError as e:
+            return [f"cannot read record {key!r}: {e}"]
+        problems = text_problems(text)
+        if errors_only(problems):
+            return problems
+        return problems + self.validate(key, stdjson.loads(text))
+
+    def refuse_errors(self, key, data, new=False):
+        """`validate`, raising `error_class` on errors; returns the
+        warnings."""
+        problems = self.validate(key, data, new=new)
+        errors = errors_only(problems)
+        if errors:
+            raise self.error_class(f"not writing {key}", errors)
+        return warnings_only(problems)
+
+    def diff(self, key, data):
+        """What `write` would change, as a unified diff (empty when nothing
+        would)."""
+        path = self.path(key)
+        return "".join(difflib.unified_diff(self.text(key).splitlines(True),
+                                            self.dumps(data).splitlines(True),
+                                            fromfile=path, tofile=path))
+
+    def write(self, key, data):
+        """Write `data` as record `key` (``json_format``), once it
+        validates; the file is left alone when its text would not change.
+        Returns ``(path, warnings)``."""
+        warnings = self.refuse_errors(key, data)
+        if self.read_text(key) != self.dumps(data):
+            self.set(data, identifier=key)
+        return self.path(key), warnings
+
+    def write_text(self, key, text):
+        """Write an editor's `text` as record `key` once it parses and
+        validates, stored as `write` stores it. Returns ``(path,
+        warnings)``, a key the text has twice among the warnings."""
+        problems = text_problems(text)
+        if errors_only(problems):
+            raise self.error_class(f"not writing {key}: {problems[0]}")
+        path, warnings = self.write(key, stdjson.loads(text))
+        return path, problems + warnings
+
+    def create(self, key, data):
+        """Write `data` as a new record `key`. Returns ``(path, warnings)``."""
+        warnings = self.refuse_errors(key, data, new=True)
+        if os.path.exists(self._path(key)):
+            raise self.error_class(f"not writing {key}: {self.path(key)} exists")
+        self.set(data, identifier=key)
+        return self.path(key), warnings
 
     def _file_to_key(self, file):
         # same transform iter_keys() yields; passing the raw filename to
@@ -241,11 +404,13 @@ class FsCache(AbstractCache):
         self._write_meta(fn, {"refresh_time": refresh_time, "valid": valid, "change": change})
 
     def delete(self, key, _key_type=None):
+        """Remove record `key` (and its .meta). Returns its path."""
         # was missing entirely: __delitem__ raised AttributeError
         fn = self._path(key)
         for path in (fn, fn + ".meta"):
             if os.path.exists(path):
                 os.remove(path)
+        return os.path.abspath(fn)
 
     def iter_keys(self):
         for file in self._list():
