@@ -46,7 +46,6 @@ configuration when they start.
 
 import copy
 import difflib
-import importlib
 import json
 import re
 
@@ -66,40 +65,10 @@ class ConfigError(RecordError):
     lists why."""
 
 
-def resolve_class(path):
-    """``(class or None, error or None, current path or None)`` for a
-    ``*Class`` value, resolved as `config.importObject` resolves it
-    (as given, then under ``lux_pipeline.``), without its logging. The
-    third item is the path to write instead when `path` uses the layout
-    from before the package rename (`importObject` accepts it with a
-    warning)."""
-    modern = path
-    if modern.startswith(_config._LEGACY_PACKAGE_PREFIX):
-        modern = "lux_pipeline." + modern[len(_config._LEGACY_PACKAGE_PREFIX):]
-    m = _config._LEGACY_SOURCE_CATEGORY.match(modern)
-    if m:
-        modern = m.group(1) + m.group(2)
-    legacy = modern if modern != path else None
-    if "." not in modern:
-        return None, f"{path!r} is not a module.Class path", legacy
-    candidates = [modern] if modern.startswith("lux_pipeline.") else [modern, f"lux_pipeline.{modern}"]
-    last = None
-    for cand in candidates:
-        modname, _, clsname = cand.rpartition(".")
-        try:
-            module = importlib.import_module(modname)
-        except ModuleNotFoundError as e:
-            if e.name and (modname == e.name or modname.startswith(e.name + ".")):
-                last = f"no module {modname}"
-                continue
-            return None, f"importing {modname}: {e}", legacy
-        except Exception as e:
-            return None, f"importing {modname}: {type(e).__name__}: {e}", legacy
-        obj = getattr(module, clsname, None)
-        if obj is None:
-            return None, f"{modname} has no {clsname}", legacy
-        return obj, None, legacy
-    return None, last or f"cannot import {path}", legacy
+# ``(class or None, error or None, modern path or None)`` for a ``*Class``
+# value, resolved exactly as Config resolves it (`config.importObject`),
+# without logging or raising
+resolve_class = _config.resolve_object
 
 
 def schema_problem(error, data):

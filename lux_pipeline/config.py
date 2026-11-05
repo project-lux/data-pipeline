@@ -24,41 +24,87 @@ def _warn_legacy_once(old, new):
         logger.warning(f"Config refers to '{old}'; update it to '{new}'")
 
 
-def _modernize_object_type(objectType):
-    """Rewrite dotted object paths that use the pre-rename layout."""
-    if objectType.startswith(_LEGACY_PACKAGE_PREFIX):
-        new = "lux_pipeline." + objectType[len(_LEGACY_PACKAGE_PREFIX) :]
-        _warn_legacy_once(objectType, new)
-        objectType = new
-    m = _LEGACY_SOURCE_CATEGORY.match(objectType)
+def modern_object_path(path):
+    """`path` rewritten from the pre-rename layout: ``pipeline.`` became
+    ``lux_pipeline.``, and ``sources.<category>.`` lost its category.
+    No logging."""
+    new = path
+    if new.startswith(_LEGACY_PACKAGE_PREFIX):
+        new = "lux_pipeline." + new[len(_LEGACY_PACKAGE_PREFIX):]
+    m = _LEGACY_SOURCE_CATEGORY.match(new)
     if m:
         new = m.group(1) + m.group(2)
+    return new
+
+
+def _modernize_object_type(objectType):
+    """`modern_object_path`, warning once per path when it rewrites."""
+    new = modern_object_path(objectType)
+    if new != objectType:
         _warn_legacy_once(objectType, new)
-        objectType = new
-    return objectType
+    return new
+
+
+def _resolve(path):
+    """``(object, exception, message, modern)`` for a dotted object path,
+    without logging or raising: the object or None; when it cannot be
+    had, the exception importObject raises and a sentence for people;
+    and the path to write instead when `path` uses the pre-rename layout
+    (else None). A path not under ``lux_pipeline.`` is tried as given and
+    then under it; a module that exists but fails to import (a missing
+    dependency, say) is that module's error, not "no module"."""
+    modern = modern_object_path(path)
+    legacy = modern if modern != path else None
+    if "." not in modern:
+        return (None, ValueError(f"Need module.class instead of {modern}"),
+                f"{path!r} is not a module.Class path", legacy)
+    candidates = [modern] if modern.startswith("lux_pipeline.") else [modern, f"lux_pipeline.{modern}"]
+    first, message = None, None
+    for cand in candidates:
+        modname, _, clsname = cand.rpartition(".")
+        try:
+            module = importlib.import_module(modname)
+        except ModuleNotFoundError as e:
+            if e.name and (modname == e.name or modname.startswith(e.name + ".")):
+                first = first or e
+                message = f"no module {modname}"
+                continue
+            return None, e, f"importing {modname}: {e}", legacy
+        except Exception as e:
+            return None, e, f"importing {modname}: {type(e).__name__}: {e}", legacy
+        if not hasattr(module, clsname):
+            return (None, AttributeError(f"module {modname!r} has no attribute {clsname!r}"),
+                    f"{modname} has no {clsname}", legacy)
+        return getattr(module, clsname), None, None, legacy
+    return None, first, message, legacy
+
+
+def resolve_object(path):
+    """``(object or None, error or None, modern path or None)`` for a
+    dotted object path, resolved exactly as `importObject` resolves it but
+    without logging or raising: for checking a configuration (the error
+    is a sentence, the modern path is what to write instead of a
+    pre-rename one)."""
+    obj, _, message, modern = _resolve(path)
+    return obj, message, modern
 
 
 # c.f. https://github.com/cheshire3/cheshire3/blob/develop/cheshire3/dynamic.py#L43
 def importObject(objectType):
-    # print(f"Trying to import {objectType}")
+    """The object a dotted path names (a ``*Class`` value, say); None for
+    an empty one. A pre-rename path works, with a warning once. Raises
+    ValueError (no dot), ModuleNotFoundError, AttributeError (no such
+    class), or the module's own import error, logged as critical."""
     if not objectType:
         return None
-    objectType = _modernize_object_type(objectType)
-    try:
-        (modName, className) = objectType.rsplit(".", 1)
-    except ValueError:
-        raise ValueError("Need module.class instead of %s" % objectType)
-    try:
-        m = importlib.import_module(modName)
-    except ModuleNotFoundError as e:
-        if not objectType.startswith("lux_pipeline."):
-            try:
-                return importObject("lux_pipeline.%s" % objectType)
-            except Exception:
-                pass
-        logger.critical(f"Could not import {objectType}: {e}")
-        raise e
-    return getattr(m, className)
+    obj, exc, _, modern = _resolve(objectType)
+    if modern:
+        _warn_legacy_once(objectType, modern)
+    if exc is not None:
+        if not isinstance(exc, (ValueError, AttributeError)):
+            logger.critical(f"Could not import {modern or objectType}: {exc}")
+        raise exc
+    return obj
 
 
 # --- named indexes (item 34) -------------------------------------------------

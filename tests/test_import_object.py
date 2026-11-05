@@ -106,3 +106,46 @@ def test_grouped_source_dirs_are_not_treated_as_categories(caplog):
     with caplog.at_level(logging.WARNING, logger="lux_pipeline"):
         assert importObject("sources.yale.ycba.mapper.YcbaMapper") is YcbaMapper
     assert not caplog.records
+
+
+# --- resolve_object: the same resolution, as data ------------------------------------------------
+
+
+@pytest.mark.parametrize("path", [
+    "process.validator.Validator",
+    "pipeline.process.validator.Validator",
+    "pipeline.sources.authorities.lc.mapper.LcnafMapper",
+    "sources.yale.ycba.mapper.YcbaMapper",
+    "lux_pipeline.process.validator.NoSuchClass",
+    "no.such.module.Thing",
+    "Validator",
+])
+def test_resolve_object_agrees_with_import_object(path, caplog):
+    obj, error, modern = config_mod.resolve_object(path)
+    assert not caplog.records                                   # no logging
+    try:
+        assert importObject(path) is obj and error is None
+    except (ValueError, ModuleNotFoundError, AttributeError):
+        assert obj is None and error
+    assert modern == (config_mod.modern_object_path(path) if
+                      config_mod.modern_object_path(path) != path else None)
+
+
+def test_two_rewrites_warn_once_with_the_final_path(caplog):
+    with caplog.at_level(logging.WARNING, logger="lux_pipeline"):
+        importObject("pipeline.sources.authorities.lc.mapper.LcnafMapper")
+    assert [r.getMessage() for r in caplog.records] == [
+        "Config refers to 'pipeline.sources.authorities.lc.mapper.LcnafMapper'; "
+        "update it to 'lux_pipeline.sources.lc.mapper.LcnafMapper'"]
+
+
+def test_a_module_that_fails_to_import_is_its_own_error(tmp_path, monkeypatch):
+    pkg = tmp_path / "brokenpkg"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("")
+    (pkg / "mod.py").write_text("import no_such_dependency_xyz\nclass C: pass\n")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    obj, error, _ = config_mod.resolve_object("brokenpkg.mod.C")
+    assert obj is None and error == "importing brokenpkg.mod: No module named 'no_such_dependency_xyz'"
+    with pytest.raises(ModuleNotFoundError, match="no_such_dependency_xyz"):
+        importObject("brokenpkg.mod.C")
