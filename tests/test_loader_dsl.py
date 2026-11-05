@@ -683,3 +683,134 @@ def test_tabjson_line_without_a_prefix_fails_the_file(tmp_path):
     ldr.prepare(0, 1)
     with pytest.raises(RuntimeError, match="1 file\\(s\\) failed"):
         ldr.process()
+
+
+# --- the input_files "identifier" rule ---------------------------------------
+
+NS = "http://example.org/data/"
+
+
+def identifier_zip(tmp_path, members):
+    import zipfile
+    path = tmp_path / "records.zip"
+    with zipfile.ZipFile(path, "w") as zh:
+        for name, rec in members.items():
+            zh.writestr(name, json.dumps(rec))
+    return path
+
+
+def load_with(tmp_path, path, typ, identifier, namespace=NS, cls=Loader, **entry):
+    cfg = {"name": "ex", "namespace": namespace, "all_configs": StubConfigs(BASE, tmp_path),
+           "datacache": {}, "input_files": {"records": [
+               {"path": str(path), "type": typ, "identifier": identifier, **entry}]}}
+    ldr = cls(cfg)
+    ldr.prepare(0, 1)
+    ldr.process()
+    return ldr
+
+
+MEMBERS = {
+    "objects/a.json": {"id": NS + "class/1.2.3.json"},
+    "objects/b.json": {"id": NS + "class/4.5"},
+    "objects/c.json.gz": {"@id": NS + "other/x.jsonld"},
+}
+
+
+def test_identifier_from_the_record_namespace_and_extension(tmp_path):
+    z = identifier_zip(tmp_path, MEMBERS)
+    ldr = load_with(tmp_path, z, "zip/json",
+                    {"from": "record", "fields": ["id", "@id"], "form": ["namespace", "extension"]})
+    assert sorted(ldr.out_cache) == ["class/1.2.3", "class/4.5", "other/x"]
+
+
+def test_identifier_record_short_form_is_last_segment_without_extension(tmp_path):
+    z = identifier_zip(tmp_path, {"m1.json": {"id": NS + "class/1.2.3.json"},
+                                  "m2.json": {"id": NS + "class/4.5"}})
+    ldr = load_with(tmp_path, z, "zip/json", "record")
+    assert sorted(ldr.out_cache) == ["1.2.3", "4.5"]          # today's rule would give "1" and "4"
+
+
+def test_identifier_from_the_member_name(tmp_path):
+    z = identifier_zip(tmp_path, {"class/1.2.3.json": {"id": "ignored"},
+                                  "class/4.5.json.gz": {"id": "ignored"}})
+    ldr = load_with(tmp_path, z, "zip/json", {"from": "name", "form": ["extension"]})
+    assert sorted(ldr.out_cache) == ["class/1.2.3", "class/4.5"]
+    ldr = load_with(tmp_path, z, "zip/json", {"from": "name"})          # default form
+    assert sorted(ldr.out_cache) == ["1.2.3", "4.5"]
+
+
+def test_without_the_key_or_with_name_identifiers_are_unchanged(tmp_path):
+    z = identifier_zip(tmp_path, {"class/1.2.3.json": {"id": NS + "x/9.json"}})
+    for rule in (None, "name"):
+        ldr = load_with(tmp_path, z, "zip/json", rule)
+        assert list(ldr.out_cache) == ["1"]                          # cut at the first "."
+
+
+def test_a_value_outside_the_namespace_is_skipped_and_counted(tmp_path, caplog):
+    z = identifier_zip(tmp_path, {"a.json": {"id": NS + "class/1"},
+                                  "b.json": {"id": "http://elsewhere.org/class/2"}})
+    with caplog.at_level("WARNING", logger="lux_pipeline"):
+        ldr = load_with(tmp_path, z, "zip/json", {"from": "record", "form": ["namespace"]})
+    assert list(ldr.out_cache) == ["class/1"] and ldr.outside_namespace == 1
+    assert "'http://elsewhere.org/class/2' is not under the namespace" in caplog.text
+    assert "1 record(s) skipped" in caplog.text
+
+
+def test_lines_and_raw_items_use_the_rule_too(tmp_path):
+    lines = tmp_path / "recs.jsonl"
+    lines.write_text(json.dumps({"id": NS + "a/1.json"}) + "\n")
+    ldr = load_with(tmp_path, lines, "lines/json", {"from": "record", "form": ["namespace", "extension"]})
+    assert list(ldr.out_cache) == ["a/1"]
+    arr = tmp_path / "recs.json"
+    arr.write_text(json.dumps([{"uuid": "u-1", "id": "x"}]))
+    ldr = load_with(tmp_path, arr, "array/raw", {"from": "record", "fields": "uuid", "form": []})
+    assert list(ldr.out_cache) == ["u-1"]
+
+
+def test_a_missing_field_fails_the_file(tmp_path):
+    z = identifier_zip(tmp_path, {"a.json": {"other": 1}})
+    with pytest.raises(RuntimeError, match="1 file\\(s\\) failed"):
+        load_with(tmp_path, z, "zip/json", {"from": "record", "fields": ["uuid"]})
+
+
+class OwnExtractor(Loader):
+    def extract_identifier(self, data):
+        return "own-" + data["id"]
+
+
+def test_a_class_that_extracts_its_own_identifier_still_wins(tmp_path):
+    z = identifier_zip(tmp_path, {"a.json": {"id": "1"}})
+    ldr = load_with(tmp_path, z, "zip/json", "record", cls=OwnExtractor)
+    assert list(ldr.out_cache) == ["own-1"]
+
+
+@pytest.mark.parametrize("rule,typ,namespace,message", [
+    ("member", "zip/json", NS, "should be \"name\", \"record\" or an object"),
+    ({"from": "file"}, "zip/json", NS, "'from' is one of name, record"),
+    ({"from": "record", "form": ["first"]}, "zip/json", NS, "'form' steps are namespace, last, extension"),
+    ({"from": "record", "fields": []}, "zip/json", NS, "'fields' should be field names"),
+    ({"from": "name", "fields": ["id"]}, "zip/json", NS, "'fields' is for"),
+    ({"from": "name", "form": ["namespace"]}, "zip/json", NS, "applies to record values"),
+    ({"from": "record", "form": ["namespace"]}, "zip/json", None, "the source has none"),
+    ({"from": "record", "fieldz": ["id"]}, "zip/json", NS, "unknown keys: fieldz"),
+    ("record", "lines/tabjson", NS, "does not apply to tabjson"),
+    ({"from": "name"}, "array/raw", NS, "raw items have no name"),
+])
+def test_a_bad_rule_is_refused_at_prepare(tmp_path, rule, typ, namespace, message):
+    cfg = {"name": "ex", "namespace": namespace, "all_configs": StubConfigs(BASE, tmp_path),
+           "datacache": {}, "input_files": {"records": [
+               {"path": str(tmp_path / "x"), "type": typ, "identifier": rule}]}}
+    with pytest.raises(ValueError, match=__import__("re").escape(message)):
+        Loader(cfg).prepare(0, 1)
+
+
+def test_lux_load_file_keeps_the_configured_rule(tmp_path):
+    z = identifier_zip(tmp_path, {"m.json": {"id": NS + "class/7.json"}})
+    cfg = {"name": "ex", "namespace": NS, "all_configs": StubConfigs(BASE, tmp_path),
+           "datacache": {}, "input_files": {"records": [
+               {"path": "configured.zip", "type": "zip/json",
+                "identifier": {"from": "record", "form": ["namespace", "extension"]}}]}}
+    ldr = Loader(cfg)
+    ldr.prepare(0, 1, path=str(z), path_type="zip/json")
+    ldr.process()
+    assert list(ldr.out_cache) == ["class/7"]
