@@ -206,6 +206,21 @@ def test_the_commands_own_output(web):
     assert "own output" in client.get(f"/runs/{rel(p)}").text
 
 
+def test_the_timing_reports_are_beside_the_log(web):
+    client, _, logs = web
+    p = write_fake_run(logs, "reconcile", 2)
+    Path(p + "-w1.timing").write_text("14:15:00 [reconcile[1/2]]   acquire 45%\n")
+    Path(p + ".timing").write_text("14:16:00 TIMING identify slice=-1\n")
+    d = client.get(f"/api/runs/{rel(p)}/timing?worker=1").json()
+    assert d["worker"] == 1 and d["lines"] == ["14:15:00 [reconcile[1/2]]   acquire 45%"]
+    assert client.get(f"/api/runs/{rel(p)}/timing?worker=driver").json()["lines"] == [
+        "14:16:00 TIMING identify slice=-1"]
+    assert client.get(f"/api/runs/{rel(p)}/timing?worker=0").json()["lines"] == []
+    assert client.get(f"/api/runs/{rel(p)}/timing?worker=x").status_code == 404
+    log = client.get(f"/api/runs/{rel(p)}/log").json()
+    assert not any("acquire" in l["text"] for l in log["lines"])
+
+
 # --- live ---------------------------------------------------------------------------------------
 
 

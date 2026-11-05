@@ -125,6 +125,20 @@ def driver_log_path(prefix):
     return f"{prefix}.log"
 
 
+# PhaseTimer's reports (lux_pipeline.log.timing_logger): beside the logs,
+# not in them, so a person following a run reads what happened, not the
+# share of each stage every minute
+def timing_log_path(prefix, worker):
+    """Worker `worker`'s timing reports: ``<prefix>-w<n>.timing``."""
+    return f"{prefix}-w{worker}.timing"
+
+
+def driver_timing_path(prefix):
+    """The driver's timing reports (identify, run in the driver):
+    ``<prefix>.timing``."""
+    return f"{prefix}.timing"
+
+
 class StatusWriter:
     """A Progress callable that keeps running totals and, at most `throttle`
     seconds apart, atomically rewrites one small JSON file describing this

@@ -26,6 +26,16 @@ from the timer's start to its finish and writes the stats as
 --profile`` adds them up across slices. cProfile slows python-bound code
 down considerably, so the timing numbers of a profiled run are not
 comparable with an unprofiled one.
+
+Where the reports go: to the ``lux_pipeline.timing`` logger
+(`lux_pipeline.log.timing_logger`), not the run's log. A worker of a run
+with a prefix sends it to ``<prefix>-w<n>.timing`` and the driver to
+``<prefix>.timing`` (`log.send_timing_to`), so the lines a person follows
+in ``lux watch`` or the web UI are not interleaved with stage shares
+every minute; the run's log gets one line when a phase finishes. With no
+file to go to (``lux interactive``, a test) the logger propagates to
+wherever ``lux_pipeline`` logs. A `stream` given to `PhaseTimer` gets the
+reports instead.
 """
 
 import atexit
@@ -34,6 +44,7 @@ import os
 import sys
 import time
 
+from lux_pipeline.log import logger, timing_logger
 from lux_pipeline.process.utils import host_cpu
 from lux_pipeline.progress import null_progress
 
@@ -142,7 +153,8 @@ class PhaseTimer:
         self.total = total
         self.report_every = report_every
         self.out_dir = out_dir
-        self.stream = stream or sys.stdout
+        # None: the reports go to timing_logger (see the module docstring)
+        self.stream = stream
         # whoever is listening for progress (see lux_pipeline.progress); the
         # default costs one call per step
         self.progress = progress
@@ -177,6 +189,20 @@ class PhaseTimer:
         if profile:
             self._start_profile()
 
+    def _say(self, text):
+        """One report: to `stream` when the timer has one, else a log
+        record per non-blank line on `timing_logger`."""
+        if self.stream is not None:
+            print(text, file=self.stream)
+            return
+        for line in text.split("\n"):
+            if line.strip():
+                timing_logger.info(line.rstrip())
+
+    def _flush(self):
+        if self.stream is not None:
+            self.stream.flush()
+
     def _at_exit(self):
         self._stop_profile()
         if not self.complete and self.count:
@@ -191,8 +217,7 @@ class PhaseTimer:
     def _start_profile(self):
         global _profiling
         if not self.out_dir:
-            print(f"  (not profiling {self._tag()}: no directory to write the profile to)",
-                  file=self.stream)
+            self._say(f"  (not profiling {self._tag()}: no directory to write the profile to)")
             return
         if _profiling is not None:
             _profiling._stop_profile()
@@ -202,7 +227,7 @@ class PhaseTimer:
             prof.enable()
         except ValueError as e:
             # another profiler is already running in this process
-            print(f"  (not profiling {self._tag()}: {e})", file=self.stream)
+            self._say(f"  (not profiling {self._tag()}: {e})")
             return
         self._profiler = prof
         _profiling = self
@@ -226,7 +251,7 @@ class PhaseTimer:
             self.profile_file = fn
             return fn
         except Exception as e:
-            print(f"  (could not write profile: {e})", file=self.stream)
+            self._say(f"  (could not write profile: {e})")
             return None
 
     # ------------------------------------------------------------- measuring
@@ -292,13 +317,13 @@ class PhaseTimer:
             line += f"  {self.count / self.total * 100:.0f}% done, ~{left / 60:.0f}m left"
         if self.skipped:
             line += f"  ({self.skipped:,} skipped)"
-        print(line, file=self.stream)
+        self._say(line)
         parents, _kids = split_stages(self.stages)
         top = sorted(parents.items(), key=lambda kv: -kv[1][1])[:4]
         if top and el:
             bits = "  ".join(f"{n} {s[1] / el * 100:.0f}%" for n, s in top)
-            print(f"[{self._tag()}]   {bits}", file=self.stream)
-        self.stream.flush()
+            self._say(f"[{self._tag()}]   {bits}")
+        self._flush()
         self._last_report = now
         self._last_count = self.count
         # keep the on-disk snapshot current, not just the log
@@ -361,47 +386,47 @@ class PhaseTimer:
         self.progress(completed=self.count + self.skipped, done=True)
         s = self.summary()
         el = s["seconds"]
-        print(f"\n=== {self._tag()} finished", file=self.stream)
-        print(f"  {s['records']:,} records in {el / 60:.1f} min "
+        # the one line of it in the run's log: the rest is timing_logger's
+        logger.info(f"{self._tag()} finished: {s['records']:,} records in {el / 60:.1f} min "
+                    f"({s['records_per_second']:,.0f}/s)"
+                    + (f", {s['skipped']:,} skipped" if s["skipped"] else ""))
+        self._say(f"\n=== {self._tag()} finished")
+        self._say(f"  {s['records']:,} records in {el / 60:.1f} min "
               f"({s['records_per_second']:,.0f}/s)"
-              + (f", {s['skipped']:,} skipped" if s["skipped"] else ""), file=self.stream)
-        print(f"  cpu {s['cpu_seconds'] / 60:.1f} min of {el / 60:.1f} min wall "
+              + (f", {s['skipped']:,} skipped" if s["skipped"] else ""))
+        self._say(f"  cpu {s['cpu_seconds'] / 60:.1f} min of {el / 60:.1f} min wall "
               f"= {s['cpu_percent']:.0f}%"
               + ("  (cpu bound)" if s["cpu_percent"] > 85 else
-                 "  (waiting on something -- io, postgres, network)"),
-              file=self.stream)
+                 "  (waiting on something -- io, postgres, network)"))
         if s.get("max_rss_mb"):
-            print(f"  peak rss {s['max_rss_mb']:,} MB", file=self.stream)
+            self._say(f"  peak rss {s['max_rss_mb']:,} MB")
         if s["stages"]:
             top, kids = split_stages(self.stages)
-            print(f"  {'stage':<20} {'seconds':>9} {'% wall':>7} {'calls':>12} {'us/call':>10}",
-                  file=self.stream)
+            self._say(f"  {'stage':<20} {'seconds':>9} {'% wall':>7} {'calls':>12} {'us/call':>10}")
             for name, st in s["stages"].items():
                 if name not in top:
                     continue
-                print(f"  {name:<20} {st['seconds']:>9,.1f} {st['percent']:>6.1f}% "
-                      f"{st['calls']:>12,} {st['us_per_call']:>10,.1f}", file=self.stream)
-            print(f"  {'(unattributed)':<20} {s['unaccounted_seconds']:>9,.1f} "
-                  f"{s['unaccounted_seconds'] / el * 100 if el else 0:>6.1f}%", file=self.stream)
+                self._say(f"  {name:<20} {st['seconds']:>9,.1f} {st['percent']:>6.1f}% "
+                      f"{st['calls']:>12,} {st['us_per_call']:>10,.1f}")
+            self._say(f"  {'(unattributed)':<20} {s['unaccounted_seconds']:>9,.1f} "
+                  f"{s['unaccounted_seconds'] / el * 100 if el else 0:>6.1f}%")
             for parent, group in kids.items():
                 ptotal = self.stages[parent][1]
                 ctotal = sum(v[1] for v in group.values())
-                print(f"\n  inside {parent} -- already counted above, not additional:",
-                      file=self.stream)
+                self._say(f"\n  inside {parent} -- already counted above, not additional:")
                 for name in sorted(group, key=lambda n: -self.stages[n][1]):
                     st = s["stages"][name]
-                    print(f"    {name:<18} {st['seconds']:>9,.1f} {'':>7} "
-                          f"{st['calls']:>12,} {st['us_per_call']:>10,.1f}", file=self.stream)
+                    self._say(f"    {name:<18} {st['seconds']:>9,.1f} {'':>7} "
+                          f"{st['calls']:>12,} {st['us_per_call']:>10,.1f}")
                 if ctotal > ptotal * 1.001:
-                    print(f"    ...totalling {ctotal:,.1f}s against {parent}'s "
+                    self._say(f"    ...totalling {ctotal:,.1f}s against {parent}'s "
                           f"{ptotal:,.1f}s, so {ctotal - ptotal:,.1f}s of it runs "
                           f"inside other stages -- these are not a breakdown of "
-                          f"{parent}", file=self.stream)
+                          f"{parent}")
         # one greppable line per slice, for eyeballing 24 logs at once
-        print(f"TIMING {self.phase} slice={self.slice_n} records={s['records']} "
-              f"seconds={el} rps={s['records_per_second']} cpu_pct={s['cpu_percent']}",
-              file=self.stream)
-        self.stream.flush()
+        self._say(f"TIMING {self.phase} slice={self.slice_n} records={s['records']} "
+              f"seconds={el} rps={s['records_per_second']} cpu_pct={s['cpu_percent']}")
+        self._flush()
         self.write()
         return s
 
@@ -425,5 +450,5 @@ class PhaseTimer:
             return fn
         except Exception as e:
             # timing must never be the thing that kills a phase
-            print(f"  (could not write timing json: {e})", file=self.stream)
+            self._say(f"  (could not write timing json: {e})")
             return None

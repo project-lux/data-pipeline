@@ -31,7 +31,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from lux_pipeline.progress import (DRIVER, LogTailer, current_step, describe_run, driver_log_path,
-                                   list_runs, log_path, run_exists)
+                                   driver_timing_path, list_runs, log_path, run_exists,
+                                   timing_log_path)
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
@@ -336,6 +337,14 @@ def stdout_data(prefix, limit=LOG_LINES):
     return {"lines": lines, "start": start, "end": end}
 
 
+def timing_data(prefix, worker, limit=LOG_LINES):
+    """The end of a worker's (or the driver's) PhaseTimer reports,
+    ``<prefix>-w<n>.timing`` / ``<prefix>.timing``: kept out of the log."""
+    path = driver_timing_path(prefix) if worker == DRIVER else timing_log_path(prefix, worker)
+    lines, start, end = tail(path, limit)
+    return {"worker": worker, "lines": lines, "start": start, "end": end}
+
+
 # --- the live stream -----------------------------------------------------------------------
 
 
@@ -466,6 +475,15 @@ def get_log(request: Request, rel: str, worker: str = "", before: int | None = N
 def get_stdout(request: Request, rel: str):
     state = request.app.state.lux
     return stdout_data(full_prefix(state, rel))
+
+
+@router.get("/{rel:path}/timing")
+def get_timing(request: Request, rel: str, worker: str = "0", limit: int = LOG_LINES):
+    state = request.app.state.lux
+    if not (worker.isdigit() or worker == DRIVER):
+        raise HTTPException(status_code=404, detail=f"no worker {worker!r}")
+    return timing_data(full_prefix(state, rel), int(worker) if worker.isdigit() else DRIVER,
+                       max(1, min(limit, 5000)))
 
 
 @router.get("/{rel:path}")

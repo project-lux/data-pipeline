@@ -24,8 +24,10 @@ from datetime import datetime
 # RUNNING_WINDOW: a worker that has not reported done but wrote its status
 # this recently is taken to be running; an older one was killed without
 # reporting. Defined with the other readers of a run's files.
+from lux_pipeline.log import send_timing_to, timing_logger
 from lux_pipeline.progress import (RUNNING_WINDOW, STATUS_RE, RunRecord, count_workers,
-                                   driver_log_path, read_run, run_exists, unfinished_workers)
+                                   driver_log_path, driver_timing_path, read_run, run_exists,
+                                   unfinished_workers)
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -221,10 +223,15 @@ def driver_log_handler(prefix, log_level="INFO"):
 def ensure_driver_log(prefix, log_level="INFO"):
     """Send this process's ``lux_pipeline`` log to ``<prefix>.log`` as
     well as wherever it goes already: the driver's side of a run, which
-    `lux watch` and the web UI tail beside the workers' files. Idempotent
-    per prefix. Returns the handler, or ``None`` without a prefix."""
+    `lux watch` and the web UI tail beside the workers' files; and
+    PhaseTimer's reports (identify's, in the driver) to ``<prefix>.timing``
+    only. Idempotent per prefix. Returns the handler, or ``None`` without
+    a prefix."""
     if not prefix:
         return None
+    timing = driver_timing_path(prefix)
+    if not any(getattr(h, "lux_timing_file", None) == timing for h in timing_logger.handlers):
+        send_timing_to(timing)
     lg = logging.getLogger("lux_pipeline")
     for h in lg.handlers:
         if getattr(h, "lux_driver_log", None) == prefix:
