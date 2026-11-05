@@ -210,3 +210,82 @@ def test_a_yuid_keyed_cache(tmp_path):
     row = c.get(y)
     assert (row["yuid"], row["data"]) == (y, {"id": "x"})
     assert list(c.iter_items()) == [(y, c.get(y))]
+
+
+# --- json_format and json_schema ---------------------------------------------------------------
+
+
+def fs_with(tmp_path, **cfg):
+    return FsCache({"name": "cfg", "tabletype": "cache", "base_dir": str(tmp_path), **cfg})
+
+
+REC = {"id": "http://x/é", "n": [1]}
+
+
+@pytest.mark.parametrize("fmt,text", [
+    (None, '{"id":"http:\\/\\/x\\/\\u00e9","n":[1]}'),               # ujson's defaults, as before
+    ("compact", '{"id":"http://x/é","n":[1]}'),
+    ("normalized", '{\n  "id": "http://x/é",\n  "n": [\n    1\n  ]\n}\n'),
+    ({"indent": 4, "escape_forward_slashes": False}, '{\n    "id": "http://x/\\u00e9",\n    "n": [\n        1\n    ]\n}\n'),
+])
+def test_json_format(tmp_path, fmt, text):
+    c = fs_with(tmp_path, **({} if fmt is None else {"json_format": fmt}))
+    c.set(REC, identifier="r")
+    assert Path(c.path("r")).read_text(encoding="utf-8") == text == c.read_text("r")
+    assert c["r"]["data"] == REC
+
+
+def test_an_unknown_json_format_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="json_format 'pretty' is not one of compact, normalized"):
+        fs_with(tmp_path, json_format="pretty")
+
+
+def test_json_schema_warns_on_set_and_writes_anyway(tmp_path, caplog):
+    schema = {"type": "object", "required": ["id"], "properties": {"n": {"type": "array"}}}
+    (tmp_path / "s.json").write_text(__import__("json").dumps(schema))
+    for c in (fs_with(tmp_path, json_schema=schema), fs_with(tmp_path, json_schema="s.json")):
+        assert c.record_problems(REC) == []
+        assert c.record_problems({"n": 1}) == ["record: 'id' is a required property",
+                                               "n: 1 is not of type 'array'"]
+        with caplog.at_level(logging.WARNING, logger="lux_pipeline"):
+            c.set({"n": 1}, identifier="bad")
+        assert "cfg_cache: bad: n: 1 is not of type 'array'" in caplog.text
+        assert c["bad"]["data"] == {"n": 1}
+    assert fs_with(tmp_path).record_problems({"n": 1}) == []        # no schema, no checks
+    with pytest.raises(ValueError, match="not a valid JSON Schema"):
+        fs_with(tmp_path, json_schema={"type": 12}).schema_validator()
+
+
+# --- FsCache's record operations, for any directory of JSON records ----------------------------
+
+
+def test_fs_record_operations(tmp_path):
+    from lux_pipeline.storage.cache.filesystem import RecordError
+    schema = {"type": "object", "required": ["id"], "properties": {"n": {"type": "integer"}}}
+    c = fs_with(tmp_path, json_format="normalized", json_schema=schema)
+    path, warnings = c.create("r", {"id": "a", "n": 1})
+    assert (path, warnings) == (str(tmp_path / "cfg_cache" / "r.json"), [])
+    assert c.text("r") == '{\n  "id": "a",\n  "n": 1\n}\n' and c.read("r") == {"id": "a", "n": 1}
+    with pytest.raises(RecordError, match="already exists"):
+        c.create("r", {"id": "b"})
+    assert c.validate("r", {"n": "x"}) == ["record: 'id' is a required property",
+                                           "n: 'x' is not of type 'integer'"]
+    with pytest.raises(RecordError, match="not writing r: record: 'id' is a required") as e:
+        c.write("r", {"n": 2})
+    assert len(e.value.problems) == 1 and c.read("r")["n"] == 1
+    assert c.diff("r", {"id": "a", "n": 2}).endswith('-  "n": 1\n+  "n": 2\n }\n')
+    os.utime(path, (1, 1))
+    c.write("r", {"id": "a", "n": 1})                     # unchanged: the file is left alone
+    assert os.stat(path).st_mtime == 1
+    path, warnings = c.write_text("r", '{"id": "a", "n": 3, "n": 4}')
+    assert c.read("r") == {"id": "a", "n": 4}
+    assert warnings == ["warning: n appears twice in the file; only the last value counts"]
+    Path(path).write_text('{"id": "a", "id": "b"}')
+    assert c.check("r") == ["warning: id appears twice in the file; only the last value counts"]
+    Path(path).write_text("{nope")
+    assert c.check("r")[0].startswith("not JSON")
+    with pytest.raises(RecordError, match="is not JSON"):
+        c.read("r")
+    assert c.delete("r") == path and not os.path.exists(path)
+    with pytest.raises(RecordError, match="record 'r' is not in"):
+        c.text("r")

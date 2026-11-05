@@ -177,10 +177,12 @@ HTTP: on a network you do not trust, use the tunnel.
   file (and sub-config store) it came from, and the sources at a glance.
   A record's page has two ways to edit it. *Fields*: the keys the
   catalogue knows, with their help, where a path resolves to and whether
-  it exists, and whether a class imports; saving changes only the keys
-  you changed, in the file's own layout. *JSON*: the file's text, checked
-  as you type, with the diff of what saving would change; saved exactly
-  as you leave it. Both write exactly what `lux config` writes, refuse an
+  it exists, and whether a class imports. *JSON*: the file's text, checked
+  as you type, with the diff of what saving would change. Either way the
+  record is saved as normalized JSON (2-space indent; a hand-formatted
+  file is reformatted the first time it is saved), so a commit in the
+  configuration's git checkout shows just what changed. Both write
+  exactly what `lux config` writes, refuse an
   invalid record (keeping what you typed), and refuse while a build runs
   unless you tick "write anyway". New records start from a template; a
   record is deleted by typing its key. *Reload from the files* re-reads

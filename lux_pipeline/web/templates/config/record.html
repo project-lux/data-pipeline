@@ -28,7 +28,7 @@
 
 <section class="card wide" data-panel="fields">
   <h2>Fields</h2>
-  <p class="muted">The keys the catalogue knows. Saving changes only the keys you change, in the file's own layout.</p>
+  <p class="muted">The keys the catalogue knows. Saved as normalized JSON (2-space indent), like every record the store writes.</p>
   <form method="post" action="/config/{{ r.key|urlencode }}" class="form fields">
     <input type="hidden" name="_csrf" value="{{ csrf_token }}">
     <input type="hidden" name="mode" value="fields">

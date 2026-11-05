@@ -3,7 +3,7 @@
 A catalogue for people and forms: each key's type, what reads it, and the
 default a missing class key falls back to. It describes; it never
 forbids. A key not listed here is legal (a source's mapper may read keys
-only it knows), and `lux_pipeline.config_store.validate_record` only
+only it knows), and `lux_pipeline.config_store.ConfigCache.validate` only
 checks the type of a key that is listed.
 
 Written from the configurations in use (the build machine's copies and
@@ -52,6 +52,16 @@ def _k(type_, help_, **kw):
 
 _NAME = _k("str", "The record's name, which the code looks it up by.", required=True)
 _TYPE = _k("str", "What the record is; decides where Config files it.", required=True)
+
+# what a cache (storage.cache) reads to write and check its JSON
+_JSON_FORMAT = _k("any", "How a filesystem cache writes JSON: \"compact\", \"normalized\" "
+                         "(2-space indent), or the ujson.dumps parameters as an object. "
+                         "Configuration stores default to normalized, other caches to "
+                         "ujson's defaults.")
+_JSON_SCHEMA = _k("any", "A JSON Schema (an object, or the path of a file, relative to "
+                         "base_dir) every record written is checked against; problems are "
+                         "logged as warnings. Configuration stores default to the schema "
+                         "generated from this catalogue.", nullable=True)
 
 BASE = {
     "type": _TYPE,
@@ -113,6 +123,8 @@ CACHES = {
     "cursor_size": _k("int", "Rows a server-side cursor fetches at a time."),
     "export_path": _k("path", "Where a loader writes an export dump."),
     "base_dir": _k("path", "For filesystem caches: the directory they live under."),
+    "json_format": _JSON_FORMAT,
+    "json_schema": _JSON_SCHEMA,
 }
 
 MAP = {
@@ -152,6 +164,8 @@ CONFIG = {
     "tabletype": _k("str", "The directory suffix (default cache: <name>_cache)."),
     "datacacheClass": _k("class", "The store's class.",
                          default="storage.cache.filesystem.FsCache"),
+    "json_format": _JSON_FORMAT,
+    "json_schema": _JSON_SCHEMA,
 }
 
 GLOBALS = {
@@ -296,8 +310,83 @@ TEMPLATES = {
 def template(record_type, name):
     """A starting point for a new record: its name and type and the keys
     the record must have, empty where only a person can fill them in
-    (`config_store.validate_record` says which). ValueError for base and
+    (`ConfigCache.validate` says which). ValueError for base and
     system (one per installation) and unknown types."""
     if record_type not in TEMPLATES:
         raise ValueError(f"no template for a {record_type!r} record")
     return TEMPLATES[record_type](name)
+
+
+# --- the catalogue as a JSON Schema ----------------------------------------------------------
+
+_SCHEMA_TYPES = {"str": "string", "path": "string", "class": "string", "url": "string",
+                 "int": "integer", "bool": "boolean", "list": "array", "dict": "object"}
+EMPTY = ("", None, [], {})
+
+
+def key_schema(spec, required=False):
+    """The JSON Schema of one catalogued key: its type (null too when
+    nullable), its help as the description and, when the record needs it,
+    not empty."""
+    out = {"description": spec.help}
+    if spec.type in _SCHEMA_TYPES:
+        jtype = _SCHEMA_TYPES[spec.type]
+        out["type"] = [jtype, "null"] if spec.nullable else jtype
+    if required:
+        out["not"] = {"enum": list(EMPTY)}
+    return out
+
+
+def _record_schema(keys):
+    props, required = {}, []
+    for k, spec in keys.items():
+        if k == "*":
+            continue
+        need = spec.required and k not in ("name", "type")
+        props[k] = key_schema(spec, need)
+        if spec.required:
+            required.append(k)
+    out = {"type": "object", "properties": props, "required": required}
+    if "*" in keys:
+        out["additionalProperties"] = key_schema(keys["*"])
+    return out
+
+
+def _when(**consts):
+    return {"properties": {k: {"const": v} for k, v in consts.items()}, "required": list(consts)}
+
+
+_json_schema = None
+
+
+def json_schema():
+    """The catalogue as one JSON Schema (draft 2020-12) for any
+    configuration record: ``type`` one of `RECORD_TYPES`, then each
+    type's keys (a default record's by its ``name``). Like the catalogue
+    it describes and never forbids: a key it does not list is allowed.
+    Configuration stores check every record written against it."""
+    global _json_schema
+    if _json_schema is None:
+        defs, branches = {}, []
+        for typ in RECORD_TYPES:
+            if typ == "default":
+                continue
+            defs[typ] = _record_schema(keys_for(typ))
+            branches.append({"if": _when(type=typ), "then": {"$ref": f"#/$defs/{typ}"}})
+        branches.append({"if": _when(type="default"),
+                         "then": {"properties": {"name": {"enum": list(DEFAULT_KINDS)}},
+                                  "required": ["name"]}})
+        for name in DEFAULT_KINDS:
+            defs[f"default-{name}"] = _record_schema(keys_for({"type": "default", "name": name}))
+            branches.append({"if": _when(type="default", name=name),
+                             "then": {"$ref": f"#/$defs/default-{name}"}})
+        _json_schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "LUX pipeline configuration record",
+            "type": "object",
+            "required": ["type"],
+            "properties": {"type": {"enum": list(RECORD_TYPES)}},
+            "allOf": branches,
+            "$defs": defs,
+        }
+    return _json_schema

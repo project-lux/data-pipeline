@@ -3,7 +3,6 @@ import re
 import logging
 import importlib
 import multiprocessing
-from .storage.cache.filesystem import FsCache
 from .storage.uricache import URICache, _MISSING
 
 
@@ -25,41 +24,87 @@ def _warn_legacy_once(old, new):
         logger.warning(f"Config refers to '{old}'; update it to '{new}'")
 
 
-def _modernize_object_type(objectType):
-    """Rewrite dotted object paths that use the pre-rename layout."""
-    if objectType.startswith(_LEGACY_PACKAGE_PREFIX):
-        new = "lux_pipeline." + objectType[len(_LEGACY_PACKAGE_PREFIX) :]
-        _warn_legacy_once(objectType, new)
-        objectType = new
-    m = _LEGACY_SOURCE_CATEGORY.match(objectType)
+def modern_object_path(path):
+    """`path` rewritten from the pre-rename layout: ``pipeline.`` became
+    ``lux_pipeline.``, and ``sources.<category>.`` lost its category.
+    No logging."""
+    new = path
+    if new.startswith(_LEGACY_PACKAGE_PREFIX):
+        new = "lux_pipeline." + new[len(_LEGACY_PACKAGE_PREFIX):]
+    m = _LEGACY_SOURCE_CATEGORY.match(new)
     if m:
         new = m.group(1) + m.group(2)
+    return new
+
+
+def _modernize_object_type(objectType):
+    """`modern_object_path`, warning once per path when it rewrites."""
+    new = modern_object_path(objectType)
+    if new != objectType:
         _warn_legacy_once(objectType, new)
-        objectType = new
-    return objectType
+    return new
+
+
+def _resolve(path):
+    """``(object, exception, message, modern)`` for a dotted object path,
+    without logging or raising: the object or None; when it cannot be
+    had, the exception importObject raises and a sentence for people;
+    and the path to write instead when `path` uses the pre-rename layout
+    (else None). A path not under ``lux_pipeline.`` is tried as given and
+    then under it; a module that exists but fails to import (a missing
+    dependency, say) is that module's error, not "no module"."""
+    modern = modern_object_path(path)
+    legacy = modern if modern != path else None
+    if "." not in modern:
+        return (None, ValueError(f"Need module.class instead of {modern}"),
+                f"{path!r} is not a module.Class path", legacy)
+    candidates = [modern] if modern.startswith("lux_pipeline.") else [modern, f"lux_pipeline.{modern}"]
+    first, message = None, None
+    for cand in candidates:
+        modname, _, clsname = cand.rpartition(".")
+        try:
+            module = importlib.import_module(modname)
+        except ModuleNotFoundError as e:
+            if e.name and (modname == e.name or modname.startswith(e.name + ".")):
+                first = first or e
+                message = f"no module {modname}"
+                continue
+            return None, e, f"importing {modname}: {e}", legacy
+        except Exception as e:
+            return None, e, f"importing {modname}: {type(e).__name__}: {e}", legacy
+        if not hasattr(module, clsname):
+            return (None, AttributeError(f"module {modname!r} has no attribute {clsname!r}"),
+                    f"{modname} has no {clsname}", legacy)
+        return getattr(module, clsname), None, None, legacy
+    return None, first, message, legacy
+
+
+def resolve_object(path):
+    """``(object or None, error or None, modern path or None)`` for a
+    dotted object path, resolved exactly as `importObject` resolves it but
+    without logging or raising: for checking a configuration (the error
+    is a sentence, the modern path is what to write instead of a
+    pre-rename one)."""
+    obj, _, message, modern = _resolve(path)
+    return obj, message, modern
 
 
 # c.f. https://github.com/cheshire3/cheshire3/blob/develop/cheshire3/dynamic.py#L43
 def importObject(objectType):
-    # print(f"Trying to import {objectType}")
+    """The object a dotted path names (a ``*Class`` value, say); None for
+    an empty one. A pre-rename path works, with a warning once. Raises
+    ValueError (no dot), ModuleNotFoundError, AttributeError (no such
+    class), or the module's own import error, logged as critical."""
     if not objectType:
         return None
-    objectType = _modernize_object_type(objectType)
-    try:
-        (modName, className) = objectType.rsplit(".", 1)
-    except ValueError:
-        raise ValueError("Need module.class instead of %s" % objectType)
-    try:
-        m = importlib.import_module(modName)
-    except ModuleNotFoundError as e:
-        if not objectType.startswith("lux_pipeline."):
-            try:
-                return importObject("lux_pipeline.%s" % objectType)
-            except Exception:
-                pass
-        logger.critical(f"Could not import {objectType}: {e}")
-        raise e
-    return getattr(m, className)
+    obj, exc, _, modern = _resolve(objectType)
+    if modern:
+        _warn_legacy_once(objectType, modern)
+    if exc is not None:
+        if not isinstance(exc, (ValueError, AttributeError)):
+            logger.critical(f"Could not import {modern or objectType}: {exc}")
+        raise exc
+    return obj
 
 
 # --- named indexes (item 34) -------------------------------------------------
@@ -207,6 +252,14 @@ def store_name_problem(name, what="name"):
     return None
 
 
+# The class a configuration directory or sub-config store is read with
+# (lux_pipeline.config_store.ConfigCache: an FsCache writing normalized JSON
+# checked against the catalogue's schema). A "config" record naming plain
+# FsCache, or no class, gets it.
+CONFIG_CACHE_CLASS = "lux_pipeline.config_store.ConfigCache"
+PLAIN_FS_CACHES = ("storage.cache.filesystem.FsCache", "lux_pipeline.storage.cache.filesystem.FsCache")
+
+
 class Config(object):
     def __init__(self, configcache=None, basepath=None):
         self.internal = {}
@@ -228,6 +281,9 @@ class Config(object):
         # whose records are more configuration (item 35). Loaded after the
         # main directory, in key order; see load_subconfig_store()
         self.subconfig_stores = {}
+        # the order they were read in: a later store's record replaces an
+        # earlier one with the same key (config_store.locations)
+        self.subconfig_order = []
         # {record key: {"store": None | sub-config store key, "path": file or
         # None}}: where each record was read from, so it can be written back
         # (lux_pipeline.config_store). A later record with the same key
@@ -256,12 +312,14 @@ class Config(object):
                 basepath = os.path.dirname(__file__)
             bootstrap = {
                 "name": "config",
-                "datacacheClass": "storage.cache.filesystem.FsCache",
+                "datacacheClass": CONFIG_CACHE_CLASS,
                 "base_dir": basepath,
                 "tabletype": "cache",
+                "all_configs": self,
             }
-            configcache = FsCache(bootstrap)
-            self.configcache = configcache
+            from .config_store import ConfigCache
+            configcache = ConfigCache(bootstrap)
+        self.configcache = configcache
         # The directory the configuration was read from: what a sub-config
         # store's relative base_dir resolves against
         self.config_dir = os.path.abspath(
@@ -655,7 +713,8 @@ class Config(object):
         from the directory this configuration was read from
         (``config_dir``), so a checkout can point at a sibling directory
         with ``"base_dir": "../subs"``; an absolute one is left alone. The
-        store class defaults to `FsCache` with ``tabletype`` ``cache``, so
+        store class defaults to `ConfigCache` (an `FsCache`; a record naming
+        plain FsCache gets it too) with ``tabletype`` ``cache``, so
         ``{"name": "sources", "base_dir": "../subs"}`` reads
         ``../subs/sources_cache/*.json``. A directory that does not exist
         is an error (FsCache would otherwise create an empty one)."""
@@ -676,8 +735,18 @@ class Config(object):
             if not os.path.isdir(directory):
                 raise ValueError(f"Sub-config store {key} points at a directory that "
                                  f"does not exist: {directory}")
-        cls = importObject(cfg.get("datacacheClass") or "storage.cache.filesystem.FsCache")
+        cls_name = cfg.get("datacacheClass")
+        if not cls_name or cls_name in PLAIN_FS_CACHES:
+            from .config_store import ConfigCache as cls
+        else:
+            cls = importObject(cls_name)
         tmp_cfg = self.merge_configs(cfg, self.defaults["cache"])
+        # how the records are written and checked is the store's to say,
+        # not the data caches' defaults
+        for k in ("json_format", "json_schema"):
+            if k not in cfg:
+                tmp_cfg.pop(k, None)
+        tmp_cfg["store_key"] = key
         cfg["datacache"] = cls(tmp_cfg)
         return cfg
 
@@ -688,6 +757,8 @@ class Config(object):
         as one already read replaces it (later wins). Returns the number of
         records read."""
         cache = self.instantiate_config(key)["datacache"]
+        if key not in self.subconfig_order:
+            self.subconfig_order.append(key)
         n = 0
         for k in cache.iter_keys():
             rec = cache[k]["data"]

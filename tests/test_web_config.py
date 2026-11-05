@@ -140,7 +140,7 @@ def test_fields_keep_an_empty_string_and_remove_on_request(web):
     client.post("/config/caches", data=form(client, mode="fields", **{"field:host": "", "field:port": "5433"}))
     data = json.loads(caches.read_text())
     assert data["port"] == 5433 and "host" not in data            # was absent, left empty: still absent
-    assert "\n\n" in caches.read_text()                           # the hand-made blank lines survive
+    assert caches.read_text() == json.dumps(data, indent=2) + "\n"   # written normalized
     client.post("/config/caches", data=form(client, mode="fields", **{"field:dbname": "lux"}))
     assert json.loads(caches.read_text())["dbname"] == "lux"
     client.post("/config/caches", data=form(client, mode="fields",
@@ -158,12 +158,12 @@ def test_a_bad_field_is_refused_and_kept(web):
     assert aat(root).read_text() == before
 
 
-def test_saving_the_text_keeps_it_verbatim(web):
+def test_saving_the_text_stores_it_normalized(web):
     client, _, root = web
     text = aat(root).read_text().replace('"merge_order": 10', '"merge_order":7')
     r = client.post("/config/aat", data=form(client, mode="text", text=text))
     assert r.status_code == 200 and r.url.params.get("tab") == "text"
-    assert aat(root).read_text() == text
+    assert aat(root).read_text() == json.dumps(json.loads(text), indent=2) + "\n"
 
 
 def test_text_that_is_not_json_or_not_valid_is_refused_and_kept(web):

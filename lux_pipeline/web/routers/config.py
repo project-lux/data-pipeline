@@ -59,7 +59,7 @@ def new_page(request, status_code=200, *, record_type=None, key="", store_key=""
     cfgs = request.app.state.lux.configs()
     if record_type and text is None:
         try:
-            text = store.dumps(schema.template(record_type, key or "newone"))
+            text = store.store_cache(cfgs, store_key or None).dumps(schema.template(record_type, key or "newone"))
         except ValueError as e:
             error, record_type = str(e), None
     return page(request, "config/new.html", status_code=status_code, record_type=record_type,
@@ -90,7 +90,7 @@ async def create(request: Request):
     if error:
         return new_page(request, 400, error=f"Not JSON: {error}", **again)
     try:
-        path, warnings = store.new_record(cfgs, key, data, store=store_key or None)
+        path, warnings = store.store_cache(cfgs, store_key or None).create(key, data)
     except ConfigError as e:
         return new_page(request, 400, error="Not written", problems=e.problems or [str(e)], **again)
     actions.record(request, "config.new", key=key, path=path, store=store_key or None)
@@ -117,19 +117,19 @@ async def save(request: Request, key: str):
         return record_page(request, key, 409, error=str(e), **keep)
     try:
         if mode == "text":
-            if text == store.read_text(cfgs, key):
+            if text == store.find(cfgs, key).text(key):
                 return redirect_with(request, f"/config/{key}?tab=text", "No change", "info")
             _, error = parse_text(text)
             if error:
                 return record_page(request, key, 400, error=f"Not JSON: {error}", **keep)
-            path, warnings = store.write_text(cfgs, key, text)
+            path, warnings = store.find(cfgs, key).write_text(key, text)
         else:
             data, problems = data_from_fields(cfgs, key, form)
             if problems:
                 return record_page(request, key, 400, error="Not saved", problems=problems, **keep)
-            if not store.diff_record(cfgs, key, data):
+            if not store.find(cfgs, key).diff(key, data):
                 return redirect_with(request, f"/config/{key}", "No change", "info")
-            path, warnings = store.write_record(cfgs, key, data)
+            path, warnings = store.find(cfgs, key).write(key, data)
     except ConfigError as e:
         return record_page(request, key, 400, error="Not saved", problems=e.problems or [str(e)],
                            **keep)
@@ -151,7 +151,7 @@ async def delete(request: Request, key: str):
         refuse_while_building(cfgs, "config", bool(form.get("force")))
     except RuntimeError as e:
         return record_page(request, key, 409, error=str(e))
-    path = store.delete_record(cfgs, key)
+    path = store.find(cfgs, key).delete(key)
     actions.record(request, "config.delete", key=key, path=path)
     state.reset()
     return redirect_with(request, "/config", f"Deleted {key} ({path}); the configuration was reloaded")
