@@ -391,12 +391,17 @@ def test_chunks_cover_everything():
     assert portal.chunks([1], 4) == [[], [], [], [1]]
 
 
+def portal_cfgs(pool, **internal):
+    return Namespace(internal=internal, external={}, results={"merged": {"recordcache": pool}})
+
+
 def test_tag_portal(pool):
     chain(pool, "p", 8)
-    pool["q"] = None  # a YPM record with no merged record
+    pool["q"] = None  # a portal record with no merged record
     pool["unsettable"] = {"data": {}}
-    cfgs = Namespace(internal={"ypm": {"recordcache2": Keys(["p", "q", "missing", "unsettable"])}},
-                     results={"merged": {"recordcache": pool}})
+    cfgs = portal_cfgs(pool, ypm={"portal": True,
+                                  "recordcache2": Keys(["p", "q", "missing", "unsettable"])},
+                       ycba={"recordcache2": Keys(["z"])})
     reached, tagged = portal.tag_portal(cfgs, workers=2)
     # p is 0, p1 is 1 ...; references are followed from records up to
     # distance 4, so p5 is the last one reached
@@ -405,11 +410,59 @@ def test_tag_portal(pool):
     assert (reached, tagged) == (9, 8)
 
 
-def test_portal_command(monkeypatch):
+def test_portal_sources_from_configuration(caplog):
+    cfgs = Namespace(
+        internal={"peabody": {"portal": "ypm"}, "ycba": {"portal": True}, "yuag": {},
+                  "ils": {"portal": False}, "pmc": {"portal": 1}},
+        external={"wikidata": {"portal": True}},
+        results={"merged": {}})
+    with caplog.at_level("WARNING", logger="lux_pipeline"):
+        assert portal.portal_sources(cfgs) == {"peabody": "ypm", "ycba": "ycba", "pmc": "pmc"}
+    assert "wikidata" in caplog.text and "pmc" in caplog.text
+    assert portal.portal_tags(cfgs) == {"ypm", "ycba", "pmc"}
+
+
+def test_tag_portal_renamed_source_keeps_its_tag(pool):
+    chain(pool, "p", 1)
+    cfgs = portal_cfgs(pool, peabody={"portal": "ypm", "recordcache2": Keys(["p"])})
+    assert portal.tag_portal(cfgs, workers=1) == (2, 2)
+    assert pool.meta == {"p": ("change", "ypm"), "p1": ("change", "ypm")}
+
+
+def test_tag_portal_joins_the_tags_of_several_portals(pool):
+    chain(pool, "a", 1)
+    chain(pool, "b", 1)
+    pool["a"]["data"]["shared"] = ref("b1")
+    cfgs = portal_cfgs(pool, ypm={"portal": True, "recordcache2": Keys(["a"])},
+                       ycba={"portal": True, "recordcache2": Keys(["b"])})
+    assert portal.tag_portal(cfgs, workers=2) == (4, 4)
+    assert pool.meta == {"a": ("change", "ypm"), "a1": ("change", "ypm"),
+                         "b": ("change", "ycba"), "b1": ("change", "ycba|ypm")}
+
+
+def test_tag_portal_with_no_portal_source(pool, caplog):
+    cfgs = portal_cfgs(pool, ypm={"recordcache2": Keys(["p"])})
+    with caplog.at_level("WARNING", logger="lux_pipeline"):
+        assert portal.tag_portal(cfgs, workers=2) == (0, 0)
+    assert "nothing to tag" in caplog.text and pool.meta == {}
+
+
+def test_portal_command(monkeypatch, capsys):
     calls = []
-    monkeypatch.setattr(portal_cli, "tag_portal", lambda cfgs, workers: calls.append(workers) or (5, 4))
+    monkeypatch.setattr(portal_cli, "tag_portal",
+                        lambda cfgs, workers, sources: calls.append((workers, sources)) or (5, 4))
     monkeypatch.setattr(portal_cli, "refuse_while_building", lambda *a: calls.append("guard"))
-    hdlr = portal_cli.CommandHandler(Namespace())
+    cfgs = Namespace(internal={"peabody": {"portal": "ypm"}}, external={}, results={})
+    hdlr = portal_cli.CommandHandler(cfgs)
     assert hdlr.process(Namespace(command="portal", max_workers=0), []) == (5, 4)
     hdlr.process(Namespace(command="portal", max_workers=6), [])
-    assert calls == ["guard", None, "guard", 6]
+    assert calls == ["guard", (None, {"peabody": "ypm"}), "guard", (6, {"peabody": "ypm"})]
+    assert "peabody -> ypm" in capsys.readouterr().out
+
+
+def test_portal_command_with_no_portal_source(monkeypatch, capsys):
+    monkeypatch.setattr(portal_cli, "tag_portal", lambda *a: pytest.fail("ran"))
+    monkeypatch.setattr(portal_cli, "refuse_while_building", lambda *a: None)
+    hdlr = portal_cli.CommandHandler(Namespace(internal={"ypm": {}}, external={}, results={}))
+    assert hdlr.process(Namespace(command="portal", max_workers=0), []) == (0, 0)
+    assert "nothing to tag" in capsys.readouterr().out

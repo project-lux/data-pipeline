@@ -230,6 +230,9 @@ SOURCE = {
     "debug": _k("any", "The acquirer's debug flag."),
     "idmap_name": _k("str", "Results: the identity map the records are keyed by."),
     "trash_non_yale_images": _k("bool", "merged: drop images that are not Yale's."),
+    "portal": _k("any", "lux portal tags the merged records this source's records lead to: "
+                        "true tags them with the source's name, a string with that tag "
+                        "(e.g. \"ypm\" for a renamed source).", roles=("internal",)),
 }
 
 KEYS = {"base": BASE, "system": BASE, "caches": CACHES, "map": MAP, "marklogic": MARKLOGIC,

@@ -9,6 +9,7 @@ import numpy as np
 import ujson as json
 
 from lux_pipeline.process.base.mapper import Mapper
+from lux_pipeline.process.phases.portal import portal_tags
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -24,6 +25,9 @@ class MlMapper(Mapper):
         Mapper.__init__(self, config)
         self.start_str = datetime.datetime.now().isoformat()
         self.configs = config["all_configs"]
+        # the tags `change` may carry: these units, plus every portal's tag
+        self.change_sources = ["ipch", "pmc", "ils", "yuag", "ycba", "ypm"]
+        self.change_sources += sorted(portal_tags(self.configs) - set(self.change_sources))
         self.globals = self.configs.globals
         self.dot_re = re.compile("(.[0-9]{4,10})([^0-9]|$)")
         self.coord_180 = re.compile("180[.0]*")
@@ -270,7 +274,7 @@ class MlMapper(Mapper):
 
         if "change" in record and record["change"]:
             sources = record["change"].split("|")
-            okay = ["ipch", "pmc", "ils", "yuag", "ycba", "ypm"]
+            okay = self.change_sources
             for s in sources[:]:
                 if not s in okay:
                     sources.remove(s)
