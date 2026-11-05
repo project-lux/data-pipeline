@@ -47,6 +47,34 @@ directory step is itself the unit: every ``max_slice``-th such entry.
 Files are counted in order across the entries, and a file
 ``should_process_item`` refuses is not counted.
 
+An entry may say where each record's identifier comes from, with
+``"identifier"`` (for the ``json`` and ``other`` formats; ``raw`` items are
+always identified from the record, ``tabjson`` lines carry theirs):
+
+    (no key)    today's rule: the file or member name, its last component
+                cut at the first "."; a line or item with no name is
+                identified from the record (``extract_identifier``)
+    "name"      the same
+    "record"    {"from": "record", "fields": ["id"], "form": ["last", "extension"]}
+    {"from": "name" | "record", "fields": [...], "form": [...]}
+
+``fields`` (record only, default ``["id"]``) are the record's top-level keys
+tried in order; ``form`` (default ``["last", "extension"]``) are steps
+applied in order to the name or value:
+
+    namespace   strip the source's ``namespace`` (record values only); a
+                value outside it is logged and the record skipped
+    last        keep the last path segment
+    extension   strip one trailing .gz / .bz2, then one of .json .jsonld
+                .xml .rdf .ttl .nt .txt (so "1.2.3" keeps its dots)
+
+so ``{"from": "record", "form": ["namespace", "extension"]}`` makes
+``http://example.org/data/class/1.2.3.json`` (namespace
+``http://example.org/data/``) the identifier ``class/1.2.3``. A name is an
+archive member's name inside its archive, or a file's own name. A source
+class that overrides ``extract_identifier`` decides record identifiers
+itself; the rule then only chooses record over name.
+
 ``prepare(path=..., path_type=...)`` (``lux load --file`` / ``--file-type``)
 replaces the configured file for one run: see `Loader.override_file`.
 
@@ -82,9 +110,19 @@ FORMATS = ("json", "raw", "other", "tabjson")
 COMPRESSIONS = ("gz", "bz2", "z")
 DIRECTORIES = ("dir", "dirs", "pair")
 SLICES = ("records", "files")
+# the input_files "identifier" rule
+IDENTIFIER_SOURCES = ("name", "record")
+IDENTIFIER_STEPS = ("namespace", "last", "extension")
+DEFAULT_IDENTIFIER_FORM = ["last", "extension"]
+COMPRESSION_SUFFIXES = (".gz", ".bz2")
+RECORD_EXTENSIONS = (".json", ".jsonld", ".xml", ".rdf", ".ttl", ".nt", ".txt")
 
 # files above this are not read through to count their lines for progress
 COUNT_LINES_BELOW = 100_000_000
+
+
+# extract_identifier's answer for a value outside the source's namespace
+_OUTSIDE = object()
 
 
 class _StopLoad(Exception):
@@ -179,6 +217,8 @@ class Loader(Sliced):
         self._slicing_files = False
         self._lmdb_envs = {}
         self._ppj_takes_identifier = None
+        self._identifier_rule = None   # the current entry's "identifier", parsed
+        self.outside_namespace = 0     # records skipped: identifier outside the namespace
         self.step_functions = {
             "dir": self.iterate_directory,
             "dirs": self.iterate_directories,
@@ -497,12 +537,14 @@ class Loader(Sliced):
         if data is None:
             return None
         ident = self.extract_identifier(data)
+        if ident is _OUTSIDE:
+            return self._skip_outside(data, parent, None)
         if not ident:
             raise ValueError(f"Could not get an identifier in {self.name} while in {parent}")
         return {"identifier": ident, "data": data}
 
     def make_json(self, path, comp, parent):
-        ident = self.make_identifier(path)
+        ident = self.name_identifier(path)
         if isinstance(path, dict):
             data = path
         else:
@@ -517,6 +559,8 @@ class Loader(Sliced):
             return None
         if not ident:
             ident = self.extract_identifier(data)
+            if ident is _OUTSIDE:
+                return self._skip_outside(data, parent, path)
             if not ident:
                 raise ValueError(f"Could not get an identifier in {self.name} while in {parent}/{path}")
         return {"identifier": ident, "data": data}
@@ -542,7 +586,7 @@ class Loader(Sliced):
         return {"identifier": ident, "data": data}
 
     def make_other(self, path, comp, parent):
-        ident = self.make_identifier(path)
+        ident = self.name_identifier(path)
         with self.file_opener(path, comp) as fh:
             data = fh.read()
         if isinstance(data, bytes):
@@ -554,6 +598,8 @@ class Loader(Sliced):
             data = {"data": data}
         if not ident:
             ident = self.extract_identifier(data)
+            if ident is _OUTSIDE:
+                return self._skip_outside(data, parent, path)
             if not ident:
                 return None
         return {"identifier": ident, "data": data}
@@ -573,10 +619,131 @@ class Loader(Sliced):
         return last.split(".")[0] or None
 
     def extract_identifier(self, data):
-        """The identifier from the record itself; the default looks at ``id``."""
+        """The identifier from the record itself. With an entry's
+        ``identifier`` rule taking it from the record: its ``fields`` in
+        order, shaped by its ``form`` (`_OUTSIDE` when ``namespace`` does
+        not match). Otherwise ``id``, as `make_identifier` shapes a name."""
+        rule = self._identifier_rule
+        if rule is not None and rule["from"] == "record":
+            if not isinstance(data, dict):
+                return None
+            for field in rule["fields"]:
+                value = data.get(field)
+                if value not in (None, ""):
+                    return self.shape_identifier(str(value), rule["form"])
+            return None
         if isinstance(data, dict) and "id" in data:
             return self.make_identifier(data["id"])
         return None
+
+    def name_identifier(self, path):
+        """The identifier a file or member name gives, under the current
+        entry's rule: None when the rule takes it from the record, the
+        name shaped by its ``form`` when it takes it from the name, and
+        `make_identifier` (today's rule) without one."""
+        rule = self._identifier_rule
+        if rule is None:
+            return self.make_identifier(path)
+        if rule["from"] == "record":
+            return None
+        if isinstance(path, Pointer):
+            name = path.get_name()
+        elif isinstance(path, (str, os.PathLike)):
+            name = os.path.basename(os.fspath(path).rstrip("/"))
+        else:
+            return None
+        ident = self.shape_identifier(name, rule["form"])
+        return None if ident is _OUTSIDE else ident
+
+    def shape_identifier(self, value, form):
+        """`value` through the ``form`` steps; `_OUTSIDE` when it is not
+        under the source's namespace, None when nothing is left."""
+        for step in form:
+            if step == "namespace":
+                ns = self.config.get("namespace") or ""
+                if not value.startswith(ns):
+                    return _OUTSIDE
+                value = value[len(ns):]
+            elif step == "last":
+                value = value.rstrip("/").rsplit("/", 1)[-1]
+            elif step == "extension":
+                for suffix in COMPRESSION_SUFFIXES:
+                    if value.endswith(suffix):
+                        value = value[: -len(suffix)]
+                        break
+                for ext in RECORD_EXTENSIONS:
+                    if value.endswith(ext):
+                        value = value[: -len(ext)]
+                        break
+        return value or None
+
+    def _skip_outside(self, data, parent, path):
+        self.outside_namespace += 1
+        where = f"{parent}/{path}" if path is not None else f"{parent}"
+        value = next((data.get(f) for f in self._identifier_rule["fields"]
+                      if isinstance(data, dict) and data.get(f)), None)
+        logger.warning(f"{self.name}: skipped a record in {where}: its identifier {value!r} "
+                       f"is not under the namespace {self.config.get('namespace')!r}")
+        return None
+
+    def entry_identifier(self, entry, spec):
+        """An ``input_files`` entry's ``identifier`` rule, checked and
+        expanded (see the module docstring); None for today's rule.
+        ValueError for one that cannot apply."""
+        rule = entry.get("identifier")
+        if rule is None or rule == "name":
+            return None
+        if rule == "record":
+            rule = {"from": "record"}
+        if not isinstance(rule, dict):
+            raise ValueError(f"{self.name}'s input_files identifier should be \"name\", "
+                             f"\"record\" or an object, not {rule!r}")
+        unknown = set(rule) - {"from", "fields", "form"}
+        if unknown:
+            raise ValueError(f"{self.name}'s input_files identifier has unknown keys: "
+                             f"{', '.join(sorted(unknown))}")
+        source = rule.get("from", "record")
+        if source not in IDENTIFIER_SOURCES:
+            raise ValueError(f"{self.name}'s input_files identifier 'from' is one of "
+                             f"{', '.join(IDENTIFIER_SOURCES)}, not {source!r}")
+        fields = rule.get("fields", ["id"])
+        if isinstance(fields, str):
+            fields = [fields]
+        if source == "name" and "fields" in rule:
+            raise ValueError(f"{self.name}'s input_files identifier: 'fields' is for "
+                             f"\"from\": \"record\"")
+        if not fields or not all(isinstance(f, str) and f for f in fields):
+            raise ValueError(f"{self.name}'s input_files identifier 'fields' should be "
+                             f"field names, not {fields!r}")
+        form = rule.get("form", DEFAULT_IDENTIFIER_FORM)
+        if isinstance(form, str):
+            form = [form]
+        bad = [f for f in form if f not in IDENTIFIER_STEPS] if isinstance(form, list) else [form]
+        if bad:
+            raise ValueError(f"{self.name}'s input_files identifier 'form' steps are "
+                             f"{', '.join(IDENTIFIER_STEPS)}, not {bad!r}")
+        if "namespace" in form:
+            if source == "name":
+                raise ValueError(f"{self.name}'s input_files identifier: 'namespace' "
+                                 f"applies to record values, not names")
+            if not self.config.get("namespace"):
+                raise ValueError(f"{self.name}'s input_files identifier strips the namespace, "
+                                 f"but the source has none")
+        fmt = spec[-1][0]
+        if fmt == "tabjson":
+            raise ValueError(f"{self.name}'s input_files identifier does not apply to "
+                             f"tabjson: each line carries its identifier")
+        if fmt == "raw" and source == "name":
+            raise ValueError(f"{self.name}'s input_files identifier: raw items have no "
+                             f"name; use \"from\": \"record\"")
+        return {"from": source, "fields": list(fields), "form": list(form)}
+
+    def configured_identifier(self, load_type, spec):
+        """The ``identifier`` rule of the config's one entry for
+        `load_type`, applied to `spec` (None when there is not exactly
+        one, or it has none)."""
+        entries = (self.config.get("input_files") or {}).get(load_type) or []
+        return self.entry_identifier(entries[0], spec) if len(entries) == 1 else None
 
     def _post_process_json(self, data, identifier):
         """Call post_process_json with one or two arguments, whichever the
@@ -773,6 +940,10 @@ class Loader(Sliced):
         info = {"path": path, "fmt": spec}
         if self.configured_slice(load_type) == "files" and self.file_level(spec) is not None:
             info["slice"] = "files"
+        # where identifiers come from is the source's, whatever the file
+        rule = self.configured_identifier(load_type, spec)
+        if rule is not None:
+            info["identifier"] = rule
         self.my_files = [info]
         logger.info(f"{self.name}: loading {path} as {fmt} ({why}) instead of the configured file")
 
@@ -820,6 +991,9 @@ class Loader(Sliced):
                 info = {"path": path, "fmt": fmtspec}
                 if self.entry_slice(p) == "files":
                     info["slice"] = "files"
+                rule = self.entry_identifier(p, fmtspec)
+                if rule is not None:
+                    info["identifier"] = rule
                 files.append(info)
         if not files and load_type == "records" and (dfp := self.config.get("dumpFilePath")):
             fmt = self.config.get("dumpFileType")
@@ -858,6 +1032,7 @@ class Loader(Sliced):
                 path = info["path"]
                 self._slicing_files = info.get("slice") == "files"
                 self._file_level = self.file_level(info["fmt"]) if self._slicing_files else None
+                self._identifier_rule = info.get("identifier")
                 if self._slicing_files and self._file_level is None and not self._take_file():
                     continue    # a whole entry is the unit, and another slice's
                 self.progress(description=os.path.basename(str(path).rstrip("/")))
@@ -873,6 +1048,7 @@ class Loader(Sliced):
         finally:
             self._slicing_files = False
             self._file_level = None
+            self._identifier_rule = None
             if hasattr(cache, "resume_commits"):
                 cache.resume_commits()
             elif hasattr(cache, "commit"):
@@ -881,6 +1057,9 @@ class Loader(Sliced):
             for env in self._lmdb_envs.values():
                 env.close()
             self._lmdb_envs = {}
+        if self.outside_namespace:
+            logger.warning(f"{self.name}: {self.outside_namespace} record(s) skipped: their "
+                           f"identifier is not under the namespace {self.config.get('namespace')!r}")
         if self.failed_files:
             raise RuntimeError(f"{self.name}: {len(self.failed_files)} file(s) failed to load: "
                                f"{', '.join(str(f) for f in self.failed_files)}")

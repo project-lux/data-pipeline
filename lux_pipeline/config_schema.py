@@ -228,7 +228,9 @@ SOURCE = {
     "dumpFilePath": _k("path", "The dump file the loader reads (relative to dumps_dir)."),
     "dumpFileType": _k("str", "The dump's format, e.g. tar.gz/json."),
     "remoteDumpFile": _k("url", "Where the dump is downloaded from."),
-    "input_files": _k("dict", "Dump files by load type: [{url, path, type}] (the loader DSL)."),
+    "input_files": _k("dict", "Dump files by load type: [{url, path, type, slice, identifier}] "
+                              "(the loader DSL; identifier: \"name\", \"record\" or {from, "
+                              "fields, form}, see process/base/loader.py)."),
     "dumps_dir": _k("path", "The source's directory under dumps_dir (lux guess-dump-type)."),
     "totalRecords": _k("int", "How many records the dump holds (for progress)."),
     "downloadMdUrl": _k("url", "Read by the ror and oclc downloaders."),
