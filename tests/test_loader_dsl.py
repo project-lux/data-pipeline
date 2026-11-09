@@ -791,9 +791,9 @@ def test_a_class_that_extracts_its_own_identifier_still_wins(tmp_path):
     ({"from": "record", "fields": []}, "zip/json", NS, "'fields' should be field names"),
     ({"from": "name", "fields": ["id"]}, "zip/json", NS, "'fields' is for"),
     ({"from": "name", "form": ["namespace"]}, "zip/json", NS, "applies to record values"),
+    ({"from": "name", "form": ["namespace"]}, "lines/tabjson", None, "the source has none"),
     ({"from": "record", "form": ["namespace"]}, "zip/json", None, "the source has none"),
     ({"from": "record", "fieldz": ["id"]}, "zip/json", NS, "unknown keys: fieldz"),
-    ("record", "lines/tabjson", NS, "does not apply to tabjson"),
     ({"from": "name"}, "array/raw", NS, "raw items have no name"),
 ])
 def test_a_bad_rule_is_refused_at_prepare(tmp_path, rule, typ, namespace, message):
@@ -802,6 +802,83 @@ def test_a_bad_rule_is_refused_at_prepare(tmp_path, rule, typ, namespace, messag
                {"path": str(tmp_path / "x"), "type": typ, "identifier": rule}]}}
     with pytest.raises(ValueError, match=__import__("re").escape(message)):
         Loader(cfg).prepare(0, 1)
+
+
+def tab_lines(tmp_path, lines):
+    fn = tmp_path / "recs.tsv"
+    fn.write_text("".join(line + "\n" for line in lines))
+    return fn
+
+
+def test_tabjson_prefix_namespace_is_stripped(tmp_path):
+    fn = tab_lines(tmp_path, [NS + 'class/1\t{"id": "a"}',
+                              NS + 'class/1.2.json\t{"data": {"id": "b"}}'])
+    ldr = load_with(tmp_path, fn, "lines/tabjson", {"from": "name", "form": ["namespace"]})
+    # only the namespace goes: the rest of the prefix is kept as written
+    assert ldr.out_cache == {"class/1": {"id": "a"}, "class/1.2.json": {"id": "b"}}
+
+
+def test_tabjson_prefix_outside_the_namespace_is_skipped_and_counted(tmp_path, caplog):
+    fn = tab_lines(tmp_path, [NS + 'class/1\t{"id": "a"}',
+                              'http://elsewhere.org/class/2\tnot even JSON'])
+    with caplog.at_level("WARNING", logger="lux_pipeline"):
+        ldr = load_with(tmp_path, fn, "lines/tabjson", {"from": "name", "form": ["namespace"]})
+    # skipped before its JSON is read, so the bad line does not fail the file
+    assert list(ldr.out_cache) == ["class/1"] and ldr.outside_namespace == 1
+    assert not ldr.failed_files
+    assert "'http://elsewhere.org/class/2' is not under the namespace" in caplog.text
+
+
+def test_tabjson_prefix_with_the_other_name_forms(tmp_path):
+    fn = tab_lines(tmp_path, [NS + 'class/1.2.json\t{"id": "a"}'])
+    ldr = load_with(tmp_path, fn, "lines/tabjson",
+                    {"from": "name", "form": ["namespace", "extension"]})
+    assert list(ldr.out_cache) == ["class/1.2"]
+    ldr = load_with(tmp_path, fn, "lines/tabjson", {"from": "name"})    # default form
+    assert list(ldr.out_cache) == ["1.2"]
+
+
+def test_tabjson_without_a_rule_or_with_name_keeps_the_prefix(tmp_path):
+    fn = tab_lines(tmp_path, [NS + 'class/1.2.json\t{"id": "a"}'])
+    for rule in (None, "name"):
+        ldr = load_with(tmp_path, fn, "lines/tabjson", rule)
+        assert list(ldr.out_cache) == [NS + "class/1.2.json"]
+
+
+def test_tabjson_identifier_from_the_record_ignores_the_prefix(tmp_path, caplog):
+    fn = tab_lines(tmp_path, ['k1\t{"data": {"id": "' + NS + 'class/7.json"}}',
+                              'k2\t{"id": "http://elsewhere.org/8"}'])
+    with caplog.at_level("WARNING", logger="lux_pipeline"):
+        ldr = load_with(tmp_path, fn, "lines/tabjson",
+                        {"from": "record", "form": ["namespace", "extension"]})
+    assert list(ldr.out_cache) == ["class/7"] and ldr.outside_namespace == 1
+
+
+def test_tabjson_prefix_that_is_only_the_namespace_fails_the_file(tmp_path):
+    fn = tab_lines(tmp_path, [NS + '\t{"id": "a"}'])
+    with pytest.raises(RuntimeError, match="1 file\\(s\\) failed"):
+        load_with(tmp_path, fn, "lines/tabjson", {"from": "name", "form": ["namespace"]})
+
+
+def test_tabjson_rule_with_file_slicing(tmp_path):
+    import gzip
+    d = tmp_path / "exp"
+    d.mkdir()
+    for f in range(3):
+        with gzip.open(d / f"export_ex_{f}.jsonl.gz", "wt") as fh:
+            for r in range(2):
+                fh.write(f'{NS}c/{f}-{r}\t{{"id": "x"}}\n')
+    got = []
+    for n in range(2):
+        cfg = {"name": "ex", "namespace": NS, "all_configs": StubConfigs(BASE, tmp_path),
+               "datacache": {}, "input_files": {"records": [
+                   {"path": str(d), "type": "dir/lines.gz/tabjson", "slice": "files",
+                    "identifier": {"from": "name", "form": ["namespace"]}}]}}
+        ldr = Loader(cfg)
+        ldr.prepare(n, 2)
+        ldr.process()
+        got += list(ldr.out_cache)
+    assert sorted(got) == [f"c/{f}-{r}" for f in range(3) for r in range(2)]
 
 
 def test_lux_load_file_keeps_the_configured_rule(tmp_path):

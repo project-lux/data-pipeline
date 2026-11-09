@@ -48,8 +48,8 @@ Files are counted in order across the entries, and a file
 ``should_process_item`` refuses is not counted.
 
 An entry may say where each record's identifier comes from, with
-``"identifier"`` (for the ``json`` and ``other`` formats; ``raw`` items are
-always identified from the record, ``tabjson`` lines carry theirs):
+``"identifier"`` (for the ``json``, ``other`` and ``tabjson`` formats; ``raw``
+items are always identified from the record):
 
     (no key)    today's rule: the file or member name, its last component
                 cut at the first "."; a line or item with no name is
@@ -71,7 +71,12 @@ applied in order to the name or value:
 so ``{"from": "record", "form": ["namespace", "extension"]}`` makes
 ``http://example.org/data/class/1.2.3.json`` (namespace
 ``http://example.org/data/``) the identifier ``class/1.2.3``. A name is an
-archive member's name inside its archive, or a file's own name. A source
+archive member's name inside its archive, or a file's own name; for
+``tabjson`` it is the line's prefix, which may be a URI, so ``namespace``
+applies to it too: ``{"from": "name", "form": ["namespace"]}`` keys the line
+``http://example.org/data/class/1<TAB>{...}`` as ``class/1``, and a prefix
+outside the namespace is skipped like a record value. With no rule a tabjson
+prefix is the identifier as written. A source
 class that overrides ``extract_identifier`` decides record identifiers
 itself; the rule then only chooses record over name.
 
@@ -653,7 +658,10 @@ class Loader(Sliced):
     def make_tabjson(self, path, comp, parent):
         """``<identifier><TAB><JSON>``: the identifier is the text before
         the first tab, the record the JSON after it. ``{"data": record}``
-        (what the external export writes) is unwrapped."""
+        (what the external export writes) is unwrapped. An entry's
+        ``identifier`` rule shapes the prefix (``from: name``; a prefix
+        outside the namespace skips the line before its JSON is parsed)
+        or ignores it for the record's fields (``from: record``)."""
         with self.file_opener(path, comp) as fh:
             line = fh.read()
         if isinstance(line, bytes):
@@ -662,12 +670,30 @@ class Loader(Sliced):
         if not sep or not ident:
             raise ValueError(f"No <identifier><TAB> prefix in {self.name} while in {parent}: "
                              f"{line[:80]!r}")
+        rule = getattr(self, "_identifier_rule", None)
+        if rule is not None:
+            if rule["from"] == "record":
+                ident = None
+            else:
+                shaped = self.shape_identifier(ident, rule["form"])
+                if shaped is _OUTSIDE:
+                    return self._skip_outside(None, parent, None, value=ident)
+                if not shaped:
+                    raise ValueError(f"Nothing is left of the identifier {ident!r} in "
+                                     f"{self.name} while in {parent}")
+                ident = shaped
         data = json.loads(text)
         if isinstance(data, dict) and list(data) == ["data"]:
             data = data["data"]
         data = self._post_process_json(data, ident)
         if data is None:
             return None
+        if ident is None:
+            ident = self.extract_identifier(data)
+            if ident is _OUTSIDE:
+                return self._skip_outside(data, parent, None)
+            if not ident:
+                raise ValueError(f"Could not get an identifier in {self.name} while in {parent}")
         return {"identifier": ident, "data": data}
 
     def make_other(self, path, comp, parent):
@@ -762,11 +788,14 @@ class Loader(Sliced):
                         break
         return value or None
 
-    def _skip_outside(self, data, parent, path):
+    def _skip_outside(self, data, parent, path, value=None):
+        """Count and log a record whose identifier (`value`, or the rule's
+        first field in `data` with one) is not under the namespace."""
         self.outside_namespace += 1
         where = f"{parent}/{path}" if path is not None else f"{parent}"
-        value = next((data.get(f) for f in self._identifier_rule["fields"]
-                      if isinstance(data, dict) and data.get(f)), None)
+        if value is None:
+            value = next((data.get(f) for f in self._identifier_rule["fields"]
+                          if isinstance(data, dict) and data.get(f)), None)
         logger.warning(f"{self.name}: skipped a record in {where}: its identifier {value!r} "
                        f"is not under the namespace {self.config.get('namespace')!r}")
         return None
@@ -807,17 +836,16 @@ class Loader(Sliced):
         if bad:
             raise ValueError(f"{self.name}'s input_files identifier 'form' steps are "
                              f"{', '.join(IDENTIFIER_STEPS)}, not {bad!r}")
+        fmt = spec[-1][0]
         if "namespace" in form:
-            if source == "name":
+            # a tabjson line's name is its prefix, often a URI; a file or
+            # member name never is
+            if source == "name" and fmt != "tabjson":
                 raise ValueError(f"{self.name}'s input_files identifier: 'namespace' "
-                                 f"applies to record values, not names")
+                                 f"applies to record values and tabjson prefixes, not names")
             if not self.config.get("namespace"):
                 raise ValueError(f"{self.name}'s input_files identifier strips the namespace, "
                                  f"but the source has none")
-        fmt = spec[-1][0]
-        if fmt == "tabjson":
-            raise ValueError(f"{self.name}'s input_files identifier does not apply to "
-                             f"tabjson: each line carries its identifier")
         if fmt == "raw" and source == "name":
             raise ValueError(f"{self.name}'s input_files identifier: raw items have no "
                              f"name; use \"from\": \"record\"")
