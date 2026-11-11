@@ -131,6 +131,8 @@ The bodies of the build phases, moved out of the old `run-*.py` scripts unchange
 
 ### The loader's input_files grammar
 
+[loader-dsl.md](loader-dsl.md) is the full reference, for setting up a source; this is a summary.
+
 A source config describes its dump files as `input_files`: a dict of load type (`records` by default) to a list of `{"path"|"url", "type"}` entries, where `type` is a small path language (from `process/base/loader.py`; `lux guess-dump-type` writes it for you):
 
 ```
