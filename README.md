@@ -6,6 +6,8 @@ See [docs/install.md](docs/install.md): system packages, `pip install -e .`,
 `lux initialize`, `lux testinstall`, downloading and loading data.
 [docs/rebuild.md](docs/rebuild.md) describes a rebuild step by step and
 [docs/codebase.md](docs/codebase.md) is a tour of the code.
+[docs/loader-dsl.md](docs/loader-dsl.md) is the reference for a source's
+`input_files` block (`lux guess-dump-type`, `lux load`).
 
 ## Running
 
