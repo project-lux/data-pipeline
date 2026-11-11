@@ -1419,6 +1419,32 @@ class PooledCache(AbstractCache):
             logger.info(f"{self.name}: dropped {idx}, {_fmt_bytes(row['size'])} returned")
         return True
 
+    def identifier_to_text(self):
+        """Make the identifier column ``text`` where an older table has it
+        as ``VARCHAR(n)``; True when it changed something.
+
+        The width bought nothing -- Postgres stores, indexes and compares
+        the two the same -- and cost records: a datacache took identifiers
+        up to 256 characters and its recordcache only 120 (less the
+        ``##qua`` suffix it adds), so one between the two loaded and then
+        failed to store, one logged error per record. Going from varchar
+        to text is binary-coercible, so the ALTER rewrites neither the
+        table nor its indexes; it only holds an ACCESS EXCLUSIVE lock for
+        the moment the catalogue changes."""
+        with self._maintenance() as cursor:
+            cursor.execute("""SELECT data_type, character_maximum_length AS width
+                FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = %s
+                  AND column_name = 'identifier'""", (self.name,))
+            row = cursor.fetchone()
+            if row is None or row["data_type"] != "character varying":
+                return False
+            cursor.execute(f"ALTER TABLE {self.name} ALTER COLUMN identifier TYPE text")
+            logger.info(f"{self.name}: identifier VARCHAR({row['width']}) -> text")
+        if getattr(self, "_col_types", None):
+            self._col_types.pop("identifier", None)
+        return True
+
     def _pk_index(self):
         qry = ("SELECT i.relname AS name FROM pg_index x "
                "JOIN pg_class i ON i.oid = x.indexrelid "
@@ -1467,7 +1493,7 @@ class DataCache(PooledCache):
 
     def __init__(self, config):
         self.pk_defn = """            yuid uuid,
-            identifier VARCHAR (256) PRIMARY KEY,"""
+            identifier TEXT PRIMARY KEY,"""
         self.key = "identifier"
         if not "tabletype" in config:
             config["tabletype"] = "data_cache"
@@ -1478,7 +1504,7 @@ class InternalRecordCache(PooledCache):
     # No YUID, Identifier is PK, data is LOD from units
 
     def __init__(self, config):
-        self.pk_defn = """identifier VARCHAR (120) PRIMARY KEY,"""
+        self.pk_defn = """identifier TEXT PRIMARY KEY,"""
         self.key = "identifier"
         if not "tabletype" in config:
             config["tabletype"] = "record_cache"
@@ -1490,7 +1516,7 @@ class ExternalRecordCache(PooledCache):
 
     def __init__(self, config):
         self.pk_defn = """            yuid uuid,
-        identifier VARCHAR (120) PRIMARY KEY,"""
+        identifier TEXT PRIMARY KEY,"""
         self.key = "identifier"
         if not "tabletype" in config:
             config["tabletype"] = "ext_record_cache"
@@ -1502,7 +1528,7 @@ class ExternalReconciledRecordCache(PooledCache):
 
     def __init__(self, config):
         self.pk_defn = """            yuid uuid,
-        identifier VARCHAR (120) PRIMARY KEY,"""
+        identifier TEXT PRIMARY KEY,"""
         self.key = "identifier"
         if not "tabletype" in config:
             config["tabletype"] = "ext_reconciled_record_cache"
@@ -1514,7 +1540,7 @@ class RecordCache(PooledCache):
 
     def __init__(self, config):
         self.pk_defn = """            yuid uuid PRIMARY KEY,
-        identifier VARCHAR (120),"""
+        identifier TEXT,"""
         self.key = "yuid"
         if not "tabletype" in config:
             config["tabletype"] = "rewritten_record_cache"
