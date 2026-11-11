@@ -33,6 +33,10 @@ class PgCache:
     def rewrite(self):
         self.log.append(("rewrite", self.label))
 
+    def identifier_to_text(self):
+        self.log.append(("identifier_text", self.label))
+        return not self.label.endswith("recordcache2")
+
 
 class LmdbCache:
     """Not Postgres: none of the maintenance methods."""
@@ -137,12 +141,12 @@ def test_maps_join_vacuum_and_bloat(run, capsys):
 
 def test_actions_run_in_order(run):
     cfgs, out, _ = run("--vacuum", "--rewrite", "--bloat", "--drop-time-indexes",
-                       "--idmap-indexes", "--expire-yuids", "180", "--cache", "recordcache",
-                       source="aat")
-    assert out["actions"] == ["bloat", "drop_time_indexes", "idmap_indexes", "rewrite",
-                              "expire_yuids", "vacuum"]
-    assert [x[0] for x in cfgs.log] == ["bloat", "drop_time_index", "covering", "rewrite",
-                                        "expire", "vacuum"]
+                       "--identifier-text", "--idmap-indexes", "--expire-yuids", "180",
+                       "--cache", "recordcache", source="aat")
+    assert out["actions"] == ["bloat", "drop_time_indexes", "identifier_text", "idmap_indexes",
+                              "rewrite", "expire_yuids", "vacuum"]
+    assert [x[0] for x in cfgs.log] == ["bloat", "drop_time_index", "identifier_text",
+                                        "covering", "rewrite", "expire", "vacuum"]
 
 
 def test_expire_yuids_reports_and_deletes(run, capsys):
@@ -247,3 +251,28 @@ def test_unknown_names_fail_before_anything_runs(run):
 def test_listed():
     from lux_pipeline.cli.help import list_commands
     assert dict(list_commands())["pg-maintain"].startswith("Maintain the Postgres tables")
+
+
+def test_identifier_text_reaches_every_cache_with_an_identifier(run, capsys):
+    cfgs, _, refused = run("--identifier-text")
+    # unlike --vacuum's list: reconciledRecordcache and the results'
+    # datacache have identifier columns too
+    assert cfgs.log == [("identifier_text", t) for t in (
+        "ycba.datacache", "ycba.recordcache", "ycba.recordcache2", "ycba.reconciledRecordcache",
+        "aat.datacache", "aat.recordcache", "lcnaf.recordcache",
+        "merged.datacache", "merged.recordcache", "merged.recordcache2")]
+    text = capsys.readouterr().out
+    assert "made 8 identifier column(s) text" in text
+    assert "skipped, not Postgres tables: lcnaf datacache" in text
+    assert refused == [("pg-maintain", False)]
+
+
+def test_identifier_text_with_other_actions_keeps_their_tables(run):
+    cfgs, _, _ = run("--identifier-text", "--vacuum", source="ycba")
+    assert [x[1] for x in cfgs.log if x[0] == "identifier_text"][-1] == "ycba.reconciledRecordcache"
+    assert "ycba.reconciledRecordcache" not in [x[1] for x in cfgs.log if x[0] == "vacuum"]
+
+
+def test_identifier_text_narrowed_by_cache(run):
+    cfgs, _, _ = run("--identifier-text", "--cache", "datacache", source="aat")
+    assert cfgs.log == [("identifier_text", "aat.datacache")]
