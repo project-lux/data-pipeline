@@ -35,7 +35,7 @@ and afterwards you have to be able to say exactly what changed.
 | key | |
 | --- | --- |
 | `masterMap` | **Required.** The `name` of another map store config, resolved through `instantiate_map()` — so the master is whatever *its* config says it is. The sample `map_idmap.json` is redis; nothing here cares. |
-| `tableName` | **Required**, and deliberately has no default. The parent class falls back to `idmap`, and a subsidiary that inherited that against a postgres master in the same database would write straight into the master's tables. |
+| `tableName` | **Required**, and deliberately has no default. The parent class falls back to the map's name; a subsidiary must say which tables it uses, and `_guard_distinct()` refuses one that resolves to the master's. |
 | `copyUpdateToken` | Copy the master's update token onto a YUID as it is copied. Default true. Free against a redis master, which returns the token as a set member; one extra call per class against a postgres one. |
 | `logChanges` | Write the `{table}_changes` audit trail. Default true. The origin snapshot is kept either way. |
 
