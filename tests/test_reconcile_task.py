@@ -148,12 +148,13 @@ def harness(tmp_path, monkeypatch):
 
         def patch(self):
             def reconcile_slice(cfgs, idmap, networkmap, to_do, my_slice=-1, max_slice=-1,
-                                do_references=True, progress=null_progress, write_flag=True):
+                                do_references=True, progress=null_progress, write_flag=True,
+                                distance_log=None):
                 self.log.append(("reconcile_slice", my_slice, max_slice))
                 self.slice_calls.append(dict(cfgs=cfgs, idmap=idmap, networkmap=networkmap,
                                              to_do=to_do, my_slice=my_slice, max_slice=max_slice,
                                              do_references=do_references, progress=progress,
-                                             token=idmap.update_token))
+                                             token=idmap.update_token, distance_log=distance_log))
                 if self.fail:
                     raise RuntimeError("acquire failed")
                 return {"records": {"records": 3}, "references": None}
@@ -215,6 +216,21 @@ def test_my_worker_runs_only_that_slice_under_the_null_engine(harness):
     m = h.manager(workers=4, my_worker=2)
     m.process("null")
     assert [(c["my_slice"], c["max_slice"]) for c in h.slice_calls] == [(2, 4)]
+
+
+def test_each_worker_logs_its_distance_drops_beside_its_log(harness, tmp_path):
+    h = harness
+    m = h.manager(workers=4, my_worker=2)
+    prefix = str(tmp_path / "reconcile-20261113")
+    m.process("null", prefix=prefix)
+    assert h.slice_calls[0]["distance_log"] == f"{prefix}-w2.distance"
+
+
+def test_no_prefix_no_distance_file(harness):
+    h = harness
+    m = h.manager(workers=1)
+    m.run_single()
+    assert h.slice_calls[0]["distance_log"] is None
 
 
 def test_named_external_source_and_no_refs(harness):

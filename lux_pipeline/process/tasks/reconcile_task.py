@@ -40,6 +40,7 @@ from lux_pipeline.process.phases.identify import report_lines, resolve_identity,
 from lux_pipeline.process.phases.reconcile import (new_update_token, reconcile_slice, select_sources,
                                                    write_refs)
 from lux_pipeline.process.reference_manager import ReferenceManager, metatypes_pattern
+from lux_pipeline.progress import distance_log_path
 from ._task_manager import TaskManager, flags_pattern, remove_stale
 
 logger = logging.getLogger("lux_pipeline")
@@ -127,8 +128,10 @@ class ReconcileManager(TaskManager):
         networkmap = cfgs.instantiate_map("networkmap")["store"]
         to_do = select_sources(cfgs, names=self.names, baseline=self.baseline, recids=self.recids)
         my_slice, max_slice = self.slice_for(n)
+        distance_log = distance_log_path(self.prefix, n) if self.prefix else None
         return reconcile_slice(cfgs, idmap, networkmap, to_do, my_slice=my_slice, max_slice=max_slice,
-                               do_references=not self.no_refs, progress=progress)
+                               do_references=not self.no_refs, progress=progress,
+                               distance_log=distance_log)
 
     # ----------------------------------------------------------- driver
 

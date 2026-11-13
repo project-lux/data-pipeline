@@ -133,6 +133,14 @@ def timing_log_path(prefix, worker):
     return f"{prefix}-w{worker}.timing"
 
 
+def distance_log_path(prefix, worker):
+    """Reconcile worker `worker`'s references dropped for being beyond
+    ``max_distance``: ``<prefix>-w<n>.distance``, one ``dist<TAB>uri##qua<Class>``
+    line each, for grepping after the run (not the log: there can be
+    millions)."""
+    return f"{prefix}-w{worker}.distance"
+
+
 def driver_timing_path(prefix):
     """The driver's timing reports (identify, run in the driver):
     ``<prefix>.timing``."""

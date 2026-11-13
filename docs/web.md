@@ -246,6 +246,7 @@ All under the configuration's `log_dir`, as the shell's `lux` writes them:
 | `<prefix>-w<n>.status` | each worker's progress (JSON, rewritten as it goes) |
 | `<prefix>-w<n>.log` | each worker's log |
 | `<prefix>-w<n>.timing`, `<prefix>.timing` | `PhaseTimer`'s reports (rates, cpu, each stage's share), kept out of the logs; `/api/runs/<run>/timing` |
+| `<prefix>-w<n>.distance` | reconcile only: one `dist<TAB>uri##qua<Class>` line per reference dropped for being beyond `max_distance`, for grepping; no file when none was |
 | `<prefix>.run` | the run: command line, host, pid, workers, sources, parent build, start, finish, exit |
 | `<prefix>.out` | a web-started run's own output |
 | `timing-*.json`, `profile-*.prof` | `PhaseTimer`'s timings and profiles (the Timing page) |

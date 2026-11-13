@@ -213,6 +213,9 @@ class TaskManager:
     # True when workers beyond len(sources) have nothing to do and the view
     # should hide them (harvest, download)
     hide_idle_workers = False
+    # The run's prefix while `process` runs (None: no files), so a worker's
+    # `_distributed` can name files of its own beside its log
+    prefix = None
 
     def __init__(self, configs, max_workers=0, args=None):
         self.configs = configs
@@ -274,6 +277,7 @@ class TaskManager:
         of worker results, indexed by worker; raises `WorkerFailed` after
         every worker has finished if any raised."""
         eng = make_engine(engine, self)
+        self.prefix = prefix
         cfgs = self.configs
         # pickled to the workers; carries no DB connections. Workers build
         # their own through lux_pipeline.runtime

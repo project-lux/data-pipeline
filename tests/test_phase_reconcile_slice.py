@@ -378,6 +378,43 @@ def test_references_loop_handles_every_kind_of_item(harness, caplog):
     assert (result["references"]["records"], result["references"]["skipped"]) == (1, 1)
 
 
+def test_references_beyond_max_distance_go_to_the_distance_log(harness, tmp_path, caplog):
+    """max_distance is 2: the distance-3 references are dropped, unreconciled,
+    one line each in the worker's file; the one in range is not listed."""
+    h = harness
+    h.queue[:] = [
+        (f"{AAT}1##quaType", {"dist": 2, "type": "Type"}),
+        (f"{AAT}2##quaType", {"dist": 3, "type": "Type"}),
+        (f"{AAT}3##quaPlace", {"dist": 3, "type": "Place"}),
+        None,
+    ]
+    path = tmp_path / "run-w0.distance"
+    with caplog.at_level(logging.INFO, logger="lux_pipeline"):
+        h.run([], distance_log=str(path))
+    assert path.read_text().splitlines() == [f"3\t{AAT}2##quaType", f"3\t{AAT}3##quaPlace"]
+    assert [c[1] for c in h.only("acquire")] == ["aat"]
+    assert f"2 references beyond max_distance 2 not reconciled: {path}" in caplog.text
+
+
+def test_no_distance_file_when_nothing_is_dropped(harness, tmp_path, caplog):
+    h = harness
+    h.queue[:] = [(f"{AAT}1##quaType", {"dist": 1, "type": "Type"}), None]
+    path = tmp_path / "run-w0.distance"
+    with caplog.at_level(logging.INFO, logger="lux_pipeline"):
+        h.run([], distance_log=str(path))
+    assert not path.exists()
+    assert "beyond max_distance" not in caplog.text
+
+
+def test_without_a_distance_log_drops_are_only_counted(harness, tmp_path, caplog):
+    h = harness
+    h.queue[:] = [(f"{AAT}2##quaType", {"dist": 3, "type": "Type"}), None]
+    with caplog.at_level(logging.INFO, logger="lux_pipeline"):
+        h.run([])
+    assert "1 references beyond max_distance 2 not reconciled" in caplog.text
+    assert not list(tmp_path.rglob("*.distance"))
+
+
 def test_reference_without_qua_raises(harness):
     h = harness
     h.queue[:] = [(f"{AAT}1", {"dist": 1, "type": "Type"}), None]

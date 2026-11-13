@@ -153,7 +153,9 @@ laptop (the validator reads its schemas on first use, not at construction).
 | `lux_pipeline/cli/viz.py` | item 36: `lux viz --recid <from>,<to>` replays one identity's records with debug on (Reconciler, Collector, source reconcilers) and draws `Reconciler.debug_graph` with netext (`.[ui-extras]`, imported inside `process`); a second Rich user besides `_view.py` |
 | `lux_pipeline/storage/cache/abstract.py` | item 38: `AbstractCache`, the cache API contract: required methods raise `NotImplementedError`, the rest (`get_multi`, `has_multi`, `get_fresh`, `len_estimate`, type iterators, bulk, commit hooks, dict methods) have defaults; `PooledCache` and `FsCache` inherit it. Backend-only capabilities (`backup`/`restore`, Postgres maintenance, `get_like`) stay out because callers probe for them with `getattr`. `FsCache` keeps times as file mtimes and `refresh_time`/`valid`/`change` in `<key>.json.meta` |
 
-Worker status, log and timing files follow `<log_dir>/<command>-<timestamp>-w<n>.status|.log|.timing`,
+Worker status, log and timing files follow `<log_dir>/<command>-<timestamp>-w<n>.status|.log|.timing`
+(a reconcile worker also writes `-w<n>.distance`, `dist<TAB>uri##qua<Class>` per reference dropped
+for being beyond `max_distance`, opened on the first drop: `progress.distance_log_path`),
 and the driver's own log is `<prefix>.log` (`progress.driver_log_path`;
 `LogTailer` reads it as the worker `progress.DRIVER`, the web UI as worker
 `driver`). Beside them the driver writes `<prefix>.run`: the command line, host and
