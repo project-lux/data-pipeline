@@ -417,6 +417,13 @@ class Rec:
         self.defer = defer
 
     def statement(self):
+        if self.kind == "list":
+            # each element quoted on its own: ALTER SYSTEM SET x = 'a,b' makes
+            # ONE element named "a,b", and for shared_preload_libraries a
+            # server that will not start ("could not access file
+            # "a,b"")
+            v = ", ".join(f"'{x.strip()}'" for x in self.value.split(",") if x.strip())
+            return f"ALTER SYSTEM SET {self.name} = {v};"
         v = f"'{self.value}'" if self.quote or self.kind in ("bytes", "ms", "str") else self.value
         return f"ALTER SYSTEM SET {self.name} = {v};"
 
@@ -646,7 +653,7 @@ def recommend(m, srv, workers):
         libs.append("pg_stat_statements")
         obs.insert(0, Rec("shared_preload_libraries", ",".join(libs),
                           "appended to what is already loaded -- replacing this "
-                          "list would silently unload the rest", quote=True,
+                          "list would silently unload the rest", kind="list",
                           restart=True))
     out.append(("Observability", obs))
     return out
