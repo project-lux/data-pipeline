@@ -202,6 +202,7 @@ def test_log_panel_is_bounded():
 
 def test_tailer_replaces_undecodable_bytes(tmp_path):
     prefix = str(tmp_path / "x")
+    Path(prefix).mkdir()
     Path(log_path(prefix, 0)).write_bytes(b"ok \xff bad\n")
     assert LogTailer(prefix, 1).read_new_lines() == [(0, "ok � bad")]
 

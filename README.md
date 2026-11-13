@@ -35,7 +35,7 @@ lux build --clear --background         # start it, return, and leave it running
 `--background` (`-b`) works for any command that is a run: instead of
 `nohup lux ... &`, `lux` starts the command as a process of its own
 (closing the terminal does not stop it) and prints where its output goes
-(`<prefix>.out`), the `lux watch <prefix>` that follows it, and the
+(`<prefix>/stdout.log`), the `lux watch <prefix>` that follows it, and the
 `kill -- -<pid>` that stops it with its workers. A mistake on the command
 line is still reported at once, with its exit status.
 
@@ -58,12 +58,14 @@ phases may be run from any directory. `./run-all2.sh --all` is the same build as
 `run-all.sh` beside it is kept until the two have been compared on the
 build machine.
 
-Every worker writes `<log_dir>/<command>-<timestamp>-w<n>.status` and
-`.log` files; `lux watch --latest` reads them to attach to a running (or
-finished) build from another terminal, and `lux watch <build prefix>`
-follows a `lux build` step by step. The command itself leaves
-`<prefix>.log` (its own log: what it does before, between and after its
-workers) and `<prefix>.run` (its command line and how it ended) beside them. `--log DEBUG` (or `--debug`) turns
+Every run is a directory, `<log_dir>/<command>-<timestamp>/` (its
+"prefix"; `--prefix` names another). Each worker writes `w<n>.status` and
+`w<n>.log` in it; `lux watch --latest` reads them to attach to a running
+(or finished) build from another terminal, and `lux watch <build prefix>`
+follows a `lux build` step by step (its steps are runs in its directory:
+`<build prefix>/reconcile`, ...). The command itself leaves `driver.log`
+(its own log: what it does before, between and after its workers) and
+`run.json` (its command line and how it ended) beside them. `--log DEBUG` (or `--debug`) turns
 up the logging, and `--no-ui` gives plain output instead of the console
 view. Other commands worth knowing:
 

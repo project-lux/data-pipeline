@@ -202,12 +202,12 @@ def test_nothing_to_validate(tmp_path):
 def test_process_writes_beside_the_logs_and_clears_old_reports(tmp_path, monkeypatch):
     cfgs = Configs(tmp_path)
     monkeypatch.setattr(_task_manager.runtime, "get_configs", lambda: cfgs)
-    old = Path(f"{tmp_path}/run-errors")
-    old.mkdir()
+    old = Path(f"{tmp_path}/run/errors")
+    old.mkdir(parents=True)
     (old / "validate-w0.jsonl").write_text('{"old": true}\n')
     m = manager(cfgs, sources=("ypm",), workers=1)
     m.process("null", prefix=str(tmp_path / "run"))
-    assert m.report_dir == f"{tmp_path}/run-errors"
+    assert m.report_dir == f"{tmp_path}/run/errors"
     lines = (old / "validate-w0.jsonl").read_text().splitlines()
     assert len(lines) == 1 and json.loads(lines[0])["identifier"] == "p"
 
@@ -230,7 +230,7 @@ def test_command_defaults_to_internal_and_prints_a_summary(tmp_path, monkeypatch
     out = capsys.readouterr().out
     assert "ycba/recordcache" in out and "most common errors (of 3 kinds):" in out
     assert "Person /identified_by/* [anyOf>additionalProperties]: Additional properties" in out
-    assert f"{tmp_path}/validate-errors/validate-w*.jsonl" in out
+    assert f"{tmp_path}/validate/errors/validate-w*.jsonl" in out
 
 
 def test_command_strict_fails_on_invalid(tmp_path, monkeypatch):

@@ -223,7 +223,7 @@ def test_each_worker_logs_its_distance_drops_beside_its_log(harness, tmp_path):
     m = h.manager(workers=4, my_worker=2)
     prefix = str(tmp_path / "reconcile-20261113")
     m.process("null", prefix=prefix)
-    assert h.slice_calls[0]["distance_log"] == f"{prefix}-w2.distance"
+    assert h.slice_calls[0]["distance_log"] == f"{prefix}/w2.distance"
 
 
 def test_no_prefix_no_distance_file(harness):
@@ -508,7 +508,7 @@ def test_command_full_run_with_the_tail(harness, tmp_path, capsys):
     assert h.names()[-1] == "clear"
     assert m.finish_stats["metatypes"] == 2
     assert "status/log prefix:" in capsys.readouterr().out
-    assert (tmp_path / "reconcile-w0.status").exists()
+    assert (tmp_path / "reconcile" / "w0.status").exists()
 
 
 def test_command_options(harness, tmp_path):

@@ -7,6 +7,7 @@ Starting is the runner's (tests/test_web_runner.py); here it is recorded
 rather than run, except where a test says so."""
 
 import json
+import os
 import re
 import sys
 import time
@@ -54,7 +55,7 @@ def started(web, monkeypatch):
         RunRecord(prefix, command, ["lux", command, *tail], extra={"web": True}).start()
         calls.append({"command": command, "tail": list(tail), "force": force, "guarded": guarded,
                       "prefix": prefix})
-        return RunHandle(prefix, command, ["lux", command, *tail], 0, time.time(), f"{prefix}.out")
+        return RunHandle(prefix, command, ["lux", command, *tail], 0, time.time(), os.path.join(prefix, "stdout.log"))
 
     monkeypatch.setattr(runner, "start", start)
     return calls
@@ -245,7 +246,7 @@ def test_a_real_run_from_the_form(web):
         time.sleep(0.1)
     rec = read_run(prefix)
     assert rec["exit"] == 0 and rec["web"] is True
-    assert "idmap" in Path(f"{prefix}.out").read_text()
+    assert "idmap" in Path(prefix, "stdout.log").read_text()
     html = client.get(r.headers["location"]).text
     assert "finished" in html and "Run again" in html and 'href="/commands/list?maps=1"' in html
 
@@ -343,7 +344,7 @@ def test_a_run_page_links_to_run_it_again(web):
     prefix = write_fake_run(state.configs().log_dir, "reconcile", 1, exit=0)
     rec = read_run(prefix)
     rec["argv"] = ["lux", "reconcile", "--source", "ycba", "--no-refs", "--no-ui", "--prefix", prefix]
-    Path(f"{prefix}.run").write_text(json.dumps(rec))
+    Path(prefix, "run.json").write_text(json.dumps(rec))
     html = client.get(f"/runs/{Path(prefix).name}").text
     m = re.search(r'href="(/commands/reconcile\?[^"]+)">Run again', html)
     assert m

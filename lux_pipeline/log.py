@@ -10,6 +10,7 @@ propagates to ``lux_pipeline`` like any child logger.
 """
 
 import logging
+import os
 
 logger = logging.getLogger("lux_pipeline")
 timing_logger = logging.getLogger("lux_pipeline.timing")
@@ -47,6 +48,14 @@ def send_timing_to(path):
         timing_logger.propagate = True
         timing_logger.setLevel(logging.NOTSET)
         return None
+    d = os.path.dirname(path)
+    if d:
+        # a run's directory, made by whichever of its files comes first;
+        # one that cannot be made fails on the first report, as before
+        try:
+            os.makedirs(d, exist_ok=True)
+        except OSError:
+            pass
     handler = logging.FileHandler(path, delay=True)
     handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", datefmt="%H:%M:%S"))
     handler.lux_timing_file = path

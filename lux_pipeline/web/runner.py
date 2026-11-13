@@ -3,11 +3,11 @@
 A command is a process of its own, as `lux build` runs its phases:
 ``python -m lux_pipeline.cli.entry <command> ... --no-ui --prefix <P>``,
 in a new session (so cancelling it stops its workers too), with its
-output in ``<P>.out``. The server never runs a phase itself, and does not
+output in ``<P>/stdout.log``. The server never runs a phase itself, and does not
 wait for one: the run page reads the run's files (W09). So the server can
 be restarted while a build runs (`adopt` picks the runs up again).
 
-Every run the runner starts has a record (``<P>.run``) from its first
+Every run the runner starts has a record (``<P>/run.json``) from its first
 moment: the runner writes one with the child's pid, the command's driver
 (a worker command, `lux build`) replaces it with its own, and, through
 ``LUX_RUN_EXTRA``, keeps ``web: true`` and the ``stdout`` file in it. When

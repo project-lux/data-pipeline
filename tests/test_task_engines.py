@@ -236,10 +236,11 @@ def test_attach_worker_log_handler_replaces_everything_and_clamps(tmp_path):
     lg = attach_worker_log_handler(str(tmp_path / "p"), 3, "LOUD")
     assert len(lg.handlers) == 1
     assert lg.handlers[0].level == logging.INFO
-    assert lg.handlers[0].baseFilename == str(tmp_path / "p-w3.log")
+    assert lg.handlers[0].baseFilename == str(tmp_path / "p" / "w3.log")
     assert lg.level == logging.INFO
-    # delay=True: nothing on disk until something is logged
-    assert not (tmp_path / "p-w3.log").exists()
+    # delay=True: nothing on disk until something is logged (the run's
+    # directory is made for it)
+    assert not (tmp_path / "p" / "w3.log").exists()
     lg2 = attach_worker_log_handler(None, 0)
     assert isinstance(lg2.handlers[0], logging.NullHandler)
 
@@ -252,7 +253,7 @@ def test_null_engine_runs_only_my_slice(tmp_path):
     args = Namespace(my_worker=1, log="INFO", max_records=-1)
     m = CountingManager(None, max_workers=3, args=args, out_dir=str(tmp_path))
     assert m.process("null", prefix, None) == [1]
-    assert sorted(p.name for p in tmp_path.glob("*.status")) == ["null-1-w1.status"]
+    assert sorted(p.name for p in tmp_path.glob("null-1/*.status")) == ["w1.status"]
     assert (tmp_path / "1").exists() and not (tmp_path / "0").exists()
 
 

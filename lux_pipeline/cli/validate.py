@@ -10,7 +10,7 @@ Replaces ``manage-data.py --validate --<source>``. Each worker validates
 its slice of each source's cache (``--cache``, default recordcache) against
 the schemas in ``<data_dir>/schema`` (``lux initialize`` fetches them; a
 missing one stops the run before any worker starts). Every error goes to
-``validate-w<n>.jsonl`` in ``<prefix>-errors/`` beside the run's logs
+``validate-w<n>.jsonl`` in ``<prefix>/errors/`` with the run's logs
 (``--out-dir`` overrides): source, cache, identifier, class, path, the
 schema rule that failed, and the message.
 
@@ -44,7 +44,7 @@ class CommandHandler(CH):
         ap.add_argument("--ignore", action="append", default=[], metavar="TEXT",
                         help="Drop errors whose message contains TEXT; repeatable")
         ap.add_argument("--out-dir", dest="out_dir", default=None,
-                        help="Where to write the error reports (default: <prefix>-errors)")
+                        help="Where to write the error reports (default: <prefix>/errors)")
         ap.add_argument("--strict", action="store_true",
                         help="Exit 1 if any record is invalid")
         self.extra_args = {"caches": "cache", "ignore": "ignore", "report_dir": "out_dir"}

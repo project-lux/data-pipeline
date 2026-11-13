@@ -72,7 +72,9 @@ def install(monkeypatch, tmp_path):
 
 
 def runs(root):
-    return sorted(p[:-4] for p in os.listdir(root / "data" / "logs") if p.endswith(".run"))
+    """The runs under log_dir: directories with a record"""
+    logs = root / "data" / "logs"
+    return sorted(p for p in os.listdir(logs) if (logs / p / "run.json").exists())
 
 
 # --- the command line ---------------------------------------------------------
@@ -117,7 +119,7 @@ def test_a_quick_command_finishes_and_its_output_is_kept(install, capsys):
     assert wait_until(lambda: (read_run(prefix) or {}).get("exit") is not None)
     rec = read_run(prefix)
     assert rec["exit"] == 0 and rec["background"] is True and "provisional" not in rec
-    assert rec["stdout"] == f"{prefix}.out" and os.path.getsize(f"{prefix}.out") > 0
+    assert rec["stdout"] == os.path.join(prefix, "stdout.log") and os.path.getsize(os.path.join(prefix, "stdout.log")) > 0
     assert prefix in out
 
 
@@ -140,15 +142,15 @@ def test_a_long_run_carries_on_and_is_followed_like_any_other(install, tmp_path,
     rec = read_run(prefix)
     assert rec["exit"] is None and not rec.get("provisional") and pid_alive(rec["pid"])
     assert run_state(rec, read_build(prefix, 0)) == "running"
-    assert wait_until(lambda: "sleeper started" in Path(f"{prefix}.log").read_text()
-                      if os.path.exists(f"{prefix}.log") else False)
+    assert wait_until(lambda: "sleeper started" in Path(os.path.join(prefix, "driver.log")).read_text()
+                      if os.path.exists(os.path.join(prefix, "driver.log")) else False)
 
     release.touch()
     assert wait_until(lambda: (read_run(prefix) or {}).get("exit") is not None)
     assert read_run(prefix)["exit"] == 0
     os.waitpid(rec["pid"], 0)       # our child here; the shell's would be init's
-    assert "sleeper says hello" in Path(f"{prefix}.out").read_text()
-    assert "sleeper done" in Path(f"{prefix}.log").read_text()
+    assert "sleeper says hello" in Path(os.path.join(prefix, "stdout.log")).read_text()
+    assert "sleeper done" in Path(os.path.join(prefix, "driver.log")).read_text()
 
 
 def test_stopping_the_process_group_stops_its_workers(install, tmp_path, capsys):
@@ -174,8 +176,8 @@ def test_a_slice_writes_no_record_of_its_own(install, capsys):
     prefix = str(install / "data" / "logs" / "slices")
     assert entry.run(["bgtests.sleeper", "--max-workers", "2", "--my-worker", "1",
                       "--prefix", prefix, "-b"]) == 0
-    assert wait_until(lambda: "sleeper done" in Path(f"{prefix}-w1.out").read_text()
-                      if os.path.exists(f"{prefix}-w1.out") else False)
+    assert wait_until(lambda: "sleeper done" in Path(os.path.join(prefix, "w1.out")).read_text()
+                      if os.path.exists(os.path.join(prefix, "w1.out")) else False)
     rec = read_run(prefix)
     # the one-shot command's own record (entry.start_record), not a provisional one
     assert rec is None or not rec.get("provisional")
@@ -185,4 +187,4 @@ def test_the_background_process_never_starts_itself_again(install, monkeypatch, 
     monkeypatch.setenv(_background.CHILD_ENV, "1")
     prefix = str(install / "data" / "logs" / "inproc")
     assert entry.run(["bgtests.sleeper", "--prefix", prefix, "-b"]) == 0
-    assert read_run(prefix)["exit"] == 0 and not os.path.exists(f"{prefix}.out")
+    assert read_run(prefix)["exit"] == 0 and not os.path.exists(os.path.join(prefix, "stdout.log"))

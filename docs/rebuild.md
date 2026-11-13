@@ -8,7 +8,7 @@ configuration) and show a console view; `lux watch --latest` attaches to
 a running build from another terminal. Any of them takes `--background`
 (`-b`): it starts as a process of its own, survives the terminal closing,
 and `lux` returns at once with the `lux watch` command that follows it and
-the `kill` that stops it; its output goes to `<prefix>.out`.
+the `kill` that stops it; its output goes to `<prefix>/stdout.log`.
 
 
 ## 1. Ensure data caches are up to date
@@ -200,9 +200,9 @@ Every parallel command runs its workers on an engine, chosen with
 * `ray`: workers as Ray tasks, on a local Ray or the cluster
   `RAY_ADDRESS` names. Needs `pip install -e .[ray]`.
 
-Whatever the engine, every worker writes
-`<log_dir>/<command>-<timestamp>-w<n>.status` and `.log`, and the command
-itself logs to `<log_dir>/<command>-<timestamp>.log`; that is what
+Whatever the engine, a run is the directory
+`<log_dir>/<command>-<timestamp>/`: every worker writes `w<n>.status` and
+`w<n>.log` in it, and the command itself logs to its `driver.log`; that is what
 `lux watch` reads, and the logs are where a worker's errors are. The
 command's own log is where its tail is: run alone, `lux reconcile`'s
 identify, metatypes and write-refs run after the last worker, and `lux
@@ -212,7 +212,8 @@ build` they are a phase of their own, `identify` (reconcile runs with
 `lux build --from identify` carries a build on after an identify that
 failed. `lux watch <log_dir>/build-<timestamp>`
 follows a `lux build` from step to step, the one-shot steps included
-(each has its own `<build prefix>-<phase>.log`); `lux watch --latest`
+(each is a run in the build's directory, `<build prefix>/<phase>/`, with
+its own `driver.log`); `lux watch --latest`
 picks the build when the newest run is one of its phases.
 
 

@@ -1,5 +1,5 @@
 """Item W01: everything a run leaves on disk, read in one place
-(lux_pipeline.progress): read_build, the run record (<prefix>.run) that
+(lux_pipeline.progress): read_build, the run record (<prefix>/run.json) that
 the driver writes, run_state and list_runs; and the record written by
 the worker commands' handler and finished by the entry point."""
 
@@ -49,7 +49,6 @@ def test_the_readers_are_still_importable_where_they_were():
     assert _view.LogTailer is LogTailer
     assert watch.count_workers is count_workers and watch.latest_prefix is latest_prefix
     assert _handler.RUNNING_WINDOW == progress.RUNNING_WINDOW == 3600
-    assert _handler._WORKER_RE is progress.STATUS_RE
 
 
 # --- read_build ------------------------------------------------------------------
@@ -103,7 +102,8 @@ def test_record_start_update_finish_round_trip(tmp_path):
     assert (got["exit"], got["error"], got["workers"], got["visible_workers"]) == \
         (1, "ValueError: no", 2, [0, 1])
     assert got["finished"] >= got["started"]
-    assert [p.name for p in tmp_path.iterdir()] == ["reconcile-2026-11-02-141500.run"]
+    assert [p.name for p in tmp_path.iterdir()] == ["reconcile-2026-11-02-141500"]
+    assert [p.name for p in Path(prefix).iterdir()] == ["run.json"]
 
 
 def test_record_finish_keeps_the_planned_count_when_no_files_say_otherwise(tmp_path):
@@ -113,8 +113,9 @@ def test_record_finish_keeps_the_planned_count_when_no_files_say_otherwise(tmp_p
 
 
 def test_a_record_that_cannot_be_written_does_not_raise(tmp_path):
-    RunRecord(str(tmp_path / "missing" / "x"), "merge", ["lux"]).start().finish(exit=0)
-    assert read_run(str(tmp_path / "missing" / "x")) is None
+    (tmp_path / "file").write_text("not a directory")
+    RunRecord(str(tmp_path / "file" / "x"), "merge", ["lux"]).start().finish(exit=0)
+    assert read_run(str(tmp_path / "file" / "x")) is None
 
 
 def test_pid_alive():

@@ -315,7 +315,7 @@ def test_command_full_run(harness, tmp_path, capsys):
     assert (call["my_slice"], call["max_slice"], call["do_references"]) == (0, 1, True)
     assert isinstance(call["progress"], StatusWriter)
     assert "status/log prefix:" in capsys.readouterr().out
-    assert (tmp_path / "merge-w0.status").exists()
+    assert (tmp_path / "merge" / "w0.status").exists()
 
 
 def test_command_options(harness, tmp_path):

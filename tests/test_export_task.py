@@ -392,7 +392,7 @@ def test_command_full_run(harness, tmp_path, capsys):
     assert (fname, args) == ("export_slice", (0, 1))
     assert isinstance(kw["progress"], StatusWriter)
     assert "status/log prefix:" in capsys.readouterr().out
-    assert (tmp_path / "export-w0.status").exists()
+    assert (tmp_path / "export" / "w0.status").exists()
 
 
 def test_command_options(harness, tmp_path):

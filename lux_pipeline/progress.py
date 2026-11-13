@@ -28,15 +28,21 @@ Design rules:
 * No imports from ``rich``, ``multiprocessing``, ``ray`` or anything under
   ``lux_pipeline/cli``. This module sits at the bottom of the import stack
   alongside ``timing.py``.
-* Paths are chosen by the caller (the engine or the shell wrapper). The
-  convention ``<log_dir>/<command>-<timestamp>-w<n>.status|.log`` is defined
-  here by `status_path` / `log_path` so the UI can find the files.
+* Paths are chosen by the caller (the engine or the shell wrapper). A run
+  is a directory, ``<log_dir>/<command>-<timestamp>/`` (its "prefix"), and
+  the names inside it are defined here (`status_path`, `log_path`,
+  `run_path`, ...) so every reader finds the files: ``run.json``,
+  ``driver.log``, ``driver.timing``, ``stdout.log``, and per worker
+  ``w<n>.status``, ``.log``, ``.timing``, ``.distance``, ``.out``. A
+  ``lux build``'s steps are runs in its directory (``<build>/reconcile``).
+  Runs from before (``<prefix>.run``, ``<prefix>-w<n>.status`` beside each
+  other in ``log_dir``) are still read: `is_legacy`.
 
 This module is also the one reader of everything a run leaves on disk, so
 the console view (``BuildView``, ``lux watch``) and any other view see a
 run the same way: `read_build` (every worker's status and the totals),
 `LogTailer` (new log lines), `count_workers` / `latest_prefix` /
-`list_runs` (which runs there are), and the run record, ``<prefix>.run``:
+`list_runs` (which runs there are), and the run record, ``run.json``:
 what the driver knows and the workers' files do not -- the command, its
 arguments, the driver's process, whether and how it finished
 (`RunRecord`, `read_run`, `run_state`). Workers never write the record.
@@ -59,8 +65,16 @@ __all__ = [
     "read_status",
     "status_path",
     "log_path",
+    "timing_log_path",
+    "distance_log_path",
+    "worker_out_path",
+    "stdout_path",
+    "ensure_run_dir",
+    "is_legacy",
+    "status_file_run",
     "DRIVER",
     "driver_log_path",
+    "driver_timing_path",
     "current_step",
     "unfinished_workers",
     "Sliced",
@@ -86,8 +100,14 @@ logger = logging.getLogger("lux_pipeline")
 # A worker that has not reported done but wrote its status this recently is
 # taken to be running; an older one was killed without reporting
 RUNNING_WINDOW = 3600
+# A worker's status file in a run's directory: <prefix>/w<n>.status
+WORKER_STATUS_RE = re.compile(r"^w(?P<n>\d+)\.status$")
+# ... and in the flat layout from before runs were directories:
 # <prefix>-w<n>.status
 STATUS_RE = re.compile(r"^(?P<prefix>.*)-w(?P<n>\d+)\.status$")
+# How far below log_dir runs are looked for: a run, a build's step, and one
+# more for a --prefix in a directory of its own under log_dir
+RUN_DEPTH = 3
 # the timestamp default_prefix (cli/_handler) puts at the end of a prefix
 _STAMP_RE = re.compile(r"^(?P<command>.*)-(?P<stamp>\d{4}-\d{2}-\d{2}-\d{6})$")
 
@@ -102,17 +122,101 @@ def null_progress(**kw):
     return None
 
 
+# --------------------------------------------------------------- a run's files
+
+# Runs found in the flat layout, which never turn into directories
+_LEGACY = set()
+
+
+def is_legacy(prefix):
+    """Whether the run at `prefix` is in the flat layout from before runs
+    were directories (``<prefix>.run``, ``<prefix>-w<n>.status`` ... beside
+    each other): not a directory, and one of those files there. Read, and
+    finished by whoever started them, in place; new runs are never
+    written that way."""
+    if prefix in _LEGACY:
+        return True
+    if not prefix or os.path.isdir(prefix):
+        return False
+    if os.path.exists(f"{prefix}.run") or glob.glob(glob.escape(prefix) + "-w*.status"):
+        _LEGACY.add(prefix)
+        return True
+    return False
+
+
+def _in_run(prefix, name, legacy_suffix):
+    """``<prefix>/<name>``, or ``<prefix><legacy_suffix>`` for a run in the
+    flat layout."""
+    if is_legacy(prefix):
+        return f"{prefix}{legacy_suffix}"
+    return os.path.join(prefix, name)
+
+
+def ensure_run_dir(path):
+    """Make the directory a run's file `path` goes in (the run's own, made
+    by its first writer). Never raises: a file the writer then cannot open
+    fails there, as before."""
+    d = os.path.dirname(path)
+    if d:
+        try:
+            os.makedirs(d, exist_ok=True)
+        except OSError:
+            pass
+    return path
+
+
 def status_path(prefix, worker):
-    """Where worker `worker` of the run identified by `prefix` writes status."""
-    return f"{prefix}-w{worker}.status"
+    """Where worker `worker` of the run at `prefix` writes status:
+    ``<prefix>/w<n>.status``."""
+    return _in_run(prefix, f"w{worker}.status", f"-w{worker}.status")
 
 
 def log_path(prefix, worker):
-    """Where worker `worker` of the run identified by `prefix` writes its log."""
-    return f"{prefix}-w{worker}.log"
+    """Where worker `worker` of the run at `prefix` writes its log:
+    ``<prefix>/w<n>.log``."""
+    return _in_run(prefix, f"w{worker}.log", f"-w{worker}.log")
 
 
-# The driver's own log, beside the workers': ``<prefix>.log``. What the
+def worker_out_path(prefix, worker):
+    """The output of one ``--my-worker`` slice started with ``lux
+    --background``: ``<prefix>/w<n>.out``."""
+    return _in_run(prefix, f"w{worker}.out", f"-w{worker}.out")
+
+
+def stdout_path(prefix):
+    """The output of a run started detached (``lux --background``, the web
+    UI): ``<prefix>/stdout.log``."""
+    return _in_run(prefix, "stdout.log", ".out")
+
+
+def status_file_run(path):
+    """``(prefix, worker)`` for a worker's status file in either layout, or
+    None for anything else."""
+    m = WORKER_STATUS_RE.match(os.path.basename(path))
+    if m and os.path.dirname(path):
+        return os.path.dirname(path), int(m.group("n"))
+    m = STATUS_RE.match(path)
+    if m:
+        return m.group("prefix"), int(m.group("n"))
+    return None
+
+
+def _below(log_dir, name):
+    """Files called `name` (a glob) in the runs below `log_dir`, down to
+    `RUN_DEPTH` directories."""
+    base = glob.escape(log_dir)
+    out = []
+    for depth in range(1, RUN_DEPTH + 1):
+        out.extend(glob.glob(os.path.join(base, *(["*"] * depth), name)))
+    return out
+
+
+def _status_files(log_dir):
+    """Every worker status file under `log_dir`, in either layout."""
+    return _below(log_dir, "w*.status") + glob.glob(os.path.join(glob.escape(log_dir), "*-w*.status"))
+
+
+# The driver's own log, beside the workers': ``<prefix>/driver.log``. What the
 # driver does before, between and after its workers -- reconcile's identify,
 # metatypes and write-refs tail, a one-shot command run under `lux build`
 # -- used to go only to its stdout, so a watcher saw every worker done and
@@ -121,30 +225,31 @@ DRIVER = "driver"
 
 
 def driver_log_path(prefix):
-    """Where the driver of the run identified by `prefix` writes its log."""
-    return f"{prefix}.log"
+    """Where the driver of the run at `prefix` writes its log:
+    ``<prefix>/driver.log``."""
+    return _in_run(prefix, "driver.log", ".log")
 
 
 # PhaseTimer's reports (lux_pipeline.log.timing_logger): beside the logs,
 # not in them, so a person following a run reads what happened, not the
 # share of each stage every minute
 def timing_log_path(prefix, worker):
-    """Worker `worker`'s timing reports: ``<prefix>-w<n>.timing``."""
-    return f"{prefix}-w{worker}.timing"
+    """Worker `worker`'s timing reports: ``<prefix>/w<n>.timing``."""
+    return _in_run(prefix, f"w{worker}.timing", f"-w{worker}.timing")
 
 
 def distance_log_path(prefix, worker):
     """Reconcile worker `worker`'s references dropped for being beyond
-    ``max_distance``: ``<prefix>-w<n>.distance``, one ``dist<TAB>uri##qua<Class>``
+    ``max_distance``: ``<prefix>/w<n>.distance``, one ``dist<TAB>uri##qua<Class>``
     line each, for grepping after the run (not the log: there can be
     millions)."""
-    return f"{prefix}-w{worker}.distance"
+    return _in_run(prefix, f"w{worker}.distance", f"-w{worker}.distance")
 
 
 def driver_timing_path(prefix):
     """The driver's timing reports (identify, run in the driver):
-    ``<prefix>.timing``."""
-    return f"{prefix}.timing"
+    ``<prefix>/driver.timing``."""
+    return _in_run(prefix, "driver.timing", ".timing")
 
 
 class StatusWriter:
@@ -165,7 +270,7 @@ class StatusWriter:
     """
 
     def __init__(self, path, worker, throttle=0.5):
-        self.path = path
+        self.path = ensure_run_dir(path)
         self.worker = worker
         self.throttle = throttle
         self.phase = None
@@ -246,9 +351,9 @@ def read_status(path):
 
 
 def unfinished_workers(log_dir):
-    """``[(path, status), ...]`` for every ``<log_dir>/*-w<n>.status`` whose
-    worker has not reported done, newest first; ``[]`` when `log_dir` is
-    unset or missing.
+    """``[(path, status), ...]`` for every worker status file under
+    `log_dir` (`_status_files`) whose worker has not reported done, newest
+    first; ``[]`` when `log_dir` is unset or missing.
 
     A worker that fails still reports done on the way out (`_run_worker`),
     so these are workers still running -- or killed outright (SIGKILL, the
@@ -258,7 +363,7 @@ def unfinished_workers(log_dir):
     if not log_dir or not os.path.isdir(log_dir):
         return []
     out = []
-    for fn in glob.glob(os.path.join(glob.escape(log_dir), "*-w*.status")):
+    for fn in _status_files(log_dir):
         st = read_status(fn)
         if st is not None and not st.get("done"):
             out.append((fn, st))
@@ -311,26 +416,38 @@ class LogTailer:
         return lines
 
 
+def _worker_files(prefix, pattern="w*.status"):
+    """The run's worker files matching `pattern` (``w*.status``), in its
+    layout."""
+    if is_legacy(prefix):
+        return glob.glob(glob.escape(prefix) + "-" + pattern)
+    return glob.glob(os.path.join(glob.escape(prefix), pattern))
+
+
 def count_workers(prefix):
-    """How many ``<prefix>-w<n>.status`` files there are: the highest n + 1."""
+    """How many worker status files the run at `prefix` has: the highest
+    n + 1."""
     highest = -1
-    for fn in glob.glob(glob.escape(prefix) + "-w*.status"):
-        m = STATUS_RE.match(fn)
-        if m and m.group("prefix") == prefix:
-            highest = max(highest, int(m.group("n")))
+    for fn in _worker_files(prefix):
+        got = status_file_run(fn)
+        if got and os.path.normpath(got[0]) == os.path.normpath(prefix):
+            highest = max(highest, got[1])
     return highest + 1
 
 
 def latest_prefix(log_dir):
     """The prefix of the most recently updated build under `log_dir`, or None."""
     newest, best = None, -1.0
-    for fn in glob.glob(os.path.join(glob.escape(log_dir), "*-w*.status")):
-        m = STATUS_RE.match(fn)
-        if not m:
+    for fn in _status_files(log_dir):
+        got = status_file_run(fn)
+        if not got:
             continue
-        mtime = os.path.getmtime(fn)
+        try:
+            mtime = os.path.getmtime(fn)
+        except OSError:
+            continue
         if mtime > best:
-            newest, best = m.group("prefix"), mtime
+            newest, best = got[0], mtime
     return newest
 
 
@@ -393,11 +510,13 @@ def read_build(prefix, workers, visible=None):
 
 
 def run_path(prefix):
-    """Where the driver of the run at `prefix` writes its record."""
-    return f"{prefix}.run"
+    """Where the driver of the run at `prefix` writes its record:
+    ``<prefix>/run.json``."""
+    return _in_run(prefix, "run.json", ".run")
 
 
 def _write_json_atomic(path, data):
+    ensure_run_dir(path)
     tmp = f"{path}.{os.getpid()}.tmp"
     try:
         with open(tmp, "w") as fh:
@@ -414,7 +533,7 @@ def _write_json_atomic(path, data):
 
 class RunRecord:
     """What the driver of a run knows and its workers' files do not,
-    written to ``<prefix>.run`` (atomically, like `StatusWriter`)::
+    written to ``<prefix>/run.json`` (atomically, like `StatusWriter`)::
 
         {"prefix", "command", "argv", "host", "pid", "engine", "workers",
          "visible_workers", "sources", "parent", "started", "finished",
@@ -473,7 +592,7 @@ class RunRecord:
 
 
 def read_run(prefix):
-    """The record at ``<prefix>.run``, or ``None``; as tolerant as
+    """The run's record (`run_path`), or ``None``; as tolerant as
     `read_status`."""
     return read_status(run_path(prefix))
 
@@ -532,14 +651,14 @@ def _started(prefix, record):
     prefix, else the oldest of its files' modification times."""
     if record and record.get("started"):
         return record["started"]
-    m = _STAMP_RE.match(os.path.basename(prefix))
+    m = _STAMP_RE.match(os.path.basename(os.path.normpath(prefix)))
     if m:
         try:
             return datetime.strptime(m.group("stamp"), "%Y-%m-%d-%H%M%S").timestamp()
         except ValueError:
             pass
     times = []
-    for fn in glob.glob(glob.escape(prefix) + "-w*.*"):
+    for fn in _worker_files(prefix, "w*.*"):
         try:
             times.append(os.path.getmtime(fn))
         except OSError:
@@ -563,7 +682,7 @@ def describe_run(prefix, now=None):
     workers = count_workers(prefix) or int((record or {}).get("workers") or 0)
     visible = (record or {}).get("visible_workers")
     build = read_build(prefix, workers, set(visible) if visible is not None else None)
-    name = os.path.basename(prefix)
+    name = os.path.basename(os.path.normpath(prefix))
     m = _STAMP_RE.match(name)
     r = record or {}
     return {
@@ -601,9 +720,10 @@ def current_step(record):
 
 
 def list_runs(log_dir, now=None):
-    """Every run under `log_dir`, newest first: each prefix with a
-    ``.run`` record or any ``-w<n>.status`` file (a run started from a
-    shell slice by slice has only those)::
+    """Every run under `log_dir`, newest first: each run directory (to
+    `RUN_DEPTH`, so a build's steps too) with a ``run.json`` or any worker
+    status file (a run started from a shell slice by slice has only
+    those), and the runs in the flat layout from before::
 
         {"prefix", "command", "state", "started", "finished", "exit",
          "error", "argv", "parent", "workers", "visible_workers",
@@ -617,12 +737,14 @@ def list_runs(log_dir, now=None):
         return []
     base = glob.escape(log_dir)
     prefixes = set()
+    for fn in _below(log_dir, "run.json"):
+        prefixes.add(os.path.dirname(fn))
     for fn in glob.glob(os.path.join(base, "*.run")):
         prefixes.add(fn[:-len(".run")])
-    for fn in glob.glob(os.path.join(base, "*-w*.status")):
-        m = STATUS_RE.match(fn)
-        if m:
-            prefixes.add(m.group("prefix"))
+    for fn in _status_files(log_dir):
+        got = status_file_run(fn)
+        if got:
+            prefixes.add(got[0])
     out = [describe_run(prefix, now) for prefix in prefixes]
     out.sort(key=lambda x: (x["started"] or 0, x["prefix"]), reverse=True)
     return out

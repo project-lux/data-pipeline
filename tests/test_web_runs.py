@@ -66,9 +66,9 @@ def test_worker_rows_follow_the_console_view(web):
     client, _, logs = web
     p = write_fake_run(logs, "reconcile", 3, totals=(100, None, 50), visible=[0, 1])
     os.remove(status_path(p, 1))                          # w1 has not reported yet
-    rec = json.loads(Path(p + ".run").read_text())
+    rec = json.loads(Path(p, "run.json").read_text())
     rec["workers"] = 3
-    Path(p + ".run").write_text(json.dumps(rec))
+    Path(p, "run.json").write_text(json.dumps(rec))
     d = client.get(f"/api/runs/{rel(p)}").json()
     rows = {r["n"]: r for r in d["rows"]}
     assert rows[1]["label"] == "waiting" and rows[1]["waiting"] and rows[1]["elapsed"] is None
@@ -201,7 +201,7 @@ def test_the_log_interleaves_workers_and_keeps_tracebacks_together(web):
 def test_the_commands_own_output(web):
     client, _, logs = web
     p = write_fake_run(logs, "merge", 1)
-    Path(p + ".out").write_text("status/log prefix: x\n")
+    Path(p, "stdout.log").write_text("status/log prefix: x\n")
     assert client.get(f"/api/runs/{rel(p)}/stdout").json()["lines"] == ["status/log prefix: x"]
     assert "own output" in client.get(f"/runs/{rel(p)}").text
 
@@ -209,8 +209,8 @@ def test_the_commands_own_output(web):
 def test_the_timing_reports_are_beside_the_log(web):
     client, _, logs = web
     p = write_fake_run(logs, "reconcile", 2)
-    Path(p + "-w1.timing").write_text("14:15:00 [reconcile[1/2]]   acquire 45%\n")
-    Path(p + ".timing").write_text("14:16:00 TIMING identify slice=-1\n")
+    Path(p, "w1.timing").write_text("14:15:00 [reconcile[1/2]]   acquire 45%\n")
+    Path(p, "driver.timing").write_text("14:16:00 TIMING identify slice=-1\n")
     d = client.get(f"/api/runs/{rel(p)}/timing?worker=1").json()
     assert d["worker"] == 1 and d["lines"] == ["14:15:00 [reconcile[1/2]]   acquire 45%"]
     assert client.get(f"/api/runs/{rel(p)}/timing?worker=driver").json()["lines"] == [
@@ -256,9 +256,9 @@ def test_the_page_follows_a_run_until_it_ends(web):
                     (1, "WARNING", "disk filling")]
                 for n in (0, 1):
                     StatusWriter(status_path(p, n), n, throttle=0)(completed=100, total=100, done=True)
-                rec = json.loads(Path(p + ".run").read_text())
+                rec = json.loads(Path(p, "run.json").read_text())
                 rec.update(finished=time.time(), exit=0)
-                Path(p + ".run").write_text(json.dumps(rec))
+                Path(p, "run.json").write_text(json.dumps(rec))
                 step = 2
             elif name == "done":
                 assert data["state"] == "finished" and data["all"]["completed"] == 200
@@ -296,12 +296,12 @@ def test_the_dashboard_links_to_the_run(web):
 def test_the_log_includes_the_drivers_lines(web):
     client, _, logs = web
     p = write_fake_run(logs, "reconcile", 2)
-    Path(p + ".log").write_text("14:15:00 INFO     worker logs: x\n14:16:00 INFO     Resolving the identity map\n")
+    Path(p, "driver.log").write_text("14:15:00 INFO     worker logs: x\n14:16:00 INFO     Resolving the identity map\n")
     d = client.get(f"/api/runs/{rel(p)}/log").json()
     # by time; the driver after the workers at the same second
     assert [(l["worker"], l["text"][:9]) for l in d["lines"]] == [
         (0, "worker 0 "), ("driver", "worker lo"), (1, "worker 1 "), ("driver", "Resolving")]
-    assert d["offsets"]["driver"] == os.path.getsize(p + ".log")
+    assert d["offsets"]["driver"] == os.path.getsize(os.path.join(p, "driver.log"))
     only = client.get(f"/api/runs/{rel(p)}/log?worker=driver").json()
     assert [l["worker"] for l in only["lines"]] == ["driver", "driver"]
     assert client.get(f"/api/runs/{rel(p)}/log?worker=nope").status_code == 404
@@ -315,7 +315,7 @@ def test_a_one_shot_run_shows_its_log(web):
     client, _, logs = web
     p = str(logs / "sheets-2026-11-03-120000")
     RunRecord(p, "sheets", ["lux", "sheets"], workers=0).start().finish(exit=0)
-    Path(p + ".log").write_text("12:00:01 INFO     read 3 tabs\n")
+    Path(p, "driver.log").write_text("12:00:01 INFO     read 3 tabs\n")
     html = client.get(f"/runs/{rel(p)}").text
     assert "read 3 tabs" in html and "no workers of its own" in html
 
@@ -323,7 +323,7 @@ def test_a_one_shot_run_shows_its_log(web):
 def fake_build(logs, step_prefix=None, finished=False):
     b = str(logs / "build-2026-11-03-130000")
     steps = [{"phase": "sheets", "command": "sheets", "argv": ["lux", "sheets"],
-              "prefix": f"{b}-sheets", "started": 1, "finished": 2, "exit": 0}]
+              "prefix": os.path.join(b, "sheets"), "started": 1, "finished": 2, "exit": 0}]
     if step_prefix:
         steps.append({"phase": "reconcile", "command": "reconcile", "argv": ["lux", "reconcile"],
                       "prefix": step_prefix, "started": 3, "finished": None, "exit": None})
@@ -338,7 +338,7 @@ def fake_build(logs, step_prefix=None, finished=False):
 def test_a_builds_page_shows_the_step_it_is_on_and_its_log(web):
     client, _, logs = web
     child = write_fake_run(logs, "reconcile", 1, extra={"parent": str(logs / "build-2026-11-03-130000")})
-    Path(child + ".log").write_text("14:20:00 INFO     Resolving the identity map\n")
+    Path(child, "driver.log").write_text("14:20:00 INFO     Resolving the identity map\n")
     b, _ = fake_build(logs, child)
     d = client.get(f"/api/runs/{rel(b)}").json()
     assert d["current"]["phase"] == "reconcile" and d["current"]["run"]["rel"] == rel(child)
@@ -350,7 +350,7 @@ def test_a_builds_page_shows_the_step_it_is_on_and_its_log(web):
     page = json.loads(html.split('id="run-page">')[1].split("</script>")[0])
     assert page["child"]["rel"] == rel(child)
     assert page["child"]["offsets"] == {"0": os.path.getsize(log_path(child, 0)),
-                                        "driver": os.path.getsize(child + ".log")}
+                                        "driver": os.path.getsize(os.path.join(child, "driver.log"))}
 
 
 def test_a_builds_stream_passes_to_the_next_step(web):
@@ -372,7 +372,7 @@ def test_a_builds_stream_passes_to_the_next_step(web):
                 step = 1
             elif name == "phase":
                 assert data["phase"] == "reconcile" and data["run"]["rel"] == rel(child)
-                Path(child + ".log").write_text("13:01:30 INFO     Resolving the identity map\n")
+                Path(child, "driver.log").write_text("13:01:30 INFO     Resolving the identity map\n")
                 step = 2
             elif name == "log" and step == 2:
                 texts = [(l.get("phase"), l["worker"], l["text"]) for l in data]

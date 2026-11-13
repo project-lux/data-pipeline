@@ -29,8 +29,8 @@ comparable with an unprofiled one.
 
 Where the reports go: to the ``lux_pipeline.timing`` logger
 (`lux_pipeline.log.timing_logger`), not the run's log. A worker of a run
-with a prefix sends it to ``<prefix>-w<n>.timing`` and the driver to
-``<prefix>.timing`` (`log.send_timing_to`), so the lines a person follows
+with a prefix sends it to ``<prefix>/w<n>.timing`` and the driver to
+``<prefix>/driver.timing`` (`log.send_timing_to`), so the lines a person follows
 in ``lux watch`` or the web UI are not interleaved with stage shares
 every minute; the run's log gets one line when a phase finishes. With no
 file to go to (``lux interactive``, a test) the logger propagates to

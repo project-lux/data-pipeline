@@ -23,7 +23,7 @@ from lux_pipeline.process.phases.merge import read_update_token
 from lux_pipeline.process.reconciler import Reconciler
 from lux_pipeline.process.reference_manager import ReferenceManager, references_path
 from lux_pipeline.process.utils.timing import PhaseTimer
-from lux_pipeline.progress import null_progress
+from lux_pipeline.progress import ensure_run_dir, null_progress
 from lux_pipeline.storage.cache.postgres import PoolManager
 
 logger = logging.getLogger("lux_pipeline")
@@ -178,7 +178,7 @@ class DistanceLog:
         if self.path is None:
             return
         if self.fh is None:
-            self.fh = open(self.path, "a", buffering=1024 * 1024)
+            self.fh = open(ensure_run_dir(self.path), "a", buffering=1024 * 1024)
         self.fh.write(f"{distance}\t{uri}\n")
 
     def close(self, max_distance=None):

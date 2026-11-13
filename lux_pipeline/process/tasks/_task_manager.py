@@ -35,7 +35,7 @@ from concurrent.futures import ProcessPoolExecutor, wait as wait_futures
 
 from lux_pipeline import runtime
 from lux_pipeline.log import restore_timing, send_timing_to, timing_state
-from lux_pipeline.progress import (StatusWriter, log_path, null_progress, status_path,
+from lux_pipeline.progress import (StatusWriter, ensure_run_dir, log_path, null_progress, status_path,
                                    timing_log_path)
 
 logger = logging.getLogger("lux_pipeline")
@@ -78,7 +78,7 @@ def make_file_handler(prefix, n, log_level="INFO"):
     lvl = (log_level or "INFO").upper()
     if not hasattr(logging, lvl):
         lvl = "INFO"
-    handler = logging.FileHandler(log_path(prefix, n), delay=True)
+    handler = logging.FileHandler(ensure_run_dir(log_path(prefix, n)), delay=True)
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(message)s", datefmt="%H:%M:%S"))
     handler.setLevel(getattr(logging, lvl))
     return handler
@@ -88,7 +88,7 @@ def attach_worker_log_handler(prefix, n, log_level="INFO"):
     """Make the worker's file its only log destination. The file is the log
     of record; the parent tails it for the live display, so a slow or
     stalled UI cannot block a worker. PhaseTimer's reports go to
-    ``<prefix>-w<n>.timing`` instead (`send_timing_to`). No prefix: a
+    ``<prefix>/w<n>.timing`` instead (`send_timing_to`). No prefix: a
     NullHandler, and the reports go with everything else."""
     lg = logging.getLogger("lux_pipeline")
     while lg.handlers:
@@ -161,7 +161,7 @@ def _run_worker(manager, n, prefix, log_level="INFO", capture_output=False):
     if prefix:
         if not capture_output:
             # the null engine: this is the driver's process, whose own
-            # handlers (its console, its <prefix>.log) come back after
+            # handlers (its console, its <prefix>/driver.log) come back after
             # the worker so the driver's tail is logged like the rest
             handlers = (list(logger.handlers), logger.level, timing_state())
         attach_worker_log_handler(prefix, n, log_level)
@@ -350,7 +350,7 @@ class MpEngine(Engine):
         results = [None] * self.max_workers
         errors = []
         if prefix:
-            logger.info(f"worker logs: {prefix}-w*.log")
+            logger.info(f"worker logs: {os.path.join(prefix, 'w*.log')}")
         with ProcessPoolExecutor(max_workers=self.max_workers, mp_context=ctx) as ex:
             futures = {ex.submit(_run_worker, self.manager, n, prefix, self.manager.log_level, True): n
                        for n in range(self.max_workers)}
@@ -388,7 +388,7 @@ class RayEngine(Engine):
         if env:
             remote = remote.options(runtime_env={"env_vars": env})
         if prefix:
-            logger.info(f"worker logs: {prefix}-w*.log")
+            logger.info(f"worker logs: {os.path.join(prefix, 'w*.log')}")
         futures = {remote.remote(self.manager, n, prefix, self.manager.log_level, True): n
                    for n in range(self.max_workers)}
         pending = list(futures)

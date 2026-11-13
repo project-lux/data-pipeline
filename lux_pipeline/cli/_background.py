@@ -4,18 +4,19 @@ What ``nohup lux ... &`` did, done by `lux` itself, and the way the web UI
 starts a run (`web.runner`): the same command line, less the flag, plus
 ``--no-ui`` and ``--prefix P``, run as ``python -m lux_pipeline.cli.entry``
 in a session of its own (`_handler.start_detached`), its output appended
-to ``P.out``. The run is then what any other run is: ``P.run``, ``P.log``
-and the workers' files, which `lux watch P` and the web UI's run page
+to ``P/stdout.log``. The run is then what any other run is, the directory
+``P`` with ``run.json``, ``driver.log`` and the workers' files, which
+`lux watch P` and the web UI's run page
 follow, and ``kill -- -<pid>`` stops it with its workers.
 
-The starter writes a provisional ``P.run`` with the child's pid at once,
+The starter writes a provisional ``P/run.json`` with the child's pid at once,
 so the run is listed (and `lux watch --latest` finds it) while the child
 is still loading its configuration; the child's own record replaces it.
 It then waits a little for the child to get that far, so that a mistake
 on the command line is reported here with the child's exit status rather
-than left in ``P.out``. One ``--my-worker`` slice writes no record (the
+than left in ``P/stdout.log``. One ``--my-worker`` slice writes no record (the
 shell scripts give every slice the same prefix): its output is
-``P-w<n>.out`` and the starter only waits a moment.
+``P/w<n>.out`` and the starter only waits a moment.
 """
 
 import json
@@ -25,7 +26,7 @@ import time
 
 from lux_pipeline.cli._handler import (PARENT_RUN_ENV, RUN_EXTRA_ENV, finish_file, free_prefix,
                                        last_lines, out_path, run_extra, start_detached)
-from lux_pipeline.progress import RunRecord, read_run
+from lux_pipeline.progress import RunRecord, read_run, worker_out_path
 
 FLAG = "--background"
 # set in the child: a started command never starts itself again (entry
@@ -92,7 +93,7 @@ def start(args, cfgs, out=None, err=None, python=None, wait=None):
     err = err or sys.stderr
     one_slice = args.my_worker > -1
     prefix = args.prefix or free_prefix(cfgs, args.command)
-    stdout = f"{prefix}-w{args.my_worker}.out" if one_slice else out_path(prefix)
+    stdout = worker_out_path(prefix, args.my_worker) if one_slice else out_path(prefix)
     tail = child_args(args.cli_argv, args, prefix)
     argv = [python or sys.executable, "-m", "lux_pipeline.cli.entry", *tail]
     shown = ["lux", *(a for a in args.cli_argv if not is_flag(a))]

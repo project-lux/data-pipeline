@@ -217,7 +217,7 @@ def test_command_downloads_and_logs_a_summary(tmp_path, stub_runtime, caplog):
     assert (m.download_type, m.overwrite) == ("all", False)
     assert m.summary() == {"downloaded": 1, "kept": 1, "failed": 0}
     assert "downloaded 1, kept 1, failed 0" in caplog.text
-    assert (tmp_path / "download-w0.status").exists()
+    assert (tmp_path / "download" / "w0.status").exists()
 
 
 def test_command_type_option(tmp_path, stub_runtime):

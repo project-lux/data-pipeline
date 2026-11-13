@@ -218,7 +218,7 @@ def test_command_builds_and_logs_a_summary(tmp_path, stub_runtime, caplog):
     assert isinstance(m, IndexLoadManager) and m.overwrite is False
     assert m.summary() == {"sources": 2, "names": 6, "uris": 2, "failed": 0}
     assert "indexed 2 source(s): 6 names, 2 uris, 0 failed" in caplog.text
-    assert (tmp_path / "load-index-w0.status").exists()
+    assert (tmp_path / "load-index" / "w0.status").exists()
 
 
 def test_command_fails_at_the_end_when_a_source_failed(tmp_path, stub_runtime):
