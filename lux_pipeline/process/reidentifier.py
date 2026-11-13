@@ -255,7 +255,11 @@ class Reidentifier(object):
             if not equiv_map:
                 # Don't know anything at all, ask for a new yuid??
                 # This shouldn't happen if previous phases have worked
-                logger.error(f"!!! reidentifier couldn't find YUID for {recid} --> {equivs}")
+                # The key looked up, not the bare URI: the class is part of
+                # it, and a reference typed differently from the record
+                # identify registered misses even though the URI has a YUID.
+                # The equivalents were looked up with the same class.
+                logger.error(f"!!! reidentifier couldn't find YUID for {qrecid} --> {equivs}")
                 return result
             else:
                 # The record's OWN assignment wins. min() over the whole
