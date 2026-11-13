@@ -1,9 +1,10 @@
 # Installing the LUX pipeline
 
 From a fresh machine to `lux counts`. The pipeline needs Python 3.10 or
-later and PostgreSQL. Redis is only needed if one of your map records
-still names it (the build machine's `networkmap`, `record_refs` and
-`redirects` may); `lux testinstall` says so if it is.
+later and PostgreSQL. Redis is optional: the samples and the build
+machine keep `networkmap` (and `redirects`, `record_refs`, which nothing
+reads) in it, and `lux initialize` asks whether to keep them there or move
+them to Postgres (`--redis` / `--no-redis`).
 
 
 ## 1. System packages
@@ -15,7 +16,7 @@ root:
 
 ```
 apt install postgresql          # or the latest from https://www.postgresql.org/download/linux/ubuntu/
-apt install redis               # only if a map record uses it
+apt install redis               # only to keep the maps in Redis
 apt install python3-pip python3-venv git
 su - postgres
 createuser <user>
@@ -27,7 +28,7 @@ createdb <user>
 * Install Postgres: https://postgresapp.com/ works well
 * Optionally pgAdmin: https://www.pgadmin.org/download/pgadmin-4-macos/
 * Install Homebrew (https://brew.sh/), then `brew update`
-* If needed, Redis: `brew install redis`
+* Only to keep the maps in Redis: `brew install redis`
 * Set Postgres (and Redis) to start at login
 
 
@@ -77,6 +78,12 @@ lux initialize ~/lux/data                                  # the samples in docs
 lux initialize ~/lux/data --configs ~/lux/pipeline-configs # a pipeline-configs checkout you already have
 lux initialize ~/lux/data --clone                          # clone project-lux/pipeline-configs into it
 ```
+
+When map records keep maps in Redis you are asked whether to keep using
+it; no (or `--no-redis`) switches `networkmap` to
+`storage.idmap.postgres.NetworkOperationMap` (any Redis idmap or reference
+map to its Postgres store) and removes the `redirects` / `record_refs`
+records, so Postgres is the only server needed.
 
 Every step checks its own state, so if one fails (Postgres not running,
 no network) fix the cause and run the same command again; nothing already

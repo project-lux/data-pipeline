@@ -9,7 +9,7 @@
     "fetcherClass": "sources.wikidata.fetcher.WdFetcher",
     "mapperClass": "sources.wikidata.mapper.WdMapper",
     "loaderClass": "sources.wikidata.loader.WdLoader",
-    "indexLoaderClass": "sources.wikidata.index_loader.RawWdIndexLoader",
+    "indexLoaderClass": "sources.wikidata.index_loader.WdFileIndexLoader",
     "reconcilerClass": "sources.wikidata.reconciler.WdReconciler",
 
     "inverseEquivDbPath": "id_to_wikidata.sqlite",

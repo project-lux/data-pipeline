@@ -28,8 +28,16 @@ The Linked Art JSON schemas the validator reads are fetched into
 files are fetched.
 
 Postgres and Redis are then probed with the installed settings and
-reported; only Postgres is required (Redis is probed because some map
-records still name it, and reported as not required). When Postgres answers and the role may create databases, you
+reported. When map records keep maps in Redis (the samples' networkmap and
+redirects), you are asked whether to keep using Redis for them
+(``--redis`` answers yes, ``--no-redis`` no; with no one at the keyboard
+the configuration is left as it is): no moves each to its Postgres store
+(``storage.idmap.postgres.IdMap``, ``ReferenceMap``,
+``NetworkOperationMap``, Redis's host / port / db dropped) and removes
+the records of Redis multimaps nothing in the pipeline reads (redirects,
+record_refs), so Postgres is the only server the pipeline needs. Maps
+left in a Redis that does not answer are reported as something to fix.
+When Postgres answers and the role may create databases, you
 are asked for the name of the database (default ``lux``, or the one
 already configured) and whether to create it (``--dbname`` to give the
 name up front; ``--create-db`` answers yes without asking, for a script;
@@ -143,24 +151,106 @@ def record_file(cfgs, predicate):
     return None, None
 
 
-def probe_services(cfgs):
-    """``[(label, ok, detail)]`` for Postgres (the cache defaults) and,
-    wherever a map record names it, Redis."""
-    out = []
+def probe_postgres(cfgs):
+    """``(ok, detail)`` for the Postgres the cache defaults name."""
     pg = _services.postgres_settings(cfgs.defaults.get("cache") or {})
     try:
-        out.append(("postgres", True, _services.probe_postgres(pg)))
+        return True, _services.probe_postgres(pg)
     except Exception as e:
-        out.append(("postgres", False, f"{_services.describe_postgres(pg)}: {type(e).__name__}: {str(e).strip()}"))
-    targets = _services.redis_targets(cfgs.map_stores.values(), cfgs.defaults.get("map") or {})
-    if not targets:
-        out.append(("redis", True, "not used by this configuration"))
-    for host, port in targets:
+        return False, f"{_services.describe_postgres(pg)}: {type(e).__name__}: {str(e).strip()}"
+
+
+def redis_maps(cfgs):
+    """The names of the map records kept in Redis, sorted."""
+    default = (cfgs.defaults.get("map") or {}).get("storeClass") or ""
+    return sorted(n for n, r in cfgs.map_stores.items()
+                  if "redis" in str(r.get("storeClass") or default).lower())
+
+
+def probe_redis(cfgs):
+    """``[(ok, detail)]`` for each Redis server a map record names."""
+    out = []
+    for host, port in _services.redis_targets(cfgs.map_stores.values(), cfgs.defaults.get("map") or {}):
         try:
-            out.append(("redis", True, _services.probe_redis(host, port)))
+            out.append((True, _services.probe_redis(host, port)))
         except Exception as e:
-            out.append(("redis", False, f"{host}:{port}: {type(e).__name__}: {str(e).strip()}"))
+            out.append((False, f"{host}:{port}: {type(e).__name__}: {str(e).strip()}"))
     return out
+
+
+# the Postgres store for each Redis one that has one
+REDIS_TO_POSTGRES = {
+    "IdMap": "storage.idmap.postgres.IdMap",
+    "ReferenceMap": "storage.idmap.postgres.ReferenceMap",
+    "NetworkOperationMap": "storage.idmap.postgres.NetworkOperationMap",
+}
+# Redis-only stores that nothing in the pipeline reads (the redirects and
+# record_refs maps): their records are removed rather than moved
+REDIS_UNREAD = ("MultiMap", "TransitiveMultiMap")
+REDIS_KEYS = ("host", "port", "db")
+
+
+def move_maps_to_postgres(cfgs, out=print):
+    """Rewrite every map record kept in Redis to use Postgres: the store
+    class swapped for the Postgres one and Redis's host / port / db
+    dropped (the Postgres maps use the cache defaults' database); a map
+    whose Redis store nothing reads is removed. Returns the names left in
+    Redis (a store with no Postgres equivalent)."""
+    default = (cfgs.defaults.get("map") or {}).get("storeClass") or ""
+    left = []
+    for name in redis_maps(cfgs):
+        fn, rec = record_file(cfgs, lambda r, n=name: r.get("type") == "map" and r.get("name") == n)
+        if fn is None:
+            left.append(name)
+            out(f"  {name}: no record file found to change")
+            continue
+        cls = str(rec.get("storeClass") or default).rsplit(".", 1)[-1]
+        if cls in REDIS_TO_POSTGRES:
+            rec["storeClass"] = REDIS_TO_POSTGRES[cls]
+            for k in REDIS_KEYS:
+                rec.pop(k, None)
+            write_json(fn, rec)
+            out(f"  {name}: {fn.name} -> {rec['storeClass']}")
+        elif cls in REDIS_UNREAD:
+            fn.unlink()
+            out(f"  {name}: removed {fn.name} (a Redis {cls}, which nothing in the pipeline reads)")
+        else:
+            left.append(name)
+            out(f"  {name}: left in Redis ({cls} has no Postgres store)")
+    return left
+
+
+def is_redis_map(rec):
+    return (isinstance(rec, dict) and rec.get("type") == "map"
+            and "redis" in str(rec.get("storeClass") or "").lower())
+
+
+def off_redis(directory):
+    """Whether the map records in `directory` have been moved off Redis:
+    there are some, and none names a Redis store."""
+    maps = []
+    for fn in directory.glob("*.json"):
+        try:
+            rec = read_json(fn)
+        except ValueError:
+            continue
+        if isinstance(rec, dict) and rec.get("type") == "map":
+            maps.append(rec)
+    return bool(maps) and not any(is_redis_map(r) for r in maps)
+
+
+def redis_choice(args, names, reachable):
+    """True to keep the maps in Redis, False to move them to Postgres, None
+    to leave the configuration as it is (no flag and no one to ask)."""
+    if getattr(args, "redis", False):
+        return True
+    if getattr(args, "no_redis", False):
+        return False
+    if not sys.stdin.isatty():
+        return None
+    state = "is running" if reachable else "is not reachable"
+    return ask(f"The maps {', '.join(names)} are kept in Redis, which {state}. "
+               f"Keep using Redis for them? (no: Postgres instead)")
 
 
 def ask_name(question, default):
@@ -195,7 +285,12 @@ def setup_database(basepath, cfgs, name=None, assume=None, out=print):
 
     cache_fn, cache_rec = record_file(cfgs, lambda r: r.get("type") == "caches" or
                                       (r.get("type") == "default" and r.get("name") == "cache"))
-    idmap_name = getattr(cfgs, "idmap_name", "idmap")
+    idmap_name = getattr(cfgs, "idmap_name", None)
+    if not idmap_name:
+        # what an installation from the samples before they set it has
+        base = cfgs.record_origins.get(cfgs.base_record_key or "", {}).get("path") or "the base record"
+        raise ValueError(f'{base} has no idmap_name; add "idmap_name": "idmap" (the name of the '
+                         f"idmap's map record) and rerun")
     map_fn, map_rec = record_file(cfgs, lambda r: r.get("type") == "map" and r.get("name") == idmap_name)
     token_fn = Path(cfgs.data_dir) / "idmap_update_token.txt"
     if cache_fn is None:
@@ -298,6 +393,10 @@ class CommandHandler(BaseHandler):
                         help="Create the database and the idmap without asking (for scripts)")
         ap.add_argument("--no-create-db", action="store_true",
                         help="Never offer to create the database")
+        ap.add_argument("--redis", action="store_true",
+                        help="Keep the maps the configuration puts in Redis there, without asking")
+        ap.add_argument("--no-redis", action="store_true",
+                        help="Move the maps the configuration puts in Redis to Postgres, without asking")
         ap.add_argument("--home-dotenv", action="store_true",
                         help="Write ~/.lux/.env pointing at this installation, without asking, "
                              "when it does not exist")
@@ -316,13 +415,18 @@ class CommandHandler(BaseHandler):
     def install_samples(self, root, out=print):
         """``<root>/config_cache`` from docs/sample_config: created, or
         completed with any sample missing from it; records already there
-        are kept as they are (your edits survive a rerun)."""
+        are kept as they are (your edits survive a rerun). Once the
+        installation's maps have moved off Redis (``--no-redis``), the
+        samples of Redis maps are not added back."""
         cc = root / "config_cache"
         fresh = not cc.exists()
         cc.mkdir(parents=True, exist_ok=True)
+        skip_redis = not fresh and off_redis(cc)
         added = []
         for fn in sorted(SAMPLES.glob("*.json")):
             if not (cc / fn.name).exists():
+                if skip_redis and is_redis_map(read_json(fn)):
+                    continue
                 shutil.copy(fn, cc / fn.name)
                 added.append(fn.name)
         if fresh:
@@ -463,6 +567,33 @@ class CommandHandler(BaseHandler):
         out(f"  ~/.lux/.env: written (LUX_BASEPATH={basepath})")
         return True
 
+    def ensure_redis(self, cfgs, args, out=print):
+        """Probe the Redis the map records name and settle whether they stay
+        there (``--redis``), move to Postgres (``--no-redis``), or, with no
+        flag, whatever the person at the keyboard says; with no one there
+        the configuration is left alone. Sets ``redis_problem`` when the
+        maps stay in a Redis that does not answer. Returns True when
+        records were rewritten."""
+        self.redis_problem = False
+        names = redis_maps(cfgs)
+        if not names:
+            out("  redis: not used by this configuration")
+            return False
+        probes = probe_redis(cfgs)
+        for ok, detail in probes:
+            out(f"  redis: {'OK' if ok else 'NOT REACHABLE'}: {detail}")
+        reachable = all(ok for ok, _ in probes)
+        keep = redis_choice(args, names, reachable)
+        if keep is False:
+            out("  maps: moving the maps kept in Redis to Postgres")
+            move_maps_to_postgres(cfgs, out)
+            return True
+        if not reachable:
+            out(f"  redis: the maps {', '.join(names)} need it; start it, "
+                f"or rerun with --no-redis to keep them in Postgres")
+            self.redis_problem = True
+        return False
+
     # --- the command -------------------------------------------------------------
 
     def process(self, args, rest):
@@ -486,17 +617,17 @@ class CommandHandler(BaseHandler):
         print("Services, with the installed settings:")
         cfgs = Config(basepath=str(basepath))
         problems = []
-        pg_ok = False
-        for label, ok, detail in probe_services(cfgs):
-            if ok:
-                print(f"  {label}: OK: {detail}")
-            elif label == "redis":
-                print(f"  {label}: not reachable: {detail} (not required; a map record still names it)")
-            else:
-                print(f"  {label}: NOT REACHABLE: {detail}")
-                problems.append(label)
-            if ok and label == "postgres":
-                pg_ok = True
+        pg_ok, detail = probe_postgres(cfgs)
+        if pg_ok:
+            print(f"  postgres: OK: {detail}")
+        else:
+            print(f"  postgres: NOT REACHABLE: {detail}")
+            problems.append("postgres")
+        if self.ensure_redis(cfgs, args):
+            # records were rewritten
+            cfgs = Config(basepath=str(basepath))
+        elif self.redis_problem:
+            problems.append("redis")
         if pg_ok and not getattr(args, "no_create_db", False):
             assume = True if getattr(args, "create_db", False) else None
             try:
