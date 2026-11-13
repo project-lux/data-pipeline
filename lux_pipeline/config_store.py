@@ -35,7 +35,8 @@ first time it is written.
 from `lux_pipeline.config_schema` (a store record may add its own with
 ``json_schema``), worded from the catalogue (`schema_problem`), then what a
 schema cannot say: classes that import, a source named as its key, map
-names unique, indexes that resolve.
+names unique, indexes that resolve, a source's ``matches`` ending where its
+namespace does.
 
 **Reload after writing.** Nothing here changes `cfgs`' records: a process
 that goes on using the configuration must build it again
@@ -69,6 +70,52 @@ class ConfigError(RecordError):
 # value, resolved exactly as Config resolves it (`config.importObject`),
 # without logging or raising
 resolve_class = _config.resolve_object
+
+
+def matches_problems(data):
+    """A source's first ``matches`` entry found in a URI of its own
+    namespace has to end where the namespace does.
+
+    `Config.split_uri` takes the identifier as what follows the entry and
+    `Config.canonicalize` puts the namespace back in front of it, so an
+    entry that stops short (``data.example.org/source-records`` for the
+    namespace ``https://data.example.org/source-records/``) keeps the rest
+    of the namespace in the identifier: every reference becomes
+    ``.../source-records//x``, which no record is registered under, and
+    the identifier ``/x`` is no key in the source's caches. An error,
+    unless the source's mapper has its own ``fix_identifier`` (which may
+    put it right): then a warning."""
+    ns, ms = data.get("namespace"), data.get("matches")
+    if isinstance(ms, str):
+        ms = [ms]
+    if not isinstance(ns, str) or not ns or not isinstance(ms, list):
+        return []
+    uri = ns + "ID"
+    # split_uri: the first entry found in the URI, the identifier after its last occurrence
+    m = next((m for m in ms if isinstance(m, str) and m and m in uri), None)
+    if m is None:
+        return []
+    ident = uri.rsplit(m, 1)[1]
+    if ident == "ID":
+        return []
+    rest = ident[: -len("ID")]
+    problem = (f"matches entry {m!r} stops short of the namespace {ns!r}: "
+               f"{uri} splits to the identifier {ident!r} and canonicalizes to "
+               f"{ns + ident}, so references never reach the records; write {m + rest!r}")
+    if _overrides_fix_identifier(data.get("mapperClass")):
+        return [f"warning: {problem} (unless {data['mapperClass']}.fix_identifier removes "
+                f"{rest!r})"]
+    return [problem]
+
+
+def _overrides_fix_identifier(path):
+    if not isinstance(path, str) or not path:
+        return False
+    cls, error, _ = resolve_class(path)
+    if error or cls is None:
+        return False
+    from lux_pipeline.process.base.mapper import Mapper
+    return getattr(cls, "fix_identifier", Mapper.fix_identifier) is not Mapper.fix_identifier
 
 
 def schema_problem(error, data):
@@ -168,7 +215,8 @@ class ConfigCache(FsCache):
         it) and unique among its type's records for a map or a MarkLogic
         store (they are looked up by name); every ``*Class`` value
         importable, with a warning for a pre-rename path; ``indexes``
-        resolving; for base / system, the directories ``path_types`` names
+        resolving; a source's ``matches`` ending where its namespace
+        does (`matches_problems`); for base / system, the directories ``path_types`` names
         and a positive ``max_workers``; for a new record, a key free in
         every store. A key the catalogue does not know is never a
         problem."""
@@ -187,6 +235,8 @@ class ConfigCache(FsCache):
 
         if typ in schema.SOURCE_TYPES and data.get("name") != key:
             problems.append(f"name is {data.get('name')!r}: a source's name must be its key {key!r}")
+        if typ in schema.SOURCE_TYPES:
+            problems.extend(matches_problems(data))
         if typ in (*schema.SOURCE_TYPES, "map"):
             # Config refuses to load a record with one of these (store_name_problem)
             found = []
