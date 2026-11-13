@@ -8,6 +8,7 @@
     "validate_allow_underscore_properties": true,
 
     "internal_uri": "https://your.local.domain/data/",
+    "idmap_name": "idmap",
     "do_not_reidentify": ["/creativecommons.org/", "/rightsstatements.org/"],
     
     "ok_record_types": {

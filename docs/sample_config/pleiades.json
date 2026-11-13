@@ -3,7 +3,7 @@
     "type": "external",
     "namespace": "https://pleiades.stoa.org/places/",
     "matches": [
-        "pleiades.stoa.org"
+        "pleiades.stoa.org/places/"
     ],
     "fetch": "https://pleiades.stoa.org/places/{identifier}/json",
     "wikidata_property": [

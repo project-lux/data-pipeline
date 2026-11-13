@@ -1851,3 +1851,156 @@ class ReferenceMap(object):
 
     def __contains__(self, key):
         return self.has_item(key)
+
+
+# What storage.idmap.redis.NetworkOperationMap expires errors after: a week, so
+# a transient failure is retried by a later build; successes and redirects
+# are kept.
+NETWORK_ERROR_TTL = 7 * 24 * 3600
+
+NETWORK_SCHEMA = """
+CREATE TABLE IF NOT EXISTS {table} (
+    key      TEXT PRIMARY KEY,
+    value    TEXT NOT NULL,
+    expires  TIMESTAMPTZ
+);
+"""
+
+
+class NetworkOperationMap(object):
+    """The fetchers' record of what a URL answered, on postgres.
+
+    Same interface as storage.idmap.redis.NetworkOperationMap, so an
+    installation without Redis names this in map_networkmap.json: a URL maps
+    to the status a fetch got (``"000"`` for no response at all, an HTTP
+    error code) or, after a redirect, the identifier it went to. Values come
+    back as strings, as Redis gives them. An error carries an expiry, Redis's
+    TTL here a column: an expired row reads as absent and is replaced by the
+    next write.
+
+    Its own table (``tableName``, else the map's name) in the database the
+    caches use; every statement in autocommit on the shared connection, like
+    the other maps here."""
+
+    def __init__(self, config):
+        self.configs = config["all_configs"]
+        self.table = config.get("tableName") or config["name"]
+        self._conn_kw = _connect_kwargs(config, self.configs)
+        self.conn = _connect(self._conn_kw)
+        with self.conn.cursor() as cur:
+            cur.execute(NETWORK_SCHEMA.format(table=self.table))
+
+    def shutdown(self):
+        # shared connection: left open deliberately, see _connect()
+        self.conn = None
+
+    LIVE = "(expires IS NULL OR expires > now())"
+
+    @staticmethod
+    def _value_in(value):
+        """``(stored string, is an error)``, as the Redis store decides."""
+        if value in (0, None):
+            value = "000"
+        elif isinstance(value, int):
+            value = str(value)
+        is_error = value in ("0", "000") or (len(value) == 3 and value.isnumeric() and int(value) > 399)
+        return value, is_error
+
+    def get(self, key):
+        with self.conn.cursor() as cur:
+            cur.execute(f"SELECT value FROM {self.table} WHERE key = %s AND {self.LIVE}", (key,))
+            row = cur.fetchone()
+        return row[0] if row else None
+
+    def set(self, key, value):
+        value, is_error = self._value_in(value)
+        expires = (datetime.datetime.now(datetime.timezone.utc)
+                   + datetime.timedelta(seconds=NETWORK_ERROR_TTL)) if is_error else None
+        with self.conn.cursor() as cur:
+            cur.execute(f"INSERT INTO {self.table} (key, value, expires) VALUES (%s, %s, %s) "
+                        f"ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, "
+                        f"expires = EXCLUDED.expires", (key, value, expires))
+
+    def delete(self, key):
+        with self.conn.cursor() as cur:
+            cur.execute(f"DELETE FROM {self.table} WHERE key = %s", (key,))
+
+    def has_item(self, key):
+        with self.conn.cursor() as cur:
+            cur.execute(f"SELECT 1 FROM {self.table} WHERE key = %s AND {self.LIVE}", (key,))
+            return cur.fetchone() is not None
+
+    def iter_items(self, chunk=1000):
+        """Stream the live (key, value) pairs on a connection of its own."""
+        stamp = f"{time.time()}".replace(".", "_")
+        conn = psycopg2.connect(**self._conn_kw)
+        try:
+            cur = conn.cursor(name=f"net_iter_{self.table}_{stamp}")
+            cur.itersize = chunk
+            cur.execute(f"SELECT key, value FROM {self.table} WHERE {self.LIVE}")
+            yield from cur
+            cur.close()
+            conn.commit()
+        finally:
+            conn.close()
+
+    def iter_keys(self, **kw):
+        for (key, _value) in self.iter_items():
+            yield key
+
+    def keys(self, **kw):
+        return list(self.iter_keys())
+
+    def _export_state(self):
+        return dict(self.iter_items())
+
+    def clear(self):
+        with self.conn.cursor() as cur:
+            cur.execute(f"TRUNCATE {self.table}")
+
+    def commit(self):
+        # autocommit: every write has already landed
+        pass
+
+    # --- backup and restore (lux_pipeline.storage.backup) ---
+
+    def _own_connection(self):
+        return psycopg2.connect(**self._conn_kw)
+
+    def backup(self, dest_dir, stem, progress=null_progress):
+        conn = self._own_connection()
+        try:
+            return pg_copy_out(conn, [self.table], dest_dir, stem, progress)
+        finally:
+            conn.close()
+
+    def restore(self, src_dir, entry, progress=null_progress):
+        conn = self._own_connection()
+        try:
+            return pg_copy_in(conn, [self.table], src_dir, entry, progress)
+        finally:
+            conn.close()
+
+    def backup_size(self):
+        conn = self._own_connection()
+        try:
+            return pg_size(conn, [self.table])
+        finally:
+            conn.close()
+
+    def __len__(self):
+        with self.conn.cursor() as cur:
+            cur.execute(f"SELECT count(*) FROM {self.table} WHERE {self.LIVE}")
+            return cur.fetchone()[0]
+
+    def __getitem__(self, key):
+        return self.get(key)
+
+    def __setitem__(self, key, value):
+        return self.set(key, value)
+
+    def __delitem__(self, key):
+        return self.delete(key)
+
+    def __contains__(self, key):
+        return self.has_item(key)

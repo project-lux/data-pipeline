@@ -109,8 +109,12 @@ def test_unreachable_services_are_reported_not_fatal(tmp_path, monkeypatch, caps
     assert init([str(root)]) == root
     out = capsys.readouterr().out
     assert "postgres: NOT REACHABLE: local socket" in out and "OSError: connection refused" in out
-    assert "redis: not reachable: localhost:6379: ConnectionError: no route (not required" in out
-    assert "start or configure postgres (" in out and "redis" not in out.split("Next:")[1]
+    # the samples keep networkmap in Redis: with no one to ask, the configuration
+    # is left alone and the Redis it needs is something to fix
+    assert "redis: NOT REACHABLE: localhost:6379: ConnectionError: no route" in out
+    assert "the maps networkmap, redirects need it" in out and "--no-redis" in out
+    assert "start or configure postgres and redis (" in out
+    assert json.load(open(root / "config_cache" / "map_networkmap.json"))["storeClass"].endswith("redis.NetworkOperationMap")
 
 
 class RecordingIdmap(dict):
@@ -144,6 +148,7 @@ def test_create_db_configures_the_database_and_an_empty_idmap(tmp_path, monkeypa
 
 def test_prompt_is_asked_at_a_tty_and_a_no_skips(tmp_path, monkeypatch, capsys, db_setup):
     monkeypatch.setattr(initialize.sys.stdin, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(initialize, "redis_choice", lambda args, names, reachable: True)   # not asked about here
     asked = []
     answers = iter(["", "n"])
     monkeypatch.setattr("builtins.input", lambda q: asked.append(q) or next(answers))
@@ -217,6 +222,106 @@ def test_database_setup_failure_is_reported_not_fatal(tmp_path, monkeypatch, cap
     assert "database: FAILED: OSError: permission denied" in out and "start or configure the database" in out
 
 
+def test_the_shipped_samples_check_clean(tmp_path):
+    """Every sample record passes lux config check: the base record names the
+    idmap (it was in globals.json, so Config had no idmap_name and creating
+    the database failed), classes resolve, matches end at the namespace."""
+    from lux_pipeline import config_store as store
+    root = tmp_path / "inst"
+    init([str(root)])
+    cfgs = Config(basepath=str(root))
+    assert cfgs.idmap_name == "idmap"
+    problems = {k: store.find(cfgs, k).check(k) for k in cfgs.record_origins}
+    assert {k: p for k, p in problems.items() if p} == {}
+
+
+def test_no_idmap_name_says_what_to_add_and_creates_nothing(tmp_path, monkeypatch, capsys, db_setup):
+    """An installation from the samples before they set idmap_name."""
+    root = tmp_path / "inst"
+    init([str(root)])
+    base = root / "config_cache" / "base.json"
+    rec = json.load(open(base))
+    del rec["idmap_name"]
+    json.dump(rec, open(base, "w"))
+    capsys.readouterr()
+    init([str(root), "--create-db"])
+    out = capsys.readouterr().out
+    assert f'database: FAILED: ValueError: {base} has no idmap_name; add "idmap_name": "idmap"' in out
+    assert db_setup == []
+
+
+def test_no_redis_moves_the_maps_to_postgres_and_stays_moved(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(_services, "probe_redis", lambda h, p, timeout=5: (_ for _ in ()).throw(ConnectionError("refused")))
+    root = tmp_path / "inst"
+    init([str(root), "--no-redis"])
+    out = capsys.readouterr().out
+    cc = root / "config_cache"
+    assert json.load(open(cc / "map_networkmap.json")) == {
+        "name": "networkmap", "type": "map", "storeClass": "storage.idmap.postgres.NetworkOperationMap"}
+    assert not (cc / "map_redirects.json").exists()
+    assert "networkmap: map_networkmap.json -> storage.idmap.postgres.NetworkOperationMap" in out
+    assert "redirects: removed map_redirects.json" in out
+    assert "start or configure" not in out
+    cfgs = Config(basepath=str(root))
+    assert initialize.redis_maps(cfgs) == [] and "redirects" not in cfgs.map_stores
+    # a rerun neither asks nor puts the Redis sample back
+    init([str(root)])
+    out = capsys.readouterr().out
+    assert "redis: not used by this configuration" in out
+    assert not (cc / "map_redirects.json").exists() and "added the missing samples" not in out
+
+
+def test_redis_question_at_a_tty(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(initialize.sys.stdin, "isatty", lambda: True, raising=False)
+    asked = []
+    answers = iter(["y"])
+    monkeypatch.setattr("builtins.input", lambda q: asked.append(q) or next(answers))
+    init([str(tmp_path / "a"), "--no-create-db", "--no-home-dotenv"])
+    assert asked == ["The maps networkmap, redirects are kept in Redis, which is running. "
+                     "Keep using Redis for them? (no: Postgres instead) [y/N] "]
+    assert json.load(open(tmp_path / "a" / "config_cache" / "map_networkmap.json"))["storeClass"].endswith("redis.NetworkOperationMap")
+    assert "start or configure" not in capsys.readouterr().out
+    # no: moved; and --redis keeps them without asking
+    asked.clear()
+    answers = iter(["n"])
+    init([str(tmp_path / "b"), "--no-create-db", "--no-home-dotenv"])
+    assert len(asked) == 1
+    assert json.load(open(tmp_path / "b" / "config_cache" / "map_networkmap.json"))["storeClass"].endswith("postgres.NetworkOperationMap")
+    asked.clear()
+    init([str(tmp_path / "c"), "--redis", "--no-create-db", "--no-home-dotenv"])
+    assert asked == []
+    assert (tmp_path / "c" / "config_cache" / "map_redirects.json").exists()
+
+
+def test_moving_maps_in_a_checkout(tmp_path, capsys):
+    """The build machine's maps: a Redis idmap and reference map move to
+    their Postgres stores, record_refs (a MultiMap) is removed, and the
+    edits are in the installed copy, never the source."""
+    src = fake_checkout(tmp_path / "checkout")
+    cc = src / "configs" / "system" / "config_cache"
+    json.dump({"name": "maps", "type": "config", "base_dir": "pipeline-configs/configs/subs",
+               "datacacheClass": "storage.cache.filesystem.FsCache", "tabletype": "cache"}, open(cc / "maps.json", "w"))
+    mc = src / "configs" / "subs" / "maps_cache"
+    mc.mkdir()
+    records = {"map_networkmap.json": {"name": "networkmap", "storeClass": "storage.idmap.redis.NetworkOperationMap", "db": 2},
+               "map_recrefs.json": {"name": "record_refs", "storeClass": "storage.idmap.redis.MultiMap", "db": 8},
+               "map_allrefs.json": {"name": "all_refs", "storeClass": "storage.idmap.redis.ReferenceMap", "host": "r", "port": 1},
+               "map_odd.json": {"name": "odd", "storeClass": "storage.idmap.redis.RedisDictValue"}}
+    for fn, rec in records.items():
+        json.dump({"type": "map", **rec}, open(mc / fn, "w"))
+    root = tmp_path / "inst"
+    init([str(root), "--configs", str(src), "--no-redis"])
+    out = capsys.readouterr().out
+    installed = root / "pipeline-configs" / "configs" / "subs" / "maps_cache"
+    assert json.load(open(installed / "map_networkmap.json"))["storeClass"] == "storage.idmap.postgres.NetworkOperationMap"
+    assert json.load(open(installed / "map_allrefs.json")) == {
+        "type": "map", "name": "all_refs", "storeClass": "storage.idmap.postgres.ReferenceMap"}
+    assert not (installed / "map_recrefs.json").exists()
+    assert "odd: left in Redis (RedisDictValue has no Postgres store)" in out
+    assert sorted(p.name for p in mc.iterdir()) == sorted(records)            # the source untouched
+    assert json.load(open(mc / "map_networkmap.json"))["storeClass"].endswith("redis.NetworkOperationMap")
+
+
 def test_services_module_settings():
     s = _services.postgres_settings({"host": "db.example.org", "port": "5433", "user": "USERNAME",
                                      "password": "PASSWORD", "dbname": "lux"})
@@ -287,6 +392,7 @@ def test_already_configured_database_asks_nothing(tmp_path, monkeypatch, capsys,
     init([str(root), "--create-db"])
     monkeypatch.setattr(_services, "postgres_database_status", lambda s, name, timeout=5: (True, True))
     monkeypatch.setattr(initialize.sys.stdin, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(initialize, "redis_choice", lambda args, names, reachable: True)   # not asked about here
 
     def only_the_name(q):
         assert q.startswith("Name of the Postgres database"), f"asked: {q}"
@@ -686,6 +792,7 @@ def test_an_existing_home_dotenv_is_kept_and_reported(tmp_path, capsys):
 def test_home_dotenv_offered_at_a_tty_and_written_on_yes(tmp_path, monkeypatch, capsys):
     home_env().unlink()
     monkeypatch.setattr(initialize.sys.stdin, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(initialize, "redis_choice", lambda args, names, reachable: True)   # not asked about here
     asked = []
     monkeypatch.setattr("builtins.input", lambda q: asked.append(q) or "y")
     root = tmp_path / "a"
@@ -706,6 +813,7 @@ def test_home_dotenv_not_written_on_no_or_without_a_tty(tmp_path, monkeypatch, c
     init([str(tmp_path / "a")])                  # no tty: not asked, not written
     assert not home_env().exists()
     monkeypatch.setattr(initialize.sys.stdin, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(initialize, "redis_choice", lambda args, names, reachable: True)   # not asked about here
     monkeypatch.setattr("builtins.input", lambda q: "")
     init([str(tmp_path / "a"), "--no-create-db"])
     assert not home_env().exists()
@@ -715,6 +823,7 @@ def test_home_dotenv_not_written_on_no_or_without_a_tty(tmp_path, monkeypatch, c
 def test_home_dotenv_flags(tmp_path, monkeypatch, capsys):
     home_env().unlink()
     monkeypatch.setattr(initialize.sys.stdin, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(initialize, "redis_choice", lambda args, names, reachable: True)   # not asked about here
     monkeypatch.setattr("builtins.input", lambda q: pytest.fail(f"asked: {q}"))
     init([str(tmp_path / "a"), "--no-create-db", "--no-home-dotenv"])
     assert not home_env().exists()

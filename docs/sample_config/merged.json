@@ -6,6 +6,11 @@
 
 	"recordcacheClass": "storage.cache.postgres.MergedRecordCache",
     "mapperClass": "sources.lux.final.mapper.Cleaner",
-    "reconcilerClass": "sources.lux.final.reconciler.CsvReconciler",
+    "reconcilerClass": "sources.lux.final.reconciler.GlobalReconciler",
+    "indexLoaderClass": "sources.lux.final.index_loader.GlobalIndexLoader",
+    "indexes": {
+        "differents": {"indexClass": "storage.idmap.lmdb.TabLmdb", "path": "global_diffs.lmdb"},
+        "reconcile_id": {"indexClass": "storage.idmap.lmdb.TabLmdb", "path": "global_equivs.lmdb"}
+    },
     "acquirerClass": null
 }
