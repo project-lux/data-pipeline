@@ -111,6 +111,17 @@ the configuration, Postgres (and Redis where configured), the idmap, the
 sources' components, the data directories, the schemas, and that worker
 processes can be started.
 
+`<data_dir>` also holds data files no command makes (lookup tables,
+corrections, LLM-derived place data). The pipeline runs without them, with
+less clean-up; copy them from a backup of an existing installation. One can
+be fetched: the Getty redirects that reconcile applies to references,
+
+```
+curl -sL -G https://vocab.getty.edu/sparql.json --data-urlencode \
+  'query=SELECT ?from ?to WHERE { ?from <http://purl.org/dc/terms/isReplacedBy> ?to }' \
+  > <data_dir>/replacements.json
+```
+
 Its last step compares the server's settings with what `lux pg-tune`
 recommends for this machine. To apply them:
 

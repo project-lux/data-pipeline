@@ -44,6 +44,33 @@ def references_path(configs):
     return os.path.join(_temp_dir(configs), REFERENCES_FILE)
 
 
+REDIRECTS_FILE = "replacements.json"
+
+
+def load_redirects(data_dir):
+    """``{old URI: new URI}`` from ``<data_dir>/replacements.json``, a
+    SPARQL JSON result (``from``, ``to``) of the Getty vocabularies'
+    replaced subjects: a reference to a replaced AAT / ULAN / TGN id is
+    recorded under its replacement. Optional, like the other data files the
+    pipeline reads from data_dir: without it (a fresh installation) no
+    reference is redirected, and a warning says so. Getty's SPARQL endpoint
+    gives the file as it is read (40,606 rows in 2026-11)::
+
+        curl -sL -G https://vocab.getty.edu/sparql.json --data-urlencode \\
+          'query=SELECT ?from ?to WHERE { ?from <http://purl.org/dc/terms/isReplacedBy> ?to }' \\
+          > <data_dir>/replacements.json
+    """
+    fn = os.path.join(data_dir, REDIRECTS_FILE)
+    if not os.path.exists(fn):
+        logger.warning(f"no {fn}: references to replaced Getty ids are not redirected "
+                       f"(load_redirects in lux_pipeline/process/reference_manager.py says "
+                       f"how to fetch it)")
+        return {}
+    with open(fn) as fh:
+        js = json.load(fh)
+    return {r["from"]["value"]: r["to"]["value"] for r in js["results"]["bindings"]}
+
+
 class ReferenceManager(object):
     def __init__(self, configs, idmap, workers=1):
         self.configs = configs
@@ -60,17 +87,7 @@ class ReferenceManager(object):
         # instead of a python loop per node
         self.internal_uris_t = tuple(self.internal_uris)
 
-        # XXX FIXME: This should be a CSV or sane JSON
-        with open(os.path.join(configs.data_dir, "replacements.json")) as fh:
-            data = fh.read()
-        js = json.loads(data)
-        getty_redirects = {}
-        res = js["results"]["bindings"]
-        for r in res:
-            f = r["from"]["value"]
-            t = r["to"]["value"]
-            getty_redirects[f] = t
-        self.redirects = getty_redirects
+        self.redirects = load_redirects(configs.data_dir)
         self.ref_cache = {}
 
         # pop_ref() hands out one reference at a time, but claims them from
