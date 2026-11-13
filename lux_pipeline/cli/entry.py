@@ -28,6 +28,11 @@ BACKGROUND_CHILD_ENV = "LUX_BACKGROUND_CHILD"
 # Commands that may run without a working installation
 NO_CONFIG_COMMANDS = ("initialize", "testinstall", "help")
 
+# other names for a command: `lux install` is `lux initialize`. Resolved
+# before anything else reads the name, so the run is recorded under the
+# command's own name
+ALIASES = {"install": "initialize"}
+
 
 def build_parser():
     # --help is ours to handle: argparse's would print these global options
@@ -68,12 +73,13 @@ def resolve_command(name):
     """The module for command `name`, or ``(None, message)``.
 
     Built-in commands are ``lux_pipeline.cli.<name>`` with ``-`` mapped to
-    ``_``. A dotted name is an extension: imported as-is (dashes mapped the
+    ``_``; a name in `ALIASES` is the command it stands for. A dotted name is an extension: imported as-is (dashes mapped the
     same way) and required to define `CommandHandler`. That is how a
     deployment adds private commands.
     """
     if not name or name.startswith("_"):
         return None, f"Unknown command '{name}'. See 'lux help' for the list."
+    name = ALIASES.get(name, name)
     modname = name.replace("-", "_")
     external = "." in name
     if not external:
@@ -111,6 +117,7 @@ def run(argv=None):
     """Everything `main` does, returning the exit status instead of exiting."""
     ap = build_parser()
     args, rest = ap.parse_known_args(argv)
+    args.command = ALIASES.get(args.command, args.command)
     # the command line as given, for the run record (<prefix>/run.json)
     args.cli_argv = list(sys.argv[1:] if argv is None else argv)
     if args.help:
