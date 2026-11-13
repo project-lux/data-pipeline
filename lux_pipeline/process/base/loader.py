@@ -370,6 +370,16 @@ class Loader(Sliced):
     def _per_slice(self, n):
         return n // self.max_slice if self.max_slice > 1 else n
 
+    def start_progress(self, total=None, slices=None):
+        """For a loader with its own ``load()``: the bar's total, this
+        slice's share of `total` (default ``totalRecords``) over `slices`
+        (the slice count it was given; default 1, the whole input). Not
+        positive (unknown): the bar counts without a total. The loop then
+        reports each record it reads with ``self.progress(advance=1)``."""
+        total = self.total if total is None else total
+        if total and total > 0:
+            self.progress(total=max(1, total // max(1, slices or 1)))
+
     def _add_total(self, n):
         """A container learned how many children it has; the running total
         is for the whole input, reported as this slice's share."""
@@ -1212,7 +1222,7 @@ class Loader(Sliced):
             else:
                 fh = zh.open(names[0])
 
-        start = time.time()
+        self.start_progress()
         x = 0
         done_x = 0
         l = 1
@@ -1220,12 +1230,11 @@ class Loader(Sliced):
             l = fh.readline()
             if not l:
                 break
+            self.progress(advance=1)
             # Find id and check if already exists before processing JSON
             what = self.get_identifier_raw(l)
             if what and what in self.out_cache:
                 done_x += 1
-                if not done_x % 10000:
-                    logger.info(f"Skipping past {done_x} {time.time() - start}")
                 continue
             # Cache assumes JSON as input, so need to parse it
             try:
@@ -1247,12 +1256,9 @@ class Loader(Sliced):
                             f"is get_identifier_raw or _json implemented for {self.__class__.__name__}?"
                         )
                 self.out_cache[what] = new
-            if not x % 10000:
-                t = time.time() - start
-                xps = x / t
-                ttls = self.total / xps
-                logger.info(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls / 3600} hrs)")
         fh.close()
+        if done_x:
+            logger.info(f"{self.name}: {x} records loaded, {done_x} already in the cache")
         self.out_cache.commit()
 
     def load_export2(self):

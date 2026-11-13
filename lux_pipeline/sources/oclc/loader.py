@@ -32,8 +32,7 @@ class ViafLoader(Loader):
             wdm = mapper.wikidata_config["mapper"]
             nss = mapper.nss
 
-            xstart = time.time()
-            start = time.time()
+            self.start_progress(slices=maxSlice)
 
             x = 0
             done_x = 0
@@ -50,6 +49,7 @@ class ViafLoader(Loader):
                 what, xml = l.split("\t")
                 x += 1
                 done_x += 1
+                self.progress(advance=1)
                 new = {"xml": xml}
                 self.out_cache[what] = new
 
@@ -80,9 +80,5 @@ class ViafLoader(Loader):
 
                 if not done_x % 10000:
                     efh.flush()
-                    t = time.time() - start
-                    xps = x / t
-                    ttls = self.total / xps
-                    logger.info(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
 
         self.out_cache.commit()
