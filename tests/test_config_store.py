@@ -111,6 +111,54 @@ def test_validate_reports(cfgs, key, changes, expect):
     assert all(not p.startswith("warning:") for p in problems)
 
 
+SAM = {"name": "sam", "type": "internal", "namespace": "https://data.example.org/datasets/source-records/"}
+
+
+@pytest.mark.parametrize("matches,ok", [
+    (["data.example.org/datasets/source-records/"], True),
+    (["https://data.example.org/datasets/source-records/"], True),
+    (["data.example.org/datasets/source-records/", "data.example.org/datasets/source-records"], True),
+    (["elsewhere.org/records"], True),                     # another host: not this namespace
+    ([], True),
+    (["data.example.org/datasets/source-records"], False),
+    (["data.example.org/datasets/source-records", "data.example.org/datasets/source-records/"], False),
+    (["data.example.org/datasets"], False),
+])
+def test_matches_must_end_where_the_namespace_does(matches, ok):
+    problems = store.matches_problems({**SAM, "matches": matches})
+    assert (problems == []) == ok, problems
+    if not ok:
+        assert len(problems) == 1 and not problems[0].startswith("warning:")
+
+
+def test_a_short_match_says_what_happens_and_what_to_write():
+    [p] = store.matches_problems({**SAM, "matches": ["data.example.org/datasets/source-records"]})
+    assert "splits to the identifier '/ID'" in p
+    assert "canonicalizes to https://data.example.org/datasets/source-records//ID" in p
+    assert p.endswith("write 'data.example.org/datasets/source-records/'")
+    # the split and canonicalize it describes are Config's
+    c = Config.__new__(Config)
+    src = {**SAM, "matches": ["data.example.org/datasets/source-records"], "mapper": None}
+    c.internal, c.external, c.external_uri_rewrites, c.other_external_matches = {"sam": src}, {}, {}, []
+    c._match_pairs = None
+    from lux_pipeline.storage.uricache import URICache
+    c._canon_cache = URICache(capacity=10)
+    assert c.split_uri(SAM["namespace"] + "ID")[1] == "/ID"
+    assert c.canonicalize(SAM["namespace"] + "ID") == "https://data.example.org/datasets/source-records//ID"
+
+
+def test_a_mapper_with_its_own_fix_identifier_makes_it_a_warning():
+    rec = {**SAM, "matches": ["data.example.org/datasets/source-records"]}
+    assert not store.matches_problems({**rec, "mapperClass": "lux_pipeline.process.base.mapper.Mapper"})[0].startswith("warning:")
+    [p] = store.matches_problems({**rec, "mapperClass": "lux_pipeline.sources.getty.mapper.UlanMapper"})
+    assert p.startswith("warning:") and "UlanMapper.fix_identifier removes '/'" in p
+
+
+def test_a_source_record_with_a_short_match_is_refused(cfgs):
+    problems = with_(cfgs, "aat", matches=["vocab.getty.edu/aat"])
+    assert any("stops short of the namespace" in p for p in problems), problems
+
+
 def test_null_switches_a_component_off_and_unknown_keys_are_fine(cfgs):
     assert with_(cfgs, "aat", acquirerClass=None, loaderClass=None, myMapperSetting=[1, "x"]) == []
 
