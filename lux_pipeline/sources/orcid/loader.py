@@ -147,19 +147,17 @@ class OrcidLoader(Loader):
             return
         logger.info(f"Loading {len(mine)} of {len(shards)} orcid shards: {[n for n, fn in mine]}")
 
-        x = 0
-        start = time.time()
+        # the shards hold only the members with data, fewer than the archive
+        self.start_progress(total=self.total if self.total > 0 else TOTAL_MEMBERS, slices=maxSlice)
         for n, fn in mine:
+            self.progress(description=f"orcid shard {n}")
             with gzip.open(fn, "rt") as fh:
                 for line in fh:
                     ident, jstr = line.strip().split("\t", 1)
                     self.out_cache[ident] = json.loads(jstr)
                     # Record is done: the cache may commit here, and only here
                     self.out_cache.checkpoint()
-                    x += 1
-                    if not x % 10000:
-                        t = time.time() - start
-                        logger.info(f"{x} in {t} = {x / t}/s (shard {n})")
+                    self.progress(advance=1)
 
     def split(self, slicen=None, maxSlice=None):
         """Write the archive out as JSONL shards, ready to load.
@@ -246,8 +244,8 @@ class OrcidLoader(Loader):
         x = 0
         mine_x = 0
         done_x = 0
-        start = time.time()
         ttl = self.total if self.total > 0 else TOTAL_MEMBERS
+        self.start_progress(total=ttl, slices=maxSlice)
         while nxt is not None:
             if not nxt.name.endswith('xml'):
                 nxt = tf.next()
@@ -262,6 +260,7 @@ class OrcidLoader(Loader):
                 nxt = tf.next()
                 continue
             mine_x += 1
+            self.progress(advance=1)
             ident = nxt.name.rsplit('/', 1)[-1].replace('.xml', '')
             rech = tf.extractfile(nxt)
             data = rech.read()
@@ -273,12 +272,8 @@ class OrcidLoader(Loader):
                 self.out_cache.checkpoint()
             nxt = tf.next()
             x+=1
-            if not x % 100000:
-                t = time.time() - start
-                xps = x/t
-                ttls = ttl / xps
-                logger.info(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-                # done_x is out of the members this worker owns, not the ones
-                # it walked past
-                logger.info(f"{done_x} with data / {mine_x} = {done_x/mine_x*100}%")
         tf.close()
+        if mine_x:
+            # done_x is out of the members this worker owns, not the ones it
+            # walked past
+            logger.info(f"orcid: {done_x} with data / {mine_x} = {done_x/mine_x*100:.1f}%")

@@ -48,10 +48,11 @@ class GnLoader(Loader):
     def load(self):
         allc = os.path.join(self.in_path, 'allCountries.txt')
         with open(allc) as fh:
-            start = time.time()
+            self.start_progress()
             x = 0
             for l in fh.readlines():
                 x += 1
+                self.progress(advance=1)
                 stuff = l.split('\t')
                 gnid = stuff[0]
                 if not gnid in self.out_cache:
@@ -74,8 +75,3 @@ class GnLoader(Loader):
                         top.part_of = model.Place(ident=f"{self.namespace}{parent}")
                     data = model.factory.toJSON(top)
                     self.out_cache[gnid] = data
-                    if not x % 10000:
-                        t = time.time() - start
-                        xps = x/t
-                        ttls = self.total / xps
-                        logger.info(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")

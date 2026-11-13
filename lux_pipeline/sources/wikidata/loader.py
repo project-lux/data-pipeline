@@ -73,7 +73,7 @@ class WdLoader(WdFetcher, WdConfigManager, Loader):
             l = 1
             done_x = 0
 
-            start = time.time()
+            self.start_progress(slices=maxSlice)
             while l:
                 l = fh.readline()
                 if not l:
@@ -83,6 +83,7 @@ class WdLoader(WdFetcher, WdConfigManager, Loader):
                     continue
 
                 x += 1
+                self.progress(advance=1)
                 if self.filter_line(l):
                     continue
                 done_x += 1
@@ -111,9 +112,3 @@ class WdLoader(WdFetcher, WdConfigManager, Loader):
 
                 # Record is done: the cache may commit here, and only here
                 self.out_cache.checkpoint()
-
-                if not done_x % 10000:
-                    t = time.time() - start
-                    xps = x/t
-                    ttls = self.total / xps
-                    logger.info(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
