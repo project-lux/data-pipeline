@@ -44,6 +44,13 @@ def _no_network(monkeypatch, tmp_path):
     (home / ".lux").mkdir(parents=True)
     (home / ".lux" / ".env").write_text("LUX_BASEPATH=/elsewhere\n")
     monkeypatch.setenv("HOME", str(home))
+    # a new installation clones pipeline-configs; these tests use the samples
+    # unless they say otherwise (REAL_DEFAULT puts the clone back)
+    monkeypatch.setattr(initialize.CommandHandler, "default_configuration",
+                        lambda self, root, out=print: self.install_samples(root, out))
+
+
+REAL_DEFAULT = initialize.CommandHandler.default_configuration
 
 
 def init(rest):
@@ -522,6 +529,51 @@ def test_clone_failure_is_reported(tmp_path, monkeypatch):
                         lambda cmd, **kw: type("R", (), {"returncode": 128, "stderr": "fatal: nope", "stdout": ""})())
     with pytest.raises(RuntimeError, match="git clone .* failed: fatal: nope"):
         init([str(tmp_path / "inst"), "--clone", "https://example.org/x.git"])
+
+
+def fake_git(monkeypatch, calls):
+    def fake_run(cmd, **kw):
+        calls.append(cmd)
+        fake_checkout(Path(cmd[-1]))
+        return type("R", (), {"returncode": 0, "stderr": "", "stdout": ""})()
+    monkeypatch.setattr(initialize.subprocess, "run", fake_run)
+    monkeypatch.setattr(initialize.CommandHandler, "default_configuration", REAL_DEFAULT)
+
+
+def test_a_new_installation_clones_pipeline_configs(tmp_path, monkeypatch, capsys):
+    calls = []
+    fake_git(monkeypatch, calls)
+    root = tmp_path / "inst"
+    bp = init([str(root)])
+    assert calls == [["git", "clone", initialize.PIPELINE_CONFIGS_URL, str(root / "pipeline-configs")]]
+    assert bp == root / "pipeline-configs" / "configs" / "system"
+    assert not (root / "config_cache").exists()
+    assert (root / ".env").read_text() == f"LUX_BASEPATH={bp}\n"
+    # a rerun keeps the checkout and does not clone again
+    assert init([str(root)]) == bp and len(calls) == 1
+
+
+def test_samples_on_request_and_an_existing_samples_installation_is_kept(tmp_path, monkeypatch):
+    calls = []
+    fake_git(monkeypatch, calls)
+    root = tmp_path / "inst"
+    assert init([str(root), "--samples"]) == root
+    assert (root / "config_cache" / "base.json").exists()
+    # later, with no flag: still the samples, nothing cloned
+    assert init([str(root)]) == root
+    assert calls == [] and not (root / "pipeline-configs").exists()
+    with pytest.raises(ValueError, match="cannot go with --clone or --configs"):
+        init([str(tmp_path / "b"), "--samples", "--clone"])
+
+
+def test_without_git_the_error_says_how_to_go_on(tmp_path, monkeypatch):
+    def no_git(cmd, **kw):
+        raise FileNotFoundError("git")
+    monkeypatch.setattr(initialize.subprocess, "run", no_git)
+    monkeypatch.setattr(initialize.CommandHandler, "default_configuration", REAL_DEFAULT)
+    root = tmp_path / "inst"
+    with pytest.raises(RuntimeError, match=f"git is not installed.*lux initialize {root} --samples"):
+        init([str(root)])
 
 
 @pytest.mark.skipif(not PIPELINE_CONFIGS.is_dir(), reason="pipeline-configs checkout not beside this repo")

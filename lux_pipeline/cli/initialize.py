@@ -1,14 +1,21 @@
 """Create or complete an installation: the data directories, a configuration, the .env, the schemas, the database.
 
-    lux initialize /srv/lux                       # the sample configuration shipped in docs/sample_config
-    lux initialize /srv/lux --configs ~/pipeline-configs   # a local pipeline-configs checkout
-    lux initialize /srv/lux --clone               # git clone project-lux/pipeline-configs into it first
+    lux initialize /srv/lux                       # git clone project-lux/pipeline-configs into it
+    lux initialize /srv/lux --configs ~/pipeline-configs   # a local pipeline-configs checkout instead
+    lux initialize /srv/lux --clone URL           # another repository of the same shape
+    lux initialize /srv/lux --samples             # the sample configuration shipped in docs/sample_config
     lux initialize /srv/lux                       # again, later: finishes whatever is not done yet
 
 Every step checks its own state, so the command can be run again after a
 failure (Postgres not up yet, no network for the schemas, a wrong
 setting) and carries on from where it got to; nothing already in place
 is overwritten, and your edits to the installed records are kept.
+
+A directory with no configuration yet gets the live one: pipeline-configs
+is cloned into ``<dir>/pipeline-configs/`` (git must be installed and
+github.com reachable; ``--samples`` installs the shipped samples instead,
+``--configs`` a checkout already on disk). A rerun keeps whichever
+configuration the directory already has.
 
 With the shipped samples, ``<dir>/config_cache/`` holds a copy of every
 sample record (missing ones are added on a rerun), ``base_dir`` is set
@@ -406,9 +413,13 @@ class CommandHandler(BaseHandler):
                         help="Where the installation lives (default: the current directory)")
         ap.add_argument("--configs", metavar="PATH",
                         help="A pipeline-configs checkout (or any directory with configs/system/config_cache) "
-                             "to install from instead of the shipped samples")
+                             "to install from instead of cloning one")
         ap.add_argument("--clone", nargs="?", const=PIPELINE_CONFIGS_URL, metavar="URL",
-                        help=f"git clone pipeline-configs into the directory first (default {PIPELINE_CONFIGS_URL})")
+                        help=f"git clone a configuration repository into the directory (default "
+                             f"{PIPELINE_CONFIGS_URL}, which a new installation gets anyway)")
+        ap.add_argument("--samples", action="store_true",
+                        help="Install the sample configuration shipped in docs/sample_config "
+                             "instead of cloning pipeline-configs")
 
     # --- the shipped samples ---------------------------------------------------
 
@@ -481,9 +492,14 @@ class CommandHandler(BaseHandler):
         else:
             target = root / "pipeline-configs"
             root.mkdir(parents=True, exist_ok=True)
-            result = subprocess.run(["git", "clone", url, str(target)], capture_output=True, text=True)
+            hint = f"; or lux initialize {root} --samples for the shipped sample configuration"
+            try:
+                result = subprocess.run(["git", "clone", url, str(target)], capture_output=True, text=True)
+            except FileNotFoundError:
+                raise RuntimeError(f"git is not installed, so {url} cannot be cloned: install git{hint}") from None
             if result.returncode != 0:
-                raise RuntimeError(f"git clone of {url} failed: {result.stderr.strip() or result.stdout.strip()}")
+                raise RuntimeError(f"git clone of {url} failed: "
+                                   f"{result.stderr.strip() or result.stdout.strip()}{hint}")
             installed = target / "configs"
             out(f"  configuration: cloned {url} to {target}")
         return self.wire_checkout(root, installed, out)
@@ -515,16 +531,29 @@ class CommandHandler(BaseHandler):
     # --- the steps -----------------------------------------------------------------
 
     def ensure_configuration(self, root, args, out=print):
+        """Install or find the configuration: what ``--clone``, ``--configs``
+        or ``--samples`` asks for; else whichever the directory already has
+        (a checkout, the samples); else, for a new installation, a clone of
+        pipeline-configs."""
+        if args.samples and (args.clone or args.configs):
+            raise ValueError("--samples installs the shipped samples; it cannot go with --clone or --configs")
         if args.clone:
             return self.clone(root, args.clone, out)
         if args.configs:
             return self.install_checkout(root, args.configs, out)
         installed = self.checkout_configs(root)
-        if installed is not None and not (root / "config_cache").is_dir():
+        samples = (root / "config_cache").is_dir()
+        if installed is not None and not samples and not args.samples:
             return self.wire_checkout(root, installed, out)
         if installed is not None:
             out(f"  note: both {installed.parent} and {root / 'config_cache'} exist; .env decides which is used")
-        return self.install_samples(root, out)
+        if samples or args.samples:
+            return self.install_samples(root, out)
+        return self.default_configuration(root, out)
+
+    def default_configuration(self, root, out=print):
+        """A new installation: the live configuration, cloned."""
+        return self.clone(root, PIPELINE_CONFIGS_URL, out)
 
     def ensure_dotenv(self, root, basepath, out=print):
         env = root / ".env"

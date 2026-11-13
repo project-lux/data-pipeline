@@ -70,14 +70,23 @@ See [web.md](web.md).
 
 `lux initialize` creates the data directories, installs a configuration,
 writes the `.env` that points `lux` at it, fetches the Linked Art schemas
-the validator reads and creates the database tables. Pick one source of
-configuration:
+the validator reads and creates the database tables. By default the
+configuration is the live one, cloned from
+[pipeline-configs](https://github.com/project-lux/pipeline-configs) into
+`~/lux/data/pipeline-configs` (git must be installed):
 
 ```
-lux initialize ~/lux/data                                  # the samples in docs/sample_config
+lux initialize ~/lux/data                                  # clone project-lux/pipeline-configs into it
 lux initialize ~/lux/data --configs ~/lux/pipeline-configs # a pipeline-configs checkout you already have
-lux initialize ~/lux/data --clone                          # clone project-lux/pipeline-configs into it
+lux initialize ~/lux/data --samples                        # the samples in docs/sample_config instead
 ```
+
+A rerun keeps whichever configuration the directory already has. The clone
+is a git checkout: `git status` in it shows what `lux initialize` changed
+for this machine (`base_dir`, and the maps if you chose not to use Redis),
+and `git pull` picks up later configuration changes (if it refuses because
+a file it changes has those local edits: `git stash`, `git pull`,
+`git stash pop`).
 
 When map records keep maps in Redis you are asked whether to keep using
 it; no (or `--no-redis`) switches `networkmap` to
