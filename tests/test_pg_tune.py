@@ -294,3 +294,97 @@ def test_command_without_memory_exits_1(monkeypatch, capsys):
 def test_command_is_listed():
     from lux_pipeline.cli.help import list_commands
     assert dict(list_commands())["pg-tune"].startswith("Suggest Postgres settings")
+
+
+# --- --sql: the statements as files, and how to run them ----------------------
+
+def sql_args(**kw):
+    return Namespace(workers=24, all=False, idmap_table="idmap", **kw)
+
+
+def statements(text):
+    """The statements of a script, comments dropped; every one must end in ;
+    -- a stray report line (a header, `machine`) would be glued onto the
+    next statement and break it."""
+    body = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("--"))
+    parts = [p.strip() for p in body.split(";")]
+    assert parts[-1] == "", f"text after the last statement: {parts[-1]!r}"
+    return [" ".join(p.split()) for p in parts[:-1]]
+
+
+def test_the_files_hold_only_comments_and_statements():
+    srv = server(shared_preload_libraries=("auth_permission_dialog", ""))
+    srv["idmap_rels"] = {"idmap": 1, "idmap_yuid": 1}
+    scripts, restart = pg.sql_scripts(machine(), srv, sql_args())
+    assert set(scripts) == {pg.SETTINGS_SQL, pg.AFTER_RESTART_SQL, pg.DATABASE_SQL}
+    first = statements(scripts[pg.SETTINGS_SQL])
+    assert all(s.startswith("ALTER SYSTEM SET ") for s in first[:-1]) and first[-1] == "SELECT pg_reload_conf()"
+    assert ("ALTER SYSTEM SET shared_preload_libraries = 'auth_permission_dialog', 'pg_stat_statements'"
+            in first)
+    # pg_stat_statements' own settings only after the restart that loads it
+    assert not any("pg_stat_statements." in s for s in first)
+    after = statements(scripts[pg.AFTER_RESTART_SQL])
+    assert after[-1] == "SELECT pg_reload_conf()" and all("pg_stat_statements." in s for s in after[:-1])
+    assert "shared_buffers" in restart and "shared_preload_libraries" in restart
+    db = statements(scripts[pg.DATABASE_SQL])
+    assert all(s.split()[0] in ("ALTER", "REINDEX", "CREATE", "SELECT") for s in db)
+    assert "REINDEX (VERBOSE) TABLE CONCURRENTLY idmap" in db
+
+
+def test_nothing_to_change_writes_no_settings_and_removes_an_old_one(tmp_path, monkeypatch):
+    scripts, _ = pg.sql_scripts(machine(), server(), sql_args())
+    paths = pg.write_sql(tmp_path / "sql", scripts)
+    assert set(paths) == set(scripts)
+    # later, every setting already as recommended
+    monkeypatch.setattr(pg, "plan", lambda m, srv, args: ([], [], []))
+    scripts, restart = pg.sql_scripts(machine(), server(), sql_args())
+    assert set(scripts) == {pg.DATABASE_SQL} and restart == []
+    paths = pg.write_sql(tmp_path / "sql", scripts)
+    assert sorted(p.name for p in (tmp_path / "sql").iterdir()) == [pg.DATABASE_SQL]
+    lines = "\n".join(pg.sql_instructions(paths, restart, {"dbname": "lux2"}, platform_name="darwin"))
+    assert "1. In the pipeline's database (lux2)" in lines and "Restart" not in lines
+
+
+def all_paths(d="/x"):
+    return {n: f"{d}/{n}" for n in (pg.SETTINGS_SQL, pg.AFTER_RESTART_SQL, pg.DATABASE_SQL)}
+
+
+def test_instructions_on_a_mac_use_postgres_apps_psql(monkeypatch):
+    monkeypatch.setattr(pg.shutil, "which", lambda name: None)
+    monkeypatch.setattr(pg.os.path, "exists", lambda p: p == pg.POSTGRES_APP_PSQL)
+    lines = "\n".join(pg.sql_instructions(all_paths(), ["shared_buffers"], {"dbname": "lux2"},
+                                          {"data_dir": "/pg/var-18"}, platform_name="darwin"))
+    app = pg.POSTGRES_APP_PSQL
+    assert f"1. The server settings" in lines
+    assert f"{app} -v ON_ERROR_STOP=1 -d postgres -f /x/{pg.SETTINGS_SQL}" in lines
+    assert "2. Restart Postgres; a reload does not apply shared_buffers:" in lines
+    assert "Postgres.app: Stop, then Start" in lines and "/pg/var-18/postgresql.auto.conf" in lines
+    assert f"{app} -d postgres -c 'SHOW shared_preload_libraries;'" in lines
+    assert "auth_permission_dialog" in lines
+    assert f"4. In the pipeline's database (lux2)" in lines
+    assert f"{app} -v ON_ERROR_STOP=1 -d lux2 -f /x/{pg.DATABASE_SQL}" in lines
+    assert "ONE AT A TIME" in lines
+
+
+def test_instructions_on_linux_run_as_postgres_and_remote_servers_get_the_connection():
+    lines = "\n".join(pg.sql_instructions(all_paths("/home/me/pg tune"), ["shared_buffers"],
+                                          {"dbname": "lux"}, platform_name="linux"))
+    assert f"sudo -u postgres psql -v ON_ERROR_STOP=1 -d postgres < '/home/me/pg tune/{pg.SETTINGS_SQL}'" in lines
+    assert "sudo systemctl restart postgresql" in lines
+    remote = "\n".join(pg.sql_instructions(all_paths(), [], {"dbname": "lux", "host": "db.example.org",
+                                                              "port": 5433, "user": "admin"},
+                                           platform_name="linux"))
+    assert f"psql -h db.example.org -p 5433 -U admin -v ON_ERROR_STOP=1 -d lux -f /x/{pg.DATABASE_SQL}" in remote
+    assert "sudo" not in remote and "-U must be a superuser" in remote
+
+
+def test_command_sql_writes_the_files_and_says_how_to_run_them(monkeypatch, capsys, no_server, tmp_path):
+    cfgs = Namespace(caches={}, defaults={"cache": {"dbname": "lux2"}}, max_workers=8, map_stores={})
+    assert run_cmd(monkeypatch, cfgs, "--sql", str(tmp_path / "sql")) == 0
+    out = capsys.readouterr().out
+    # read from the cache defaults (default_cache.json), not the empty caches record
+    assert no_server["db"] == {"dbname": "lux2"}
+    names = sorted(p.name for p in (tmp_path / "sql").iterdir())
+    assert names == [pg.SETTINGS_SQL, pg.AFTER_RESTART_SQL, pg.DATABASE_SQL]
+    assert out.rstrip().endswith("and REINDEX CONCURRENTLY refuse to run inside.")
+    assert f"-d lux2 -f {tmp_path / 'sql' / pg.DATABASE_SQL}" in out

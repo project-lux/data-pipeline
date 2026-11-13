@@ -101,6 +101,21 @@ the configuration, Postgres (and Redis where configured), the idmap, the
 sources' components, the data directories, the schemas, and that worker
 processes can be started.
 
+Its last step compares the server's settings with what `lux pg-tune`
+recommends for this machine. To apply them:
+
+```
+lux pg-tune --sql ~/pg-tune
+```
+
+It writes `pg-tune-1-settings.sql` (`ALTER SYSTEM`, any database),
+`pg-tune-2-after-restart.sql` (pg_stat_statements' settings, which exist only
+once the restart has loaded it) and `pg-tune-3-database.sql` (the pipeline's
+database), and ends with the commands that run them in order on this
+machine: psql (Postgres.app's on a Mac), the restart, and pgAdmin's rule of
+one statement at a time. Run `lux pg-tune` again after the first build: it
+sizes `shared_buffers` from the identity map, which is empty until then.
+
 A source's `name` starts its Postgres table names (`<name>_datacache`, ...),
 and so does a map's when it has no `tableName`. Both must be lower case
 letters, digits and `_`, starting with a letter or `_`, at most 40

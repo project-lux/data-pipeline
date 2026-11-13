@@ -5,6 +5,7 @@
     lux pg-tune --measure-io       # add an fsync/throughput probe
     lux pg-tune --all              # print settings already correct too
     lux pg-tune --no-db            # machine only, don't connect
+    lux pg-tune --sql DIR          # and the SQL as files to run, with how to run them
 
 `analyse` measures the machine and reads the server, `report` turns that
 into the lines `lux pg-tune` prints, and `pending_changes` is the short
@@ -42,10 +43,13 @@ box in docs/idmap-migration.md, and the 72 GiB / 36 vCPU build server whose
 `top` and `pg_stat_activity` samples are in docs/performance-backlog.md.
 """
 
+import datetime
 import math
 import os
 import platform
 import re
+import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -717,6 +721,39 @@ def analyse(db, no_db=False, idmap_table="idmap", unreadable=None):
     return m, srv, why
 
 
+def plan(m, srv, args):
+    """What to change: ``(groups, deferred, restart_needed)``. `groups` is
+    ``[(title, [(rec, current text, already set)])]`` without the empty
+    ones; `deferred` the recommendations that can only be set after the
+    restart that loads their library (printing them in the first block
+    would put a statement that cannot succeed in a block meant to be run
+    top to bottom); `restart_needed` the names a reload does not apply.
+    ``args.all`` keeps the settings already as recommended too."""
+    groups, deferred, restart_needed = [], [], []
+    for title, recs in recommend(m, srv, args.workers):
+        rows = []
+        for rec in recs:
+            same, cur_txt = is_current(srv, rec)
+            if same and not args.all:
+                continue
+            if rec.defer:
+                deferred.append(rec)
+                continue
+            rows.append((rec, cur_txt, same))
+            if rec.restart and not same:
+                restart_needed.append(rec.name)
+        if rows:
+            groups.append((title, rows))
+    return groups, deferred, restart_needed
+
+
+def _explain(out, rec, cur_txt=None, same=False):
+    for chunk in _wrap(rec.why, 74):
+        out(f"-- {chunk}")
+    if cur_txt is not None:
+        out(f"--   currently: {cur_txt}" + ("   (already correct)" if same else ""))
+
+
 def report(m, srv, why, args):
     """What to change, as ``(lines, status)``: status 1 when nothing could
     be sized (no memory figure). `args` carries ``workers``,
@@ -787,34 +824,14 @@ def report(m, srv, why, args):
               "assume PG15 or later.")
 
     # ---- the recommendations
-    groups = recommend(m, srv, args.workers)
-    restart_needed, printed, deferred = [], 0, []
-
-    for title, recs in groups:
-        rows = []
-        for rec in recs:
-            same, cur_txt = is_current(srv, rec)
-            if same and not args.all:
-                continue
-            if rec.defer:
-                # printing this here would put a statement that cannot succeed
-                # in the middle of a block meant to be run top to bottom
-                deferred.append(rec)
-                continue
-            rows.append((rec, cur_txt, same))
-        if not rows:
-            continue
+    groups, deferred, restart_needed = plan(m, srv, args)
+    printed = 0
+    for title, rows in groups:
         out(f"\n{'-' * 78}\n-- {title}\n{'-' * 78}")
         for rec, cur_txt, same in rows:
-            for chunk in _wrap(rec.why, 74):
-                out(f"-- {chunk}")
-            if cur_txt is not None:
-                out(f"--   currently: {cur_txt}"
-                      + ("   (already correct)" if same else ""))
+            _explain(out, rec, cur_txt, same)
             out(rec.statement())
             printed += 1
-            if rec.restart and not same:
-                restart_needed.append(rec.name)
         out()
 
     if printed == 0 and not deferred:
@@ -839,13 +856,157 @@ def report(m, srv, why, args):
         out("--     \"pg_stat_statements.track\"")
         for rec in deferred:
             out()
-            for chunk in _wrap(rec.why, 74):
-                out(f"-- {chunk}")
+            _explain(out, rec)
             out(rec.statement())
         out("\nSELECT pg_reload_conf();")
 
     _tail(out, srv, m, args.idmap_table)
     return lines, 0
+
+
+# ------------------------------------------------------------ --sql files
+
+SETTINGS_SQL = "pg-tune-1-settings.sql"
+AFTER_RESTART_SQL = "pg-tune-2-after-restart.sql"
+DATABASE_SQL = "pg-tune-3-database.sql"
+POSTGRES_APP_PSQL = "/Applications/Postgres.app/Contents/Versions/latest/bin/psql"
+
+
+def sql_scripts(m, srv, args):
+    """The report's SQL as scripts that run top to bottom (comments and
+    statements only): ``({file name: text}, restart_needed)``. The server
+    settings (none when nothing differs), the settings that exist only
+    after the restart, and the statements for the pipeline's database."""
+    groups, deferred, restart_needed = plan(m, srv, args)
+    head = (f"-- lux pg-tune {datetime.date.today().isoformat()}, sized for "
+            f"--workers {args.workers}")
+    scripts = {}
+    if groups:
+        lines = [head, "-- The server settings: ALTER SYSTEM, run as a superuser in any database."]
+        out = lines.append
+        for title, rows in groups:
+            out("")
+            out(f"-- {title}")
+            for rec, cur_txt, same in rows:
+                _explain(out, rec, cur_txt, same)
+                out(rec.statement())
+        out("")
+        out("SELECT pg_reload_conf();")
+        if restart_needed:
+            out("-- These need a full restart, not a reload: " + ", ".join(restart_needed))
+        scripts[SETTINGS_SQL] = "\n".join(lines) + "\n"
+    if deferred:
+        lines = [head, "-- AFTER the restart: these belong to pg_stat_statements, whose",
+                 "-- parameters do not exist until shared_preload_libraries has loaded it."]
+        for rec in deferred:
+            lines.append("")
+            _explain(lines.append, rec)
+            lines.append(rec.statement())
+        lines += ["", "SELECT pg_reload_conf();"]
+        scripts[AFTER_RESTART_SQL] = "\n".join(lines) + "\n"
+    lines = [head, "-- In the pipeline's own database."]
+    _database_sql(lambda *parts: lines.append(" ".join(str(x) for x in parts) if parts else ""),
+                  srv, args.idmap_table)
+    scripts[DATABASE_SQL] = "\n".join(lines) + "\n"
+    return scripts, restart_needed
+
+
+def write_sql(directory, scripts):
+    """Write `scripts` into `directory` (made if missing), replacing the
+    files of an earlier run, including one this run has nothing for.
+    ``{file name: path}``."""
+    os.makedirs(directory, exist_ok=True)
+    paths = {}
+    for name in (SETTINGS_SQL, AFTER_RESTART_SQL, DATABASE_SQL):
+        path = os.path.join(directory, name)
+        if name in scripts:
+            with open(path, "w") as fh:
+                fh.write(scripts[name])
+            paths[name] = path
+        elif os.path.exists(path):
+            os.remove(path)
+    return paths
+
+
+def _psql():
+    if shutil.which("psql") or sys.platform != "darwin" or not os.path.exists(POSTGRES_APP_PSQL):
+        return "psql"
+    return POSTGRES_APP_PSQL
+
+
+def sql_instructions(paths, restart_needed, db, srv=None, platform_name=None):
+    """How to run the files `write_sql` wrote, in order, as lines: psql
+    commands for this machine (Postgres.app's psql on a Mac without one on
+    the PATH; ``sudo -u postgres`` for a local server on Linux), the
+    restart, and pgAdmin's one-statement-at-a-time rule."""
+    plat = platform_name or sys.platform
+    db = db or {}
+    dbname = db.get("dbname") or os.getenv("USER") or "postgres"
+    remote = bool(db.get("host"))
+    psql = _psql() if plat == "darwin" else "psql"
+    conn = ""
+    if remote:
+        conn = f" -h {shlex.quote(str(db['host']))} -p {db.get('port') or 5432}"
+        conn += f" -U {shlex.quote(db['user'])}" if db.get("user") else ""
+
+    def run(database, path):
+        q = shlex.quote(path)
+        if plat == "linux" and not remote:
+            # as the postgres superuser, the file read by the shell (whose
+            # user can read it) rather than by psql
+            return f"sudo -u postgres psql -v ON_ERROR_STOP=1 -d {database} < {q}"
+        return f"{psql}{conn} -v ON_ERROR_STOP=1 -d {database} -f {q}"
+
+    def show(database, sql):
+        if plat == "linux" and not remote:
+            return f"sudo -u postgres psql -d {database} -c {shlex.quote(sql)}"
+        return f"{psql}{conn} -d {database} -c {shlex.quote(sql)}"
+
+    out = ["", "=" * 78, "the SQL files -- run them in this order", "=" * 78]
+    step = 0
+    if SETTINGS_SQL in paths:
+        step += 1
+        out += [f"  {step}. The server settings, as a superuser (ALTER SYSTEM is server-wide,",
+                "     so any database will do):",
+                f"       {run('postgres', paths[SETTINGS_SQL])}"]
+        if remote:
+            out.append("     (-U must be a superuser there)")
+    if restart_needed:
+        step += 1
+        out += [f"  {step}. Restart Postgres; a reload does not apply "
+                f"{', '.join(restart_needed[:3])}{' ...' if len(restart_needed) > 3 else ''}:"]
+        if plat == "darwin":
+            out.append("       Postgres.app: Stop, then Start, in its window")
+        elif plat == "linux":
+            out.append("       sudo systemctl restart postgresql")
+        else:
+            out.append("       pg_ctl restart -D <data directory>")
+        where = (srv or {}).get("data_dir") or "the data directory"
+        out += ["     If it does not start, its log says which setting; they are in",
+                f"     {where}/postgresql.auto.conf -- fix or delete that line, then start it."]
+    if AFTER_RESTART_SQL in paths:
+        step += 1
+        out += [f"  {step}. pg_stat_statements' settings, once the restart has loaded it:",
+                f"       {show('postgres', 'SHOW shared_preload_libraries;')}"]
+        if plat == "darwin":
+            out += ["     It should list pg_stat_statements. If it shows only auth_permission_dialog,",
+                    "     Postgres.app's own startup setting won; skip this step."]
+        else:
+            out.append("     It should list pg_stat_statements; if not, skip this step.")
+        out.append(f"       {run('postgres', paths[AFTER_RESTART_SQL])}")
+    if DATABASE_SQL in paths:
+        step += 1
+        out += [f"  {step}. In the pipeline's database ({dbname}): the reference queues' storage,",
+                "     the idmap's REINDEX and prewarm. The REINDEX takes a while on a large",
+                "     idmap; run it with no build going:",
+                f"       {run(dbname, paths[DATABASE_SQL])}"]
+    out += ["  Then run lux pg-tune again: it should have nothing to change.",
+            "",
+            "  In pgAdmin instead: open each file in the Query Tool, connected as a superuser",
+            "  to the database named above, and run its statements ONE AT A TIME (select one,",
+            "  then Execute / F5). Run together they are one transaction, which ALTER SYSTEM",
+            "  and REINDEX CONCURRENTLY refuse to run inside."]
+    return out
 
 
 def _wrap(text, width):
@@ -861,11 +1022,10 @@ def _wrap(text, width):
     return out
 
 
-def _tail(out, srv, m, idmap_table):
-    out(f"\n{'=' * 78}")
-    out("not ALTER SYSTEM -- run these too")
-    out("=" * 78)
-
+def _database_sql(out, srv, idmap_table):
+    """The statements for the pipeline's own database (comments and
+    SQL only, so the lines run as a script): the reference queues'
+    storage, the idmap's REINDEX and prewarm."""
     ref = (srv or {}).get("ref_tables", {})
     need = [t for t, opts in ref.items()
             if not any(o.startswith("autovacuum_vacuum_scale_factor") for o in opts)]
@@ -926,6 +1086,14 @@ def _tail(out, srv, m, idmap_table):
             out("--     pg_index; check pg_indexes if any of these error)")
     out("--    Verify it took: shared_buffers is only worth raising if")
     out("--    IO/DataFileRead falls. Sample pg_stat_activity mid-merge.")
+
+
+def _tail(out, srv, m, idmap_table):
+    out(f"\n{'=' * 78}")
+    out("not ALTER SYSTEM -- run these too")
+    out("=" * 78)
+
+    _database_sql(out, srv, idmap_table)
 
     if sys.platform == "linux" and m["ram"]["total"]:
         # sized from the shared_buffers actually recommended above, which is

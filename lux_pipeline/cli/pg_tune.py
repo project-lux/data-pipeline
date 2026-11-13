@@ -5,6 +5,7 @@
     lux pg-tune --measure-io       # add an fsync / sequential-write probe
     lux pg-tune --all              # print the settings already correct too
     lux pg-tune --no-db            # the machine only, without connecting
+    lux pg-tune --sql ~/pg-tune    # also write the SQL as files, and say how to run them
 
 Changes nothing: prints ALTER SYSTEM statements (and the REINDEX, prewarm
 and table storage statements the pipeline wants) for a superuser to review
@@ -12,7 +13,13 @@ and run. Reads the machine's cpus, memory and storage, and the server the
 configuration's cache settings point at (its version, current settings,
 the identity map's size), so the recommendations are for the database the
 pipeline actually uses. Formerly pg-tune.py; ``lux testinstall`` ends with
-the same check, summarised. See `lux_pipeline.storage.pg_tune` for why each
+the same check, summarised. ``--sql DIR`` also writes the statements as
+scripts that run top to bottom -- ``pg-tune-1-settings.sql`` (ALTER
+SYSTEM), ``pg-tune-2-after-restart.sql`` (pg_stat_statements' settings,
+which exist only once the restart has loaded it) and
+``pg-tune-3-database.sql`` (the pipeline's database: reference queue
+storage, REINDEX, prewarm) -- and ends with the commands that run them in
+order on this machine (psql, the restart, pgAdmin). See `lux_pipeline.storage.pg_tune` for why each
 setting is what it is.
 
 The configuration is read, not instantiated, and only for the database
@@ -31,9 +38,14 @@ DEFAULT_WORKERS = 24
 
 
 def pipeline_settings(cfgs):
-    """``(cache settings, max_workers, idmap table)`` from a configuration."""
+    """``(cache settings, max_workers, idmap table)`` from a configuration.
+    The cache settings are the cache defaults (``default_cache.json``, which
+    Config fills from a ``caches`` record when there is only that): reading
+    ``caches`` alone measured the idmap in $USER's database under
+    pipeline-configs."""
     idmap = (getattr(cfgs, "map_stores", None) or {}).get("idmap") or {}
-    return ((getattr(cfgs, "caches", None) or {}),
+    defaults = (getattr(cfgs, "defaults", None) or {}).get("cache")
+    return ((defaults or getattr(cfgs, "caches", None) or {}),
             getattr(cfgs, "max_workers", None) or DEFAULT_WORKERS,
             idmap.get("tableName") or idmap.get("name") or "idmap")
 
@@ -57,6 +69,9 @@ class CommandHandler(BaseHandler):
         ap.add_argument("--idmap-table", dest="idmap_table", default=None,
                         help="The identity map's table, whose size sizes shared_buffers "
                              "(default: the idmap's tableName, else its name)")
+        ap.add_argument("--sql", metavar="DIR", default=None,
+                        help="Also write the statements as SQL files in DIR (settings, after the "
+                             "restart, the pipeline's database) and print how to run them")
 
     def process(self, args, rest):
         super().process(args, rest)
@@ -76,4 +91,10 @@ class CommandHandler(BaseHandler):
             print(line)
         if status:
             sys.exit(status)
+        if args.sql:
+            scripts, restart = pg_tune.sql_scripts(m, srv, args)
+            paths = pg_tune.write_sql(args.sql, scripts)
+            for line in pg_tune.sql_instructions(paths, restart, db, srv):
+                print(line)
+                lines.append(line)
         return lines
