@@ -5,9 +5,8 @@
     lux watch --latest                                 # the newest run; its build, if it has one
 
 A run is a directory under ``log_dir``: the workers' ``w<n>.status`` and
-``w<n>.log``, the driver's ``driver.log`` and its record ``run.json``
-(a run from before runs were directories, its files beside each other
-in ``log_dir``, is read too). The view shows a row per worker and tails every log,
+``w<n>.log``, the driver's ``driver.log`` and its record ``run.json``.
+The view shows a row per worker and tails every log,
 the driver's included, so a phase's tail -- reconcile's identify,
 metatypes and write-refs after its workers have finished -- is seen as it
 runs, and the view ends when the run's record says it is over (or, for a
@@ -24,7 +23,7 @@ from lux_pipeline.cli._handler import BaseHandler
 from lux_pipeline.cli._view import BuildView
 # the readers of a run's files live in lux_pipeline.progress; imported here
 # too, where they used to be defined
-from lux_pipeline.progress import (STATUS_RE, count_workers, current_step, latest_prefix,  # noqa: F401
+from lux_pipeline.progress import (count_workers, current_step, latest_prefix,  # noqa: F401
                                    list_runs, read_run, run_exists, run_path, run_state, read_build,
                                    status_path)
 

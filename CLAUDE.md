@@ -160,11 +160,10 @@ timing files are `w<n>.status|.log|.timing` in it (a reconcile worker also write
 `max_distance`, opened on the first drop: `progress.distance_log_path`), and the
 driver's own log is `driver.log` (`progress.driver_log_path`;
 `LogTailer` reads it as the worker `progress.DRIVER`, the web UI as worker
-`driver`). The first writer makes the directory (`progress.ensure_run_dir`).
-Runs from before (`<prefix>.run`, `<prefix>-w<n>.status` flat in `log_dir`) are
-still read: `progress.is_legacy` switches every path to the flat names, and
-`list_runs` / `unfinished_workers` look in both (runs to `RUN_DEPTH` levels
-below `log_dir`, so a build's steps too). Beside them the driver writes `run.json`: the command line, host and
+`driver`). The first writer makes the directory (`progress.ensure_run_dir`);
+`list_runs` / `unfinished_workers` look for runs to `RUN_DEPTH` levels below
+`log_dir`, so a build's steps too. Runs written flat in `log_dir` before
+(`<prefix>.run`, `<prefix>-w<n>.status`) are not read. Beside them the driver writes `run.json`: the command line, host and
 pid, planned and final worker count, sources, `parent` (a `lux build`'s
 prefix, from `LUX_PARENT_RUN`), start, finish and exit status (130 for an
 interrupt). `CommandHandler.process` writes it for every worker command

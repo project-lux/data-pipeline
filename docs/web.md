@@ -254,9 +254,9 @@ named in a URL by its path under `log_dir`; in it:
 | `run.json` | the run: command line, host, pid, workers, sources, parent build, start, finish, exit |
 | `stdout.log` | a web-started (or `--background`) run's own output |
 
-Runs from before runs were directories (`<prefix>.run`,
-`<prefix>-w<n>.status` ... side by side in `log_dir`) are still listed and
-shown. Beside the runs, in `log_dir` itself:
+Runs written before runs were directories (`<prefix>.run`,
+`<prefix>-w<n>.status` ... side by side in `log_dir`) are not listed.
+Beside the runs, in `log_dir` itself:
 
 | File | What |
 |---|---|

@@ -1,15 +1,11 @@
 """A run is a directory: ``<log_dir>/<command>-<timestamp>/`` holding its
 record (``run.json``), the driver's ``driver.log`` / ``driver.timing``, a
 detached run's ``stdout.log`` and every worker's ``w<n>.*``. A ``lux
-build``'s steps are runs in its directory. Runs written before, flat in
-``log_dir`` (``<prefix>.run``, ``<prefix>-w<n>.status``), are still read.
+build``'s steps are runs in its directory.
 """
 
-import json
 import os
-import socket
 import sys
-import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -19,26 +15,9 @@ import pytest
 
 from lux_pipeline import progress
 from lux_pipeline.cli import _handler
-from lux_pipeline.progress import (LogTailer, RunRecord, StatusWriter, count_workers, describe_run,
-                                   driver_log_path, is_legacy, latest_prefix, list_runs, log_path,
-                                   read_build, read_run, run_exists, run_path, status_file_run,
+from lux_pipeline.progress import (RunRecord, StatusWriter, describe_run, driver_log_path,
+                                   latest_prefix, list_runs, log_path, run_path, status_file_run,
                                    status_path, stdout_path, unfinished_workers)
-
-
-def legacy_run(log_dir, name="merge-2026-10-01-101500", workers=2, done=True):
-    """A run as `lux` wrote them before runs were directories."""
-    prefix = os.path.join(str(log_dir), name)
-    for n in range(workers):
-        Path(f"{prefix}-w{n}.status").write_text(json.dumps(
-            {"worker": n, "phase": "merge", "description": f"s{n}", "completed": 5,
-             "total": 5, "updated": time.time(), "done": done}))
-        Path(f"{prefix}-w{n}.log").write_text(f"10:00:0{n} INFO     worker {n}\n")
-    Path(f"{prefix}.log").write_text("10:00:09 INFO     driver line\n")
-    Path(f"{prefix}.run").write_text(json.dumps(
-        {"prefix": prefix, "command": "merge", "argv": ["lux", "merge"], "host": socket.gethostname(),
-         "pid": None, "workers": workers, "started": 1000.0, "finished": 1001.0, "exit": 0}))
-    Path(f"{prefix}.out").write_text("output\n")
-    return prefix
 
 
 # --- the layout ---------------------------------------------------------------
@@ -64,9 +43,9 @@ def test_the_first_writer_makes_the_directory(tmp_path):
     assert os.listdir(tmp_path) == ["merge-2026-11-13-101500"]
 
 
-def test_status_file_run_reads_both_layouts():
+def test_status_file_run():
     assert status_file_run("/l/merge-1/w12.status") == ("/l/merge-1", 12)
-    assert status_file_run("/l/merge-1-w12.status") == ("/l/merge-1", 12)
+    assert status_file_run("/l/merge-1-w12.status") is None
     assert status_file_run("/l/merge-1/w12.log") is None
     assert status_file_run("/l/merge-1/run.json") is None
 
@@ -88,34 +67,12 @@ def test_a_builds_steps_are_runs_in_its_directory(tmp_path):
     assert latest_prefix(str(tmp_path)) == step
 
 
-def test_a_run_from_before_is_still_read(tmp_path):
-    p = legacy_run(tmp_path)
-    assert is_legacy(p)
-    assert run_path(p) == f"{p}.run" and status_path(p, 1) == f"{p}-w1.status"
-    assert stdout_path(p) == f"{p}.out" and driver_log_path(p) == f"{p}.log"
-    assert run_exists(p) and count_workers(p) == 2
-    assert read_run(p)["command"] == "merge"
-    assert read_build(p, 2)["done"] is True
-    assert LogTailer(p, 2).read_new_lines() == [
-        (0, "10:00:00 INFO     worker 0"), (1, "10:00:01 INFO     worker 1"),
-        ("driver", "10:00:09 INFO     driver line")]
-    [r] = list_runs(str(tmp_path))
-    assert (r["prefix"], r["command"], r["state"], r["workers"]) == (p, "merge", "finished", 2)
-
-
-def test_old_and_new_runs_are_listed_together(tmp_path):
-    old = legacy_run(tmp_path)
-    new = str(tmp_path / "merge-2026-11-13-101500")
-    RunRecord(new, "merge", ["lux", "merge"]).start()
-    assert {r["prefix"] for r in list_runs(str(tmp_path))} == {old, new}
-    assert not is_legacy(new)
-
-
-def test_a_new_run_is_never_written_flat(tmp_path):
-    """No directory yet and nothing flat there: a new run, in a directory"""
-    p = str(tmp_path / "export-2026-11-13-101500")
-    assert not is_legacy(p)
-    assert status_path(p, 0) == f"{p}/w0.status"
+def test_files_outside_a_run_directory_are_not_runs(tmp_path):
+    """The flat layout from before runs were directories is not read"""
+    (tmp_path / "merge-2026-10-01-101500.run").write_text("{}")
+    (tmp_path / "merge-2026-10-01-101500-w0.status").write_text('{"done": false}')
+    assert list_runs(str(tmp_path)) == []
+    assert unfinished_workers(str(tmp_path)) == []
 
 
 def test_describe_run_names_a_step_by_its_record(tmp_path):

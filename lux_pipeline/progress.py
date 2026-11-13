@@ -35,8 +35,6 @@ Design rules:
   ``driver.log``, ``driver.timing``, ``stdout.log``, and per worker
   ``w<n>.status``, ``.log``, ``.timing``, ``.distance``, ``.out``. A
   ``lux build``'s steps are runs in its directory (``<build>/reconcile``).
-  Runs from before (``<prefix>.run``, ``<prefix>-w<n>.status`` beside each
-  other in ``log_dir``) are still read: `is_legacy`.
 
 This module is also the one reader of everything a run leaves on disk, so
 the console view (``BuildView``, ``lux watch``) and any other view see a
@@ -70,7 +68,6 @@ __all__ = [
     "worker_out_path",
     "stdout_path",
     "ensure_run_dir",
-    "is_legacy",
     "status_file_run",
     "DRIVER",
     "driver_log_path",
@@ -79,7 +76,7 @@ __all__ = [
     "unfinished_workers",
     "Sliced",
     "RUNNING_WINDOW",
-    "STATUS_RE",
+    "WORKER_STATUS_RE",
     "LogTailer",
     "count_workers",
     "latest_prefix",
@@ -102,9 +99,6 @@ logger = logging.getLogger("lux_pipeline")
 RUNNING_WINDOW = 3600
 # A worker's status file in a run's directory: <prefix>/w<n>.status
 WORKER_STATUS_RE = re.compile(r"^w(?P<n>\d+)\.status$")
-# ... and in the flat layout from before runs were directories:
-# <prefix>-w<n>.status
-STATUS_RE = re.compile(r"^(?P<prefix>.*)-w(?P<n>\d+)\.status$")
 # How far below log_dir runs are looked for: a run, a build's step, and one
 # more for a --prefix in a directory of its own under log_dir
 RUN_DEPTH = 3
@@ -124,33 +118,6 @@ def null_progress(**kw):
 
 # --------------------------------------------------------------- a run's files
 
-# Runs found in the flat layout, which never turn into directories
-_LEGACY = set()
-
-
-def is_legacy(prefix):
-    """Whether the run at `prefix` is in the flat layout from before runs
-    were directories (``<prefix>.run``, ``<prefix>-w<n>.status`` ... beside
-    each other): not a directory, and one of those files there. Read, and
-    finished by whoever started them, in place; new runs are never
-    written that way."""
-    if prefix in _LEGACY:
-        return True
-    if not prefix or os.path.isdir(prefix):
-        return False
-    if os.path.exists(f"{prefix}.run") or glob.glob(glob.escape(prefix) + "-w*.status"):
-        _LEGACY.add(prefix)
-        return True
-    return False
-
-
-def _in_run(prefix, name, legacy_suffix):
-    """``<prefix>/<name>``, or ``<prefix><legacy_suffix>`` for a run in the
-    flat layout."""
-    if is_legacy(prefix):
-        return f"{prefix}{legacy_suffix}"
-    return os.path.join(prefix, name)
-
 
 def ensure_run_dir(path):
     """Make the directory a run's file `path` goes in (the run's own, made
@@ -168,36 +135,33 @@ def ensure_run_dir(path):
 def status_path(prefix, worker):
     """Where worker `worker` of the run at `prefix` writes status:
     ``<prefix>/w<n>.status``."""
-    return _in_run(prefix, f"w{worker}.status", f"-w{worker}.status")
+    return os.path.join(prefix, f"w{worker}.status")
 
 
 def log_path(prefix, worker):
     """Where worker `worker` of the run at `prefix` writes its log:
     ``<prefix>/w<n>.log``."""
-    return _in_run(prefix, f"w{worker}.log", f"-w{worker}.log")
+    return os.path.join(prefix, f"w{worker}.log")
 
 
 def worker_out_path(prefix, worker):
     """The output of one ``--my-worker`` slice started with ``lux
     --background``: ``<prefix>/w<n>.out``."""
-    return _in_run(prefix, f"w{worker}.out", f"-w{worker}.out")
+    return os.path.join(prefix, f"w{worker}.out")
 
 
 def stdout_path(prefix):
     """The output of a run started detached (``lux --background``, the web
     UI): ``<prefix>/stdout.log``."""
-    return _in_run(prefix, "stdout.log", ".out")
+    return os.path.join(prefix, "stdout.log")
 
 
 def status_file_run(path):
-    """``(prefix, worker)`` for a worker's status file in either layout, or
-    None for anything else."""
+    """``(prefix, worker)`` for a worker's status file, or None for anything
+    else."""
     m = WORKER_STATUS_RE.match(os.path.basename(path))
     if m and os.path.dirname(path):
         return os.path.dirname(path), int(m.group("n"))
-    m = STATUS_RE.match(path)
-    if m:
-        return m.group("prefix"), int(m.group("n"))
     return None
 
 
@@ -212,8 +176,8 @@ def _below(log_dir, name):
 
 
 def _status_files(log_dir):
-    """Every worker status file under `log_dir`, in either layout."""
-    return _below(log_dir, "w*.status") + glob.glob(os.path.join(glob.escape(log_dir), "*-w*.status"))
+    """Every worker status file under `log_dir`."""
+    return _below(log_dir, "w*.status")
 
 
 # The driver's own log, beside the workers': ``<prefix>/driver.log``. What the
@@ -227,7 +191,7 @@ DRIVER = "driver"
 def driver_log_path(prefix):
     """Where the driver of the run at `prefix` writes its log:
     ``<prefix>/driver.log``."""
-    return _in_run(prefix, "driver.log", ".log")
+    return os.path.join(prefix, "driver.log")
 
 
 # PhaseTimer's reports (lux_pipeline.log.timing_logger): beside the logs,
@@ -235,7 +199,7 @@ def driver_log_path(prefix):
 # share of each stage every minute
 def timing_log_path(prefix, worker):
     """Worker `worker`'s timing reports: ``<prefix>/w<n>.timing``."""
-    return _in_run(prefix, f"w{worker}.timing", f"-w{worker}.timing")
+    return os.path.join(prefix, f"w{worker}.timing")
 
 
 def distance_log_path(prefix, worker):
@@ -243,13 +207,13 @@ def distance_log_path(prefix, worker):
     ``max_distance``: ``<prefix>/w<n>.distance``, one ``dist<TAB>uri##qua<Class>``
     line each, for grepping after the run (not the log: there can be
     millions)."""
-    return _in_run(prefix, f"w{worker}.distance", f"-w{worker}.distance")
+    return os.path.join(prefix, f"w{worker}.distance")
 
 
 def driver_timing_path(prefix):
     """The driver's timing reports (identify, run in the driver):
     ``<prefix>/driver.timing``."""
-    return _in_run(prefix, "driver.timing", ".timing")
+    return os.path.join(prefix, "driver.timing")
 
 
 class StatusWriter:
@@ -417,10 +381,7 @@ class LogTailer:
 
 
 def _worker_files(prefix, pattern="w*.status"):
-    """The run's worker files matching `pattern` (``w*.status``), in its
-    layout."""
-    if is_legacy(prefix):
-        return glob.glob(glob.escape(prefix) + "-" + pattern)
+    """The run's worker files matching `pattern` (``w*.status``)."""
     return glob.glob(os.path.join(glob.escape(prefix), pattern))
 
 
@@ -512,7 +473,7 @@ def read_build(prefix, workers, visible=None):
 def run_path(prefix):
     """Where the driver of the run at `prefix` writes its record:
     ``<prefix>/run.json``."""
-    return _in_run(prefix, "run.json", ".run")
+    return os.path.join(prefix, "run.json")
 
 
 def _write_json_atomic(path, data):
@@ -723,7 +684,7 @@ def list_runs(log_dir, now=None):
     """Every run under `log_dir`, newest first: each run directory (to
     `RUN_DEPTH`, so a build's steps too) with a ``run.json`` or any worker
     status file (a run started from a shell slice by slice has only
-    those), and the runs in the flat layout from before::
+    those)::
 
         {"prefix", "command", "state", "started", "finished", "exit",
          "error", "argv", "parent", "workers", "visible_workers",
@@ -735,12 +696,9 @@ def list_runs(log_dir, now=None):
     engine runs one. ``[]`` when `log_dir` is unset or missing."""
     if not log_dir or not os.path.isdir(log_dir):
         return []
-    base = glob.escape(log_dir)
     prefixes = set()
     for fn in _below(log_dir, "run.json"):
         prefixes.add(os.path.dirname(fn))
-    for fn in glob.glob(os.path.join(base, "*.run")):
-        prefixes.add(fn[:-len(".run")])
     for fn in _status_files(log_dir):
         got = status_file_run(fn)
         if got:

@@ -6,10 +6,9 @@ Everything comes from what a run leaves in its directory under ``log_dir``
 record -- read
 by `lux_pipeline.progress` (W01), the reader `lux watch` uses, so the two
 can never disagree. A run started from a shell (status files only) shows
-too, and so does a run from before runs were directories. A run is named
-in a URL by its directory relative to ``log_dir`` (a build's step is
-``build-<timestamp>/reconcile``), and a name that would lead outside it is
-a 404.
+too. A run is named in a URL by its directory relative to ``log_dir`` (a
+build's step is ``build-<timestamp>/reconcile``), and a name that would
+lead outside it is a 404.
 
 Per worker, the rules are the console view's (`cli/_view.BuildView`): no
 status file yet is ``waiting``; no total is an indeterminate bar; the
