@@ -29,9 +29,10 @@ requirement the whole thing exists to satisfy:
     list of read calls and raises on everything else. A write to the master
     is not a code-review question, it is an exception at runtime.
   * `tableName` is mandatory, and instantiation refuses to start if it
-    resolves to the same tables the master is using. Inheriting the parent's
-    default of "idmap" against a postgres master in the same database would
-    otherwise put the "subsidiary" straight into the master's tables.
+    resolves to the same tables the master is using. A default (the parent
+    falls back to the map's name, and once fell back to "idmap") against a
+    postgres master in the same database could otherwise put the
+    "subsidiary" straight into the master's tables.
   * nothing copied from the master is ever re-copied over a local decision:
     every hydrating insert is ON CONFLICT DO NOTHING.
 
@@ -219,10 +220,10 @@ class IdMap(postgres.IdMap):
             raise ValueError(
                 f"subsidiary idmap '{self.master_name}' cannot be its own master")
 
-        # No default, unlike the parent. The parent falls back to "idmap",
-        # and a subsidiary that inherited that against a postgres master in
-        # the same database would write into the master's own tables -- the
-        # one failure mode this class exists to make impossible.
+        # No default, unlike the parent (which falls back to the map's
+        # name, and once fell back to "idmap"): a subsidiary whose tables
+        # were the master's would write into the master -- the one failure
+        # mode this class exists to make impossible.
         table = config.get("tableName")
         if not table:
             raise ValueError(

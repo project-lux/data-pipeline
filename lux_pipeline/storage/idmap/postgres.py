@@ -226,9 +226,17 @@ CREATE INDEX IF NOT EXISTS {yuids}_token_idx ON {yuids} (token);
 
 
 class IdMap(object):
+    # True when the table is the map's name for want of a tableName
+    _table_from_name = False
+
     def __init__(self, config):
         self.configs = config["all_configs"]
-        self.table = config.get("tableName", "idmap")
+        # A map's table is its tableName, else its name -- the rule every
+        # other map store and `lux list` follow. This used to fall back to
+        # "idmap" whatever the map was called, so a second idmap record that
+        # only changed its name opened the live map's tables.
+        self._table_from_name = not config.get("tableName")
+        self.table = config.get("tableName") or config.get("name") or "idmap"
         self.yuid_table = f"{self.table}_yuid"
 
         self.prefix_map_out = {"yuid": self.configs.internal_uri}
@@ -289,6 +297,16 @@ class IdMap(object):
                 # empty table: the builds are instant and nothing can be
                 # waiting on them
                 cur.execute(INDEXES.format(**fmt))
+                if self._table_from_name and self.table != "idmap":
+                    # Before the name became the default, a map with no
+                    # tableName used "idmap": say so if that is what this
+                    # installation has, rather than start empty in silence
+                    cur.execute("SELECT to_regclass('idmap')")
+                    if cur.fetchone()[0] is not None:
+                        logger.warning(
+                            f"idmap: created an empty table {self.table!r} (the map's "
+                            f"name). A table 'idmap' exists; if this map should use it, "
+                            f'set "tableName": "idmap" on the map record')
                 return
             # A map from before the presence column. ADD COLUMN of a
             # nullable column with no default is a catalog change, but it

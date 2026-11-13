@@ -35,7 +35,7 @@ def pipeline_settings(cfgs):
     idmap = (getattr(cfgs, "map_stores", None) or {}).get("idmap") or {}
     return ((getattr(cfgs, "caches", None) or {}),
             getattr(cfgs, "max_workers", None) or DEFAULT_WORKERS,
-            idmap.get("tableName") or "idmap")
+            idmap.get("tableName") or idmap.get("name") or "idmap")
 
 
 class CommandHandler(BaseHandler):
@@ -56,7 +56,7 @@ class CommandHandler(BaseHandler):
                         help="Do not connect; recommend from the machine alone")
         ap.add_argument("--idmap-table", dest="idmap_table", default=None,
                         help="The identity map's table, whose size sizes shared_buffers "
-                             "(default: the idmap's tableName, else idmap)")
+                             "(default: the idmap's tableName, else its name)")
 
     def process(self, args, rest):
         super().process(args, rest)
