@@ -107,7 +107,7 @@ def test_a_second_run_in_the_same_second_gets_its_own_prefix(runner, monkeypatch
     monkeypatch.setattr(mod, "default_prefix", lambda cfgs, cmd: os.path.join(cfgs.log_dir, f"{cmd}-T"))
     cfgs = runner.state.configs()
     first = runner.new_prefix(cfgs, "list")
-    Path(f"{first}.out").write_text("")
+    Path(first).mkdir()                       # a run's directory is there
     assert runner.new_prefix(cfgs, "list") == f"{first}-2"
 
 
@@ -118,14 +118,14 @@ def test_a_run_has_a_record_and_output_from_the_start(runner, monkeypatch):
     monkeypatch.setenv("FAKE_LUX", "ok")
     h = runner.start("list", ["--maps"])
     rec = read_run(h.prefix)
-    assert rec["web"] is True and rec["stdout"] == f"{h.prefix}.out"
+    assert rec["web"] is True and rec["stdout"] == os.path.join(h.prefix, "stdout.log")
     assert rec["argv"] == ["lux", "list", "--maps"] and rec["command"] == "list"
     assert rec["pid"] == h.pid != os.getpid()
     assert os.path.dirname(h.prefix) == runner.state.configs().log_dir
     wait_for(finished(h.prefix))
     rec = read_run(h.prefix)
     assert rec["exit"] == 0 and rec["error"] is None
-    out = Path(f"{h.prefix}.out").read_text()
+    out = Path(h.prefix, "stdout.log").read_text()
     assert "--maps --no-ui --prefix " + h.prefix in out and "all done" in out
     wait_for(lambda: h.prefix not in runner.handles)
     assert runner.resets
@@ -147,7 +147,7 @@ def test_a_driver_keeps_the_web_fields_in_its_own_record(runner, monkeypatch):
     rec = read_run(h.prefix)
     # the driver's record (engine, workers), with the runner's fields from LUX_RUN_EXTRA
     assert rec["engine"] == "mp" and rec["workers"] == 2 and rec["exit"] == 0
-    assert rec["web"] is True and rec["stdout"] == f"{h.prefix}.out"
+    assert rec["web"] is True and rec["stdout"] == os.path.join(h.prefix, "stdout.log")
     wait_for(lambda: h.prefix not in runner.handles)
     assert read_run(h.prefix)["exit"] == 0           # the reaper did not finish it again
 
@@ -275,7 +275,7 @@ def test_the_real_lux_list_runs_and_is_finished(runner):
     h = real.start("list", ["--maps"])
     wait_for(finished(h.prefix), timeout=60)
     rec = read_run(h.prefix)
-    out = Path(f"{h.prefix}.out").read_text()
+    out = Path(h.prefix, "stdout.log").read_text()
     assert rec["exit"] == 0, out
     assert "Maps" in out and "idmap" in out
 

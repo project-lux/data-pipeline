@@ -227,8 +227,8 @@ def write_fake_run(log_dir, command, workers, *, done=False, record=True,
     running until `exit` is given), ``exit`` and ``started``. `updated`
     back-dates every status file's ``updated`` time. `record=False` leaves
     only the workers' files, as a shell-started slice does."""
-    Path(log_dir).mkdir(parents=True, exist_ok=True)
     prefix = os.path.join(str(log_dir), f"{command}-{ts}")
+    Path(prefix).mkdir(parents=True, exist_ok=True)      # a run is a directory
     dones = list(done) if isinstance(done, (list, tuple)) else [done] * workers
     tots = list(totals) if isinstance(totals, (list, tuple)) else [totals] * workers
     for n in range(workers):

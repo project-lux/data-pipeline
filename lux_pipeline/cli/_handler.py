@@ -25,17 +25,16 @@ from datetime import datetime
 # this recently is taken to be running; an older one was killed without
 # reporting. Defined with the other readers of a run's files.
 from lux_pipeline.log import send_timing_to, timing_logger
-from lux_pipeline.progress import (RUNNING_WINDOW, STATUS_RE, RunRecord, count_workers,
-                                   driver_log_path, driver_timing_path, read_run, run_exists,
-                                   unfinished_workers)
+from lux_pipeline.progress import (RUNNING_WINDOW, RunRecord, count_workers, driver_log_path,
+                                   driver_timing_path, ensure_run_dir, read_run, run_exists,
+                                   status_file_run, stdout_path, unfinished_workers)
 
 logger = logging.getLogger("lux_pipeline")
 
-_WORKER_RE = STATUS_RE
 # set by `lux build` in each phase's environment: the build's own prefix
 PARENT_RUN_ENV = "LUX_PARENT_RUN"
 # set by whoever starts a command to add fields to its run record, as JSON
-# (the web UI's runner: {"web": true, "stdout": "<prefix>.out"})
+# (the web UI's runner: {"web": true, "stdout": "<prefix>/stdout.log"})
 RUN_EXTRA_ENV = "LUX_RUN_EXTRA"
 
 
@@ -51,8 +50,9 @@ def run_extra():
 
 
 def default_prefix(cfgs, command):
-    """``<log_dir>/<command>-<timestamp>``: where this run's per-worker
-    status and log files go, and what `lux watch` needs to find them."""
+    """``<log_dir>/<command>-<timestamp>``: the run's directory, where its
+    record, the driver's log and every worker's status and log files go,
+    and what `lux watch` needs to find them."""
     log_dir = getattr(cfgs, "log_dir", None) or "."
     started = datetime.now().strftime("%Y-%m-%d-%H%M%S")
     return os.path.join(log_dir, f"{command or 'task'}-{started}")
@@ -61,19 +61,20 @@ def default_prefix(cfgs, command):
 def free_prefix(cfgs, command, taken=()):
     """`default_prefix`, with ``-2``, ``-3``... added while a run (or the
     output of one) is already there, or the name is in `taken`: two runs
-    started in the same second never share files."""
+    started in the same second never share a directory."""
     prefix = default_prefix(cfgs, command)
     base, n = prefix, 1
-    while run_exists(prefix) or os.path.exists(out_path(prefix)) or prefix in taken:
+    while os.path.exists(prefix) or run_exists(prefix) or os.path.exists(out_path(prefix)) \
+            or prefix in taken:
         n += 1
         prefix = f"{base}-{n}"
     return prefix
 
 
 def out_path(prefix):
-    """``<prefix>.out``: the output of a run started detached (`lux
-    --background`, the web UI)."""
-    return f"{prefix}.out"
+    """``<prefix>/stdout.log``: the output of a run started detached (`lux
+    --background`, the web UI); `progress.stdout_path`."""
+    return stdout_path(prefix)
 
 
 def start_detached(argv, out, env=None, cwd=None):
@@ -81,8 +82,9 @@ def start_detached(argv, out, env=None, cwd=None):
     would: in a session of its own (no controlling terminal, so closing
     the terminal sends it no SIGHUP, and its pid is its process group, so
     ``kill -- -<pid>`` stops its workers too), stdin from ``/dev/null``,
-    stdout and stderr appended to `out`. Returns the `subprocess.Popen`."""
-    with open(out, "ab") as fh:
+    stdout and stderr appended to `out` (its directory made: a run's
+    output is the first of its files). Returns the `subprocess.Popen`."""
+    with open(ensure_run_dir(out), "ab") as fh:
         return subprocess.Popen(argv, stdout=fh, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                 start_new_session=True, env=env, cwd=cwd)
 
@@ -108,7 +110,7 @@ def last_line(path, limit=4096):
 
 
 def finish_file(prefix, exit, error=None):
-    """Finish the record at ``<prefix>.run`` as it is on disk now (the
+    """Finish the run's record (``run.json``) as it is on disk now (the
     driver may have replaced the starter's), unless it is finished
     already: for whoever started a run detached and saw it end. True when
     it wrote."""
@@ -141,8 +143,8 @@ def refuse_while_building(cfgs, command, force=False, window=RUNNING_WINDOW, now
     now = time.time() if now is None else now
     running, stale = {}, {}
     for fn, st in unfinished_workers(getattr(cfgs, "log_dir", None)):
-        m = _WORKER_RE.match(fn)
-        prefix = m.group("prefix") if m else fn
+        got = status_file_run(fn)
+        prefix = got[0] if got else fn
         age = now - (st.get("updated") or 0)
         group = running if age <= window else stale
         group.setdefault(prefix, []).append(age)
@@ -204,13 +206,13 @@ def finish_record(record, exc=None, prefix=None):
 
 
 def driver_log_handler(prefix, log_level="INFO"):
-    """A file handler on the driver's log, ``<prefix>.log``, in the
+    """A file handler on the driver's log, ``<prefix>/driver.log``, in the
     workers' line format (time, level, message) so every reader of a
     run's logs parses it the same way. Opened on the first line."""
     lvl = (log_level or "INFO").upper()
     if not hasattr(logging, lvl):
         lvl = "INFO"
-    handler = logging.FileHandler(driver_log_path(prefix), delay=True)
+    handler = logging.FileHandler(ensure_run_dir(driver_log_path(prefix)), delay=True)
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(message)s",
                                            datefmt="%H:%M:%S"))
     handler.setLevel(getattr(logging, lvl))
@@ -221,10 +223,10 @@ def driver_log_handler(prefix, log_level="INFO"):
 
 
 def ensure_driver_log(prefix, log_level="INFO"):
-    """Send this process's ``lux_pipeline`` log to ``<prefix>.log`` as
+    """Send this process's ``lux_pipeline`` log to ``<prefix>/driver.log`` as
     well as wherever it goes already: the driver's side of a run, which
     `lux watch` and the web UI tail beside the workers' files; and
-    PhaseTimer's reports (identify's, in the driver) to ``<prefix>.timing``
+    PhaseTimer's reports (identify's, in the driver) to ``driver.timing``
     only. Idempotent per prefix. Returns the handler, or ``None`` without
     a prefix."""
     if not prefix:
@@ -263,9 +265,9 @@ class BaseHandler:
     # False for a command that does not need the pipeline configuration at
     # all (entry then passes cfgs=None without trying to load one)
     needs_configs = True
-    # Given --prefix, a command logs to <prefix>.log and (unless it writes
+    # Given --prefix, a command logs to <prefix>/driver.log and (unless it writes
     # its own record: the worker commands, lux build) entry writes
-    # <prefix>.run for it, so a one-shot step of a build -- sheets,
+    # <prefix>/run.json for it, so a one-shot step of a build -- sheets,
     # identify by hand, portal -- is a run `lux watch` and the web UI can
     # follow like any other. False for the commands that take the option
     # to mean something else (watch) or are not runs (serve, help).
@@ -330,7 +332,7 @@ class CommandHandler(BaseHandler):
         raise NotImplementedError(f"{type(self).__name__} has no manager yet")
 
     def start_record(self, prefix, args, manager, workers):
-        """Write ``<prefix>.run`` for this run and return its `RunRecord`;
+        """Write ``<prefix>/run.json`` for this run and return its `RunRecord`;
         ``None`` for one ``--my-worker`` slice of a larger run, which is one
         of many processes sharing the prefix (each slice would overwrite
         the others' record). Never raises."""
@@ -381,9 +383,9 @@ class CommandHandler(BaseHandler):
         for s in sources:
             manager.prepare_single(s)
 
-        # <prefix>.run: the command, its options and its outcome, beside the
+        # <prefix>/run.json: the command, its options and its outcome, beside the
         # workers' status and log files (lux_pipeline.progress.list_runs);
-        # <prefix>.log: what this process logs before, between and after
+        # <prefix>/driver.log: what this process logs before, between and after
         # the workers (a defaulted prefix: entry attached one given)
         self.run_prefix = prefix
         ensure_driver_log(prefix, getattr(args, "log", "INFO"))

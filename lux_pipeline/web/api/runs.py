@@ -1,12 +1,14 @@
 """Runs, from their files: the list, one run as the console view shows it,
 its log, and a live stream of both.
 
-Everything comes from what a run leaves under ``log_dir`` -- the workers'
-``-w<n>.status`` and ``-w<n>.log``, the driver's ``.run`` record -- read
+Everything comes from what a run leaves in its directory under ``log_dir``
+-- the workers' ``w<n>.status`` and ``w<n>.log``, the driver's ``run.json``
+record -- read
 by `lux_pipeline.progress` (W01), the reader `lux watch` uses, so the two
 can never disagree. A run started from a shell (status files only) shows
-too. A run is named in a URL by its prefix relative to ``log_dir``, and a
-name that would lead outside it is a 404.
+too. A run is named in a URL by its directory relative to ``log_dir`` (a
+build's step is ``build-<timestamp>/reconcile``), and a name that would
+lead outside it is a 404.
 
 Per worker, the rules are the console view's (`cli/_view.BuildView`): no
 status file yet is ``waiting``; no total is an indeterminate bar; the
@@ -14,7 +16,7 @@ label is the description, else the phase, else ``running``; hidden
 (idle) workers are left out of the totals. Elapsed time is counted from
 the run's start; the estimate of what remains is elapsed x remaining /
 done, as Rich's column estimates it. The driver's own log
-(``<prefix>.log``) is read beside the workers' as the worker named
+(``driver.log``) is read beside the workers' as the worker named
 ``driver``: a phase's tail after its workers (reconcile's identify) and a
 one-shot step's whole log are there. A ``lux build``'s page follows the
 step the build is on, passing to the next as the build does.
@@ -32,7 +34,7 @@ from fastapi.responses import StreamingResponse
 
 from lux_pipeline.progress import (DRIVER, LogTailer, current_step, describe_run, driver_log_path,
                                    driver_timing_path, list_runs, log_path, run_exists,
-                                   timing_log_path)
+                                   stdout_path, timing_log_path)
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
@@ -193,7 +195,7 @@ def run_data(state, prefix, now=None, children=True):
         "parent": link(state, run["parent"]), "phases": phase_strip(state, run),
         "current": current_link(state, run),
         "driver_log": os.path.exists(driver_log_path(prefix)),
-        "stdout": os.path.exists(f"{prefix}.out"), "now": now,
+        "stdout": os.path.exists(stdout_path(prefix)), "now": now,
     }
     if children:
         out["children"] = [{"command": r["command"], "state": r["state"],
@@ -331,15 +333,15 @@ def log_data(state, prefix, worker=None, before=None, limit=LOG_LINES, level=Non
 
 
 def stdout_data(prefix, limit=LOG_LINES):
-    """The end of the driver's own output, ``<prefix>.out`` (a run the web
+    """The end of the driver's own output, ``stdout.log`` (a run the web
     UI started keeps it, W10)."""
-    lines, start, end = tail(f"{prefix}.out", limit)
+    lines, start, end = tail(stdout_path(prefix), limit)
     return {"lines": lines, "start": start, "end": end}
 
 
 def timing_data(prefix, worker, limit=LOG_LINES):
     """The end of a worker's (or the driver's) PhaseTimer reports,
-    ``<prefix>-w<n>.timing`` / ``<prefix>.timing``: kept out of the log."""
+    ``w<n>.timing`` / ``driver.timing``: kept out of the log."""
     path = driver_timing_path(prefix) if worker == DRIVER else timing_log_path(prefix, worker)
     lines, start, end = tail(path, limit)
     return {"worker": worker, "lines": lines, "start": start, "end": end}

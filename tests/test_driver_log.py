@@ -77,6 +77,7 @@ def test_the_driver_log_is_in_the_workers_format(tmp_path):
 
 def test_the_tailer_reads_the_driver_as_its_own_worker(tmp_path):
     prefix = str(tmp_path / "x")
+    Path(prefix).mkdir()
     Path(log_path(prefix, 0)).write_text("10:00:00 INFO     w0 line\n")
     Path(driver_log_path(prefix)).write_text("10:00:01 INFO     identify ...\n")
     t = LogTailer(prefix, 1)

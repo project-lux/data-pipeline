@@ -89,7 +89,9 @@ def token_file(cfgs):
 
 
 def write_status(cfgs, name, done=False, age=0):
+    """A worker's status file, ``<run>/w<n>.status``, under log_dir"""
     path = Path(cfgs.log_dir) / name
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"worker": 0, "completed": 1, "total": None, "done": done,
                                 "updated": time.time() - age}))
     return path
@@ -195,7 +197,7 @@ def test_lux_new_token_loads_the_configuration_uninstantiated(tmp_path, today, m
 def test_lux_new_token_refuses_during_a_build(tmp_path, today):
     cfgs = NoIdmapConfigs(tmp_path)
     token_file(cfgs).write_text("__20261027__\n")
-    write_status(cfgs, "reconcile-2026-10-27-090000-w0.status")
+    write_status(cfgs, "reconcile-2026-10-27-090000/w0.status")
     with pytest.raises(RuntimeError, match="a build is running"):
         run(new_token.CommandHandler, cfgs)
     assert token_file(cfgs).read_text() == "__20261027__\n"
@@ -207,7 +209,7 @@ def test_lux_new_token_refuses_during_a_build(tmp_path, today):
 
 def test_nothing_running_is_fine(tmp_path):
     cfgs = StubConfigs(tmp_path)
-    write_status(cfgs, "merge-2026-10-27-080000-w0.status", done=True)
+    write_status(cfgs, "merge-2026-10-27-080000/w0.status", done=True)
     assert refuse_while_building(cfgs, "identify") == []
 
 
@@ -222,9 +224,9 @@ def test_no_log_dir_is_fine(tmp_path):
 def test_a_recent_unfinished_worker_refuses_and_names_the_build(tmp_path):
     cfgs = StubConfigs(tmp_path)
     prefix = os.path.join(cfgs.log_dir, "reconcile-2026-10-27-090000")
-    write_status(cfgs, "reconcile-2026-10-27-090000-w0.status", age=120)
-    write_status(cfgs, "reconcile-2026-10-27-090000-w1.status", age=30)
-    write_status(cfgs, "reconcile-2026-10-27-090000-w2.status", done=True)
+    write_status(cfgs, "reconcile-2026-10-27-090000/w0.status", age=120)
+    write_status(cfgs, "reconcile-2026-10-27-090000/w1.status", age=30)
+    write_status(cfgs, "reconcile-2026-10-27-090000/w2.status", done=True)
     with pytest.raises(RuntimeError) as e:
         refuse_while_building(cfgs, "identify")
     msg = str(e.value)
@@ -234,7 +236,7 @@ def test_a_recent_unfinished_worker_refuses_and_names_the_build(tmp_path):
 
 def test_force_runs_anyway_with_a_warning(tmp_path, caplog):
     cfgs = StubConfigs(tmp_path)
-    write_status(cfgs, "merge-2026-10-27-090000-w3.status")
+    write_status(cfgs, "merge-2026-10-27-090000/w3.status")
     with caplog.at_level("WARNING", logger="lux_pipeline"):
         got = refuse_while_building(cfgs, "write-refs", force=True)
     assert got == [os.path.join(cfgs.log_dir, "merge-2026-10-27-090000")]
@@ -243,7 +245,7 @@ def test_force_runs_anyway_with_a_warning(tmp_path, caplog):
 
 def test_a_long_silent_worker_was_killed_and_only_warns(tmp_path, caplog):
     cfgs = StubConfigs(tmp_path)
-    write_status(cfgs, "reconcile-2026-10-26-090000-w5.status", age=_handler.RUNNING_WINDOW + 60)
+    write_status(cfgs, "reconcile-2026-10-26-090000/w5.status", age=_handler.RUNNING_WINDOW + 60)
     with caplog.at_level("WARNING", logger="lux_pipeline"):
         assert refuse_while_building(cfgs, "identify") == []
     assert "probably killed" in caplog.text
@@ -252,7 +254,8 @@ def test_a_long_silent_worker_was_killed_and_only_warns(tmp_path, caplog):
 
 def test_unreadable_status_files_are_skipped(tmp_path):
     cfgs = StubConfigs(tmp_path)
-    (Path(cfgs.log_dir) / "load-2026-10-27-090000-w0.status").write_text("{not json")
+    (Path(cfgs.log_dir) / "load-2026-10-27-090000").mkdir(parents=True)
+    (Path(cfgs.log_dir) / "load-2026-10-27-090000/w0.status").write_text("{not json")
     assert unfinished_workers(cfgs.log_dir) == []
     assert refuse_while_building(cfgs, "identify") == []
 
@@ -261,7 +264,7 @@ def test_unreadable_status_files_are_skipped(tmp_path):
                                      write_refs.CommandHandler])
 def test_every_command_refuses_before_touching_anything(tmp_path, cwd, handler):
     cfgs = StubConfigs(tmp_path)
-    write_status(cfgs, "reconcile-2026-10-27-090000-w0.status")
+    write_status(cfgs, "reconcile-2026-10-27-090000/w0.status")
     with pytest.raises(RuntimeError, match="a build is running"):
         run(handler, cfgs)
     assert cfgs.log == []

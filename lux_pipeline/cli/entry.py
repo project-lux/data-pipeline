@@ -51,11 +51,11 @@ def build_parser():
     ap.add_argument("--engine", choices=ENGINES, help=f"Task engine (default {DEFAULT_ENGINE})")
     ap.add_argument("--no-ui", "--no_ui", "--disable-ui", action="store_true",
                     help="Plain output instead of the console view")
-    ap.add_argument("--prefix", help="Status/log file prefix for this run "
-                                     "(default <log_dir>/<command>-<timestamp>)")
+    ap.add_argument("--prefix", help="This run's directory: its record, logs and workers' status "
+                                     "files (default <log_dir>/<command>-<timestamp>)")
     ap.add_argument("-b", "--background", action="store_true",
                     help="Start the command in the background and return: output in "
-                         "<prefix>.out, follow it with lux watch <prefix>")
+                         "<prefix>/stdout.log, follow it with lux watch <prefix>")
     return ap
 
 
@@ -111,7 +111,7 @@ def run(argv=None):
     """Everything `main` does, returning the exit status instead of exiting."""
     ap = build_parser()
     args, rest = ap.parse_known_args(argv)
-    # the command line as given, for the run record (<prefix>.run)
+    # the command line as given, for the run record (<prefix>/run.json)
     args.cli_argv = list(sys.argv[1:] if argv is None else argv)
     if args.help:
         if not args.command:
@@ -232,7 +232,7 @@ def start_background(mod, args):
 
 
 def start_record(hdlr, args):
-    """``<prefix>.run`` for a command with no workers and no record of its
+    """``<prefix>/run.json`` for a command with no workers and no record of its
     own, so it is a run like the others (`lux_pipeline.progress.list_runs`);
     set on the handler so a failure finishes it. Never raises."""
     try:

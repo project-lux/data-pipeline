@@ -23,7 +23,7 @@ from lux_pipeline.process.phases.merge import read_update_token
 from lux_pipeline.process.reconciler import Reconciler
 from lux_pipeline.process.reference_manager import ReferenceManager, references_path
 from lux_pipeline.process.utils.timing import PhaseTimer
-from lux_pipeline.progress import null_progress
+from lux_pipeline.progress import ensure_run_dir, null_progress
 from lux_pipeline.storage.cache.postgres import PoolManager
 
 logger = logging.getLogger("lux_pipeline")
@@ -160,8 +160,40 @@ def write_refs(cfgs, idmap, ref_mgr=None):
     return references_path(cfgs)
 
 
+class DistanceLog:
+    """The references this worker dropped for being beyond ``max_distance``:
+    one ``dist<TAB>uri##qua<Class>`` line each in `path`, so a URI with no
+    identity can be checked afterwards (grep the run's ``*.distance``
+    files). Not the log: a build can drop millions. The file is opened on
+    the first line, so a worker that dropped nothing leaves none; `path`
+    None counts without writing."""
+
+    def __init__(self, path=None):
+        self.path = path
+        self.fh = None
+        self.count = 0
+
+    def write(self, uri, distance):
+        self.count += 1
+        if self.path is None:
+            return
+        if self.fh is None:
+            self.fh = open(ensure_run_dir(self.path), "a", buffering=1024 * 1024)
+        self.fh.write(f"{distance}\t{uri}\n")
+
+    def close(self, max_distance=None):
+        if self.fh is not None:
+            self.fh.close()
+            self.fh = None
+        if self.count:
+            where = f": {self.path}" if self.path else ""
+            logger.info(f"{self.count} references beyond max_distance {max_distance} "
+                        f"not reconciled{where}")
+
+
 def reconcile_slice(cfgs, idmap, networkmap, to_do, my_slice=-1, max_slice=-1,
-                    do_references=True, progress=null_progress, write_flag=True):
+                    do_references=True, progress=null_progress, write_flag=True,
+                    distance_log=None):
     """Reconcile this slice of every source in `to_do` (from
     `select_sources`), then the references those records led to, and tidy
     up.
@@ -170,7 +202,9 @@ def reconcile_slice(cfgs, idmap, networkmap, to_do, my_slice=-1, max_slice=-1,
     (``-1``: everything, unsliced, in this process). ``do_references=False``
     is the script's ``--norefs``. `progress` is a ``lux_pipeline.progress``
     callable. `write_flag` writes the ``reconcile_is_done-<n>.txt`` flag the
-    shell orchestration waits for (sliced runs only).
+    shell orchestration waits for (sliced runs only). `distance_log` is a
+    file for the references dropped for being beyond ``max_distance``
+    (`DistanceLog`; None: counted only).
 
     Returns ``{"records": <PhaseTimer summary>, "references": <summary, or
     None without the references pass>}``.
@@ -182,6 +216,7 @@ def reconcile_slice(cfgs, idmap, networkmap, to_do, my_slice=-1, max_slice=-1,
     # workers instead of one worker taking the final batch and expanding it alone.
     ref_mgr = ReferenceManager(cfgs, idmap, workers=max_slice if max_slice > 0 else 1)
     assertion_log = IdentityResolver(cfgs, idmap, my_slice)
+    dropped = DistanceLog(distance_log)
     debug = cfgs.debug_reconciliation
 
     if my_slice > -1:
@@ -319,6 +354,7 @@ def reconcile_slice(cfgs, idmap, networkmap, to_do, my_slice=-1, max_slice=-1,
             except:
                 continue
             if distance > cfgs.max_distance:
+                dropped.write(uri, distance)
                 continue
 
             # NB: did_ref (marking the reference done) now happens only after a
@@ -381,6 +417,7 @@ def reconcile_slice(cfgs, idmap, networkmap, to_do, my_slice=-1, max_slice=-1,
 
     # final tidy up
     assertion_log.close()
+    dropped.close(cfgs.max_distance)
     ref_mgr.write_metatypes(my_slice)
     # force all postgres connections to close
     poolman = PoolManager.get_instance()

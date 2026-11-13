@@ -39,8 +39,9 @@ def test_null_progress_accepts_every_keyword_and_returns_none():
 
 
 def test_path_convention():
-    assert status_path("/logs/merge-20261023", 3) == "/logs/merge-20261023-w3.status"
-    assert log_path("/logs/merge-20261023", 3) == "/logs/merge-20261023-w3.log"
+    """A run is a directory"""
+    assert status_path("/logs/merge-20261023", 3) == "/logs/merge-20261023/w3.status"
+    assert log_path("/logs/merge-20261023", 3) == "/logs/merge-20261023/w3.log"
 
 
 # --- StatusWriter ------------------------------------------------------------
@@ -102,7 +103,8 @@ def test_writer_leaves_no_temp_file_behind(tmp_path):
     sw = StatusWriter(path, worker=0, throttle=0)
     sw(advance=1)
     sw.flush()
-    assert [p.name for p in tmp_path.iterdir()] == ["x-w0.status"]
+    assert [p.name for p in tmp_path.iterdir()] == ["x"]
+    assert [p.name for p in (tmp_path / "x").iterdir()] == ["w0.status"]
 
 
 def test_writer_survives_an_unwritable_path(tmp_path):

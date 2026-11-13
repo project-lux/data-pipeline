@@ -1,9 +1,9 @@
 """Console view of a build, rendered from the workers' status and log files.
 
 `BuildView` is the only place the pipeline touches Rich. It reads the
-``<prefix>-w<n>.status`` files that `lux_pipeline.progress.StatusWriter`
-writes and tails the ``<prefix>-w<n>.log`` files the workers log to, and
-the driver's own ``<prefix>.log``; it never holds a reference to a worker,
+``w<n>.status`` files in the run's directory that
+`lux_pipeline.progress.StatusWriter` writes and tails the ``w<n>.log``
+files the workers log to, and the driver's own ``driver.log``; it never holds a reference to a worker,
 and no worker knows it exists. That is what lets `lux watch` attach to any
 build -- one started by a `lux` engine, by a ``*_parallel.sh`` loop, or by
 hand -- while it runs or after it finished.
@@ -13,7 +13,7 @@ task per worker plus an "all workers" task; and a bounded panel of log lines
 holding this process's own log records and the tailed lines, prefixed
 ``w<n>`` for a worker and ``driver`` for the driver.
 
-A run is over when its record (``<prefix>.run``) says so; a run with no
+A run is over when its record (``run.json``) says so; a run with no
 record -- started slice by slice from a shell -- is over when every
 worker says done. The difference is the driver's tail: reconcile's
 identify, metatypes and write-refs run after the last worker finishes,
@@ -127,7 +127,7 @@ class BuildView:
 
     ``with view:`` starts the display, routes the ``lux_pipeline`` logger
     into the log panel (restoring the previous handlers on exit; a file
-    handler -- the driver's ``<prefix>.log`` -- stays, since the file is the
+    handler -- the driver's ``driver.log`` -- stays, since the file is the
     log of record and the panel is only a display) and, unless
     ``auto_refresh`` is off, polls the files every ``interval`` seconds. An
     engine or `lux watch` may also call `refresh` itself.

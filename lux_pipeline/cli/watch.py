@@ -4,9 +4,9 @@
     lux watch <log_dir>/build-2026-11-03-101500        # a lux build: step by step, to the end
     lux watch --latest                                 # the newest run; its build, if it has one
 
-A run is its files under ``log_dir``: the workers' ``-w<n>.status`` and
-``-w<n>.log``, the driver's ``<prefix>.log`` and its record
-``<prefix>.run``. The view shows a row per worker and tails every log,
+A run is a directory under ``log_dir``: the workers' ``w<n>.status`` and
+``w<n>.log``, the driver's ``driver.log`` and its record ``run.json``.
+The view shows a row per worker and tails every log,
 the driver's included, so a phase's tail -- reconcile's identify,
 metatypes and write-refs after its workers have finished -- is seen as it
 runs, and the view ends when the run's record says it is over (or, for a
@@ -23,8 +23,9 @@ from lux_pipeline.cli._handler import BaseHandler
 from lux_pipeline.cli._view import BuildView
 # the readers of a run's files live in lux_pipeline.progress; imported here
 # too, where they used to be defined
-from lux_pipeline.progress import (STATUS_RE, count_workers, current_step, latest_prefix,  # noqa: F401
-                                   list_runs, read_run, run_exists, run_state, read_build)
+from lux_pipeline.progress import (count_workers, current_step, latest_prefix,  # noqa: F401
+                                   list_runs, read_run, run_exists, run_path, run_state, read_build,
+                                   status_path)
 
 
 class CommandHandler(BaseHandler):
@@ -34,7 +35,7 @@ class CommandHandler(BaseHandler):
     uses_prefix = False
 
     def add_args(self, ap):
-        ap.add_argument("prefix", nargs="?", help="Status/log file prefix of the run to watch")
+        ap.add_argument("prefix", nargs="?", help="The run to watch: its directory")
         ap.add_argument("--latest", action="store_true", help="Watch the newest run in log_dir")
         ap.add_argument("--interval", type=float, default=0.5, help="Seconds between file reads")
         ap.add_argument("--workers", type=int, default=0, help="Worker count (default: from the status files)")
@@ -54,7 +55,7 @@ class CommandHandler(BaseHandler):
         if prefix:
             return prefix
         if not args.latest:
-            raise ValueError("give a prefix (lux watch <log_dir>/<command>-<timestamp>) or --latest")
+            raise ValueError("give a run (lux watch <log_dir>/<command>-<timestamp>) or --latest")
         log_dir = self.log_dir()
         # the newest run by its record or files; a phase of a build that
         # is still going hands over to the build, which passes from phase
@@ -70,7 +71,7 @@ class CommandHandler(BaseHandler):
             return newest["prefix"]
         prefix = latest_prefix(log_dir)
         if prefix is None:
-            raise ValueError(f"no *.run or *-w*.status files under {log_dir}")
+            raise ValueError(f"no runs (run.json or w*.status files) under {log_dir}")
         return prefix
 
     # --- one run -----------------------------------------------------------
@@ -128,7 +129,7 @@ class CommandHandler(BaseHandler):
             if record.get("exit") is not None:
                 return followed
             if not record:
-                raise ValueError(f"no record at {prefix}.run")
+                raise ValueError(f"no record at {run_path(prefix)}")
             build = read_build(prefix, 0)
             if run_state(record, build) != "running":
                 return followed
@@ -155,8 +156,8 @@ class CommandHandler(BaseHandler):
             print(f"{prefix}: {len(steps)} step(s), {state}")
             return steps
         if record is None and (args.workers or count_workers(prefix)) < 1:
-            raise ValueError(f"no run found at {prefix} (expected {prefix}.run or "
-                             f"{prefix}-w0.status ...)")
+            raise ValueError(f"no run found at {prefix} (expected {run_path(prefix)} or "
+                             f"{status_path(prefix, 0)} ...)")
         try:
             view = self.watch_run(prefix, args)
         except KeyboardInterrupt:

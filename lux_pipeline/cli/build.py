@@ -23,13 +23,14 @@ phases, in order:
     export     lux export
 
 Each step is a separate ``lux`` process, so each phase loads a fresh
-configuration and gets its own status/log prefix for ``lux watch``:
-``<P>-<phase>`` (the clear phase's three steps: ``<P>-clear``,
-``<P>-clear-refs``, ``<P>-new-token``; the identify phase's:
-``<P>-identify``, ``<P>-metatypes``, ``<P>-write-refs``), where ``P`` is ``--prefix`` or
-the build's own ``<log_dir>/build-<timestamp>``. A one-shot step logs to
-``<P>-<phase>.log`` and has a record too, so ``lux watch <P>`` follows the
-build from step to step. The build writes ``<P>.run``: its
+configuration and is a run of its own for ``lux watch``, a directory in
+the build's: ``<P>/<phase>`` (the clear phase's three steps:
+``<P>/clear``, ``<P>/clear-refs``, ``<P>/new-token``; the identify phase's:
+``<P>/identify``, ``<P>/metatypes``, ``<P>/write-refs``), where ``P`` is
+``--prefix`` or the build's own ``<log_dir>/build-<timestamp>``. A
+one-shot step logs to ``<P>/<phase>/driver.log`` and has a record too, so
+``lux watch <P>`` follows the build from step to step. The build writes
+``<P>/run.json``: its
 command line, its phases, the one running now (``current``) and each
 step's command, prefix, start, end and exit status (``steps``); every
 phase's own record names the build as its ``parent``. Each phase's
@@ -117,12 +118,12 @@ class CommandHandler(BaseHandler):
         """argv for one ``lux`` step, with the global options passed on:
         all of them to a phase run by workers, only the log level to a
         one-shot step, and to ``portal`` (its own process pool) the
-        worker count too. Every step gets a status/log prefix,
-        ``<prefix>-<name>`` (`name` defaults to the phase, then the
-        command), so each is a run to follow: a worker phase's workers
-        write their files under it, and every step's driver logs to
-        ``<prefix>-<name>.log`` and has a record. `prefix` is the build's
-        own (default ``--prefix``)."""
+        worker count too. Every step is a run, the directory
+        ``<prefix>/<name>`` in the build's (`name` defaults to the phase,
+        then the command), so each is a run to follow: a worker phase's
+        workers write their files in it, and every step's driver logs to
+        its ``driver.log`` and has a record. `prefix` is the build's own
+        (default ``--prefix``)."""
         prefix = prefix or args.prefix
         argv = [sys.executable, "-m", "lux_pipeline.cli.entry", command, *opts]
         if args.log:
@@ -144,7 +145,7 @@ class CommandHandler(BaseHandler):
             if args.profile:
                 argv.append("--profile")
         if prefix:
-            argv += ["--prefix", f"{prefix}-{name or phase or command}"]
+            argv += ["--prefix", os.path.join(prefix, name or phase or command)]
         return argv
 
     def steps(self, args, prefix=None):
@@ -248,7 +249,7 @@ class CommandHandler(BaseHandler):
         refuse_while_building(cfgs, "build", args.force)
         self.build_prefix = prefix
         self.run_prefix = None      # a build has no workers of its own to count
-        # <prefix>.log: which step is running, and when one failed
+        # <prefix>/driver.log: which step is running, and when one failed
         ensure_driver_log(prefix, args.log)
         self.run_record = RunRecord(prefix, "build", command_argv(args), engine=args.engine,
                                     workers=0, sources=[args.source or "all"],

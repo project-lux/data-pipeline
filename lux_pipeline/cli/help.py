@@ -25,8 +25,8 @@ Global options (before or after the command):
   --my-worker N        run as worker N of --max-workers in this process (engine null)
   --engine E           mp (default), ray, or null
   --no-ui              plain output instead of the console view
-  --prefix P           status/log file prefix for this run (default <log_dir>/<command>-<timestamp>)
-  -b, --background     start the run in its own process and return (output in <prefix>.out;
+  --prefix P           this run's directory: record, logs, status files (default <log_dir>/<command>-<timestamp>)
+  -b, --background     start the run in its own process and return (output in <prefix>/stdout.log;
                        lux watch <prefix> follows it)"""
 
 

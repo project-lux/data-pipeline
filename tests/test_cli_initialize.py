@@ -565,7 +565,7 @@ def test_testinstall_all_ok_with_stubbed_databases_and_real_workers(tmp_path, mo
     assert "2 workers spawned and reported" in lines[11]
     assert lines[12] == ("OK    postgres tuned for the build: PostgreSQL 16.4: every setting as "
                          "recommended for 2 workers")
-    assert len(list((root / "tmp").glob("testinstall-*/spawn-w*.status"))) == 2
+    assert len(list((root / "tmp").glob("testinstall-*/spawn/w*.status"))) == 2
 
 
 def test_testinstall_names_every_source_that_fails_to_build(tmp_path, monkeypatch, capsys):

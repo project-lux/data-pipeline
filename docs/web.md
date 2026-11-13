@@ -85,7 +85,7 @@ HTTP: on a network you do not trust, use the tunnel.
 * **Dashboard** (`/`): the installation's directories, worker count and
   Postgres target; the sources by group; what is running now, with its
   progress; the recent runs under `log_dir` (as `lux watch --latest` finds
-  them, with their `<prefix>.run` records); the last lines of
+  them, with their `run.json` records); the last lines of
   `pipeline_process_status.txt`; the last health check. The header's
   *running* badge shows from any page while a run is going.
 * **Commands** (`/commands`): every `lux` command by group, each a form
@@ -98,8 +98,8 @@ HTTP: on a network you do not trust, use the tunnel.
   the command's name. A build phase, or such a run, is refused while a
   build is running, as in the shell; a command with `--force` can be
   forced. A run started here is a process of its own (as `lux build` runs
-  its phases), its output in `<prefix>.out` beside its status and log
-  files in `log_dir`; you go straight to its run page. The server can be
+  its phases), its output in `stdout.log` beside its status and log
+  files in its directory under `log_dir`; you go straight to its run page. The server can be
   restarted while it runs. `config`, `serve`, `watch`, `help`,
   `interactive` and `initialize` are described, not run. *Build*
   (`/commands/build`): `lux build` with a tick box per phase, `--from` /
@@ -112,7 +112,7 @@ HTTP: on a network you do not trust, use the tunnel.
   worker (what it is doing, its bar, done/total, %, elapsed, remaining),
   the all-workers row, and the log, all following the run live and
   stopping when it ends. The log holds the workers' lines and the
-  driver's own (`<prefix>.log`, shown as `driver`): what the command did
+  driver's own (`driver.log`, shown as `driver`): what the command did
   before, between and after its workers, so a lone `lux reconcile`'s
   identify, metatypes and write-refs are followed after its workers have
   finished, and a one-shot step (sheets, portal, and a build's identify
@@ -220,8 +220,8 @@ python -m lux_pipeline.cli.entry <command> <options> --no-ui --prefix <log_dir>/
 
 in a new session (so cancelling it reaches its workers), with
 `LUX_BASEPATH` passed on and its standard output and errors in
-`<prefix>.out`. Its record, `<prefix>.run`, is written the moment it
-starts (`"web": true`, the pid, the `.out` file) and the command's driver
+`<prefix>/stdout.log`. Its record, `<prefix>/run.json`, is written the moment it
+starts (`"web": true`, the pid, the output file) and the command's driver
 then keeps it as a shell run would. When the process ends without
 finishing its record (it failed early, or it was cancelled), the server
 finishes it with the exit code and the last line of output.
@@ -239,15 +239,27 @@ finishes it with the exit code and the last line of output.
 
 ## The files it reads
 
-All under the configuration's `log_dir`, as the shell's `lux` writes them:
+All under the configuration's `log_dir`, as the shell's `lux` writes
+them. A run is a directory, `<log_dir>/<command>-<timestamp>/` (a `lux
+build`'s steps are directories in its own, `build-<timestamp>/reconcile`),
+named in a URL by its path under `log_dir`; in it:
 
 | File | What |
 |---|---|
-| `<prefix>-w<n>.status` | each worker's progress (JSON, rewritten as it goes) |
-| `<prefix>-w<n>.log` | each worker's log |
-| `<prefix>-w<n>.timing`, `<prefix>.timing` | `PhaseTimer`'s reports (rates, cpu, each stage's share), kept out of the logs; `/api/runs/<run>/timing` |
-| `<prefix>.run` | the run: command line, host, pid, workers, sources, parent build, start, finish, exit |
-| `<prefix>.out` | a web-started run's own output |
+| `w<n>.status` | each worker's progress (JSON, rewritten as it goes) |
+| `w<n>.log` | each worker's log |
+| `driver.log` | the driver's own log |
+| `w<n>.timing`, `driver.timing` | `PhaseTimer`'s reports (rates, cpu, each stage's share), kept out of the logs; `/api/runs/<run>/timing` |
+| `w<n>.distance` | reconcile only: one `dist<TAB>uri##qua<Class>` line per reference dropped for being beyond `max_distance`, for grepping; no file when none was |
+| `run.json` | the run: command line, host, pid, workers, sources, parent build, start, finish, exit |
+| `stdout.log` | a web-started (or `--background`) run's own output |
+
+Runs written before runs were directories (`<prefix>.run`,
+`<prefix>-w<n>.status` ... side by side in `log_dir`) are not listed.
+Beside the runs, in `log_dir` itself:
+
+| File | What |
+|---|---|
 | `timing-*.json`, `profile-*.prof` | `PhaseTimer`'s timings and profiles (the Timing page) |
 | `pipeline_process_status.txt` | `lux build`'s one line per build (the Dashboard) |
 | `web_actions.log` | the action log |

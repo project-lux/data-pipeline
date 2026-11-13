@@ -293,7 +293,7 @@ def test_command_single_mode_and_summary(tmp_path, stub_runtime, caplog):
     assert (m.mode, m.until, m.overwrite) == ("single", "2025-01-01T00:00:00", False)
     assert m.summary() == {"sources": 2, "records": 5, "failed": 0}
     assert "harvested 5 record(s) over 2 source run(s), 0 failed" in caplog.text
-    assert (tmp_path / "harvest-w0.status").exists()
+    assert (tmp_path / "harvest" / "w0.status").exists()
 
 
 def test_command_two_phase_and_pages_options(tmp_path, stub_runtime):

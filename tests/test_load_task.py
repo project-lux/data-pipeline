@@ -336,7 +336,7 @@ def test_command_defaults(tmp_path, stub_runtime, capsys):
     assert calls[1] == ("process", True)
     assert cfgs.cache("ror").cleared == 0
     assert "status/log prefix:" in capsys.readouterr().out
-    assert (tmp_path / "load-w0.status").exists()
+    assert (tmp_path / "load" / "w0.status").exists()
 
 
 def test_command_options(tmp_path, stub_runtime):

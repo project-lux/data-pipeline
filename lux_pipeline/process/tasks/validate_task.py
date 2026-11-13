@@ -61,8 +61,8 @@ def path_pattern(error):
 class ValidateManager(TaskManager):
     """Options, read from `args` in ``__init__``: ``caches`` (``--cache``,
     default recordcache), ``ignore`` (``--ignore``, repeatable) and
-    ``report_dir`` (``--out-dir``; default ``<prefix>-errors`` beside the
-    run's logs, else ``log_dir``)."""
+    ``report_dir`` (``--out-dir``; default ``<prefix>/errors`` in the
+    run's directory, else ``log_dir``)."""
 
     def __init__(self, configs, max_workers=0, args=None):
         super().__init__(configs, max_workers, args)
@@ -115,7 +115,7 @@ class ValidateManager(TaskManager):
     def process(self, engine="mp", prefix=None, view=None):
         self.check()
         if self.report_dir is None:
-            self.report_dir = f"{prefix}-errors" if prefix else self.configs.log_dir
+            self.report_dir = os.path.join(prefix, "errors") if prefix else self.configs.log_dir
         os.makedirs(self.report_dir, exist_ok=True)
         for n in range(self.max_workers):
             fn = self.report_path(n)

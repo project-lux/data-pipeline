@@ -85,9 +85,9 @@ def test_clear_runs_first(tmp_path, monkeypatch):
     run(hdlr, ["--clear", "--to", "reconcile", "--skip", "sheets"])
     base = hdlr.build_prefix
     assert [a[3:] for a in hdlr.ran[:3]] == [
-        ["clear", "--source", "all", "--force", "--prefix", f"{base}-clear"],
-        ["clear", "--refs", "--force", "--prefix", f"{base}-clear-refs"],
-        ["new-token", "--prefix", f"{base}-new-token"]]
+        ["clear", "--source", "all", "--force", "--prefix", os.path.join(base, "clear")],
+        ["clear", "--refs", "--force", "--prefix", os.path.join(base, "clear-refs")],
+        ["new-token", "--prefix", os.path.join(base, "new-token")]]
     assert [name_of(a) for a in hdlr.ran[3:]] == ["reconcile"]
 
 
@@ -131,19 +131,19 @@ def test_global_options_go_to_the_phases(tmp_path, monkeypatch):
         by.setdefault(name_of(a), a)
     rec = by["reconcile"]
     assert rec[4:6] == ["--source", "ycba,aat"]
-    for opt in (["--max-workers", "8"], ["--engine", "ray"], ["--prefix", "/logs/b1-reconcile"],
+    for opt in (["--max-workers", "8"], ["--engine", "ray"], ["--prefix", "/logs/b1/reconcile"],
                 ["--log", "DEBUG"]):
         i = rec.index(opt[0])
         assert rec[i:i + 2] == opt
     assert "--no-ui" in rec and "--profile" in rec
-    assert by["merge"][by["merge"].index("--prefix") + 1] == "/logs/b1-merge"
-    assert by["export"][by["export"].index("--prefix") + 1] == "/logs/b1-export"
+    assert by["merge"][by["merge"].index("--prefix") + 1] == "/logs/b1/merge"
+    assert by["export"][by["export"].index("--prefix") + 1] == "/logs/b1/export"
     # the one-shot steps take no worker options, but a prefix of their own
     assert "--max-workers" not in by["clear"] and "--engine" not in by["new-token"]
-    assert by["new-token"][by["new-token"].index("--prefix") + 1] == "/logs/b1-new-token"
+    assert by["new-token"][by["new-token"].index("--prefix") + 1] == "/logs/b1/new-token"
     assert by["clear"][by["clear"].index("--log") + 1] == "DEBUG"
     # portal runs its own pool: the worker count and its prefix, nothing else
-    assert by["portal"][4:] == ["--log", "DEBUG", "--max-workers", "8", "--prefix", "/logs/b1-portal"]
+    assert by["portal"][4:] == ["--log", "DEBUG", "--max-workers", "8", "--prefix", "/logs/b1/portal"]
 
 
 # --- housekeeping, failure, status -------------------------------------------
@@ -178,7 +178,7 @@ def test_dry_run_runs_nothing(tmp_path, monkeypatch, capsys):
     assert not Path(hdlr.configs.log_dir, "pipeline_process_status.txt").exists()
 
 
-# --- the build's run record (<prefix>.run) ---------------------------------------
+# --- the build's run record (<prefix>/run.json) ----------------------------------
 
 
 def test_the_build_records_its_phases_and_steps(tmp_path, monkeypatch):
@@ -191,7 +191,7 @@ def test_the_build_records_its_phases_and_steps(tmp_path, monkeypatch):
     assert [(s["phase"], s["command"], s["exit"]) for s in rec["steps"]] == [
         ("reconcile", "reconcile", 0), ("identify", "identify", 0), ("identify", "metatypes", 0),
         ("identify", "write-refs", 0), ("merge", "merge", 0), ("export", "export", 0)]
-    assert rec["steps"][4]["prefix"] == str(tmp_path / "logs" / "b1-merge")
+    assert rec["steps"][4]["prefix"] == str(tmp_path / "logs" / "b1" / "merge")
     assert rec["steps"][4]["argv"][:2] == ["lux", "merge"]
     assert all(s["started"] <= s["finished"] for s in rec["steps"])
 
@@ -219,22 +219,22 @@ def test_every_worker_phase_gets_a_prefix_without_one_given(tmp_path, monkeypatc
     for a in hdlr.ran:
         by.setdefault(name_of(a), a)
     for phase in ("reconcile", "merge", "export", "sheets", "portal"):
-        assert by[phase][by[phase].index("--prefix") + 1] == f"{base}-{phase}"
+        assert by[phase][by[phase].index("--prefix") + 1] == os.path.join(base, phase)
     # every step has a prefix, so `lux watch <build>` can follow each in
     # turn; the clear phase's three steps each get their own
     clears = [s for s in read_run(base)["steps"] if s["phase"] == "clear"]
     assert [s["command"] for s in clears] == ["clear", "clear", "new-token"]
-    assert [s["prefix"] for s in clears] == [f"{base}-clear", f"{base}-clear-refs", f"{base}-new-token"]
+    assert [s["prefix"] for s in clears] == [os.path.join(base, "clear"), os.path.join(base, "clear-refs"), os.path.join(base, "new-token")]
     assert all(s["prefix"] for s in read_run(base)["steps"])
     # so do the identify phase's, and the build's record says identify
     # while they run, not reconcile
     idents = [s for s in read_run(base)["steps"] if s["phase"] == "identify"]
     assert [s["command"] for s in idents] == ["identify", "metatypes", "write-refs"]
-    assert [s["prefix"] for s in idents] == [f"{base}-identify", f"{base}-metatypes",
-                                             f"{base}-write-refs"]
+    assert [s["prefix"] for s in idents] == [os.path.join(base, "identify"), os.path.join(base, "metatypes"),
+                                             os.path.join(base, "write-refs")]
     # and the build logs to its own file
-    assert os.path.exists(f"{base}.log")
-    assert "running:" in Path(f"{base}.log").read_text()
+    assert os.path.exists(os.path.join(base, "driver.log"))
+    assert "running:" in Path(base, "driver.log").read_text()
 
 
 def test_each_step_is_told_its_parent(tmp_path, monkeypatch):
@@ -264,7 +264,7 @@ def test_a_dry_run_writes_no_record(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     hdlr = make(tmp_path)
     run(hdlr, ["--dry-run"])
-    assert list(Path(hdlr.configs.log_dir).glob("*.run")) == []
+    assert list(Path(hdlr.configs.log_dir).rglob("run.json")) == []
 
 
 def test_refuses_while_a_build_runs(tmp_path, monkeypatch):
@@ -290,9 +290,9 @@ def test_the_identify_phase_steps_are_one_shot(tmp_path, monkeypatch):
     run(hdlr, ["--from", "identify", "--to", "identify", "--max-workers", "8", "--engine", "mp",
                "--no-ui", "--prefix", "/logs/b2", "--log", "DEBUG"])
     assert [a[3:] for a in hdlr.ran] == [
-        ["identify", "--log", "DEBUG", "--prefix", "/logs/b2-identify"],
-        ["metatypes", "--log", "DEBUG", "--prefix", "/logs/b2-metatypes"],
-        ["write-refs", "--log", "DEBUG", "--prefix", "/logs/b2-write-refs"]]
+        ["identify", "--log", "DEBUG", "--prefix", "/logs/b2/identify"],
+        ["metatypes", "--log", "DEBUG", "--prefix", "/logs/b2/metatypes"],
+        ["write-refs", "--log", "DEBUG", "--prefix", "/logs/b2/write-refs"]]
 
 
 def test_a_failed_identify_stops_before_metatypes(tmp_path, monkeypatch):
