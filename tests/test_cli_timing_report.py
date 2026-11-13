@@ -8,6 +8,7 @@ database and no installed configuration."""
 import io
 import json
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -503,3 +504,58 @@ def test_slices_spread_over_days_are_flagged(tmp_path, capsys):
     assert lux("--dir", str(tmp_path)) == 0
     assert ("reconcile's slices span 4d 02h but its wall clock is 2h 15m -- slices from "
             "more than one run?") in capsys.readouterr().out
+
+
+# --- runs are directories -----------------------------------------------------
+
+
+def runs_below(logs):
+    """Two reconcile runs, the older with more slices, and a build whose
+    merge step is a directory in the build's."""
+    for n in range(8):
+        write_timing(logs / "reconcile-a", "reconcile", n, 1000, 9000, 4500, {"acquire": (1000, 4500)},
+                     started_at=OLD, max_slice=8)
+    for n in range(4):
+        write_timing(logs / "reconcile-b", "reconcile", n, 1000, 8100, 4000, {"acquire": (1000, 4000)},
+                     started_at=T0, max_slice=4)
+    for n in range(2):
+        write_timing(logs / "build-c" / "merge", "merge", n, 500, 3600, 1800, {}, started_at=T0 + 9000,
+                     max_slice=2)
+
+
+def test_each_phase_from_its_latest_run_below(tmp_path):
+    runs_below(tmp_path)
+    stale = {}
+    phases = timing_report.load(str(tmp_path), stale=stale)
+    assert [r["file"] for r in phases["reconcile"]] == [
+        f"reconcile-b/timing-reconcile-{n}.json" for n in range(4)]
+    assert {r["dir"] for r in phases["merge"]} == {"build-c/merge"}
+    assert stale == {}                                 # another run's directory is not stale
+    data, _ = timing_report.directory_data(str(tmp_path))
+    assert [(ph, s["dir"], s["slices"]) for ph, s, _ in data] == [
+        ("reconcile", "reconcile-b", 4), ("merge", "build-c/merge", 2)]
+
+
+def test_a_run_or_a_build_reports_on_itself(tmp_path, capsys):
+    runs_below(tmp_path)
+    assert lux("--dir", str(tmp_path)) == 0
+    out = capsys.readouterr().out
+    assert "  run reconcile-b\n" in out and "  run build-c/merge\n" in out
+    assert lux("--dir", str(tmp_path / "reconcile-a")) == 0
+    out = capsys.readouterr().out
+    assert "0/8 finished" not in out and "8/8 finished" in out and "  run " not in out
+    phases, _ = timing_report.directory_data(str(tmp_path / "build-c"))
+    assert [(ph, s["dir"]) for ph, s, _ in phases] == [("merge", "merge")]
+    assert lux_rich("--dir", str(tmp_path)) == 0
+    assert "run reconcile-b" in capsys.readouterr().out
+
+
+def test_profiles_come_from_the_reported_run(tmp_path):
+    profiled_run(tmp_path / "reconcile-a", 0)
+    for n in range(2):
+        write_timing(tmp_path / "reconcile-b", "reconcile", n, 10, 60, 30, {},
+                     started_at=time.time() + 60, max_slice=2)
+    phases, none_found = timing_report.directory_data(str(tmp_path), profile=5)
+    assert phases[0][1]["dir"] == "reconcile-b" and phases[0][2] is None and none_found
+    phases, none_found = timing_report.directory_data(str(tmp_path / "reconcile-a"), profile=5)
+    assert phases[0][2]["slices"] == 1 and not none_found

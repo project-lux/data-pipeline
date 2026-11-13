@@ -36,6 +36,11 @@ every minute; the run's log gets one line when a phase finishes. With no
 file to go to (``lux interactive``, a test) the logger propagates to
 wherever ``lux_pipeline`` logs. A `stream` given to `PhaseTimer` gets the
 reports instead.
+
+The JSON (``timing-<phase>-<slice>.json``) and profiles go to the same
+run directory (`timing_out_dir`), so each run keeps its own and
+``lux timing-report`` reads a run, a build or the latest of each phase
+under ``log_dir``; outside a run, to ``log_dir`` itself.
 """
 
 import atexit
@@ -44,7 +49,7 @@ import os
 import sys
 import time
 
-from lux_pipeline.log import logger, timing_logger
+from lux_pipeline.log import logger, timing_logger, timing_run_dir
 from lux_pipeline.process.utils import host_cpu
 from lux_pipeline.progress import null_progress
 
@@ -139,6 +144,14 @@ class _Stage:
         acc[0] += 1
         acc[1] += el
         return False
+
+
+def timing_out_dir(cfgs):
+    """Where a phase's ``timing-<phase>-<slice>.json`` and profiles go: the
+    run's directory, beside its ``w<n>.timing`` (`log.timing_run_dir`), so
+    each run keeps its own; outside a run (no ``--prefix``, a root script)
+    ``log_dir``, or ``data_dir`` without one."""
+    return timing_run_dir() or getattr(cfgs, "log_dir", None) or getattr(cfgs, "data_dir", None)
 
 
 class PhaseTimer:

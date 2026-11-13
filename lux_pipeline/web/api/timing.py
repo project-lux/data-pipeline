@@ -5,8 +5,10 @@ phase in build order, its stages with their share of worker time, the
 nested stages, the slices, the profiles; the all-phases summary with a
 timeline; two runs side by side.
 
-The directories read are ``log_dir`` by default; another one, for an
-earlier build's copy, must be inside the installation (base, data, log,
+The directory read is ``log_dir`` by default, each phase's latest run
+below it (a run's timing JSON is in its directory); a run's or a build's
+directory reports on that run; another one, for an earlier build's copy,
+must be inside the installation (base, data, log,
 exports or backup directory).
 """
 
@@ -15,6 +17,7 @@ import os
 from fastapi import APIRouter, HTTPException, Request
 
 from lux_pipeline.process.utils import timing_report as tr
+from lux_pipeline.web.api.runs import rel_prefix
 from lux_pipeline.web.security import under
 
 router = APIRouter(prefix="/api/timing", tags=["timing"])
@@ -94,6 +97,7 @@ def phase_view(phase, s, prof=None):
         "idle": (f"workers are off-cpu {idle:.0f}% of the time: the stages say what they are "
                  f"waiting in" + tr.postgres_meanwhile(s.get("host"))) if idle > 20 else None,
         "stale": tr.stale_note(s["stale_files"]) if s.get("stale_files") else None,
+        "dir": s.get("dir") if s.get("dir") not in (None, ".") else None,
         "stages": stages, "nested": nested, "rates": sr, "slice_rows": slices,
         "marks": [{"source": m[0], "minutes": m[1] / 60} for m in marks],
         "marks_slice": s["runs"][0].get("slice"), "profile": profile_view(prof),
@@ -140,7 +144,13 @@ def timing_data(state, phase=None, profile=None, directory=None):
     except (RuntimeError, FileNotFoundError) as e:
         return {"directory": d, "phases": [], "summary": None, "no_profiles": False,
                 "error": str(e)}
-    return {"directory": d, "phases": [phase_view(ph, s, p) for ph, s, p in phases],
+    views = []
+    for ph, s, p in phases:
+        v = phase_view(ph, s, p)
+        # the run page of the run its numbers come from
+        v["run"] = rel_prefix(state, os.path.join(d, s["dir"])) if v["dir"] else None
+        views.append(v)
+    return {"directory": d, "phases": views,
             "summary": summary_view(tr.overall_summary(phases)),
             "no_profiles": tr.NO_PROFILES if no_profiles else None, "error": None}
 

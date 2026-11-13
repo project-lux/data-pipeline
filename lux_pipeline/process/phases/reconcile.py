@@ -22,7 +22,7 @@ from lux_pipeline.process.identity_resolver import IdentityResolver
 from lux_pipeline.process.phases.merge import read_update_token
 from lux_pipeline.process.reconciler import Reconciler
 from lux_pipeline.process.reference_manager import ReferenceManager, references_path
-from lux_pipeline.process.utils.timing import PhaseTimer
+from lux_pipeline.process.utils.timing import PhaseTimer, timing_out_dir
 from lux_pipeline.progress import ensure_run_dir, null_progress
 from lux_pipeline.storage.cache.postgres import PoolManager
 
@@ -243,10 +243,10 @@ def reconcile_slice(cfgs, idmap, networkmap, to_do, my_slice=-1, max_slice=-1,
     logger.info(f"Update token is: {idmap.update_token}")
 
     # Where the time goes, and whether the phase is cpu bound or waiting. Writes
-    # timing-reconcile-<slice>.json next to the logs so a 24-way run can be added
+    # timing-reconcile-<slice>.json in the run directory so a 24-way run can be added
     # up rather than read across 24 files.
     timer = PhaseTimer("reconcile", slice_n=my_slice, max_slice=max_slice,
-                       out_dir=cfgs.log_dir if hasattr(cfgs, "log_dir") else cfgs.data_dir,
+                       out_dir=timing_out_dir(cfgs),
                        progress=progress)
     # What this slice expects to see, summed over the sources: a per-source
     # total would read as more than 100% once the second source starts
@@ -330,7 +330,7 @@ def reconcile_slice(cfgs, idmap, networkmap, to_do, my_slice=-1, max_slice=-1,
         # A second phase, not more of the first: it claims from a shared queue
         # rather than walking a slice, so its rate means something different.
         timer = PhaseTimer("reconcile-refs", slice_n=my_slice, max_slice=max_slice,
-                           out_dir=cfgs.log_dir if hasattr(cfgs, "log_dir") else cfgs.data_dir,
+                           out_dir=timing_out_dir(cfgs),
                            progress=progress)
         # the records timer's finish() has just reported this worker done and a
         # total that no longer applies; the queue has no total

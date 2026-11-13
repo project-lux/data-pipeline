@@ -42,7 +42,7 @@ import os
 import ujson
 
 from lux_pipeline.process.merge_batch import in_batches
-from lux_pipeline.process.utils.timing import PhaseTimer
+from lux_pipeline.process.utils.timing import PhaseTimer, timing_out_dir
 from lux_pipeline.progress import null_progress
 from lux_pipeline.sources.lux.qlever.mapper2 import QleverMapper
 from lux_pipeline.storage.cache.postgres import PoolManager
@@ -107,7 +107,7 @@ def export_slice(cfgs, my_slice, max_slice, *, no_ml=False, gz=False, chunk_size
     fn = os.path.join(out_dir, f"{stem}_{my_slice}{suffix}")
 
     timer = PhaseTimer("export", slice_n=my_slice, max_slice=max_slice,
-                       out_dir=cfgs.log_dir if hasattr(cfgs, "log_dir") else cfgs.data_dir,
+                       out_dir=timing_out_dir(cfgs),
                        progress=progress)
     progress(total=_estimate(merged) // max(max_slice, 1))
 
@@ -229,7 +229,7 @@ def export_sources_slice(cfgs, my_slice, max_slice, sources=SOURCES, out_dir=Non
     logger.info(f"Update token is: {idmap.update_token}")
 
     timer = PhaseTimer("export-sources", slice_n=my_slice, max_slice=max_slice,
-                       out_dir=cfgs.log_dir if hasattr(cfgs, "log_dir") else cfgs.data_dir,
+                       out_dir=timing_out_dir(cfgs),
                        progress=progress)
     running_total = 0
     written = 0
@@ -310,7 +310,7 @@ def export_nt_slice(cfgs, my_slice, max_slice, out_dir=None, gzip_level=1, progr
     rc = cfgs.results["merged"]["recordcache"]
 
     timer = PhaseTimer("export-nt", slice_n=my_slice, max_slice=max_slice,
-                       out_dir=cfgs.log_dir if hasattr(cfgs, "log_dir") else cfgs.data_dir,
+                       out_dir=timing_out_dir(cfgs),
                        progress=progress)
     progress(total=_estimate(rc) // max(max_slice, 1))
     written = 0

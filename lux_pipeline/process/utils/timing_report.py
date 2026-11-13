@@ -1,8 +1,10 @@
 """Roll up the per-slice timing JSON (and cProfile output) a build leaves.
 
-Every `PhaseTimer` writes ``timing-<phase>-<slice>.json`` to ``log_dir``,
-and with profiling on ``profile-<phase>-<slice>.prof`` beside it. This adds
-the slices of each phase up, stage by stage; `lux timing-report` (and the
+Every `PhaseTimer` writes ``timing-<phase>-<slice>.json`` to its run's
+directory (``log_dir`` outside a run), and with profiling on
+``profile-<phase>-<slice>.prof`` beside it. Given a run, a build or
+``log_dir``, this finds each phase's latest run below it and adds its
+slices up, stage by stage; `lux timing-report` (and the
 root ``timing-report.py``) print what it returns.
 
 Works on a running build as well as a finished one: PhaseTimer rewrites its
@@ -26,6 +28,7 @@ from collections import defaultdict
 # counting them twice did to the unattributed figure.
 from lux_pipeline.process.utils import host_cpu
 from lux_pipeline.process.utils.timing import split_stages
+from lux_pipeline.progress import RUN_DEPTH
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -52,24 +55,43 @@ def phase_key(phase):
         return (len(PHASE_ORDER), phase)
 
 
+def timing_files(directory, name="timing-*.json"):
+    """`name` files in `directory` and in the run directories below it,
+    down to `progress.RUN_DEPTH` levels: one run (``<log_dir>/merge-<ts>``),
+    a build and its steps, or every run under ``log_dir``."""
+    base = glob.escape(directory)
+    out = []
+    for depth in range(RUN_DEPTH + 1):
+        out.extend(glob.glob(os.path.join(base, *(["*"] * depth), name)))
+    return sorted(out)
+
+
 def load(directory, phase=None, stale=None):
     """``{phase: [timing json, ...]}`` for the ``timing-*.json`` files in
-    `directory`, or only `phase`'s: the phase's latest run only.
+    `directory` and the runs below it (`timing_files`), or only `phase`'s:
+    the phase's latest run only.
 
-    A run rewrites ``timing-<phase>-<slice>.json`` for the slices it has, so
-    files of an earlier run survive beside it when that run had more slices
-    (``-24`` .. ``-31`` after a 32-way run, beside a 24-way one) or none
-    (``-all``, a ``--recid`` or single-process run). They differ from the
-    latest run in ``max_slice``, so a phase keeps the files whose
-    ``max_slice`` is that of its most recently updated file; the names of
-    the others go into `stale` (``{phase: [file name, ...]}``) if given."""
+    Every run writes its timing JSON into its own directory, so a phase
+    takes the files of the run directory holding its most recently
+    updated file; earlier runs' directories are passed over. Each file
+    gets ``file`` and ``dir``, its path and its run's directory relative
+    to `directory` (``"."`` for `directory` itself).
+
+    Within one directory, a run rewrites ``timing-<phase>-<slice>.json``
+    for the slices it has, so files of an earlier run with the same
+    prefix survive beside it when that run had more slices (``-24`` ..
+    ``-31`` after a 32-way run, beside a 24-way one) or none (``-all``, a
+    ``--recid`` or single-process run). They differ from the latest run in
+    ``max_slice``, so a phase keeps the files whose ``max_slice`` is that
+    of its most recently updated file; the names of the others go into
+    `stale` (``{phase: [file name, ...]}``) if given."""
     out = defaultdict(list)
-    for fn in sorted(glob.glob(os.path.join(directory, "timing-*.json"))):
+    for fn in timing_files(directory):
         try:
             with open(fn) as fh:
                 j = json.load(fh)
         except Exception as e:
-            logger.warning(f"skipping {os.path.basename(fn)}: {e}")
+            logger.warning(f"skipping {os.path.relpath(fn, directory)}: {e}")
             continue
         if phase and j.get("phase") != phase:
             continue
@@ -84,10 +106,12 @@ def load(directory, phase=None, stale=None):
             j["times_estimated"] = True
         if "started_at" not in j and j.get("updated_at") is not None:
             j["started_at"] = j["updated_at"] - j.get("seconds", 0)
-        j["file"] = os.path.basename(fn)
+        j["file"] = os.path.relpath(fn, directory)
+        j["dir"] = os.path.relpath(os.path.dirname(fn), directory)
         out[j.get("phase", "?")].append(j)
     for ph, runs in out.items():
         newest = max(runs, key=lambda r: r.get("updated_at") or 0)
+        runs = [r for r in runs if r["dir"] == newest["dir"]]
         keep = [r for r in runs if r.get("max_slice") == newest.get("max_slice")]
         if len(keep) < len(runs):
             dropped = sorted(r["file"] for r in runs if r not in keep)
@@ -95,7 +119,7 @@ def load(directory, phase=None, stale=None):
                          f"{', '.join(dropped)}")
             if stale is not None:
                 stale[ph] = dropped
-            out[ph] = keep
+        out[ph] = keep
     return out
 
 
@@ -217,6 +241,8 @@ def report_lines(phase, s, stragglers=True):
     out = []
     done = f"{s['complete']}/{s['slices']} finished"
     out.append(f"\n=== {phase}  ({done})")
+    if s.get("dir") not in (None, "."):
+        out.append(f"  run {s['dir']}")
     out.append(f"  {s['records']:,} records in {s['wall'] / 60:.1f} min wall "
                f"= {s['rate']:,.0f}/s aggregate"
                + (f", {s['skipped']:,} skipped" if s["skipped"] else ""))
@@ -601,7 +627,9 @@ def _check_dir(directory):
 
 def directory_data(directory, phase=None, profile=None):
     """``[(phase, summary, profile data or None), ...]`` for every phase (or
-    `phase`) in `directory`, in build order (`phase_key`), and whether profiles were asked
+    `phase`) in `directory` and the runs below it (`load`: each phase's
+    latest run; ``summary["dir"]`` is that run's directory relative to
+    `directory`), in build order (`phase_key`), and whether profiles were asked
     for but none found. `profile` is the number of top functions to take
     from the ``profile-*.prof`` files, or None for none. Raises when there
     is no timing JSON to report on."""
@@ -610,17 +638,23 @@ def directory_data(directory, phase=None, profile=None):
     phases = load(directory, phase, stale)
     if not phases:
         which = f"timing-{phase}-*.json" if phase else "timing-*.json"
-        raise RuntimeError(f"no {which} in {directory} -- has a phase run since "
-                           f"timing was added?")
-    profiles = load_profiles(directory, phase) if profile else {}
+        raise RuntimeError(f"no {which} in {directory} or the runs below it -- "
+                           f"has a phase run since timing was added?")
     out = []
+    found_profiles = False
     for ph in sorted(phases, key=phase_key):
         s = summarise(phases[ph])
         s["stale_files"] = stale.get(ph, [])
-        prof = (profile_data(profiles[ph], stages=list(s["stages"]), n=profile)
-                if ph in profiles else None)
+        s["dir"] = phases[ph][0]["dir"]
+        prof = None
+        if profile:
+            # the profiles of the run the numbers come from
+            paths = load_profiles(os.path.join(directory, s["dir"]), ph).get(ph)
+            if paths:
+                found_profiles = True
+                prof = profile_data(paths, stages=list(s["stages"]), n=profile)
         out.append((ph, s, prof))
-    return out, bool(profile and not profiles)
+    return out, bool(profile and not found_profiles)
 
 
 NO_PROFILES = "no profile-*.prof found -- run the phase with --profile or LUX_PROFILE=1"
