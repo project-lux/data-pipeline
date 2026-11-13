@@ -81,7 +81,8 @@ lux initialize ~/lux/data --configs ~/lux/pipeline-configs # a pipeline-configs 
 lux initialize ~/lux/data --samples                        # the samples in docs/sample_config instead
 ```
 
-A rerun keeps whichever configuration the directory already has. The clone
+`lux install` is the same command. A rerun keeps whichever configuration
+the directory already has. The clone
 is a git checkout: `git status` in it shows what `lux initialize` changed
 for this machine (`base_dir`, and the maps if you chose not to use Redis),
 and `git pull` picks up later configuration changes (if it refuses because

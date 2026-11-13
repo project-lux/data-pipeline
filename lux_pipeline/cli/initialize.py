@@ -5,6 +5,7 @@
     lux initialize /srv/lux --clone URL           # another repository of the same shape
     lux initialize /srv/lux --samples             # the sample configuration shipped in docs/sample_config
     lux initialize /srv/lux                       # again, later: finishes whatever is not done yet
+    lux install /srv/lux                          # the same command
 
 Every step checks its own state, so the command can be run again after a
 failure (Postgres not up yet, no network for the schemas, a wrong

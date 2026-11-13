@@ -87,8 +87,10 @@ class CommandHandler(BaseHandler):
         logger.debug("listing the command modules in lux_pipeline.cli")
         print("Usage: lux <command> [options]\n")
         print("Commands:")
+        from lux_pipeline.cli.entry import ALIASES
         for name, doc in list_commands():
-            print(f"  {name:<18} {doc}")
+            also = sorted(a for a, target in ALIASES.items() if target == name)
+            print(f"  {name:<18} {doc}" + (f" (also: lux {', lux '.join(also)})" if also else ""))
         print()
         print(GLOBAL_OPTIONS)
         print("\nA command's own options are listed by: lux <command> --help (or lux help <command>)")

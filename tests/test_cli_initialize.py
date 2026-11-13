@@ -881,3 +881,19 @@ def test_home_dotenv_flags(tmp_path, monkeypatch, capsys):
     assert not home_env().exists()
     bp = init([str(tmp_path / "a"), "--no-create-db", "--home-dotenv"])
     assert home_env().read_text() == f"LUX_BASEPATH={bp}\n"
+
+
+def test_install_is_initialize(tmp_path, capsys):
+    """An alias: the same module, listed once, with the alias beside it."""
+    from lux_pipeline.cli import entry
+    mod, err = entry.resolve_command("install")
+    assert mod is initialize and err is None
+    root = tmp_path / "inst"
+    assert entry.run(["install", str(root), "--samples", "--no-create-db", "--no-home-dotenv"]) == 0
+    assert (root / "config_cache" / "base.json").exists()
+    capsys.readouterr()
+    entry.run(["help"])
+    line = next(l for l in capsys.readouterr().out.splitlines() if l.strip().startswith("initialize"))
+    assert line.endswith("(also: lux install)")
+    from lux_pipeline.cli.help import list_commands
+    assert "install" not in dict(list_commands())          # one command, not two
