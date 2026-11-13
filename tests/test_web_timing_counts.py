@@ -117,6 +117,18 @@ def test_directories_must_be_inside_the_installation(web, tmp_path):
     assert client.get("/api/timing", params={"dir": str(inside)}).json()["phases"]
 
 
+def test_each_phase_links_to_the_run_it_comes_from(web):
+    client, state = web
+    logs = Path(state.configs().log_dir)
+    build(logs / "build-1" / "steps")
+    d = client.get("/api/timing").json()
+    assert [(p["dir"], p["run"]) for p in d["phases"]] == [("build-1/steps", "build-1/steps")] * 2
+    assert 'href="/runs/build-1/steps"' in client.get("/timing").text
+    # a run's own directory: a flat report, no run link
+    one = client.get("/api/timing", params={"dir": str(logs / "build-1" / "steps")}).json()
+    assert [(p["dir"], p["run"]) for p in one["phases"]] == [(None, None)] * 2
+
+
 def test_compare(web):
     client, state = web
     data = Path(state.configs().data_dir)

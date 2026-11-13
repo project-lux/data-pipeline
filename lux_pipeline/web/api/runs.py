@@ -32,6 +32,7 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
+from lux_pipeline.process.utils.timing_report import timing_files
 from lux_pipeline.progress import (DRIVER, LogTailer, current_step, describe_run, driver_log_path,
                                    driver_timing_path, list_runs, log_path, run_exists,
                                    stdout_path, timing_log_path)
@@ -196,6 +197,8 @@ def run_data(state, prefix, now=None, children=True):
         "current": current_link(state, run),
         "driver_log": os.path.exists(driver_log_path(prefix)),
         "stdout": os.path.exists(stdout_path(prefix)), "now": now,
+        # its PhaseTimer JSON, in it or (a build) in its steps' directories
+        "timing": bool(timing_files(prefix)),
     }
     if children:
         out["children"] = [{"command": r["command"], "state": r["state"],

@@ -48,7 +48,7 @@ from contextlib import contextmanager
 
 import ujson as json
 
-from lux_pipeline.process.utils.timing import PhaseTimer
+from lux_pipeline.process.utils.timing import PhaseTimer, timing_out_dir
 from lux_pipeline.config import index_path
 from lux_pipeline.storage.idmap.lmdb import TabLmdb
 
@@ -1070,7 +1070,7 @@ class IdentityResolver(object):
         # Not built in __init__: run-reconcile constructs this class purely as
         # an assertion writer, and a PhaseTimer there would steal the global
         # that timing.stage() reads out from under reconcile's own timer.
-        self._timer = PhaseTimer("identify", out_dir=getattr(self.configs, "log_dir", None))
+        self._timer = PhaseTimer("identify", out_dir=timing_out_dir(self.configs))
 
         files = sorted(glob.glob(assertions_pattern(self.configs)))
         if not files:
@@ -1177,8 +1177,8 @@ class IdentityResolver(object):
             return stats
         finally:
             if self._timer:
-                # writes timing-identify-all.json next to every other phase's,
-                # so timing-report.py rolls it in
+                # writes timing-identify-all.json in the run directory,
+                # where lux timing-report finds it
                 self._timer.finish()
             if not keep_temp:
                 # The work files are derived and rebuilt by a rerun.

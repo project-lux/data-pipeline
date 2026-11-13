@@ -5,7 +5,7 @@
 {% macro us(v) %}{% if v is none %}-{% else %}{{ "{:,.1f}".format(v) }}{% endif %}{% endmacro %}
 {% block content %}
 <h1>Timing</h1>
-<p class="lead">What every phase's <code>PhaseTimer</code> left in <code>{{ data.directory }}</code>, slice by slice, added up:
+<p class="lead">What every phase's <code>PhaseTimer</code> left in <code>{{ data.directory }}</code> (each phase's latest run below it), slice by slice, added up:
 <code>lux timing-report</code> in the browser. Phases are in build order; a phase still running shows its numbers so far.
 <a href="/timing/compare">Compare two runs</a>.</p>
 <form class="form inline" method="get" action="/timing">
@@ -22,7 +22,8 @@
 <section class="card wide timing" id="phase-{{ p.phase }}">
   <h2>{{ p.phase }} {{ badge("finished" if p.finished else "running") }}
     <span class="muted small">{{ p.complete }}/{{ p.slices }} slices finished</span>
-    <a class="small" href="/runs?command={{ p.phase.split('-')[0] }}">its runs</a></h2>
+    {% if p.run %}<a class="small" href="/runs/{{ p.run }}">its run</a>{% else %}<a class="small" href="/runs?command={{ p.phase.split('-')[0] }}">its runs</a>{% endif %}</h2>
+  {% if p.dir %}<p class="muted small">from <code>{{ p.dir }}</code></p>{% endif %}
   <dl class="kv">
     <dt>records</dt><dd>{{ fmt_n(p.records) }}{% if p.skipped %} ({{ fmt_n(p.skipped) }} skipped){% endif %} in {{ fmt_duration(p.wall) }} wall, {{ "{:,.0f}".format(p.rate) }}/s</dd>
     <dt>work</dt><dd>{{ "%.1f"|format(p.worker_hours) }} worker-hours, {{ "%.1f"|format(p.cpu_hours) }} cpu-hours</dd>

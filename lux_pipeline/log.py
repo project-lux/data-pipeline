@@ -36,6 +36,18 @@ def restore_timing(state):
     timing_logger.setLevel(level)
 
 
+def timing_run_dir():
+    """The run directory `timing_logger` writes to: the directory of the
+    file `send_timing_to` gave it (``<prefix>/w<n>.timing`` in a worker,
+    ``<prefix>/driver.timing`` in the driver), or None outside a run.
+    PhaseTimer's JSON and profiles go there too (`timing.timing_out_dir`)."""
+    for h in timing_logger.handlers:
+        path = getattr(h, "lux_timing_file", None)
+        if path:
+            return os.path.dirname(path) or None
+    return None
+
+
 def send_timing_to(path):
     """Write `timing_logger`'s records to `path` only, whatever the run's
     log level (the reports are INFO, and a run at ``--log WARNING`` still

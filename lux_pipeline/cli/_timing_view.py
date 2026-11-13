@@ -182,6 +182,8 @@ def slices_text(s):
 
 def phase_panel(phase, s):
     parts = [summary_grid(s)]
+    if s.get("dir") not in (None, "."):
+        parts.insert(0, Text(f"run {s['dir']}", style="dim"))
     idle = 100 - s["cpu_percent"]
     if s.get("stale_files"):
         parts.append(Text(f"ignored {stale_note(s['stale_files'])}", style="dim yellow"))

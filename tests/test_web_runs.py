@@ -221,6 +221,15 @@ def test_the_timing_reports_are_beside_the_log(web):
     assert not any("acquire" in l["text"] for l in log["lines"])
 
 
+def test_a_run_with_timing_json_links_to_its_report(web):
+    client, _, logs = web
+    p = write_fake_run(logs, "merge", 1)
+    assert "Timing report" not in client.get(f"/runs/{rel(p)}").text
+    Path(p, "timing-merge-0.json").write_text("{}")
+    html = client.get(f"/runs/{rel(p)}").text
+    assert "Timing report" in html and "/timing?dir=" in html
+
+
 # --- live ---------------------------------------------------------------------------------------
 
 

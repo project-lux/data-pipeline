@@ -4,7 +4,7 @@
 {% block content %}
 <p class="crumbs"><a href="/timing">Timing</a> /</p>
 <h1>Compare two runs</h1>
-<p class="lead">Two directories of timing JSON (a copy of an earlier build's <code>log_dir</code>, say), phase by phase. Both must be inside the installation.</p>
+<p class="lead">Two runs' or builds' directories (or copies of an earlier <code>log_dir</code>), phase by phase: each phase's latest run in each. Both must be inside the installation.</p>
 <form class="form" method="get" action="/timing/compare">
   <label>Before <input type="text" name="before" value="{{ before }}" required></label>
   <label>After <input type="text" name="after" value="{{ after }}" required></label>

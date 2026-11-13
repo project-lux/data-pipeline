@@ -250,6 +250,7 @@ named in a URL by its path under `log_dir`; in it:
 | `w<n>.log` | each worker's log |
 | `driver.log` | the driver's own log |
 | `w<n>.timing`, `driver.timing` | `PhaseTimer`'s reports (rates, cpu, each stage's share), kept out of the logs; `/api/runs/<run>/timing` |
+| `timing-<phase>-<slice>.json`, `profile-<phase>-<slice>.prof` | `PhaseTimer`'s timings and (with `--profile`) profiles; the Timing page reads each phase's latest run, or one run's (its page links to it) |
 | `w<n>.distance` | reconcile only: one `dist<TAB>uri##qua<Class>` line per reference dropped for being beyond `max_distance`, for grepping; no file when none was |
 | `run.json` | the run: command line, host, pid, workers, sources, parent build, start, finish, exit |
 | `stdout.log` | a web-started (or `--background`) run's own output |
@@ -260,7 +261,7 @@ Beside the runs, in `log_dir` itself:
 
 | File | What |
 |---|---|
-| `timing-*.json`, `profile-*.prof` | `PhaseTimer`'s timings and profiles (the Timing page) |
+| `timing-*.json`, `profile-*.prof` | only from a run with no prefix (a root script); still read |
 | `pipeline_process_status.txt` | `lux build`'s one line per build (the Dashboard) |
 | `web_actions.log` | the action log |
 

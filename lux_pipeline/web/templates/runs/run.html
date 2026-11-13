@@ -80,4 +80,5 @@
 </section>
 {% endif %}
 {% if r.stdout %}<p><a href="/api/runs/{{ r.rel }}/stdout">The command's own output</a></p>{% endif %}
+{% if r.timing %}<p><a href="/timing?dir={{ r.prefix|urlencode }}">Timing report</a> for this run</p>{% endif %}
 {% endblock %}

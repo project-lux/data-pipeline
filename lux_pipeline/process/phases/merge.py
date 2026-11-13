@@ -26,7 +26,7 @@ from lux_pipeline.process.merge_batch import MERGE_BATCH, prefetched
 from lux_pipeline.process.merger import MergeHandler
 from lux_pipeline.process.reference_manager import ReferenceManager
 from lux_pipeline.process.reidentifier import Reidentifier
-from lux_pipeline.process.utils.timing import PhaseTimer
+from lux_pipeline.process.utils.timing import PhaseTimer, timing_out_dir
 from lux_pipeline.progress import null_progress
 from lux_pipeline.storage.cache.postgres import PoolManager
 
@@ -261,9 +261,9 @@ def merge_slice(cfgs, idmap, to_do, my_slice=-1, max_slice=-1, recids=(),
     logger.info(start_time)
 
     # Where the time goes, and whether this is cpu bound or waiting on postgres.
-    # Writes timing-merge-<slice>.json next to the logs.
+    # Writes timing-merge-<slice>.json in the run directory.
     timer = PhaseTimer("merge", slice_n=my_slice, max_slice=max_slice,
-                       out_dir=cfgs.log_dir if hasattr(cfgs, "log_dir") else cfgs.data_dir,
+                       out_dir=timing_out_dir(cfgs),
                        progress=progress)
     # What this slice expects to see, summed over the sources: a per-source
     # total would read as more than 100% once the second source starts
@@ -397,7 +397,7 @@ def merge_slice(cfgs, idmap, to_do, my_slice=-1, max_slice=-1, recids=(),
         # A different shape of work: rebuilding merged records for references,
         # driven by the done_refs file rather than a slice of the record cache.
         timer = PhaseTimer("merge-refs", slice_n=my_slice, max_slice=max_slice,
-                           out_dir=cfgs.log_dir if hasattr(cfgs, "log_dir") else cfgs.data_dir,
+                           out_dir=timing_out_dir(cfgs),
                            progress=progress)
         # the records timer's finish() has just reported this worker done and a
         # total that no longer applies; the file is read as it goes, no total

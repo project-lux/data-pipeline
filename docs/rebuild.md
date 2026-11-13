@@ -219,8 +219,10 @@ picks the build when the newest run is one of its phases.
 
 ## Where the time went
 
-Every phase writes `timing-<phase>-<slice>.json` to `log_dir`;
-`lux timing-report` adds the slices up, stage by stage, phase by phase in
+Every phase writes `timing-<phase>-<slice>.json` into its run's
+directory, beside `w<n>.timing`; `lux timing-report` finds each phase's
+latest run under `log_dir` (`--dir` a run's or a build's directory for
+that one) and adds the slices up, stage by stage, phase by phase in
 build order, and ends with all the phases together: start to end, the time
 between phases, and the stages that cost the most elapsed time. Beside the
 workers' own cpu it shows what postgres used and how busy the machine was
