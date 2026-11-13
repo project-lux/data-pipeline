@@ -136,6 +136,18 @@ def test_shared_preload_libraries_is_appended_to_not_replaced():
     assert "pg_stat_statements" in value
 
 
+def test_shared_preload_libraries_quotes_each_library_on_its_own():
+    """'a,b' in one quote is ONE library called "a,b": Postgres.app's server
+    would not start after it (could not access file
+    "auth_permission_dialog,pg_stat_statements")."""
+    srv = server(shared_preload_libraries=("auth_permission_dialog", ""))
+    stmt = recs(srv=srv)["shared_preload_libraries"].statement()
+    assert stmt == ("ALTER SYSTEM SET shared_preload_libraries = "
+                    "'auth_permission_dialog', 'pg_stat_statements';")
+    stmt = recs(srv=server(shared_preload_libraries=("", "")))["shared_preload_libraries"].statement()
+    assert stmt == "ALTER SYSTEM SET shared_preload_libraries = 'pg_stat_statements';"
+
+
 def test_shared_preload_libraries_is_left_alone_when_already_loaded():
     srv = server(shared_preload_libraries=("pg_stat_statements", ""))
     assert "shared_preload_libraries" not in recs(srv=srv)
