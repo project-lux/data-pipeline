@@ -193,7 +193,7 @@ class DistanceLog:
 
 def reconcile_slice(cfgs, idmap, networkmap, to_do, my_slice=-1, max_slice=-1,
                     do_references=True, progress=null_progress, write_flag=True,
-                    distance_log=None):
+                    distance_log=None, skip_missing_indexes=False):
     """Reconcile this slice of every source in `to_do` (from
     `select_sources`), then the references those records led to, and tidy
     up.
@@ -210,7 +210,7 @@ def reconcile_slice(cfgs, idmap, networkmap, to_do, my_slice=-1, max_slice=-1,
     None without the references pass>}``.
     """
     # --- set up environment ---
-    reconciler = Reconciler(cfgs, idmap, networkmap)
+    reconciler = Reconciler(cfgs, idmap, networkmap, skip_missing_indexes=skip_missing_indexes)
     # workers: how many processes share the reference queue. Lets pop_ref() shrink
     # its claim as the queue drains, so the last references spread over all the
     # workers instead of one worker taking the final batch and expanding it alone.

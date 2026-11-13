@@ -149,8 +149,9 @@ def harness(tmp_path, monkeypatch):
         def patch(self):
             def reconcile_slice(cfgs, idmap, networkmap, to_do, my_slice=-1, max_slice=-1,
                                 do_references=True, progress=null_progress, write_flag=True,
-                                distance_log=None):
+                                distance_log=None, skip_missing_indexes=False):
                 self.log.append(("reconcile_slice", my_slice, max_slice))
+                self.skip_missing_indexes = skip_missing_indexes
                 self.slice_calls.append(dict(cfgs=cfgs, idmap=idmap, networkmap=networkmap,
                                              to_do=to_do, my_slice=my_slice, max_slice=max_slice,
                                              do_references=do_references, progress=progress,
@@ -596,3 +597,37 @@ def test_a_partial_run_leaves_them(harness, tmp_path, options):
     assert len(list(Path(h.cfgs.temp_dir).glob("metatypes-*.json"))) == 2
     assert (Path(h.cfgs.temp_dir) / "assertions-23.tsv").exists()
     assert len(list(flags.iterdir())) == 2
+
+
+# --- reconciliation indexes not built yet --------------------------------------
+
+
+def with_lcnaf(h, tmp_path):
+    cfgs = h.configure()
+    cfgs.indexes_dir = str(tmp_path / "indexes")
+    cfgs.external["lcnaf"] = {"name": "lcnaf", "reconcilerClass": "sources.lc.reconciler.LcnafReconciler",
+                              "indexes": {"reconcile_id": {"path": "id_to_lcnaf.lmdb"}}}
+    return cfgs
+
+
+@pytest.mark.parametrize("options", [{}, {"baseline": True}])
+def test_a_missing_index_stops_the_run_before_any_worker(harness, tmp_path, options):
+    h = harness
+    with_lcnaf(h, tmp_path)
+    m = h.manager(workers=1, **options)
+    with pytest.raises(ValueError) as info:
+        m.process("null")
+    msg = str(info.value)
+    assert f"lcnaf: id index {tmp_path / 'indexes' / 'id_to_lcnaf.lmdb'}" in msg
+    assert "lux load-index --source lcnaf" in msg and "--skip-missing-indexes" in msg
+    assert h.slice_calls == []
+
+
+def test_skip_missing_indexes_runs_and_tells_the_workers(harness, tmp_path, caplog):
+    h = harness
+    with_lcnaf(h, tmp_path)
+    m = h.manager(workers=1, skip_missing_indexes=True)
+    with caplog.at_level("WARNING", logger="lux_pipeline"):
+        m.process("null")
+    assert "reconciling without the indexes not built yet" in caplog.text and "lcnaf: id index" in caplog.text
+    assert h.skip_missing_indexes is True and len(h.slice_calls) == 1
