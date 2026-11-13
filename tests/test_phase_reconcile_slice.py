@@ -110,7 +110,7 @@ def make_stubs(log, queue):
     manager hands out `queue` in order."""
 
     class Reconciler:
-        def __init__(self, cfgs, idmap, networkmap):
+        def __init__(self, cfgs, idmap, networkmap, skip_missing_indexes=False):
             log.append(("Reconciler", cfgs, idmap, networkmap))
 
         def reconcile(self, rec):

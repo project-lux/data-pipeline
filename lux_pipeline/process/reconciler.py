@@ -5,7 +5,7 @@ logger = logging.getLogger("lux_pipeline")
 
 
 class Reconciler(object):
-    def __init__(self, config, idmap, networkmap):
+    def __init__(self, config, idmap, networkmap, skip_missing_indexes=False):
         self.reconcilers = []
         self.debug = config.debug_reconciliation
         self.reconcileTypes = config.reconcile_record_types
@@ -21,6 +21,10 @@ class Reconciler(object):
                 self.reconcilers.append(rlr)
 
         self.global_reconciler = config.results["merged"].get("reconciler", None)
+        if skip_missing_indexes:
+            from lux_pipeline.process.base.reconciler import skip_missing_indexes as skip
+            for name, which, path in skip(self.reconcilers):
+                logger.warning(f"{name}: no {which} index ({path}); reconciling without it")
         self.collector = Collector(config, idmap, networkmap)
         try:
             self.min_equivs = config.reconcile_min_equivs

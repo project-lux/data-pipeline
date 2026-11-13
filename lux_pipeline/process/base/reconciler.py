@@ -1,8 +1,9 @@
 import logging
+import os
 from lux_pipeline.process.utils.mapper_utils import get_year_from_timespan
 from sqlitedict import SqliteDict
 from lux_pipeline.storage.idmap.lmdb import TabLmdb
-from lux_pipeline.config import index_path
+from lux_pipeline.config import index_path, resolve_object
 import re
 import time
 
@@ -438,3 +439,55 @@ class SqliteReconciler(LazyIndexes, Reconciler):
             return f"{self.namespace}{ms[0][0]}"
         else:
             return None
+
+
+# ------------------------------------------------- indexes not built yet
+
+INDEX_KINDS = (("name", "reconcile_label"), ("id", "reconcile_id"))
+
+
+def missing_indexes(cfgs):
+    """``[(source, "name"|"id", path)]``: the reconciliation indexes the
+    configured reconcilers would open that do not exist yet. Read from the
+    configuration, nothing instantiated, so the driver can say so before
+    any worker starts -- a reconciler raises on the first record that
+    needs a missing index (see LazyIndexes). The sources the reconciler
+    uses: external and results (the merged global index)."""
+    out = []
+    for group in (cfgs.external, cfgs.results):
+        for name, cfg in group.items():
+            r = cfg.get("reconciler")
+            cls = type(r) if r is not None else None
+            if cls is None and cfg.get("reconcilerClass"):
+                cls, _err, _modern = resolve_object(cfg["reconcilerClass"])
+            if not isinstance(cls, type) or not issubclass(cls, LazyIndexes):
+                continue
+            for which, key in INDEX_KINDS:
+                path = index_path(cfg, key, "")
+                if not path:
+                    continue
+                if not os.path.isabs(path):
+                    path = os.path.join(cfgs.indexes_dir, path)
+                if not os.path.exists(path):
+                    out.append((name, which, path))
+    return out
+
+
+def skip_missing_indexes(reconcilers):
+    """Treat each index of `reconcilers` whose file does not exist as not
+    configured (None): that reconciler then declines that kind of match,
+    as one without the index always has. Only for a run told to
+    (``lux reconcile --skip-missing-indexes``); otherwise the first access
+    raises. Returns ``[(source, which, path)]`` skipped."""
+    skipped = []
+    for r in reconcilers:
+        if not isinstance(r, LazyIndexes):
+            continue
+        r._ensure_index_state()
+        for which, _key in INDEX_KINDS:
+            path = r._index_paths.get(which)
+            if path and r._indexes.get(which) is _UNOPENED and not os.path.exists(path):
+                r._indexes[which] = None
+                skipped.append((getattr(r, "config", {}).get("name", "?"), which, path))
+    return skipped
+

@@ -34,9 +34,13 @@ class CommandHandler(CH):
                              "ignores --source and --recid, skips the finishing steps")
         ap.add_argument("--no-finish", "--no_finish", dest="no_finish", action="store_true",
                         help="Skip identify, metatypes and write-refs after the workers")
+        ap.add_argument("--skip-missing-indexes", dest="skip_missing_indexes", action="store_true",
+                        help="Reconcile without the indexes not built yet (a partial build); "
+                             "otherwise a missing index stops the run before it starts")
         add_profile_arg(ap)
         self.extra_args = {"recid": "recid", "no_refs": "no_refs", "new_token": "new_token",
-                           "baseline": "baseline", "no_finish": "no_finish"}
+                           "baseline": "baseline", "no_finish": "no_finish",
+                           "skip_missing_indexes": "skip_missing_indexes"}
 
     def resolve_sources(self, args):
         """``all`` is every internal source, as the script's ``--all``;

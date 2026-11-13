@@ -35,6 +35,7 @@ of the evidence, and delete the YUIDs it no longer saw.
 
 import logging
 
+from lux_pipeline.process.base.reconciler import missing_indexes
 from lux_pipeline.process.identity_resolver import assertions_pattern
 from lux_pipeline.process.phases.identify import report_lines, resolve_identity, vacuum_idmap
 from lux_pipeline.process.phases.reconcile import (new_update_token, reconcile_slice, select_sources,
@@ -58,6 +59,7 @@ class ReconcileManager(TaskManager):
         self.new_token = False
         self.baseline = False
         self.no_finish = False
+        self.skip_missing_indexes = False
         self.results = None
         self.finish_stats = None
         if args is not None:
@@ -68,6 +70,7 @@ class ReconcileManager(TaskManager):
             self.new_token = bool(getattr(args, "new_token", False))
             self.baseline = bool(getattr(args, "baseline", False))
             self.no_finish = bool(getattr(args, "no_finish", False))
+            self.skip_missing_indexes = bool(getattr(args, "skip_missing_indexes", False))
         if self.unsliced and self.max_workers != 1:
             logger.info(f"one worker for {'--baseline' if self.baseline else '--recid'}, "
                         f"not {self.max_workers}: an explicit record list is not sliced")
@@ -101,14 +104,36 @@ class ReconcileManager(TaskManager):
         return [name for _, name in self.sources]
 
     def check(self):
-        """What `select_sources` would reject, raised in the driver before
-        any worker starts."""
+        """What `select_sources` would reject, and reconciliation indexes
+        that are not built yet, raised in the driver before any worker
+        starts."""
+        self.check_indexes()
         if self.baseline:
             return
         if not self.sources:
             raise ValueError("No source selected")
         if self.recids and len(self.sources) != 1:
             raise ValueError("Can only build individual records from a single source")
+
+    def check_indexes(self):
+        """Every reconciler's indexes must exist: a missing one used to
+        fail every worker on its first record. With
+        ``--skip-missing-indexes`` the run goes on without them, said once
+        here and by each worker."""
+        missing = missing_indexes(self.configs)
+        if not missing:
+            return
+        lines = [f"  {name}: {which} index {path}" for name, which, path in missing]
+        sources = ",".join(sorted({name for name, _w, _p in missing}))
+        if self.skip_missing_indexes:
+            logger.warning("reconciling without the indexes not built yet "
+                           "(--skip-missing-indexes):\n" + "\n".join(lines))
+            return
+        raise ValueError(
+            "reconciliation indexes not built yet:\n" + "\n".join(lines) + "\n"
+            f"Build them (after downloading and loading those sources) with "
+            f"lux load-index --source {sources}, or rerun with --skip-missing-indexes "
+            f"to reconcile without them (fewer matches: a partial build)")
 
     # ----------------------------------------------------------- workers
 
@@ -131,7 +156,8 @@ class ReconcileManager(TaskManager):
         distance_log = distance_log_path(self.prefix, n) if self.prefix else None
         return reconcile_slice(cfgs, idmap, networkmap, to_do, my_slice=my_slice, max_slice=max_slice,
                                do_references=not self.no_refs, progress=progress,
-                               distance_log=distance_log)
+                               distance_log=distance_log,
+                               skip_missing_indexes=self.skip_missing_indexes)
 
     # ----------------------------------------------------------- driver
 
