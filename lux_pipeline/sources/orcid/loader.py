@@ -91,14 +91,35 @@ class OrcidLoader(Loader):
         # they simply aren't found under its own name.
         return f"{self._shard_base()}_{n:03d}.jsonl.gz"
 
-    def find_shards(self):
-        # Shards are written to a .tmp name and renamed once complete, so
-        # anything visible here is a whole shard.
+    def existing_shards(self):
+        """Every complete shard file of this dump, by number."""
         found = {}
         for fn in glob.glob(f"{self._shard_base()}_*.jsonl.gz"):
             m = re.search(r"_(\d+)\.jsonl\.gz$", fn)
             if m:
                 found[int(m.group(1))] = fn
+        return found
+
+    def shards_ready(self, count):
+        """Whether exactly shards 0..count-1 of this dump exist, written
+        no earlier than the dump itself."""
+        found = self.existing_shards()
+        if sorted(found) != list(range(count)):
+            return False
+        dump = os.path.getmtime(self.in_path) if os.path.exists(self.in_path) else 0
+        return all(os.path.getmtime(fn) >= dump for fn in found.values())
+
+    def remove_shards(self):
+        """Delete this dump's shards, finished or not: a new dump makes
+        them stale, and a stale shard would be loaded in place of it."""
+        for fn in [*self.existing_shards().values(), *glob.glob(f"{self._shard_base()}_*.jsonl.gz.tmp")]:
+            os.remove(fn)
+            logger.info(f"Removed {fn}")
+
+    def find_shards(self):
+        # Shards are written to a .tmp name and renamed once complete, so
+        # anything visible here is a whole shard.
+        found = self.existing_shards()
         if not found:
             return []
         missing = [n for n in range(max(found) + 1) if n not in found]
@@ -107,8 +128,8 @@ class OrcidLoader(Loader):
             # every record those slices held
             raise ValueError(
                 f"orcid shards {missing} are missing from {self._shard_base()}_*.jsonl.gz; "
-                f"re-run split-orcid.py for those slices, or delete the shards to "
-                f"load from {self.in_path} instead"
+                f"re-run lux download --source orcid (or split-orcid.py for those slices), "
+                f"or delete the shards to load from {self.in_path} instead"
             )
         return [found[n] for n in range(max(found) + 1)]
 
@@ -173,10 +194,14 @@ class OrcidLoader(Loader):
         Either way shard n holds the same records, so the two can be mixed.
 
         The filter is baked into the shards, so re-run this if should_load()
-        changes."""
+        changes. A single pass first removes every shard of this dump, so
+        none from an earlier split (or a larger shard count) is left to be
+        loaded beside the new ones."""
         if maxSlice is None:
             maxSlice = 1
         mine = [slicen] if slicen is not None else list(range(maxSlice))
+        if slicen is None:
+            self.remove_shards()
 
         # Shards are written under a .tmp name and renamed once the walk
         # finishes, so a split that dies partway leaves nothing that
@@ -187,6 +212,8 @@ class OrcidLoader(Loader):
         logger.info(f"Writing {len(mine)} of {maxSlice} shards: {', '.join(paths[n] for n in mine)}")
 
         ttl = self.total if self.total > 0 else TOTAL_MEMBERS
+        # the bar counts every member walked past: each pass reads them all
+        self.progress(total=ttl, completed=0, description=f"orcid: splitting into {maxSlice} files")
         tf = tarfile.open(self.in_path, "r:gz")
         nxt = tf.next()
         x = 0
@@ -201,6 +228,7 @@ class OrcidLoader(Loader):
                 # Which shard a record belongs to is decided the same way the
                 # loader used to pick its slice out of the archive, so shard n
                 # holds exactly what worker n would have loaded from the .tgz
+                self.progress(advance=1)
                 fh = handles.get(x % maxSlice)
                 if fh is None:
                     x += 1
@@ -217,12 +245,6 @@ class OrcidLoader(Loader):
                     fh.write(f"{ident}\t{json.dumps({'xml': data.decode('utf-8')})}\n")
                 nxt = tf.next()
                 x += 1
-                if not x % 100000:
-                    t = time.time() - start
-                    xps = x / t
-                    ttls = ttl / xps
-                    logger.info(f"{x} in {t} = {xps}/s --> {ttls} total ({ttls/3600} hrs)")
-                    logger.info(f"{done_x} with data / {mine_x} = {done_x/mine_x*100}%")
         finally:
             for fh in handles.values():
                 fh.close()
@@ -232,7 +254,9 @@ class OrcidLoader(Loader):
             os.rename(f"{path}.tmp", path)
             logger.info(f"Wrote {kept[n]} records to {path} "
                   f"({os.path.getsize(path)/1e9:.1f}GB)")
-        logger.info(f"{done_x} records from {mine_x} members in {time.time() - start}s")
+        pct = f" ({done_x / mine_x * 100:.1f}%)" if mine_x else ""
+        logger.info(f"{done_x} records with data{pct} from {mine_x} members in "
+                    f"{time.time() - start:.0f}s")
 
     def _load_dump(self, slicen, maxSlice):
         # This loads from annual summary dump file.

@@ -1,3 +1,7 @@
+# `lux download --source orcid` now does this after downloading the dump
+# (sources/orcid/downloader.py, `shards` files, default 24); this script
+# re-splits a dump already on disk, or splits it in parallel.
+#
 # One-time repack of the ORCID annual summaries dump into per-slice JSONL
 # shards, so that every later load -- in every environment -- reads only the
 # records it is actually going to store.
