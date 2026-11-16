@@ -233,7 +233,10 @@ SOURCE = {
                               "fields, form}, see process/base/loader.py)."),
     "dumps_dir": _k("path", "The source's directory under dumps_dir (lux guess-dump-type)."),
     "totalRecords": _k("int", "How many records the dump holds (for progress)."),
-    "downloadMdUrl": _k("url", "Read by the ror and oclc downloaders."),
+    "downloadMdUrl": _k("url", "Read by the ror, oclc and orcid downloaders (orcid: the "
+                               "year's figshare article)."),
+    "shards": _k("int", "orcid: how many JSON Lines files lux download splits the "
+                        "summaries dump into (default 24)."),
     "downloadUrlBase": _k("url", "Read by the oclc downloader."),
     "downloadXPath": _k("str", "Read by the ror and oclc downloaders."),
     "externalLinksPath": _k("path", "Read by the lc loader."),
