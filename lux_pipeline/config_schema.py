@@ -246,6 +246,11 @@ SOURCE = {
     "raise_on_validation_error": _k("bool", "With validate_on_acquire: fail on an invalid "
                                             "record."),
     "ignore_sources_for_records": _k("list", "Read by the acquirer."),
+    "allowed_licenses": _k("list", "wikimedia: the licence codes an image may have (default pd, "
+                                   "cc0, cc-by-4.0, cc-by-sa-4.0); read by the mapper and the "
+                                   "dump loader."),
+    "image_extensions": _k("list", "wikimedia: the file extensions the dump loader keeps "
+                                   "(default jpg, jpeg, png, gif, tif, tiff, webp, svg)."),
     "debug": _k("any", "The acquirer's debug flag."),
     "idmap_name": _k("str", "Results: the identity map the records are keyed by."),
     "trash_non_yale_images": _k("bool", "merged: drop images that are not Yale's."),
