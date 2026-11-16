@@ -91,7 +91,7 @@ picks which ones to download (`all` by default).
 | Key | Loaded by | What it is |
 |---|---|---|
 | `records` | `lux load` (the default) | The source's own dump, as the publisher releases it |
-| `export` | `lux load --type export` | A LUX export of the datacache, e.g. the published `https://yale-lux-data.s3.amazonaws.com/sources/<name>.zip` (`zip.bz2/json`), or `lux export --type external` output (`lines.gz/tabjson`) |
+| `export` | `lux load --type export` | A LUX export of the datacache: `lux export --type external` output (`lines.gz/tabjson`), or an older datacache export (`zip.bz2/json`) |
 | `lmdb` | `lux load --type lmdb` | An LMDB distribution store from `lux export --format lmdb` (`lmdb/json.z`) |
 | anything else | not loaded | Downloaded with `lux download --type <key>` for a source's own code to read (DNB's `mappings`) |
 
@@ -188,7 +188,7 @@ compressed LMDB values.
 | `lines/json` | Plain JSON Lines | IPCH |
 | `tar.gz/json` | A gzipped tar of one JSON file per record | YCBA, YPM, PMC |
 | `zip/json` | A zip of one JSON file per record | YUAG |
-| `zip.bz2/json` | A LUX datacache export | Every `export` entry |
+| `zip.bz2/json` | An older LUX datacache export | None configured now |
 | `zip/arraylines/json` | A zip of JSON arrays written one record per line | BNE |
 | `zip/array/raw` | A zip of one big JSON array | ROR, BNE materia |
 | `graph.gz/raw` | A gzipped JSON-LD `@graph` | Pleiades places |

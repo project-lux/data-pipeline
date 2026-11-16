@@ -1211,6 +1211,10 @@ class Loader(Sliced):
         # without headers/footers or other wrapping
         # Dump in raw without parsing
 
+        if not self.in_path:
+            # a harvested or fetched source: no input_files, no dumpFilePath
+            logger.info(f"{self.name}: no input_files or dumpFilePath; nothing to load")
+            return
         if self.in_path.endswith(".gz"):
             fh = gzip.open(self.in_path)
         elif self.in_path.endswith(".zip"):
