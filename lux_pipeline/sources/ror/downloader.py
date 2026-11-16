@@ -16,8 +16,7 @@ file name and the MD5 the base class verifies. The file is saved as
 ``dumpFilePath`` when that names a ``.zip``, else under its own name in
 ``dumps_dir``; a ``dumpFilePath`` naming the extracted JSON, as the live
 configuration does until the loader reads the zip (item 29), is left
-alone. Any ``input_files`` entries (the published export) come from the
-base class as usual.
+alone. Any ``input_files`` entries come from the base class as usual.
 """
 
 import logging
