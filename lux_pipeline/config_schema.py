@@ -228,6 +228,9 @@ SOURCE = {
     "dumpFilePath": _k("path", "The dump file the loader reads (relative to dumps_dir)."),
     "dumpFileType": _k("str", "The dump's format, e.g. tar.gz/json."),
     "remoteDumpFile": _k("url", "Where the dump is downloaded from."),
+    "rsync": _k("any", "What lux download copies with rsync: a source (rsync://host/module/path/, "
+                       "host::module/path, user@host:path) or {source, path, include, exclude, "
+                       "options, delete, type}, or a list of them; see process/base/rsync.py."),
     "input_files": _k("dict", "Dump files by load type: [{url, path, type, slice, identifier}] "
                               "(the loader DSL; identifier: \"name\", \"record\" or {from, "
                               "fields, form}, see process/base/loader.py)."),

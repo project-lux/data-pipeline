@@ -130,7 +130,10 @@ COUNT_LINES_BELOW = 100_000_000
 # files an operating system leaves in a directory or archive, never records:
 # macOS's __MACOSX/ tree and ._<name> AppleDouble files, Finder's .DS_Store,
 # Windows' Thumbs.db and desktop.ini
-OS_METADATA_DIRS = ("__MACOSX",)
+OS_METADATA_DIRS = ("__MACOSX",
+                    # rsync's working directory while a transfer is under way
+                    # (lux download with an rsync entry: --delay-updates)
+                    ".~tmp~")
 OS_METADATA_FILES = (".DS_Store", "Thumbs.db", "desktop.ini")
 UTF8_BOM = b"\xef\xbb\xbf"
 # the json step reads a file or member found in a container (a zip, tar or
