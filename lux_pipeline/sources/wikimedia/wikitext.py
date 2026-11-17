@@ -45,7 +45,9 @@ FLAGGED = frozenset({
     "nld", "npd", "nsd", "dw-no-source-since",
 })
 
-IMAGE_EXTENSIONS = ("jpg", "jpeg", "png", "gif", "tif", "tiff", "webp", "svg")
+# the file extensions of the images LUX shows (``image_extensions``):
+# the dump loader keeps only these and WmMapper maps only these
+IMAGE_EXTENSIONS = ("jpg", "jpeg", "png", "gif", "webp", "svg")
 
 # the templates whose fields describe the file
 INFO_TEMPLATES = ("information", "artwork", "photograph", "art-photo", "book", "map")
@@ -165,6 +167,13 @@ def page_licenses(text, allowed=tuple(LICENSES)):
                 found.add(code)
     order = list(LICENSES) + [c for c in allowed if c not in LICENSES]
     return [c for c in order if c in found and c in allowed]
+
+
+def image_extensions(config):
+    """The source's ``image_extensions``, lower case without dots, else
+    `IMAGE_EXTENSIONS`: what both `WmLoader` and `WmMapper` read."""
+    exts = config.get("image_extensions") or IMAGE_EXTENSIONS
+    return tuple(e.lower().lstrip(".") for e in exts)
 
 
 def is_image(title, extensions=IMAGE_EXTENSIONS):

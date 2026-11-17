@@ -7,7 +7,8 @@ The ``mediawiki`` container streams the dump's ``<page>`` elements
 in namespace 6 (``File:``) that are not redirects, as
 ``{"pageid", "title", "revision", "timestamp", "wikitext"}``.
 `post_process_json` then keeps a page only when its title has an image
-extension (``image_extensions``, default `wikitext.IMAGE_EXTENSIONS`) and
+extension (``image_extensions``, default `wikitext.IMAGE_EXTENSIONS`; the
+mapper reads the same key, so nothing is loaded that it would not map) and
 its templates grant one of the licences in ``allowed_licenses`` (the
 same key `WmMapper` reads; default ``pd``, ``cc0``, ``cc-by-4.0``,
 ``cc-by-sa-4.0``), adding ``license`` (the least restrictive) and
@@ -63,8 +64,7 @@ class WmLoader(Loader):
     def __init__(self, config):
         super().__init__(config)
         self.licenses = tuple(config.get("allowed_licenses") or wikitext.LICENSES)
-        exts = config.get("image_extensions") or wikitext.IMAGE_EXTENSIONS
-        self.image_extensions = tuple(e.lower().lstrip(".") for e in exts)
+        self.image_extensions = wikitext.image_extensions(config)
         self.pages = Counter()
 
     def _init_dsl(self):

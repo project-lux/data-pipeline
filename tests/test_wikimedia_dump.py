@@ -43,12 +43,13 @@ def page(title, text, ns=6, pageid=1, redirect=False):
 PAGES = [
     page("File:Izvori vruće vode 0114.jpg", INFO.format(lic="{{self|cc-by-sa-4.0}}"), pageid=1),
     page("File:Old.jpg", INFO.format(lic="{{self|cc-by-sa-3.0}}"), pageid=2),
-    page("File:Painting.tif", INFO.format(lic="{{Licensed-PD-Art|1=PD-old-auto|2=PD-x}}"), pageid=3),
+    page("File:Painting.svg", INFO.format(lic="{{Licensed-PD-Art|1=PD-old-auto|2=PD-x}}"), pageid=3),
     page("File:Talk.ogg", INFO.format(lic="{{cc-zero}}"), pageid=4),
     page("File:Moved.jpg", "#REDIRECT [[File:Other.jpg]]", pageid=5, redirect=True),
     page("Category:Spas", "{{cc-zero}}", ns=14, pageid=6),
     page("File:Doubtful.png", INFO.format(lic="{{cc-zero}}{{copyvio|reason}}"), pageid=7),
     page("File:Dual.PNG", INFO.format(lic="{{self|GFDL|cc-by-4.0|migration=redundant}}"), pageid=8),
+    page("File:Scan.tif", INFO.format(lic="{{PD-self}}"), pageid=9),
 ]
 
 
@@ -80,9 +81,10 @@ def load(tmp_path, path, type_="mediawiki.bz2/raw", slices=(0, 1), **keys):
     return ldr, cache
 
 
-def mapper():
+def mapper(**keys):
     m = object.__new__(WmMapper)
     m.name, m.licenses = "wikimedia", ["pd", "cc0", "cc-by-sa-4.0", "cc-by-4.0"]
+    m.image_extensions = wt.image_extensions(keys)
     return m
 
 
@@ -130,13 +132,13 @@ def test_fields_as_plain_text():
 
 def test_only_licensed_image_file_pages_are_loaded(tmp_path):
     ldr, cache = load(tmp_path, dump(tmp_path))
-    assert sorted(cache) == ["Dual.PNG", "Izvori_vru%C4%87e_vode_0114.jpg", "Painting.tif"]
+    assert sorted(cache) == ["Dual.PNG", "Izvori_vru%C4%87e_vode_0114.jpg", "Painting.svg"]
     rec = cache["Izvori_vru%C4%87e_vode_0114.jpg"]
     assert (rec["pageid"], rec["revision"], rec["license"], rec["licenses"]) == (1, "91", "cc-by-sa-4.0", ["cc-by-sa-4.0"])
     assert rec["title"] == "File:Izvori vruće vode 0114.jpg" and "{{self|cc-by-sa-4.0}}" in rec["wikitext"]
-    assert cache["Painting.tif"]["license"] == "pd" and cache["Dual.PNG"]["license"] == "cc-by-4.0"
-    assert ldr.pages["file"] == 6 and ldr.pages["redirect"] == 1 and ldr.pages["other"] == 1
-    assert ldr.pages["not an image"] == 1 and ldr.pages["no allowed licence"] == 2
+    assert cache["Painting.svg"]["license"] == "pd" and cache["Dual.PNG"]["license"] == "cc-by-4.0"
+    assert ldr.pages["file"] == 7 and ldr.pages["redirect"] == 1 and ldr.pages["other"] == 1
+    assert ldr.pages["not an image"] == 2 and ldr.pages["no allowed licence"] == 2
     assert ldr.pages["kept"] == 3
 
 
@@ -148,7 +150,7 @@ def test_extensions_and_licences_come_from_the_config(tmp_path):
 def test_workers_share_the_pages(tmp_path):
     path = dump(tmp_path)
     got = [sorted(load(tmp_path, path, slices=(n, 2))[1]) for n in range(2)]
-    assert sorted(got[0] + got[1]) == ["Dual.PNG", "Izvori_vru%C4%87e_vode_0114.jpg", "Painting.tif"]
+    assert sorted(got[0] + got[1]) == ["Dual.PNG", "Izvori_vru%C4%87e_vode_0114.jpg", "Painting.svg"]
     assert got[0] and got[1]
 
 
@@ -159,7 +161,7 @@ def test_a_directory_of_dump_parts_sliced_by_file(tmp_path):
     (parts / "b.xml.bz2").write_bytes(dump(tmp_path, PAGES[2:]).read_bytes())
     cfg_type = "dir/mediawiki.bz2/raw"
     _, cache = load(tmp_path, parts, type_=cfg_type)
-    assert sorted(cache) == ["Dual.PNG", "Izvori_vru%C4%87e_vode_0114.jpg", "Painting.tif"]
+    assert sorted(cache) == ["Dual.PNG", "Izvori_vru%C4%87e_vode_0114.jpg", "Painting.svg"]
 
 
 def test_a_file_given_on_the_command_line_is_read_as_a_dump(tmp_path):
@@ -198,8 +200,20 @@ def test_a_dump_page_maps_like_an_api_record(tmp_path):
     assert rights == ('<span>Izvori vruće vode 0114 by Olja Simović Own work, '
                       '<a href="https://creativecommons.org/licenses/by-sa/4.0">CC BY-SA 4.0</a></span>')
     assert out["subject_to"][0]["classified_as"][0]["id"] == "https://creativecommons.org/licenses/by-sa/4.0"
-    # a TIFF is loaded but, as from the API, not shown
-    assert mapper().transform({"identifier": "Painting.tif", "data": cache["Painting.tif"]}, "") is None
+
+
+def test_the_mapper_shows_the_extensions_the_loader_keeps(tmp_path):
+    _, cache = load(tmp_path, dump(tmp_path))
+    svg = {"identifier": "Painting.svg", "data": cache["Painting.svg"]}
+    assert mapper().transform(svg, "")["data"]["access_point"][0]["id"].endswith("/Painting.svg")
+    assert mapper(image_extensions=[".JPG", "png"]).transform(svg, "") is None
+    png = {"identifier": "Dual.PNG", "data": cache["Dual.PNG"]}
+    assert mapper(image_extensions=[".JPG", "png"]).transform(png, "") is not None
+    # a TIFF is neither loaded nor, from an API record, shown
+    assert "tif" not in wt.IMAGE_EXTENSIONS and "tiff" not in wt.IMAGE_EXTENSIONS
+    api = {"query": {"pages": {"1": {"title": "File:Scan.tif", "imageinfo": [{"extmetadata": {
+        "License": {"value": "pd"}}}]}}}}
+    assert mapper().transform({"identifier": "Scan.tif", "data": api}, "") is None
 
 
 def test_an_api_record_still_maps():

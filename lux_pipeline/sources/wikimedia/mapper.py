@@ -12,11 +12,14 @@ class WmMapper(Mapper):
     digitally shown by, when its licence is in ``allowed_licenses``. Reads
     both shapes the datacache holds: the imageinfo API response the
     fetcher stores, and a file page from a dump (`WmLoader`: the page's
-    wikitext with its ``license``)."""
+    wikitext with its ``license``). Only titles with one of the
+    ``image_extensions`` are shown, as only those are loaded."""
 
     def __init__(self, config):
         Mapper.__init__(self, config)
         self.licenses = config.get('allowed_licenses', ['pd', 'cc0', 'cc-by-sa-4.0', 'cc-by-4.0'])
+        # the same key and default as the dump loader
+        self.image_extensions = wikitext.image_extensions(config)
 
     def api_metadata(self, data):
         # take a image info API response from wikimedia commons
@@ -78,8 +81,7 @@ class WmMapper(Mapper):
         title = meta['title']
         if title.startswith('File:'):
             title = title[5:]
-        tl = title.lower()
-        if not tl.endswith('.jpg') and not tl.endswith('.jpeg') and not tl.endswith('.gif') and not tl.endswith('.png'):
+        if not wikitext.is_image(title, self.image_extensions):
             return None
         uri = f"https://commons.wikimedia.org/wiki/Special:Filepath/{title}"
         do.access_point = model.DigitalObject(ident=uri)
