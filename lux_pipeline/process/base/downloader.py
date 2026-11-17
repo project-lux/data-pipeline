@@ -28,6 +28,14 @@ Configuration keys, all per source and all optional:
     no ``path`` is saved under the file name at the end of the URL. Entries
     without a ``url`` describe local files and are skipped here.
 
+``rsync``
+    Directories or files to copy from an rsync mirror, one entry or a
+    list: ``{"source": "rsync://host/module/path/", "path": "subdir",
+    "include": [...], "exclude": [...], "options": [...], "delete": false,
+    "type": "records"}`` or just the source string. See
+    `lux_pipeline.process.base.rsync`. Each entry is one download, run by
+    one worker, with the bar following rsync's progress.
+
 ``dumps_dir``
     A sub-directory of the base configuration's ``dumps_dir`` where this
     source's files live. Relative paths resolve against it, exactly as the
@@ -56,6 +64,7 @@ from pathlib import Path
 
 import requests
 
+from lux_pipeline.process.base import rsync
 from lux_pipeline.progress import Sliced
 
 logger = logging.getLogger("lux_pipeline")
@@ -104,14 +113,22 @@ class BaseDownloader(Sliced):
         """Return ``[{"url": …, "path": …}, …]`` for the files this source needs.
 
         ``type`` is ``all`` or a key of ``input_files`` (``records``,
-        ``export``, …). The ``remoteDumpFile`` pair counts as ``records``.
-        A source that configures no downloads returns an empty list.
+        ``export``, …). The ``remoteDumpFile`` pair counts as ``records``,
+        as does an ``rsync`` entry unless it gives its own ``type``; an
+        rsync entry's ``path`` is its destination directory and it
+        carries the entry as ``rsync``. A source that configures no
+        downloads returns an empty list.
         """
         urls = []
         url = self.config.get("remoteDumpFile")
         path = self.config.get("dumpFilePath")
         if url and path and type in ("all", "records"):
             urls.append({"url": url, "path": self.resolve_path(path)})
+
+        for spec in rsync.rsync_specs(self.config):
+            if type in ("all", spec.get("type") or "records"):
+                urls.append({"url": spec["source"], "path": self.resolve_path(spec.get("path") or ""),
+                             "rsync": spec})
 
         for rtype, entries in (self.config.get("input_files") or {}).items():
             if type not in ("all", rtype):
@@ -224,7 +241,10 @@ class BaseDownloader(Sliced):
         Returns 1 when a file was written and 0 when an existing file was
         kept because ``overwrite`` is false. Raises on any HTTP or transfer
         error, or a ``checksum`` mismatch, after removing the partial file.
+        An ``rsync`` entry goes to `process_rsync`.
         """
+        if download.get("rsync"):
+            return self.process_rsync(download, overwrite)
         url = download["url"]
         path = download["path"]
         filename = os.path.basename(path)
@@ -272,3 +292,13 @@ class BaseDownloader(Sliced):
         self.progress(completed=written)
         logger.info(f"Finished downloading {label} ({written:,} bytes)")
         return 1
+
+    def process_rsync(self, download, overwrite=True):
+        """Bring ``download["path"]`` up to date with its rsync source
+        (`rsync.transfer`): 1 when files arrived, 0 when there was nothing
+        to fetch. ``overwrite`` false keeps every file already there."""
+        spec = download["rsync"]
+        dest = download["path"]
+        label = f"{self.name}/{os.path.basename(dest.rstrip('/')) or self.name}"
+        files, _ = rsync.transfer(spec, dest, self.progress, label, overwrite=overwrite)
+        return 1 if files else 0
