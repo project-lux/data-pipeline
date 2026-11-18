@@ -37,7 +37,7 @@ GROUPS = {
     "phases": ("download", "harvest", "load", "load-index", "reconcile", "merge", "export",
                "portal", "sheets", "build"),
     "steps": ("identify", "metatypes", "new-token", "write-refs", "build-differents", "refetch",
-              "validate"),
+              "validate", "artifact"),
     "stores": ("counts", "clear", "backup", "restore", "pg-maintain"),
     "info": ("list", "timing-report", "pg-tune", "testinstall", "guess-dump-type", "viz", "help",
              "watch", "interactive", "initialize", "serve", "config", "show"),

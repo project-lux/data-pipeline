@@ -1,6 +1,7 @@
 # Artifacts: generated files with a record of when and how
 
-Status: plan (2026-11-18). Nothing here is implemented yet.
+Status: the framework and `getty_replacement_uris` (item 1 of "The first
+artifacts") are implemented; items 2 to 4 are planned.
 
 ## Why
 
@@ -76,9 +77,12 @@ Keys every artifact has:
 
 Everything else in the record is the generator's own: an endpoint, a query,
 a sheet id, which properties to keep. Each generator class lists its keys
-(`required_keys`, `optional_keys`) and `lux config check` checks them, as it
-checks the common keys above. The catalogue in `config_schema.py` gains an
-`ARTIFACT` table for the common keys.
+(`required_keys`, and `optional_keys` as `{key: default}`) and
+`lux config check` checks them (`config_store.artifact_problems`): a
+required key missing is an error; a key neither the generator nor the
+catalogue knows is a warning, not an error, since the catalogue never
+forbids a key, but a typo would be silently ignored. The catalogue in
+`config_schema.py` has an `ARTIFACT` table for the common keys.
 
 Records are read, never instantiated by `instantiate_all`: a generator is
 built only when `lux artifact` runs it. Its `__init__` opens nothing (the
@@ -113,7 +117,7 @@ The base class:
 ```python
 class ArtifactGenerator:
     required_keys = ()
-    optional_keys = ()
+    optional_keys = {}     # {key: default}
     needs_sources = ()
 
     def __init__(self, config, cfgs, progress=null_progress): ...
@@ -222,7 +226,10 @@ code that made it. A checksum that no longer matches is reported by
 
 ## Reading an artifact
 
-`Config.artifact_path(name, file=None)` is `artifacts_cache.path`, with:
+`Config.artifact_path(name, file=None)` is `artifacts_cache.path`. `file`
+is the file's name: which one, for an artifact with several, and the name
+it had in `data_dir` before artifacts (for an artifact with one file, only
+that), so a reader needs no knowledge of the record. With:
 
 * a warning, once per process, when the artifact is stale (several mappers in
   each of many workers read the same files);
@@ -262,8 +269,8 @@ versions. Listing and checking never refuse.
 
 Also:
 
-* `lux testinstall`: a check listing missing and stale artifacts (a warning,
-  not a failure).
+* `lux testinstall`: a last check listing missing and stale artifacts (a
+  warning, not a failure).
 * `lux list --artifacts`: `list.artifact_rows`, as `--maps` uses `map_rows`.
 * `lux config check`: the record checks above; `config_store` gets
   `ConfigError`s for an unknown generator key and an overlapping `files`

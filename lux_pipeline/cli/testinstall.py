@@ -226,6 +226,20 @@ class CommandHandler(BaseHandler):
         v.load()
         return f"{len(schema_names(v))} schemas under {v.schema_dir}"
 
+    def check_artifacts(self):
+        """Every configured artifact made and current (docs/artifacts.md); a
+        missing or stale one is an `Advice`: the build reads a fallback or
+        an older file, or goes without."""
+        rows = [r for r in self.cfgs.artifacts_cache.status() if r["configured"]]
+        if not rows:
+            return "no artifacts configured"
+        stale = [r for r in rows if r["stale"]]
+        if stale:
+            shown = "; ".join(f"{r['name']} ({r['stale']})" for r in stale)
+            raise Advice(f"{len(stale)} of {len(rows)} stale: {shown}. "
+                         f"lux artifact --stale makes them again")
+        return f"{len(rows)} current in {self.cfgs.artifacts_dir}"
+
     def check_workers(self, n):
         prefix = os.path.join(tempfile.mkdtemp(prefix="testinstall-", dir=getattr(self.cfgs, "temp_dir", None) or None),
                               "spawn")
@@ -293,6 +307,7 @@ class CommandHandler(BaseHandler):
         if not getattr(args, "skip_pg_tune", False):
             steps.append(("postgres tuned for the build",
                           lambda: self.check_pg_tune(workers), False, "configs"))
+        steps.append(("artifacts made and current", self.check_artifacts, False, "configs"))
         return steps
 
     def run_checks(self, args, out=None, stop_on_fail=True, cfgs=None, on_result=None):

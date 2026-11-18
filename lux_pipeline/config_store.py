@@ -58,7 +58,8 @@ from lux_pipeline.storage.cache.filesystem import (FsCache, RecordError, errors_
 KEY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 # path_types may name these even when base does not set them: Config gives
 # them defaults
-DEFAULTED_DIRS = ("temp_dir", "indexes_dir", "nt_dir", "distribution_dir", "backup_dir")
+DEFAULTED_DIRS = ("temp_dir", "indexes_dir", "nt_dir", "distribution_dir", "backup_dir",
+                  "artifacts_dir")
 
 
 class ConfigError(RecordError):
@@ -217,9 +218,10 @@ class ConfigCache(FsCache):
         importable, with a warning for a pre-rename path; ``indexes``
         resolving; a source's ``matches`` ending where its namespace
         does (`matches_problems`); for base / system, the directories ``path_types`` names
-        and a positive ``max_workers``; for a new record, a key free in
-        every store. A key the catalogue does not know is never a
-        problem."""
+        and a positive ``max_workers``; for an artifact, `artifact_problems`;
+        for a new record, a key free in every store. A key the catalogue
+        does not know never stops a write (for an artifact, one its
+        generator does not know either is a warning)."""
         problems = []
         if not KEY_RE.match(key or ""):
             problems.append(f"{key!r} is not a usable record key (letters, digits, _ . -)")
@@ -265,6 +267,9 @@ class ConfigCache(FsCache):
                 elif modern:
                     problems.append(f"warning: {k} uses the old path {value}; write {modern}")
 
+        if typ == "artifact":
+            problems.extend(artifact_problems(key, data, self.configs))
+
         if isinstance(data.get("indexes"), dict) and self.configs is not None:
             try:
                 self.configs.resolve_indexes(copy.deepcopy(data))
@@ -302,6 +307,66 @@ class ConfigCache(FsCache):
             problems.append(f"warning: {key} in {store_label(stores[-1])} replaces the "
                             f"record of the same key in {replaced}")
         return problems
+
+
+def artifact_problems(key, data, cfgs=None):
+    """What an artifact record's checks find beyond the schema's
+    (docs/artifacts.md): its name is its key; ``files`` relative paths
+    inside artifacts_dir, none listed twice nor by another artifact;
+    ``maxShrink`` a fraction and ``maxAgeDays`` not negative; the keys its
+    generator requires are there, and a key neither the catalogue nor the
+    generator knows is a warning (a typo would be ignored); a source the
+    generator needs that the configuration lacks is a warning."""
+    from lux_pipeline.artifacts.cache import file_problem
+    problems = []
+    if data.get("name") != key:
+        problems.append(f"name is {data.get('name')!r}: an artifact's name must be its key {key!r}")
+    files = data.get("files")
+    if isinstance(files, list):
+        for rel in files:
+            problem = file_problem(rel)
+            if problem:
+                problems.append(f"files: {problem}")
+        twice = sorted({f for f in files if isinstance(f, str) and files.count(f) > 1})
+        if twice:
+            problems.append(f"files: {', '.join(twice)} listed more than once")
+        if cfgs is not None:
+            for other, rec in (getattr(cfgs, "artifacts", {}) or {}).items():
+                if other == key:
+                    continue
+                shared = sorted(set(f for f in files if isinstance(f, str))
+                                & set(f for f in (rec.get("files") or []) if isinstance(f, str)))
+                if shared:
+                    problems.append(f"files: {', '.join(shared)} also written by artifact {other}")
+    shrink = data.get("maxShrink")
+    if shrink is not None and (isinstance(shrink, bool) or not isinstance(shrink, (int, float))
+                               or not 0 <= shrink <= 1):
+        problems.append(f"maxShrink should be a fraction from 0 to 1, not {shrink!r}")
+    age = data.get("maxAgeDays")
+    if isinstance(age, int) and not isinstance(age, bool) and age < 0:
+        problems.append(f"maxAgeDays should not be negative, not {age}")
+
+    cls, error, _ = resolve_class(data.get("generatorClass")) if data.get("generatorClass") \
+        else (None, None, None)
+    if cls is None or error:
+        return problems     # the *Class check reports it
+    required = tuple(getattr(cls, "required_keys", ()) or ())
+    known = set(schema.ARTIFACT) | set(required) | set(getattr(cls, "optional_keys", ()) or ())
+    for k in required:
+        if data.get(k) in schema.EMPTY:
+            problems.append(f"{k} is required by {cls.__name__}")
+    for k in data:
+        if k not in known:
+            problems.append(f"warning: {k} is not a key of {cls.__name__} or of every artifact: "
+                            f"a typo is ignored")
+    if cfgs is not None:
+        have = set(getattr(cfgs, "internal", {})) | set(getattr(cfgs, "external", {})) \
+            | set(getattr(cfgs, "results", {}))
+        missing = [s for s in getattr(cls, "needs_sources", ()) or () if s not in have]
+        if missing:
+            problems.append(f"warning: {cls.__name__} is made from {', '.join(missing)}, which "
+                            f"this configuration does not have: lux artifact will refuse to make it")
+    return problems
 
 
 # --- the stores of a configuration, and finding a record in them -----------------------------

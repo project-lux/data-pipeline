@@ -57,7 +57,7 @@ LMDB stores in `indexes_dir`, read through `TabLmdb`.
 | File | Read at | Origin |
 |---|---|---|
 | `data_dir/idmap_update_token.txt` | `process/phases/reconcile.py:135`, `process/phases/merge.py:43`, every idmap (`storage/idmap/postgres.py:260` and others) | **Generated** by `lux new-token` and `lux initialize` |
-| `data_dir/getty_replacement_uris.json`: the replaced AAT, ULAN and TGN ids | `process/reference_manager.py` `load_redirects`, called by the reference manager (reconcile) and the Getty fetcher (`sources/getty/fetcher.py`) | **Pre-built outside**, by a one-line Getty SPARQL `curl` given in `load_redirects`' docstring and in `docs/install.md`. Called `replacements.json` (reference manager) and `getty_replacements.json` (fetcher) before 2026-11; an old name is still read, with a warning to rename it. |
+| `artifacts_dir/getty_replacement_uris.json` (before artifacts, `data_dir/`): the replaced AAT, ULAN and TGN ids | `process/reference_manager.py` `load_redirects`, called by the reference manager (reconcile) and the Getty fetcher (`sources/getty/fetcher.py`) | **Generated** by `lux artifact --type getty_replacement_uris` (`artifacts/getty.py`, docs/artifacts.md), into `artifacts_dir`; read from `data_dir` until the artifact is made. Called `replacements.json` (reference manager) and `getty_replacements.json` (fetcher) before 2026-11; an old name is still read, with a warning to rename it. |
 | `data_dir/schema/*.json` | `process/validator.py:48` | **Fetched** by `lux initialize` (`cli/initialize.py:369`) from the Linked Art site |
 | `data_dir/pending_deletes.jsonl` | `process/update_manager.py:20` | **Generated** by the harvesters (`process/base/harvester.py`) |
 | `data_dir/google_sheet_id.txt`, `token.json`, `credentials.json` | `process/sheets.py:218, 236` | **Pre-built outside**: the sheet's id and the Google API credentials |
@@ -84,7 +84,10 @@ LMDB stores in `indexes_dir`, read through `TabLmdb`.
 
 Fixed since the audit: the Getty replaced-ids file was in two copies
 (`replacements.json`, `getty_replacements.json`); it is now one file,
-`getty_replacement_uris.json`, read by both.
+`getty_replacement_uris.json`, read by both. It is now the first artifact
+(docs/artifacts.md): `lux artifact --type getty_replacement_uris` makes it,
+with a manifest entry saying when and from what, and `lux testinstall`
+reports it when stale.
 
 Two cheap improvements would close most of that gap:
 
