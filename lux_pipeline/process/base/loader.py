@@ -47,6 +47,12 @@ directory step is itself the unit: every ``max_slice``-th such entry.
 Files are counted in order across the entries, and a file
 ``should_process_item`` refuses is not counted.
 
+An entry's ``"include"`` (a glob or a list of them, as ``fnmatch``
+matches a file name, as the rsync ``include`` key does) narrows what a
+``dir`` or ``dirs`` step reads to the files whose names match one: a
+dump directory also holds checksums and indexes. Files it leaves out are
+not counted for slicing either.
+
 An entry may say where each record's identifier comes from, with
 ``"identifier"`` (for the ``json``, ``other`` and ``tabjson`` formats; ``raw``
 items are always identified from the record):
@@ -91,6 +97,7 @@ load manager which path a source takes.
 
 import bz2
 import collections
+import fnmatch
 import gzip
 import inspect
 import io
@@ -267,6 +274,8 @@ class Loader(Sliced):
         self._lmdb_envs = {}
         self._ppj_takes_identifier = None
         self._identifier_rule = None   # the current entry's "identifier", parsed
+        self._include = None           # the current entry's "include" globs
+        self.not_included = 0          # files a dir step left out for "include"
         self.outside_namespace = 0     # records skipped: identifier outside the namespace
         self.not_json_names = collections.Counter()   # extension -> files the json step skipped
         self.step_functions = {
@@ -392,8 +401,18 @@ class Loader(Sliced):
 
     # --- containers ----------------------------------------------------------
 
+    def included(self, name):
+        """Whether the current entry's ``include`` lets a ``dir`` step read
+        the file `name` (every file when it has none)."""
+        if not self._include or any(fnmatch.fnmatchcase(name, g) for g in self._include):
+            return True
+        self.not_included += 1
+        return False
+
     def iterate_directory(self, path, comp, remaining):
         files = [f for f in sorted(os.listdir(path)) if not is_os_metadata(f)]
+        if self._include:
+            files = [f for f in files if not os.path.isfile(os.path.join(path, f)) or self.included(f)]
         if len(remaining) == 1:
             self._add_total(len(files))
         for f in files:
@@ -407,6 +426,8 @@ class Loader(Sliced):
                 continue
             full = os.path.join(path, f)
             if os.path.isfile(full):
+                if not self.included(f):
+                    continue
                 if len(remaining) == 1:
                     self._add_total(1)
                 yield full
@@ -997,6 +1018,25 @@ class Loader(Sliced):
             return self.config.get("dumpFileType")
         return None
 
+    def entry_include(self, entry):
+        """An ``input_files`` entry's ``include`` globs as a list (None
+        without one); ValueError for anything but a string or strings."""
+        inc = entry.get("include")
+        if inc is None or inc == []:
+            return None
+        if isinstance(inc, str):
+            inc = [inc]
+        if not isinstance(inc, list) or not all(isinstance(g, str) and g for g in inc):
+            raise ValueError(f"{self.name}'s input_files include should be a glob or a list "
+                             f"of them, not {inc!r}")
+        return inc
+
+    def configured_include(self, load_type):
+        """The ``include`` of the config's one entry for `load_type` (None
+        when there is not exactly one, or it has none)."""
+        entries = (self.config.get("input_files") or {}).get(load_type) or []
+        return self.entry_include(entries[0]) if len(entries) == 1 else None
+
     def configured_slice(self, load_type):
         """How the config's one entry for `load_type` is sliced
         (``records`` when there is not exactly one)."""
@@ -1066,6 +1106,9 @@ class Loader(Sliced):
         info = {"path": path, "fmt": spec}
         if self.configured_slice(load_type) == "files" and self.file_level(spec) is not None:
             info["slice"] = "files"
+        include = self.configured_include(load_type)
+        if include and self.file_level(spec) is not None:
+            info["include"] = include
         # where identifiers come from is the source's, whatever the file
         rule = self.configured_identifier(load_type, spec)
         if rule is not None:
@@ -1117,6 +1160,9 @@ class Loader(Sliced):
                 info = {"path": path, "fmt": fmtspec}
                 if self.entry_slice(p) == "files":
                     info["slice"] = "files"
+                include = self.entry_include(p)
+                if include:
+                    info["include"] = include
                 rule = self.entry_identifier(p, fmtspec)
                 if rule is not None:
                     info["identifier"] = rule
@@ -1159,6 +1205,7 @@ class Loader(Sliced):
                 self._slicing_files = info.get("slice") == "files"
                 self._file_level = self.file_level(info["fmt"]) if self._slicing_files else None
                 self._identifier_rule = info.get("identifier")
+                self._include = info.get("include")
                 if self._slicing_files and self._file_level is None and not self._take_file():
                     continue    # a whole entry is the unit, and another slice's
                 self.progress(description=os.path.basename(str(path).rstrip("/")))
@@ -1175,6 +1222,7 @@ class Loader(Sliced):
             self._slicing_files = False
             self._file_level = None
             self._identifier_rule = None
+            self._include = None
             if hasattr(cache, "resume_commits"):
                 cache.resume_commits()
             elif hasattr(cache, "commit"):
@@ -1183,6 +1231,9 @@ class Loader(Sliced):
             for env in self._lmdb_envs.values():
                 env.close()
             self._lmdb_envs = {}
+        if self.not_included:
+            logger.info(f"{self.name}: left out {self.not_included} file(s) whose names match "
+                        f"no input_files include pattern")
         if self.not_json_names:
             counts = ", ".join(f"{n} {ext}" for ext, n in sorted(self.not_json_names.items()))
             logger.warning(f"{self.name}: skipped {sum(self.not_json_names.values())} file(s) "
