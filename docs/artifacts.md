@@ -11,8 +11,10 @@ CSVs and `xpath_fixes.json` from the Google Sheet, Wikidata's
 a `lux` command that leaves no trace of when it ran. Nothing says how old a
 file is, what made it, or when it should be made again. `type_overrides.json`
 is the example: a 2022 snapshot of Wikidata's language items with no
-generator anywhere, about 390 of its Wikidata items no longer carrying an ISO 639 code and 75
-of its AAT ids culture concepts rather than languages.
+generator anywhere, about 390 of its Wikidata items no longer carrying an
+ISO 639 code, and 89 of its 1,478 AAT ids outside AAT's languages hierarchy
+(74 culture or people concepts, 12 replaced ids, 3 others, and one
+malformed id).
 
 An **artifact** is such a file (or a few files made together) with:
 
@@ -34,7 +36,8 @@ reads it (see "The other files" below).
 * `artifacts_dir`: a new optional base key, falling back to
   `<data_dir>/artifacts` as `backup_dir` falls back to `<data_dir>/backups`.
   Relative paths resolve against `base_dir` like the other directories.
-* `<artifacts_dir>/manifest.json`: one entry per artifact made at least once.
+* `<artifacts_dir>/manifest/<name>.json`: one record per artifact made at
+  least once (see "The manifest").
 * `<artifacts_dir>/<file>` for each file an artifact lists; subdirectories
   allowed (`sameAs/google.csv`).
 
@@ -51,7 +54,7 @@ record, `configs/system/config_cache/artifacts.json`, the same shape as
 {
   "name": "getty_replacement_uris",
   "type": "artifact",
-  "generatorClass": "lux_pipeline.sources.getty.artifacts.ReplacementUris",
+  "generatorClass": "lux_pipeline.artifacts.getty.ReplacementUris",
   "files": ["getty_replacement_uris.json"],
   "maxAgeDays": 90,
   "maxShrink": 0.5,
@@ -83,12 +86,35 @@ rule for every component).
 
 ## Generators
 
-A base class in `lux_pipeline/process/base/artifact.py`:
+Artifacts have their own part of the package, `lux_pipeline/artifacts/`,
+beside `lux_pipeline/sources/` (a namespace package like the rest: no
+`__init__.py`):
+
+| Module | Holds |
+|---|---|
+| `artifacts/base.py` | `ArtifactGenerator`, the base class |
+| `artifacts/manifest.py` | the manifest (an `FsCache`), staleness, `publish` |
+| `artifacts/getty.py` | `ReplacementUris` (`getty_replacement_uris`) |
+| `artifacts/languages.py` | `LanguageTypes` (`type_overrides`) |
+| `artifacts/sheets.py` | the Google Sheet generator, over `process/sheets.py`'s `SheetImport` |
+| `artifacts/differents.py` | `wikidata_differents`, over `lux build-differents` |
+
+An artifact does not need a configured source. A generator reads public
+services (SPARQL endpoints, downloads) or files, never a source's
+datacache, so an installation without Wikidata as a source still gets
+`type_overrides` for languages. The exception is an artifact that is by
+nature derived from a source's data (`wikidata_differents` is the
+`differentFrom` pairs in the wikidata datacache); its generator says which
+source it needs (`needs_sources`), `lux config check` warns when the record
+exists without that source, and `lux artifact` refuses to run it.
+
+The base class:
 
 ```python
 class ArtifactGenerator:
     required_keys = ()
     optional_keys = ()
+    needs_sources = ()
 
     def __init__(self, config, cfgs, progress=null_progress): ...
 
@@ -98,48 +124,55 @@ class ArtifactGenerator:
         {relative path: row count}."""
 ```
 
-Generators live with the source they concern
-(`lux_pipeline/sources/getty/artifacts.py`,
-`lux_pipeline/sources/wikidata/artifacts.py`); the Google Sheet one in
-`lux_pipeline/process/sheets.py`. They log through `lux_pipeline` and never
-print.
+Generators log through `lux_pipeline` and never print.
 
-The driver (`lux_pipeline/storage/artifacts.py`, `ArtifactStore`):
+Making an artifact (`artifacts/manifest.py`, `make`):
 
 1. builds the generator and runs `generate` into
    `<artifacts_dir>/.tmp-<name>-<pid>/`;
 2. checks each listed file exists, and its row count against the manifest's
    (`maxShrink`);
 3. renames each into place (same filesystem, so atomic per file);
-4. writes the manifest entry, `manifest.json` itself written to a temporary
-   file and renamed, under an `fcntl` lock so two runs cannot lose each
-   other's entries;
+4. writes the artifact's manifest record;
 5. removes the temporary directory, on failure too. A failed run leaves the
    previous files and entry as they were.
 
-`ArtifactStore.publish(name, files)` (steps 2 to 5) is public, so a command
+`publish(cfgs, name, files)` (steps 2 to 5) is public, so a command
 that is already a generator in its own right (`lux build-differents`'s
 merge, `lux sheets`) records its output the same way.
 
 ## The manifest
 
+The manifest is an `FsCache` (`storage/cache/filesystem.py`): one JSON
+record per artifact, keyed by its name, in `<artifacts_dir>/manifest/`.
+`FsCache` already gives what a hand-written `manifest.json` would need:
+each record written to a temporary file and renamed (`os.replace`), so two
+artifacts made at once cannot lose each other's entries and no lock is
+needed; `json_format: "normalized"`, so the records diff well; and a
+`json_schema` for the entry, which `FsCache.write` checks before
+writing (it refuses a record with errors). Reading every entry is iterating the cache.
+
+`<artifacts_dir>/manifest/getty_replacement_uris.json`:
+
 ```json
 {
-  "getty_replacement_uris": {
-    "generator": "lux_pipeline.sources.getty.artifacts.ReplacementUris",
-    "generated_at": "2026-11-18T14:02:11+00:00",
-    "seconds": 4.2,
-    "files": [
-      {"path": "getty_replacement_uris.json", "size": 8226003,
-       "md5": "…", "rows": 40606}
-    ],
-    "code": {"commit": "12cb4b5…", "dirty": false, "version": "0.1.0"},
-    "config": {"commit": "d4e202d…", "dirty": false,
-               "path": "/…/configs/subs/artifacts_cache/getty_replacement_uris.json",
-               "record_sha256": "…"}
-  }
+  "generator": "lux_pipeline.artifacts.getty.ReplacementUris",
+  "generated_at": "2026-11-18T14:02:11+00:00",
+  "seconds": 4.2,
+  "files": [
+    {"path": "getty_replacement_uris.json", "size": 8226003,
+     "md5": "…", "rows": 40606}
+  ],
+  "code": {"commit": "12cb4b5…", "dirty": false, "version": "0.1.0"},
+  "config": {"commit": "d4e202d…", "dirty": false,
+             "path": "/…/configs/subs/artifacts_cache/getty_replacement_uris.json",
+             "record_sha256": "…"}
 }
 ```
+
+`generated_at` is in the record rather than taken from the file's mtime
+(which `FsCache` uses for record times), so copying or restoring the
+directory does not make an artifact look new.
 
 * `code.commit` / `dirty`: `git rev-parse HEAD` and `git status --porcelain`
   in the checkout `lux_pipeline` was imported from; `null` when it is not a
@@ -231,21 +264,30 @@ One PR each, in this order. Each adds its record to pipeline-configs (and the
 `config_cache` copies) in a companion PR.
 
 1. **Framework and `getty_replacement_uris`.** `artifacts_dir`, the record
-   type, catalogue and checks, `ArtifactStore`, `artifact_path`,
+   type, catalogue and checks, `artifacts/` (base class, manifest, `make`,
+   `publish`), `artifact_path`,
    `lux artifact`, the testinstall check, and the Getty generator: the SPARQL
    query from `load_redirects`' docstring (keys `endpoint`, `query`), the
    SPARQL JSON result written as it is read today. `maxAgeDays: 90`.
-2. **`type_overrides`.** Generator in `sources/wikidata/artifacts.py`:
-   * Wikidata SPARQL (`endpoint`, default `https://query.wikidata.org/sparql`)
-     for items with any of `codeProperties` (default `P218`, `P219`, `P220`,
-     the ISO 639 codes), with their `P1014` (AAT), `P244` (LC) and `P4801`
-     (LC vocabularies);
+2. **`type_overrides`.** `artifacts/languages.py`, `LanguageTypes`, from two
+   SPARQL endpoints and no source:
+   * Wikidata (`wikidataEndpoint`, default
+     `https://query.wikidata.org/sparql`): items with any of
+     `codeProperties` (default `P218`, `P219`, `P220`, the ISO 639 codes;
+     8,330 items in 2026-11), with their `P1014` (AAT), `P244` (LC) and
+     `P4801` (LC vocabularies);
    * LC ids kept only when they are subject headings (`sh…`), LC vocabulary
      ids only under `languages/`;
-   * AAT ids kept only when the AAT record in the aat datacache maps as a
-     Language (`AatMapper.guess_type`), which drops the culture concepts and
-     the malformed `aat/6000320089674`; an AAT id not in the datacache is
-     dropped with a count in the log. Getty's SPARQL endpoint is not needed;
+   * Getty (`gettyEndpoint`, default `https://vocab.getty.edu/sparql.json`):
+     every concept under `aatRoot` (default `300389739`, "languages and
+     writing systems": 2,327 concepts, the "by specific type" hierarchy and
+     the alphabetical list `300411913` that `AatMapper.guess_type` tests).
+     An AAT id from Wikidata is kept only when it is in that set. Tried
+     against today's file, this drops 74 of its 75 AAT ids outside the
+     languages range (all but Ga'anda, a language in the alphabetical list),
+     the malformed `aat/6000320089674`, 12 ids Getty has replaced and 3
+     non-language concepts. A replaced id whose replacement is in the set
+     could be kept as the replacement; decided when writing it;
    * every kept URI to `"Language"`, the file's shape today.
 
    `maxAgeDays: 180`. The applying code is unchanged here (see "Not in
@@ -259,8 +301,9 @@ One PR each, in this order. Each adds its record to pipeline-configs (and the
    (a local xlsx or CSV directory instead of the sheet the record names)
    relates to the manifest is decided in this PR.
 4. **`wikidata_differents`.** `lux build-differents` writes
-   `differentFrom/wikidata.csv` through `ArtifactStore.publish` when its
-   merge finishes; the generator runs the command's manager. The 137 MB
+   `differentFrom/wikidata.csv` through `artifacts.manifest.publish` when its
+   merge finishes; the generator (`needs_sources = ("wikidata",)`) runs the
+   command's manager. The 137 MB
    `differentFrom/wikidata_differents.csv` in today's `data_dir` is the
    older output under another name.
 
@@ -275,14 +318,14 @@ without a generator.
 | `parenthetical_places.json` (9 KB) | label to TGN URI, curated | codebase, beside `sources/lc/mapper.py` |
 | `stupid_table.json` (22 KB) | YUL node to replacement URI and class, curated | codebase, beside `sources/yale/library/mapper.py` |
 | `lib_okay_parts.json` (57 KB) | YUL node to count | unknown origin: Rob |
-| `periods_by_name.json` (700 KB) | period label to YUL node | generator from the ils datacache, if that is where it came from: Rob |
-| `ils-exhs.csv`, `ils-objs.csv` | ILS id to YCBA activity URIs | generator from the ycba / ils datacaches, if derivable: Rob |
+| `periods_by_name.json` (700 KB) | period label to YUL node | generator from the ils datacache (`needs_sources`), if that is where it came from: Rob |
+| `ils-exhs.csv`, `ils-objs.csv` | ILS id to YCBA activity URIs | generator from the ycba / ils datacaches (`needs_sources`), if derivable: Rob |
 | `yul-wiki-recon.csv` (1.4 MB) | YUL node to Wikidata entity | a reconciliation run's output: Rob |
-| `unidentified_people_ulan.csv` (1.3 MB) | ULAN ids of unidentified people | generator from the ulan datacache (by label or hierarchy) |
+| `unidentified_people_ulan.csv` (1.3 MB) | ULAN ids of unidentified people | generator over Getty's SPARQL endpoint (by label or hierarchy) |
 | `lib_enhance_places.json` (14 MB), `sameAs/matches-llm.csv` (15 MB) | LLM runs | generator wrapping the run (`experiments/gemini-places.py`), `maxAgeDays: null`; or kept as data with a recorded origin: Rob |
 | `macs.nt` (DNB), `lcsh/external_links.nt` | downloaded by hand | generator that downloads the URL (or the source's own `lux download`) |
 | `differentFrom/aat_different_from.csv`, `tgn_…`, `ulan_…`, `quick_differents.csv` | different-from pairs | Getty ones: generator, if they come from Getty data; `quick_differents.csv` (3 pairs): codebase or the sheet |
-| `<source>_cycle_breaks.json` (`cycleBreakPath` on bnf, lcsh, wikidata) | | not in the download: the mappers skip them silently. Generator from cycle detection over the datacache, or drop the key |
+| `<source>_cycle_breaks.json` (`cycleBreakPath` on bnf, lcsh, wikidata) | | not in the download: the mappers skip them silently. Generator from cycle detection over the source's datacache (`needs_sources`), or drop the key |
 | `all_aats.csv`, `all_ulans.csv`, `works-wiki-recon-old.csv`, `place-cycle-fixes.jsonl`, `results.jsonl.copy`, `populate-timestamps.txt` | | read by no pipeline code (`place-cycle-fixes.jsonl` by the untracked `merge_place_equivs.py`, `populate-timestamps.txt` by the root `populate-timestamps.py`): delete, or archive outside `data_dir` |
 
 Codebase files go in a `data/` directory beside their reader, added to
