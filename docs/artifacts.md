@@ -36,8 +36,8 @@ reads it (see "The other files" below).
 * `artifacts_dir`: a new optional base key, falling back to
   `<data_dir>/artifacts` as `backup_dir` falls back to `<data_dir>/backups`.
   Relative paths resolve against `base_dir` like the other directories.
-* `<artifacts_dir>/manifest/<name>.json`: one record per artifact made at
-  least once (see "The manifest").
+* `<artifacts_dir>/manifest.json`: one entry per artifact made at least
+  once, kept by `ArtifactCache` (see "The cache and the manifest").
 * `<artifacts_dir>/<file>` for each file an artifact lists; subdirectories
   allowed (`sameAs/google.csv`).
 
@@ -93,7 +93,7 @@ beside `lux_pipeline/sources/` (a namespace package like the rest: no
 | Module | Holds |
 |---|---|
 | `artifacts/base.py` | `ArtifactGenerator`, the base class |
-| `artifacts/manifest.py` | the manifest (an `FsCache`), staleness, `publish` |
+| `artifacts/cache.py` | `ArtifactCache`: the files, `manifest.json`, staleness |
 | `artifacts/getty.py` | `ReplacementUris` (`getty_replacement_uris`) |
 | `artifacts/languages.py` | `LanguageTypes` (`type_overrides`) |
 | `artifacts/sheets.py` | the Google Sheet generator, over `process/sheets.py`'s `SheetImport` |
@@ -126,54 +126,71 @@ class ArtifactGenerator:
 
 Generators log through `lux_pipeline` and never print.
 
-Making an artifact (`artifacts/manifest.py`, `make`):
+## The cache and the manifest
 
-1. builds the generator and runs `generate` into
-   `<artifacts_dir>/.tmp-<name>-<pid>/`;
-2. checks each listed file exists, and its row count against the manifest's
-   (`maxShrink`);
-3. renames each into place (same filesystem, so atomic per file);
-4. writes the artifact's manifest record;
-5. removes the temporary directory, on failure too. A failed run leaves the
+`ArtifactCache` (`artifacts/cache.py`) is `artifacts_dir`, and the only
+thing that writes in it. Every write updates `manifest.json` as part of the
+write, so the manifest cannot drift from the files: there is no separate
+"now record it" step for a generator or a command to forget. Readers go
+through it too.
+
+| Method | Does |
+|---|---|
+| `path(name, file=None)` | the artifact's file (`file` for one with several); `None` when missing |
+| `entry(name)` / `entries()` | manifest entries |
+| `stale(name)` | `None`, or why it is stale (see "Stale") |
+| `set(name, files, config, generator=None, seconds=None, force=False)` | publish `files` (`{relative path: (temporary path, rows)}`) as artifact `name` |
+| `make(name, force=False)` | build the record's generator, run it into a temporary directory, `set` the result |
+| `check(name=None)` | recompute sizes and md5s against the manifest |
+
+It is not an `FsCache`: an artifact is a file of any format (CSV, N-Triples,
+JSON), not a JSON record, and has several files under one name. It borrows
+`FsCache`'s ways: temporary file then `os.replace`, and `manifest.json`
+written normalized (2-space, sorted, `/` unescaped) so it diffs well.
+
+`set`:
+
+1. checks each listed file exists, and its row count against the manifest's
+   (`maxShrink`; `force` passes);
+2. renames each into place (temporary files are made in
+   `<artifacts_dir>/.tmp-<name>-<pid>/`, on the same filesystem, so atomic
+   per file);
+3. updates the artifact's entry in `manifest.json`: under an `fcntl` lock on
+   `manifest.json.lock`, read the file, replace the entry, write a temporary
+   file and rename it, so two artifacts made at once cannot lose each
+   other's entries;
+4. removes the temporary directory, on failure too. A failed run leaves the
    previous files and entry as they were.
 
-`publish(cfgs, name, files)` (steps 2 to 5) is public, so a command
-that is already a generator in its own right (`lux build-differents`'s
-merge, `lux sheets`) records its output the same way.
+`make` is what `lux artifact` calls. A command that is a generator in its
+own right (`lux build-differents`'s merge, `lux sheets`) calls `set` with
+what it wrote, and gets the same checks and manifest entry.
 
-## The manifest
+`Config.artifacts_cache` is built on first use, not at construction, like
+the other lazily opened stores.
 
-The manifest is an `FsCache` (`storage/cache/filesystem.py`): one JSON
-record per artifact, keyed by its name, in `<artifacts_dir>/manifest/`.
-`FsCache` already gives what a hand-written `manifest.json` would need:
-each record written to a temporary file and renamed (`os.replace`), so two
-artifacts made at once cannot lose each other's entries and no lock is
-needed; `json_format: "normalized"`, so the records diff well; and a
-`json_schema` for the entry, which `FsCache.write` checks before
-writing (it refuses a record with errors). Reading every entry is iterating the cache.
-
-`<artifacts_dir>/manifest/getty_replacement_uris.json`:
+`manifest.json`:
 
 ```json
 {
-  "generator": "lux_pipeline.artifacts.getty.ReplacementUris",
-  "generated_at": "2026-11-18T14:02:11+00:00",
-  "seconds": 4.2,
-  "files": [
-    {"path": "getty_replacement_uris.json", "size": 8226003,
-     "md5": "…", "rows": 40606}
-  ],
-  "code": {"commit": "12cb4b5…", "dirty": false, "version": "0.1.0"},
-  "config": {"commit": "d4e202d…", "dirty": false,
-             "path": "/…/configs/subs/artifacts_cache/getty_replacement_uris.json",
-             "record_sha256": "…"}
+  "getty_replacement_uris": {
+    "generator": "lux_pipeline.artifacts.getty.ReplacementUris",
+    "generated_at": "2026-11-18T14:02:11+00:00",
+    "seconds": 4.2,
+    "files": [
+      {"path": "getty_replacement_uris.json", "size": 8226003,
+       "md5": "…", "rows": 40606}
+    ],
+    "code": {"commit": "12cb4b5…", "dirty": false, "version": "0.1.0"},
+    "config": {"commit": "d4e202d…", "dirty": false,
+               "path": "/…/configs/subs/artifacts_cache/getty_replacement_uris.json",
+               "record_sha256": "…"}
+  }
 }
 ```
 
-`generated_at` is in the record rather than taken from the file's mtime
-(which `FsCache` uses for record times), so copying or restoring the
-directory does not make an artifact look new.
-
+* `generated_at` is in the entry, not taken from the files' mtimes, so
+  copying or restoring the directory does not make an artifact look new.
 * `code.commit` / `dirty`: `git rev-parse HEAD` and `git status --porcelain`
   in the checkout `lux_pipeline` was imported from; `null` when it is not a
   checkout. `version` is the installed `lux-pipeline` version.
@@ -205,8 +222,7 @@ code that made it. A checksum that no longer matches is reported by
 
 ## Reading an artifact
 
-`Config.artifact_path(name, file=None)` returns the path of the artifact's
-file (`file` for an artifact with several), with:
+`Config.artifact_path(name, file=None)` is `artifacts_cache.path`, with:
 
 * a warning, once per process, when the artifact is stale (several mappers in
   each of many workers read the same files);
@@ -264,8 +280,8 @@ One PR each, in this order. Each adds its record to pipeline-configs (and the
 `config_cache` copies) in a companion PR.
 
 1. **Framework and `getty_replacement_uris`.** `artifacts_dir`, the record
-   type, catalogue and checks, `artifacts/` (base class, manifest, `make`,
-   `publish`), `artifact_path`,
+   type, catalogue and checks, `artifacts/base.py`, `ArtifactCache`,
+   `artifact_path`,
    `lux artifact`, the testinstall check, and the Getty generator: the SPARQL
    query from `load_redirects`' docstring (keys `endpoint`, `query`), the
    SPARQL JSON result written as it is read today. `maxAgeDays: 90`.
@@ -301,7 +317,7 @@ One PR each, in this order. Each adds its record to pipeline-configs (and the
    (a local xlsx or CSV directory instead of the sheet the record names)
    relates to the manifest is decided in this PR.
 4. **`wikidata_differents`.** `lux build-differents` writes
-   `differentFrom/wikidata.csv` through `artifacts.manifest.publish` when its
+   `differentFrom/wikidata.csv` through `ArtifactCache.set` when its
    merge finishes; the generator (`needs_sources = ("wikidata",)`) runs the
    command's manager. The 137 MB
    `differentFrom/wikidata_differents.csv` in today's `data_dir` is the
