@@ -338,7 +338,7 @@ def test_report_lines_tolerate_missing_stats():
 @pytest.fixture
 def real_merge(monkeypatch):
     """`lux metatypes` with the real `merge_metatypes`, on a reference
-    manager built without its constructor (which reads replacements.json)."""
+    manager built without its constructor (which reads getty_replacement_uris.json)."""
     def make(cfgs, idmap):
         cfgs.log.append("ReferenceManager")
         rm = ReferenceManager.__new__(ReferenceManager)

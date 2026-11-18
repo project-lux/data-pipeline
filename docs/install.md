@@ -114,12 +114,13 @@ processes can be started.
 `<data_dir>` also holds data files no command makes (lookup tables,
 corrections, LLM-derived place data). The pipeline runs without them, with
 less clean-up; copy them from a backup of an existing installation. One can
-be fetched: the Getty redirects that reconcile applies to references,
+be fetched: the Getty vocabularies' replaced ids (AAT, ULAN and TGN), which
+reconcile applies to references and the Getty fetcher follows,
 
 ```
 curl -sL -G https://vocab.getty.edu/sparql.json --data-urlencode \
   'query=SELECT ?from ?to WHERE { ?from <http://purl.org/dc/terms/isReplacedBy> ?to }' \
-  > <data_dir>/replacements.json
+  > <data_dir>/getty_replacement_uris.json
 ```
 
 Its last step compares the server's settings with what `lux pg-tune`

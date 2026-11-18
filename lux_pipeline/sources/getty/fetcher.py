@@ -1,5 +1,6 @@
 import logging
 from lux_pipeline.process.base.fetcher import Fetcher
+from lux_pipeline.process.reference_manager import load_redirects
 import requests
 import ujson as json
 import os
@@ -13,22 +14,11 @@ logger = logging.getLogger("lux_pipeline")
 class GettyFetcher(Fetcher):
     def __init__(self, config):
         Fetcher.__init__(self, config)
-        fn = os.path.join(config["all_configs"].data_dir, "getty_replacements.json")
-        if os.path.exists(fn):
-            with open(fn) as fh:
-                data = fh.read()
-        else:
-            pass
-        try:
-            js = json.loads(data)
-        except:
-            js = {"results": {"bindings": []}}
+        # "aat/<old>" -> "aat/<new>", from the reference manager's file (it
+        # warns when the file is missing; every Getty source would repeat it)
         self.redirects = {}
-        res = js["results"]["bindings"]
-        for r in res:
-            f = r["from"]["value"].replace("http://vocab.getty.edu/", "")
-            t = r["to"]["value"].replace("http://vocab.getty.edu/", "")
-            self.redirects[f] = t
+        for f, t in load_redirects(config["all_configs"].data_dir, warn=False).items():
+            self.redirects[f.replace("http://vocab.getty.edu/", "")] = t.replace("http://vocab.getty.edu/", "")
 
         fn = os.path.join(config["all_configs"].data_dir, "unidentified_people_ulan.csv")
         self.bad_ulan_people = {}
