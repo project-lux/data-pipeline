@@ -24,10 +24,13 @@ Configuration::
 
     "loaderClass": "sources.wikimedia.loader.WmLoader",
     "input_files": {"records": [
-        {"path": "commonswiki", "type": "dir/mediawiki.bz2/raw", "slice": "files"}
+        {"path": "commonswiki", "type": "dir/mediawiki.bz2/raw", "slice": "files",
+         "include": ["*-pages-articles-multistream[0-9]*.xml-p*.bz2"]}
     ]}
 
-for a directory of dump parts, one part per worker at a time; or
+for a directory of dump parts, one part per worker at a time (``include``
+leaves out the checksum and index files a dump directory also holds, which
+are not XML); or
 ``"type": "mediawiki.bz2/raw"`` for a single file, where every worker
 reads the whole file and keeps its share of the pages. ``lux load
 --source wikimedia --file <part>.xml.bz2`` recognises a MediaWiki export

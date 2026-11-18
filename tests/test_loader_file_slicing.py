@@ -222,3 +222,67 @@ def test_yul_legacy_load_entry_point_loads_its_slice(tmp_path):
     ldr = yul(tmp_path, dumpFilePath=str(tmp_path / "yul"))
     assert ldr.load(1, 2) == 3
     assert sorted(ldr.out_cache) == expected["part-01.jsonl.gz"]
+
+
+# --- include: the files a directory step reads -----------------------------------
+
+def dump_with_strays(dirpath):
+    """A dump directory as downloaded: the parts, plus checksums and an
+    index that are not records."""
+    expected = write_dump(dirpath, files=4)
+    (dirpath / "dump-md5sums.txt").write_text("0123  part-00.jsonl.gz\n")
+    with gzip.open(dirpath / "part-index.txt.gz", "wt") as fh:
+        fh.write("12:34:not json\n")
+    return expected
+
+
+def test_include_reads_only_the_matching_files(tmp_path):
+    expected = dump_with_strays(tmp_path / "dump")
+    entry = {"path": "dump", "type": "dir/lines.gz/json", "include": ["part-[0-9]*.jsonl.gz"]}
+    [ldr] = run_slices(Opening, tmp_path, [entry], 1)
+    assert ldr.opened == sorted(expected)
+    assert sorted(ldr.out_cache) == sorted(i for ids in expected.values() for i in ids)
+    assert ldr.not_included == 2
+
+
+def test_without_include_a_stray_file_fails_the_load(tmp_path):
+    dump_with_strays(tmp_path / "dump")
+    entry = {"path": "dump", "type": "dir/lines.gz/json"}
+    ldr = make(Loader, tmp_path, [entry])
+    ldr.prepare(0, 1)
+    with pytest.raises(RuntimeError, match="failed to load"):
+        ldr.process()
+
+
+def test_files_left_out_are_not_counted_for_slicing(tmp_path):
+    expected = dump_with_strays(tmp_path / "dump")
+    entry = {"path": "dump", "type": "dir/lines.gz/json", "slice": "files", "include": "part-0*"}
+    ldrs = run_slices(Opening, tmp_path, [entry], 2)
+    names = sorted(expected)
+    assert [ldr.opened for ldr in ldrs] == [names[0::2], names[1::2]]
+
+
+def test_include_applies_to_files_in_nested_directories(tmp_path):
+    expected = dump_with_strays(tmp_path / "dump" / "a")
+    more = write_dump(tmp_path / "dump" / "b", files=2, prefix="g")
+    (tmp_path / "dump" / "b" / "README").write_text("not records")
+    entry = {"path": "dump", "type": "dirs/lines.gz/json", "include": ["*.jsonl.gz"]}
+    [ldr] = run_slices(Opening, tmp_path, [entry], 1)
+    assert sorted(ldr.out_cache) == sorted(i for e in (expected, more) for ids in e.values() for i in ids)
+    assert ldr.not_included == 3
+
+
+def test_a_directory_given_with_file_keeps_the_include(tmp_path):
+    expected = dump_with_strays(tmp_path / "other")
+    entry = {"path": "dump", "type": "dir/lines.gz/json", "include": ["part-[0-9]*"]}
+    ldr = make(Opening, tmp_path, [entry])
+    ldr.prepare(0, 1, path=str(tmp_path / "other"))
+    ldr.process()
+    assert ldr.opened == sorted(expected)
+
+
+@pytest.mark.parametrize("bad", [5, ["ok", 3], [""], {"glob": "x"}])
+def test_include_must_be_globs(tmp_path, bad):
+    entry = {"path": "dump", "type": "dir/lines.gz/json", "include": bad}
+    with pytest.raises(ValueError, match="include"):
+        make(Loader, tmp_path, [entry]).prepare(0, 1)

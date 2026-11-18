@@ -231,7 +231,7 @@ SOURCE = {
     "rsync": _k("any", "What lux download copies with rsync: a source (rsync://host/module/path/, "
                        "host::module/path, user@host:path) or {source, path, include, exclude, "
                        "options, delete, type}, or a list of them; see process/base/rsync.py."),
-    "input_files": _k("dict", "Dump files by load type: [{url, path, type, slice, identifier}] "
+    "input_files": _k("dict", "Dump files by load type: [{url, path, type, slice, identifier, include}] "
                               "(the loader DSL; identifier: \"name\", \"record\" or {from, "
                               "fields, form}, see process/base/loader.py)."),
     "dumps_dir": _k("path", "The source's directory under dumps_dir (lux guess-dump-type)."),

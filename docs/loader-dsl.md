@@ -108,6 +108,7 @@ files and overwriting is on, the later file wins (DNB depends on this).
 | `type` | How to read it: a spec in the [type language](#the-type-language) below. |
 | `slice` | `records` (default) or `files`: how the work is shared between workers. See [Slicing](#slicing). |
 | `identifier` | Where each record's identifier comes from. See [Identifiers](#identifiers). |
+| `include` | For a `dir` or `dirs` type: a glob, or a list of them, that a file's name must match to be read (`fnmatch`, case-sensitive; the same patterns as an `rsync` `include`). Other files are left out and not counted for slicing. A downloaded dump directory often holds checksums, indexes or READMEs beside the parts: without `include` they are read as records and the load fails. |
 
 An entry needs a `url` or a `path`; one with neither is skipped with a warning.
 
@@ -519,4 +520,5 @@ DSL is not used. Do not write new loaders that way.
 | `... is not JSON: ...; it starts b'...'` | The type is wrong for the file: check it with `lux guess-dump-type --path <file> --explain` |
 | `Cannot guess the type of ...; set 'type' in input_files` | An entry without `type` whose content the guesser cannot place |
 | A worker runs out of memory | `array`, `dict`, `graph` or `xmls` parse the whole file; if the JSON array is written one record per line, use `arraylines` |
+| `Failed to load <directory>` with `Invalid data stream`, `Not a gzipped file` or an XML/JSON syntax error | A file in the directory that is not a record file (checksums, an index): give the entry an `include` |
 | Loading takes N times as long as reading the files once | A dump of many compressed files sliced by record: use `"slice": "files"` |
