@@ -381,12 +381,19 @@ Not artifacts at all: `idmap_update_token.txt`, `pending_deletes.jsonl`,
 
 ## Not in these PRs
 
-* Where `type_overrides` is applied. `Mapper.post_reconcile` changes a
-  record's type in memory during reconcile, so its assertions are written
-  under `##quaLanguage`, but the recordcache keeps `Type` and merge looks the
-  record up as `##quaType` (`process/merge_batch.prefetched`). Read from the
-  code, not yet seen in a build's logs (`Couldn't find YUID for internal
-  record …##quaType`). Fixing it, by applying the override at mapping time, is
-  a change to reconcile behaviour and its own PR.
+* Where `type_overrides` is applied: done separately, after item 2.
+  `Mapper.post_reconcile` used to change the type of the reconciled copy of
+  a record, which nothing stores: the assertions it fed have the same key
+  either way (Language's parent class is Type, so `make_qua` writes
+  `##quaType` for both) and merge reads the recordcache, so the overrides
+  changed nothing. (An earlier version of this note said the assertions
+  were written under `##quaLanguage`; `parent_record_types` rules that
+  out.) `Mapper.apply_type_overrides` now applies them in `post_mapping`,
+  before the recordcache write, by the record's own URI or an equivalent,
+  and `post_reconcile` does nothing. That also types LCSH's language
+  headings (madsrdf:Topic, mapped as Type) as languages, by their own id
+  or the Wikidata item LC links them to; AAT and Wikidata records were
+  already typed by their own mappers, and merge prefers Language over Type
+  when a cluster mixes them.
 * The web UI artifacts page.
 * `lux build` running `lux artifact --stale` as a first step.

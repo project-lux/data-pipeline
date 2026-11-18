@@ -19,17 +19,21 @@ model.Group._all_properties["members_exemplified_by"] = mebInfo
 
 
 # The type_overrides artifact (lux artifact --type type_overrides;
-# lux_pipeline/artifacts/languages.py): {uri: class} for post_reconcile, the
-# identifiers of languages. Read from <data_dir>/type_overrides.json until
-# the artifact is made.
+# lux_pipeline/artifacts/languages.py): {uri: class}, the identifiers of
+# languages, applied by Mapper.apply_type_overrides as a record is mapped.
+# Read from <data_dir>/type_overrides.json until the artifact is made.
 TYPE_OVERRIDES_ARTIFACT = "type_overrides"
 TYPE_OVERRIDES_FILE = "type_overrides.json"
+# {path: (mtime, overrides)}: every mapper in a process shares one copy
+_type_overrides = {}
 
 
 def read_type_overrides(configs):
     """``{uri: class}`` from the ``type_overrides`` artifact; ``{}`` when
     there is none. A configuration without `artifact_path` (a test's stub)
-    reads ``<data_dir>/type_overrides.json``, as before artifacts."""
+    reads ``<data_dir>/type_overrides.json``, as before artifacts. Read
+    once per process (again when the file changes) and shared by every
+    mapper, which only reads it."""
     finder = getattr(configs, "artifact_path", None)
     if callable(finder):
         fn = finder(TYPE_OVERRIDES_ARTIFACT, TYPE_OVERRIDES_FILE)
@@ -37,8 +41,14 @@ def read_type_overrides(configs):
         fn = os.path.join(configs.data_dir, TYPE_OVERRIDES_FILE)
     if not isinstance(fn, str) or not os.path.exists(fn):
         return {}
+    mtime = os.path.getmtime(fn)
+    hit = _type_overrides.get(fn)
+    if hit is not None and hit[0] == mtime:
+        return hit[1]
     with open(fn) as fh:
-        return json.load(fh)
+        overrides = json.load(fh)
+    _type_overrides[fn] = (mtime, overrides)
+    return overrides
 
 
 class Mapper(object):
@@ -467,18 +477,42 @@ class Mapper(object):
         record = self.trash_different_from(record)
         if record is None and self.debug:
             logger.error(f"trash_different killed record")
+        record = self.apply_type_overrides(record)
         record = self.process_xpath_fixes(record)
         if record is None:
             logger.error(f"xpath_fixes trashed the record :(")
         return record
 
+    def apply_type_overrides(self, record):
+        """Give a ``Type`` record the class `type_overrides` has for its own
+        URI or one of its equivalents (a language, today), and its
+        equivalents typed ``Type`` the same class. Part of `post_mapping`,
+        so the record is stored, reconciled and merged as that class: an
+        LCSH heading such as "French language" (a madsrdf:Topic) by its own
+        id or the Wikidata item LC links it to, an internal record by an
+        equivalent. After `fix_links` (the equivalents' URIs canonical) and
+        `trash_different_from`, before the xpath fixes, which still win."""
+        if not record or not self.type_overrides:
+            return record
+        data = record.get("data")
+        if not isinstance(data, dict) or data.get("type") != "Type":
+            return record
+        equivs = data.get("equivalent", [])
+        for uri in [data.get("id")] + [eq.get("id") for eq in equivs]:
+            cls = self.type_overrides.get(uri) if uri else None
+            if cls and cls != "Type":
+                data["type"] = cls
+                for eq in equivs:
+                    if eq.get("type") == "Type":
+                        eq["type"] = cls
+                break
+        return record
+
     def post_reconcile(self, record):
-        if record["data"]["type"] == "Type":
-            fequivs = [x["id"] for x in record["data"].get("equivalent", [])]
-            for fe in fequivs:
-                if fe in self.type_overrides:
-                    record["data"]["type"] = self.type_overrides[fe]
-                    break
+        """A hook after a record is reconciled. Nothing stores what it
+        changes, so it changes nothing: the type overrides it used to apply
+        are applied as the record is mapped (`apply_type_overrides`)."""
+        return None
 
     def transform(self, record, rectype, reference=False):
         # No op

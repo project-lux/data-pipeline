@@ -2,9 +2,10 @@
 
 `LanguageTypes` makes ``{uri: "Language"}`` for every identifier of a
 language that a record may give as an equivalent: the Wikidata items with an
-ISO 639 code, and their AAT, LCSH and LC vocabulary identifiers. A mapper
-reads it (`Mapper.post_reconcile`) to give a record of type ``Type`` whose
-equivalent is one of them the type ``Language``.
+ISO 639 code, and their AAT, LCSH and LC vocabulary identifiers. Every
+mapper reads it and, as it maps a record (`Mapper.apply_type_overrides`, in
+`post_mapping`), gives a ``Type`` record that is one of them or has one as
+an equivalent the type ``Language``.
 
 It asks two SPARQL endpoints and needs no source, so an installation without
 Wikidata as a source still has it:
