@@ -53,6 +53,13 @@ SOURCES = {
     "ulan": ("external", "http://vocab.getty.edu/ulan/",
              "https://vocab.getty.edu/ulan/{identifier}.jsonld",
              {"merge_order": 11, "mapperClass": "lux_pipeline.sources.getty.mapper.UlanMapper"}),
+    # LcshMapper uses lcnaf's mapper: configure both
+    "lcsh": ("external", "http://id.loc.gov/authorities/subjects/",
+             "https://id.loc.gov/authorities/subjects/{identifier}.json",
+             {"merge_order": 20, "mapperClass": "lux_pipeline.sources.lc.mapper.LcshMapper"}),
+    "lcnaf": ("external", "http://id.loc.gov/authorities/names/",
+              "https://id.loc.gov/authorities/names/{identifier}.json",
+              {"merge_order": 21, "mapperClass": "lux_pipeline.sources.lc.mapper.LcnafMapper"}),
 }
 DEFAULT_SOURCES = ("ycba", "aat")
 

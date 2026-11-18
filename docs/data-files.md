@@ -23,7 +23,7 @@ differently with no warning.
 
 | File (in `data_dir`) | Read at | Origin |
 |---|---|---|
-| `type_overrides.json` (now `artifacts_dir/`) | `process/base/mapper.py` `read_type_overrides` (every mapper) | **Generated** by `lux artifact --type type_overrides` (`artifacts/languages.py`, from Wikidata's and Getty's SPARQL endpoints); read from `data_dir` until the artifact is made. Before 2026-11 pre-built outside, a 2022 snapshot with no writer |
+| `type_overrides.json` (now `artifacts_dir/`) | `process/base/mapper.py` `read_type_overrides` (every mapper; applied in `post_mapping` by `apply_type_overrides`) | **Generated** by `lux artifact --type type_overrides` (`artifacts/languages.py`, from Wikidata's and Getty's SPARQL endpoints); read from `data_dir` until the artifact is made. Before 2026-11 pre-built outside, a 2022 snapshot with no writer |
 | `xpath_fixes.json` | `process/base/mapper.py:144` (every mapper) | **Generated** by `lux sheets` (`process/sheets.py:168`) from the "Fixes" tab of the Google Sheet. The sheet itself is curated by hand. |
 | `<source>_cycle_breaks.json` for aat, bne, bnf, dnb, geonames, lcnaf, lcsh, tgn, wikidata, wof (the source's `cycleBreakPath`, which `path_types` resolves under `data_dir`) | `process/base/mapper.py:121` | **Pre-built outside**: no writer |
 | `metatypes.json` | `sources/lux/final/mapper.py:32` (merge); checked by `process/tasks/merge_task.py:119` | **Generated** by `lux metatypes` and reconcile's final step (`process/reference_manager.py:143`) |

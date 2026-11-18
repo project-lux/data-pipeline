@@ -184,21 +184,131 @@ def test_the_mapper_without_artifacts(tmp_path):
     assert read_type_overrides(cfgs) == {}            # no record, no file
 
 
-def test_post_reconcile_uses_what_the_mapper_read(tmp_path, monkeypatch):
-    """The applying code is unchanged: a Type whose equivalent is a
-    language becomes a Language."""
+# --- applying them, as a record is mapped -------------------------------------------------------
+
+
+def bare_mapper(overrides):
     from lux_pipeline.process.base.mapper import Mapper
-    cfgs = install(tmp_path)
+    m = Mapper.__new__(Mapper)
+    m.type_overrides = overrides
+    return m
+
+
+def test_apply_type_overrides():
+    m = bare_mapper({AAT + "300388306": "Language", WD + "Q150": "Language"})
+    by_equivalent = {"data": {"id": "https://example.org/1", "type": "Type", "equivalent": [
+        {"id": "http://id.worldcat.org/fast/1", "type": "Type"}, {"id": AAT + "300388306", "type": "Type"}]}}
+    assert m.apply_type_overrides(by_equivalent)["data"]["type"] == "Language"
+    # the equivalents say the same class
+    assert [e["type"] for e in by_equivalent["data"]["equivalent"]] == ["Language", "Language"]
+    by_own_id = {"data": {"id": WD + "Q150", "type": "Type"}}
+    assert m.apply_type_overrides(by_own_id)["data"]["type"] == "Language"
+    culture = {"data": {"id": "https://example.org/2", "type": "Type",
+                        "equivalent": [{"id": AAT + "300016098", "type": "Type"}]}}
+    assert m.apply_type_overrides(culture)["data"]["type"] == "Type"
+    # only a Type is given another class
+    place = {"data": {"id": WD + "Q150", "type": "Place"}}
+    assert m.apply_type_overrides(place)["data"]["type"] == "Place"
+    assert bare_mapper({}).apply_type_overrides(by_own_id) is by_own_id
+    assert m.apply_type_overrides(None) is None
+
+
+def test_post_reconcile_changes_nothing():
+    """It used to apply the overrides to a copy nothing stored."""
+    m = bare_mapper({AAT + "300388306": "Language"})
+    rec = {"data": {"id": "x", "type": "Type", "equivalent": [{"id": AAT + "300388306"}]}}
+    assert m.post_reconcile(rec) is None and rec["data"]["type"] == "Type"
+
+
+LCSH = "http://id.loc.gov/authorities/subjects/"
+
+
+def lcsh_record(ident, label, close=()):
+    """An LCSH heading as the dump has it (compacted madsrdf): a Topic."""
+    return {"identifier": ident, "data": {"@graph": [
+        {"@id": LCSH + ident, "@type": ["madsrdf:Topic", "madsrdf:Authority", "skos:Concept"],
+         "madsrdf:authoritativeLabel": {"@language": "en", "@value": label},
+         "madsrdf:hasCloseExternalAuthority": [{"@id": c} for c in close]}]}}
+
+
+@pytest.fixture
+def built(tmp_path, monkeypatch):
+    """An installation with ycba, aat, lcsh and lcnaf whose type_overrides
+    artifact is made (from the stubbed endpoints, plus Esperanto's LCSH id)
+    before the mappers are built."""
+    root = make_installation(tmp_path, sources=("ycba", "aat", "lcsh", "lcnaf"))
+    (root / "config_cache" / "type_overrides.json").write_text(json.dumps(RECORD))
     endpoints(monkeypatch)
-    cfgs.artifacts_cache.make("type_overrides")
-    mapper = Mapper.__new__(Mapper)
-    mapper.type_overrides = read_type_overrides(cfgs)
-    rec = {"data": {"type": "Type", "equivalent": [{"id": AAT + "300388306"}]}}
-    mapper.post_reconcile(rec)
-    assert rec["data"]["type"] == "Language"
-    culture = {"data": {"type": "Type", "equivalent": [{"id": AAT + "300016098"}]}}
-    mapper.post_reconcile(culture)
-    assert culture["data"]["type"] == "Type"
+    make_configs(root).artifacts_cache.make("type_overrides")
+    cfgs = make_configs(root, instantiate=True)
+    # merged's reconciler, which trash_different_from asks for known
+    # different-from pairs: this installation has none configured
+    cfgs.differents = {}
+    cfgs.results["merged"]["reconciler"] = SimpleNamespace(
+        reconcile=lambda recid, kind: cfgs.differents.get(recid, []))
+    return cfgs
+
+
+def test_an_lcsh_language_heading_is_stored_as_a_language(built):
+    """LCSH language headings are madsrdf:Topic records, which the LC mapper
+    maps as Type; the override, applied as the record is mapped, is what
+    the recordcache keeps (and so what reconcile and merge read)."""
+    src = built.external["lcsh"]
+    mapped = src["mapper"].transform(lcsh_record("sh85051829", "French language",
+                                                 [WD + "Q150"]), None)
+    assert mapped["data"]["type"] == "Type"
+    stored = src["acquirer"].do_post_map(mapped, "Type", True)
+    assert stored["data"]["type"] == "Language"
+    # the identity key is the same either way (Language's parent is Type)
+    assert stored["identifier"] == "sh85051829##quaType"
+    assert src["recordcache"]["sh85051829##quaType"]["data"]["type"] == "Language"
+
+
+def test_by_its_own_id_when_wikidata_is_not_a_source(built):
+    """Without wikidata configured, fix_links drops the Wikidata link LC
+    gives; the heading's own id, which the list has from P244, still
+    matches."""
+    src = built.external["lcsh"]
+    mapped = src["mapper"].transform(lcsh_record("sh85044883", "Esperanto", [WD + "Q143"]), None)
+    stored = src["acquirer"].do_post_map(mapped, "Type", True)
+    assert stored["data"]["type"] == "Language"
+    assert all("wikidata" not in e["id"] for e in stored["data"].get("equivalent", []))
+
+
+def test_an_lcsh_topic_that_is_no_language_stays_a_type(built):
+    src = built.external["lcsh"]
+    mapped = src["mapper"].transform(lcsh_record("sh85074776", "Laser fusion"), None)
+    assert src["acquirer"].do_post_map(mapped, "Type", True)["data"]["type"] == "Type"
+
+
+def test_an_internal_record_with_a_language_equivalent(built):
+    src = built.internal["ycba"]
+    ns = src["namespace"]
+    rec = {"identifier": "concept/1", "data": {
+        "id": ns + "concept/1", "type": "Type", "_label": "French",
+        "equivalent": [{"id": AAT + "300388306", "type": "Type", "_label": "French"}]}}
+    stored = src["acquirer"].do_post_map(rec, "Type", True)
+    assert stored["data"]["type"] == "Language"
+    assert src["recordcache"]["concept/1"]["data"]["type"] == "Language"
+
+
+def test_a_known_different_equivalent_does_not_count(built):
+    """trash_different_from runs first: an equivalent the different-from
+    index says is not the same thing gives no class."""
+    src = built.internal["ycba"]
+    ns = src["namespace"]
+    built.differents[ns + "concept/2"] = [AAT + "300388306"]
+    rec = {"identifier": "concept/2", "data": {
+        "id": ns + "concept/2", "type": "Type", "_label": "Frenchness",
+        "equivalent": [{"id": AAT + "300388306", "type": "Type", "_label": "French"}]}}
+    stored = src["acquirer"].do_post_map(rec, "Type", True)
+    assert stored["data"]["type"] == "Type" and not stored["data"]["equivalent"]
+
+
+def test_the_overrides_are_read_once_per_process(built, monkeypatch):
+    a = built.external["lcsh"]["mapper"].type_overrides
+    b = built.internal["ycba"]["mapper"].type_overrides
+    assert a is b and len(a) == 11
 
 
 def test_the_record_checks_clean(tmp_path):
