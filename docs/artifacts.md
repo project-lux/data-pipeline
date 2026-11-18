@@ -255,7 +255,9 @@ One PR each, in this order. Each adds its record to pipeline-configs (and the
    sheet id moves from `data_dir/google_sheet_id.txt` into the record
    (`sheet`), the file still read when the record has none. Credentials stay
    in `data_dir` (secrets are not configuration). `lux sheets` keeps its
-   options: fetch through the artifact, then load.
+   options: fetch through the artifact, then load. How `lux sheets --file`
+   (a local xlsx or CSV directory instead of the sheet the record names)
+   relates to the manifest is decided in this PR.
 4. **`wikidata_differents`.** `lux build-differents` writes
    `differentFrom/wikidata.csv` through `ArtifactStore.publish` when its
    merge finishes; the generator runs the command's manager. The 137 MB
@@ -302,13 +304,3 @@ Not artifacts at all: `idmap_update_token.txt`, `pending_deletes.jsonl`,
   a change to reconcile behaviour and its own PR.
 * The web UI artifacts page.
 * `lux build` running `lux artifact --stale` as a first step.
-
-## Open questions
-
-1. `lux sheets --file` reads a local xlsx / CSV directory instead of the
-   sheet. Through the artifact, the manifest would then describe a file the
-   record does not name. Record it (`"overrides": {"file": …}` in the
-   entry), or have `--file` write to `data_dir` and not publish?
-2. Default `maxShrink` of 0.5: right for the Getty and sheet artifacts;
-   `type_overrides` would shrink by design the first time (the culture
-   concepts), which `--force` covers once.
