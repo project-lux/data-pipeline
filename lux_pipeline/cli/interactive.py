@@ -5,7 +5,7 @@
 
 The namespace holds `cfgs`, `idmap` (``None`` when the map store cannot be
 reached), `ref_mgr()` (a ReferenceManager, built on first call because it
-reads replacements.json), Rich's `print` and `inspect`, and
+reads aat_replacement_uris.json), Rich's `print` and `inspect`, and
 `setup_for(task, *sources, **options)`, which returns a one-worker manager
 for a command with the sources added, so ``setup_for("load", "ror").run_single()``
 runs a load in this process. On a terminal, history is kept in

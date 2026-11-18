@@ -44,28 +44,44 @@ def references_path(configs):
     return os.path.join(_temp_dir(configs), REFERENCES_FILE)
 
 
-REDIRECTS_FILE = "replacements.json"
+# The Getty vocabularies' replaced ids (AAT, ULAN and TGN): one file, read
+# by the reference manager (reconcile) and the Getty fetcher.
+REDIRECTS_FILE = "aat_replacement_uris.json"
+# its names before 2026-11: the reference manager's and the fetcher's copies
+OLD_REDIRECTS_FILES = ("replacements.json", "getty_replacements.json")
 
 
-def load_redirects(data_dir):
-    """``{old URI: new URI}`` from ``<data_dir>/replacements.json``, a
-    SPARQL JSON result (``from``, ``to``) of the Getty vocabularies'
+def load_redirects(data_dir, warn=True):
+    """``{old URI: new URI}`` from ``<data_dir>/aat_replacement_uris.json``,
+    a SPARQL JSON result (``from``, ``to``) of the Getty vocabularies'
     replaced subjects: a reference to a replaced AAT / ULAN / TGN id is
-    recorded under its replacement. Optional, like the other data files the
-    pipeline reads from data_dir: without it (a fresh installation) no
-    reference is redirected, and a warning says so. Getty's SPARQL endpoint
-    gives the file as it is read (40,606 rows in 2026-11)::
+    recorded under its replacement, and the Getty fetcher fetches the
+    replacement instead. Without it, records keep pointing at ids Getty has
+    retired, which then match nothing. Optional, like the other data files
+    the pipeline reads from data_dir: without it (a fresh installation) no
+    reference is redirected, and a warning says so (`warn`). A file still
+    under an old name (`OLD_REDIRECTS_FILES`) is read, with a warning to
+    rename it. Getty's SPARQL endpoint gives the file as it is read (40,606
+    rows in 2026-11)::
 
         curl -sL -G https://vocab.getty.edu/sparql.json --data-urlencode \\
           'query=SELECT ?from ?to WHERE { ?from <http://purl.org/dc/terms/isReplacedBy> ?to }' \\
-          > <data_dir>/replacements.json
+          > <data_dir>/aat_replacement_uris.json
     """
     fn = os.path.join(data_dir, REDIRECTS_FILE)
     if not os.path.exists(fn):
-        logger.warning(f"no {fn}: references to replaced Getty ids are not redirected "
-                       f"(load_redirects in lux_pipeline/process/reference_manager.py says "
-                       f"how to fetch it)")
-        return {}
+        old = [os.path.join(data_dir, o) for o in OLD_REDIRECTS_FILES
+               if os.path.exists(os.path.join(data_dir, o))]
+        if old:
+            if warn:
+                logger.warning(f"reading {old[0]}: rename it to {fn} (the file's name since 2026-11)")
+            fn = old[0]
+        else:
+            if warn:
+                logger.warning(f"no {fn}: references to replaced Getty ids are not redirected "
+                               f"(load_redirects in lux_pipeline/process/reference_manager.py says "
+                               f"how to fetch it)")
+            return {}
     with open(fn) as fh:
         js = json.load(fh)
     return {r["from"]["value"]: r["to"]["value"] for r in js["results"]["bindings"]}
