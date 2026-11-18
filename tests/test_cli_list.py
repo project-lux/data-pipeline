@@ -197,7 +197,7 @@ def test_everything_together(capsys):
 
 def test_help_lists_list_with_its_docstring():
     from lux_pipeline.cli.help import list_commands
-    assert ("list", "List the configured sources, maps and indexes.") in list_commands()
+    assert ("list", "List the configured sources, maps, indexes and artifacts.") in list_commands()
 
 
 # --- the listing as data (web UI item W03) -----------------------------------

@@ -45,42 +45,53 @@ def references_path(configs):
 
 
 # The Getty vocabularies' replaced ids (AAT, ULAN and TGN): one file, read
-# by the reference manager (reconcile) and the Getty fetcher.
+# by the reference manager (reconcile) and the Getty fetcher, made by the
+# artifact of this name (lux artifact --type getty_replacement_uris;
+# lux_pipeline/artifacts/getty.py)
+REDIRECTS_ARTIFACT = "getty_replacement_uris"
 REDIRECTS_FILE = "getty_replacement_uris.json"
 # its names before 2026-11: the reference manager's and the fetcher's copies
 OLD_REDIRECTS_FILES = ("replacements.json", "getty_replacements.json")
 
 
-def load_redirects(data_dir, warn=True):
-    """``{old URI: new URI}`` from ``<data_dir>/getty_replacement_uris.json``,
+def load_redirects(where, warn=True):
+    """``{old URI: new URI}`` from the ``getty_replacement_uris`` artifact,
     a SPARQL JSON result (``from``, ``to``) of the Getty vocabularies'
     replaced subjects: a reference to a replaced AAT / ULAN / TGN id is
     recorded under its replacement, and the Getty fetcher fetches the
     replacement instead. Without it, records keep pointing at ids Getty has
-    retired, which then match nothing. Optional, like the other data files
-    the pipeline reads from data_dir: without it (a fresh installation) no
-    reference is redirected, and a warning says so (`warn`). A file still
-    under an old name (`OLD_REDIRECTS_FILES`) is read, with a warning to
-    rename it. Getty's SPARQL endpoint gives the file as it is read (40,606
-    rows in 2026-11)::
+    retired, which then match nothing.
 
-        curl -sL -G https://vocab.getty.edu/sparql.json --data-urlencode \\
-          'query=SELECT ?from ?to WHERE { ?from <http://purl.org/dc/terms/isReplacedBy> ?to }' \\
-          > <data_dir>/getty_replacement_uris.json
+    `where` is the `Config`, whose `artifact_path` finds the artifact (or,
+    until it is made, ``<data_dir>/getty_replacement_uris.json``), or a
+    data directory (anything else with a ``data_dir``), read as before
+    artifacts. Optional: with no file (a fresh installation) no reference
+    is redirected, and a warning says so (`warn`). A file still under an
+    old name in data_dir (`OLD_REDIRECTS_FILES`) is read, with a warning to
+    rename it. ``lux artifact --type getty_replacement_uris`` makes it
+    (40,606 rows in 2026-11).
     """
-    fn = os.path.join(data_dir, REDIRECTS_FILE)
-    if not os.path.exists(fn):
+    if hasattr(where, "artifact_path"):
+        data_dir = where.data_dir
+        fn = where.artifact_path(REDIRECTS_ARTIFACT, REDIRECTS_FILE)
+    else:
+        data_dir = getattr(where, "data_dir", where)
+        fn = os.path.join(data_dir, REDIRECTS_FILE)
+        fn = fn if os.path.exists(fn) else None
+    if fn is None:
         old = [os.path.join(data_dir, o) for o in OLD_REDIRECTS_FILES
                if os.path.exists(os.path.join(data_dir, o))]
         if old:
             if warn:
-                logger.warning(f"reading {old[0]}: rename it to {fn} (the file's name since 2026-11)")
+                logger.warning(f"reading {old[0]}: rename it to "
+                               f"{os.path.join(data_dir, REDIRECTS_FILE)} (the file's name since "
+                               f"2026-11), or make the artifact: lux artifact --type "
+                               f"{REDIRECTS_ARTIFACT}")
             fn = old[0]
         else:
             if warn:
-                logger.warning(f"no {fn}: references to replaced Getty ids are not redirected "
-                               f"(load_redirects in lux_pipeline/process/reference_manager.py says "
-                               f"how to fetch it)")
+                logger.warning(f"no {REDIRECTS_FILE}: references to replaced Getty ids are not "
+                               f"redirected (lux artifact --type {REDIRECTS_ARTIFACT} makes it)")
             return {}
     with open(fn) as fh:
         js = json.load(fh)
@@ -103,7 +114,7 @@ class ReferenceManager(object):
         # instead of a python loop per node
         self.internal_uris_t = tuple(self.internal_uris)
 
-        self.redirects = load_redirects(configs.data_dir)
+        self.redirects = load_redirects(configs)
         self.ref_cache = {}
 
         # pop_ref() hands out one reference at a time, but claims them from

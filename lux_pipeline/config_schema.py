@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 # What Config.handle_config_record accepts. ("build", refactor_docs/42, is
 # not accepted until that item lands.)
 RECORD_TYPES = ("base", "system", "caches", "default", "globals", "internal", "external",
-                "results", "map", "marklogic", "config")
+                "results", "map", "marklogic", "config", "artifact")
 SOURCE_TYPES = ("internal", "external", "results")
 # default records: name -> the kind of store they hold defaults for
 DEFAULT_KINDS = {"cache": "caches", "map": "map", "marklogic": "marklogic", "ml": "marklogic"}
@@ -81,6 +81,8 @@ BASE = {
     "distribution_dir": _k("path", "Where lux export --format lmdb builds distribution stores. "
                                    "Default exports_dir."),
     "backup_dir": _k("path", "Where lux backup writes. Default <data_dir>/backups."),
+    "artifacts_dir": _k("path", "Where lux artifact writes artifacts and their manifest.json. "
+                                "Default <data_dir>/artifacts."),
     "max_workers": _k("int", "Workers a parallel phase starts by default. Default: the cores "
                              "less three."),
     "idmap_name": _k("str", "The name of the map record that is the identity map.",
@@ -166,6 +168,20 @@ CONFIG = {
                          default="storage.cache.filesystem.FsCache"),
     "json_format": _JSON_FORMAT,
     "json_schema": _JSON_SCHEMA,
+}
+
+ARTIFACT = {
+    "name": _NAME,
+    "type": _TYPE,
+    "generatorClass": _k("class", "The generator that makes the artifact's files "
+                                  "(lux_pipeline.artifacts).", required=True),
+    "files": _k("list", "The files the generator writes, relative to artifacts_dir.",
+                required=True),
+    "maxAgeDays": _k("int", "Older than this, the artifact is stale; absent or null: stale only "
+                            "when its record changes.", nullable=True),
+    "maxShrink": _k("any", "lux artifact refuses to replace a file whose row count drops by more "
+                           "than this fraction (default 0.5) unless --force."),
+    "*": _k("any", "The generator's own settings: see its required_keys and optional_keys."),
 }
 
 GLOBALS = {
@@ -265,7 +281,7 @@ SOURCE = {
 
 KEYS = {"base": BASE, "system": BASE, "caches": CACHES, "map": MAP, "marklogic": MARKLOGIC,
         "config": CONFIG, "globals": GLOBALS, "internal": SOURCE, "external": SOURCE,
-        "results": SOURCE}
+        "results": SOURCE, "artifact": ARTIFACT}
 
 
 def keys_for(record):
@@ -315,6 +331,8 @@ TEMPLATES = {
     "marklogic": lambda n: {"name": n, "type": "marklogic", "rest": "", "search": "",
                             "sparql": "", "xquery": "", "auth": {}},
     "config": lambda n: {"name": n, "type": "config", "base_dir": ""},
+    "artifact": lambda n: {"name": n, "type": "artifact", "generatorClass": "",
+                           "files": [], "maxAgeDays": 90},
     "default": lambda n: {"name": n, "type": "default"},
     "globals": lambda n: {"type": "globals"},
     "caches": lambda n: {"name": "_caches", "type": "caches"},

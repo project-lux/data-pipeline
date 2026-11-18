@@ -1,10 +1,11 @@
-"""List the configured sources, maps and indexes.
+"""List the configured sources, maps, indexes and artifacts.
 
     lux list                     # internal, external and results sources
     lux list --source external
     lux list --source aat,lcnaf
     lux list --maps              # the map stores (idmap, all_refs, ...)
     lux list --indexes           # the reconcile index files per source
+    lux list --artifacts         # the artifacts (lux artifact) and whether each is stale
 """
 
 import sys
@@ -114,6 +115,19 @@ def map_rows(cfgs):
             for name, cfg in cfgs.map_stores.items()]
 
 
+def artifact_rows(cfgs):
+    """``[{"artifact", "class", "files", "state"}]`` for every configured
+    artifact (`ArtifactCache.status`); ``state`` is ``current`` or why it
+    is stale."""
+    rows = []
+    for r in cfgs.artifacts_cache.status():
+        rec = cfgs.artifacts.get(r["name"]) or {}
+        rows.append({"artifact": r["name"], "class": rec.get("generatorClass", ""),
+                     "files": ", ".join(r["files"]),
+                     "state": "current" if r["stale"] is None else r["stale"]})
+    return rows
+
+
 def index_rows(cfgs, which):
     """``(group, source, label, path)`` for every configured index of the
     sources `which` selects (``all``, a group, or names)."""
@@ -217,6 +231,19 @@ def _maps_table(rows: list) -> Table:
     return table
 
 
+def _artifacts_table(rows: list) -> Table:
+    """rows: `artifact_rows`"""
+    table = Table(title="Artifacts", box=box.ROUNDED, show_lines=False, title_justify="left",
+                  header_style="bold", expand=False, padding=(0, 1))
+    table.add_column("Artifact", style="bold cyan", no_wrap=True)
+    table.add_column("Generator", style="green", no_wrap=True)
+    table.add_column("Files", style="dim")
+    table.add_column("State")
+    for row in rows:
+        table.add_row(row["artifact"], row["class"], row["files"], row["state"])
+    return table
+
+
 def _indexes_table(rows: list[tuple[str, str, str, str]]) -> Table:
     """rows: (group, source, label, path)"""
     table = Table(title="Indexes", box=box.ROUNDED, show_lines=False, title_justify="left",
@@ -235,6 +262,8 @@ class CommandHandler(BaseHandler):
         ap.add_argument("--maps", action="store_true", help="List the map stores")
         ap.add_argument("--indexes", action="store_true",
                         help="List the reconcile index files per source")
+        ap.add_argument("--artifacts", action="store_true",
+                        help="List the artifacts and whether each is stale")
 
     def index_rows(self, which):
         """``(group, source, label, path)`` for every configured index of the
@@ -245,7 +274,7 @@ class CommandHandler(BaseHandler):
         super().process(args, rest)
         cfgs = self.configs
         console = Console(file=sys.stdout)
-        only_extras = (args.maps or args.indexes) and not args.source
+        only_extras = (args.maps or args.indexes or args.artifacts) and not args.source
 
         if not only_extras:
             self.list_sources(args, console)
@@ -254,6 +283,9 @@ class CommandHandler(BaseHandler):
             console.print()
         if args.indexes:
             console.print(_indexes_table(self.index_rows(args.source)))
+            console.print()
+        if args.artifacts:
+            console.print(_artifacts_table(artifact_rows(cfgs)))
             console.print()
 
     def list_sources(self, args, console):

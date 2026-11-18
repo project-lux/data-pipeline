@@ -113,15 +113,22 @@ processes can be started.
 
 `<data_dir>` also holds data files no command makes (lookup tables,
 corrections, LLM-derived place data). The pipeline runs without them, with
-less clean-up; copy them from a backup of an existing installation. One can
-be fetched: the Getty vocabularies' replaced ids (AAT, ULAN and TGN), which
-reconcile applies to references and the Getty fetcher follows,
+less clean-up; copy them from a backup of an existing installation.
+
+Files a generator can make are artifacts (docs/artifacts.md), configured
+as `"type": "artifact"` records (pipeline-configs has them in
+`configs/subs/artifacts_cache/`). Make them all, then list them to see
+their age and whether any is stale:
 
 ```
-curl -sL -G https://vocab.getty.edu/sparql.json --data-urlencode \
-  'query=SELECT ?from ?to WHERE { ?from <http://purl.org/dc/terms/isReplacedBy> ?to }' \
-  > <data_dir>/getty_replacement_uris.json
+lux artifact --all
+lux artifact
 ```
+
+So far that is the Getty vocabularies' replaced ids (AAT, ULAN and TGN),
+which reconcile applies to references and the Getty fetcher follows
+(`getty_replacement_uris`). `lux artifact --stale` makes the stale ones
+again; the last step of `lux testinstall` lists them.
 
 Its last step compares the server's settings with what `lux pg-tune`
 recommends for this machine. To apply them:

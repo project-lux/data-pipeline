@@ -17,7 +17,7 @@ class GettyFetcher(Fetcher):
         # "aat/<old>" -> "aat/<new>", from the reference manager's file (it
         # warns when the file is missing; every Getty source would repeat it)
         self.redirects = {}
-        for f, t in load_redirects(config["all_configs"].data_dir, warn=False).items():
+        for f, t in load_redirects(config["all_configs"], warn=False).items():
             self.redirects[f.replace("http://vocab.getty.edu/", "")] = t.replace("http://vocab.getty.edu/", "")
 
         fn = os.path.join(config["all_configs"].data_dir, "unidentified_people_ulan.csv")

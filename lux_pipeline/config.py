@@ -273,6 +273,11 @@ class Config(object):
         self.results = {}
         self.marklogic_stores = {}
         self.map_stores = {}
+        # {record key: record} for "type": "artifact" records: files a build
+        # reads that a generator makes (docs/artifacts.md); read, never
+        # instantiated. The ArtifactCache over them is built on first use
+        self.artifacts = {}
+        self._artifacts_cache = None
         self.globals = {}
         self.globals_cfg = {}
         self.validator = None
@@ -363,6 +368,12 @@ class Config(object):
             self.backup_dir = os.path.join(self.data_dir, "backups")
         elif not self.backup_dir.startswith("/"):
             self.backup_dir = os.path.join(self.base_dir, self.backup_dir)
+        # Where artifacts and their manifest.json live (docs/artifacts.md).
+        # Optional: falls back to <data_dir>/artifacts.
+        if not getattr(self, "artifacts_dir", None):
+            self.artifacts_dir = os.path.join(self.data_dir, "artifacts")
+        elif not self.artifacts_dir.startswith("/"):
+            self.artifacts_dir = os.path.join(self.base_dir, self.artifacts_dir)
         if hasattr(self, "log_dir") and not self.log_dir.startswith("/"):
             self.log_dir = os.path.join(self.base_dir, self.log_dir)
         if hasattr(self, "tests_dir") and not self.tests_dir.startswith("/"):
@@ -462,8 +473,61 @@ class Config(object):
             self.map_stores[rec["name"]] = rec
         elif typ == "config":
             self.subconfig_stores[k] = rec
+        elif typ == "artifact":
+            self.artifacts[k] = rec
         else:
             logger.critical(f"Unknown config type: {typ} in {k}")
+
+    @property
+    def artifacts_cache(self):
+        """The `ArtifactCache` over ``artifacts_dir`` and the artifact
+        records, built on first use (it opens nothing)."""
+        if self._artifacts_cache is None:
+            from .artifacts.cache import ArtifactCache
+            self._artifacts_cache = ArtifactCache(self)
+        return self._artifacts_cache
+
+    def artifact_path(self, name, file=None):
+        """The path of artifact `name`'s file, for code that reads it; None
+        when there is none to read. `file` is the file's name: which one,
+        for an artifact with several, and the name it had in ``data_dir``
+        before artifacts (an artifact with one file needs it only for that).
+
+        An artifact made by `lux artifact` is read from ``artifacts_dir``,
+        with a warning (once per process) when it is stale. Until it is made,
+        or when the configuration has no record for `name`, ``<data_dir>/
+        <file>`` is read, with a warning, so nothing breaks before the
+        configuration and the artifacts catch up."""
+        from .artifacts.cache import ArtifactError, warn_once
+        cache = self.artifacts_cache
+        if name in self.artifacts:
+            try:
+                files = cache.files(name)
+                rel = cache.file_name(name, None if len(files) == 1 else file)
+            except ArtifactError as e:
+                warn_once(str(e))
+                return None
+            path = cache.path(name, rel)
+            if path:
+                why = cache.stale(name)
+                if why:
+                    warn_once(f"artifact {name} is stale ({why}): lux artifact --type {name} "
+                              f"makes it again")
+                return path
+            legacy = os.path.join(self.data_dir, file or rel)
+            if os.path.isfile(legacy):
+                warn_once(f"artifact {name} has not been made: reading {legacy} instead "
+                          f"(lux artifact --type {name} makes it)")
+                return legacy
+            return None
+        if not file:
+            return None
+        legacy = os.path.join(self.data_dir, file)
+        if os.path.isfile(legacy):
+            warn_once(f"reading {legacy}: the configuration has no artifact record {name} "
+                      f"to make it (docs/artifacts.md)")
+            return legacy
+        return None
 
     def process_base(self, rec):
         for k, v in rec.items():

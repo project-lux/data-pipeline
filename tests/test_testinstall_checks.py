@@ -100,7 +100,8 @@ def test_the_lines_written_are_the_commands(installed):
     lines = out.getvalue().splitlines()
     assert lines[0].startswith("OK    .env: ")
     assert lines[4] == "OK    postgres reachable: PostgreSQL (stub)"
-    assert lines[-1].startswith("FAIL  validator schemas present: FileNotFoundError: core.json")
+    assert lines[-2].startswith("FAIL  validator schemas present: FileNotFoundError: core.json")
+    assert lines[-1] == "OK    artifacts made and current: no artifacts configured"
 
 
 def test_the_command_still_stops_and_exits_one(installed, capsys):

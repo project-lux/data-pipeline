@@ -792,7 +792,9 @@ def test_testinstall_ends_with_settings_to_change_as_a_warning(installed, monkey
     lines = capsys.readouterr().out.splitlines()
     assert lines[-1] == "All checks passed."
     n = seen["workers"]
-    assert lines[-2] == ("WARN  postgres tuned for the build: 8 settings differ from the "
+    # the artifacts check comes last; this installation configures none
+    assert lines[-2] == "OK    artifacts made and current: no artifacts configured"
+    assert lines[-3] == ("WARN  postgres tuned for the build: 8 settings differ from the "
                          f"recommendation for {n} workers: max_connections (100 -> 125), "
                          "shared_buffers (128MB -> 44GB), setting_0, setting_1, setting_2, "
                          "setting_3 and 2 more. lux pg-tune prints the SQL")
@@ -814,7 +816,7 @@ def test_testinstall_an_unreadable_server_is_a_warning(installed, monkeypatch, c
     tuned_server(monkeypatch, srv=False)
     assert run_testinstall(["--skip-workers"], cwd=installed, monkeypatch=monkeypatch) is True
     lines = capsys.readouterr().out.splitlines()
-    assert lines[-2] == ("WARN  postgres tuned for the build: RuntimeError: server not inspected: "
+    assert lines[-3] == ("WARN  postgres tuned for the build: RuntimeError: server not inspected: "
                          "could not connect (connection refused) (not required)")
 
 
