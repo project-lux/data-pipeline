@@ -46,13 +46,13 @@ def references_path(configs):
 
 # The Getty vocabularies' replaced ids (AAT, ULAN and TGN): one file, read
 # by the reference manager (reconcile) and the Getty fetcher.
-REDIRECTS_FILE = "aat_replacement_uris.json"
+REDIRECTS_FILE = "getty_replacement_uris.json"
 # its names before 2026-11: the reference manager's and the fetcher's copies
 OLD_REDIRECTS_FILES = ("replacements.json", "getty_replacements.json")
 
 
 def load_redirects(data_dir, warn=True):
-    """``{old URI: new URI}`` from ``<data_dir>/aat_replacement_uris.json``,
+    """``{old URI: new URI}`` from ``<data_dir>/getty_replacement_uris.json``,
     a SPARQL JSON result (``from``, ``to``) of the Getty vocabularies'
     replaced subjects: a reference to a replaced AAT / ULAN / TGN id is
     recorded under its replacement, and the Getty fetcher fetches the
@@ -66,7 +66,7 @@ def load_redirects(data_dir, warn=True):
 
         curl -sL -G https://vocab.getty.edu/sparql.json --data-urlencode \\
           'query=SELECT ?from ?to WHERE { ?from <http://purl.org/dc/terms/isReplacedBy> ?to }' \\
-          > <data_dir>/aat_replacement_uris.json
+          > <data_dir>/getty_replacement_uris.json
     """
     fn = os.path.join(data_dir, REDIRECTS_FILE)
     if not os.path.exists(fn):

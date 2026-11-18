@@ -1,4 +1,4 @@
-"""The Getty vocabularies' replaced ids: <data_dir>/aat_replacement_uris.json,
+"""The Getty vocabularies' replaced ids: <data_dir>/getty_replacement_uris.json,
 optional, read by the reference manager (reconcile redirects references) and
 the Getty fetcher (fetches the replacement). A fresh installation has no
 such file, and `lux reconcile` once failed in every worker with
@@ -28,17 +28,17 @@ def write(path, rows=ROWS):
 
 
 def test_the_file_is_named_for_what_it_holds():
-    assert REDIRECTS_FILE == "aat_replacement_uris.json"
+    assert REDIRECTS_FILE == "getty_replacement_uris.json"
 
 
 def test_without_the_file_nothing_is_redirected(tmp_path, caplog):
     with caplog.at_level(logging.WARNING, logger="lux_pipeline"):
         assert load_redirects(str(tmp_path)) == {}
-    assert "aat_replacement_uris.json: references to replaced Getty ids are not redirected" in caplog.text
+    assert "getty_replacement_uris.json: references to replaced Getty ids are not redirected" in caplog.text
 
 
 def test_the_sparql_result_maps_old_to_new(tmp_path):
-    write(tmp_path / "aat_replacement_uris.json")
+    write(tmp_path / "getty_replacement_uris.json")
     assert load_redirects(str(tmp_path)) == dict(ROWS)
 
 
@@ -49,7 +49,7 @@ def test_an_old_name_is_read_with_a_warning_to_rename_it(tmp_path, caplog):
         assert load_redirects(str(tmp_path)) == dict(ROWS)
     assert "replacements.json: rename it to" in caplog.text
     # the new name wins once it is there
-    write(tmp_path / "aat_replacement_uris.json", ROWS[1:])
+    write(tmp_path / "getty_replacement_uris.json", ROWS[1:])
     assert load_redirects(str(tmp_path)) == dict(ROWS[1:])
 
 
@@ -60,7 +60,7 @@ def fetcher(tmp_path):
 
 
 def test_the_getty_fetcher_reads_the_same_file(tmp_path):
-    write(tmp_path / "aat_replacement_uris.json")
+    write(tmp_path / "getty_replacement_uris.json")
     assert fetcher(tmp_path).redirects == {"aat/300281837": "aat/300140808",
                                            "ulan/500396271": "ulan/500353823"}
 

@@ -120,7 +120,7 @@ reconcile applies to references and the Getty fetcher follows,
 ```
 curl -sL -G https://vocab.getty.edu/sparql.json --data-urlencode \
   'query=SELECT ?from ?to WHERE { ?from <http://purl.org/dc/terms/isReplacedBy> ?to }' \
-  > <data_dir>/aat_replacement_uris.json
+  > <data_dir>/getty_replacement_uris.json
 ```
 
 Its last step compares the server's settings with what `lux pg-tune`
