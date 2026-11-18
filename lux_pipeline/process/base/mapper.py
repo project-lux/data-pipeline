@@ -18,6 +18,29 @@ model.Set._all_properties["members_exemplified_by"] = mebInfo
 model.Group._all_properties["members_exemplified_by"] = mebInfo
 
 
+# The type_overrides artifact (lux artifact --type type_overrides;
+# lux_pipeline/artifacts/languages.py): {uri: class} for post_reconcile, the
+# identifiers of languages. Read from <data_dir>/type_overrides.json until
+# the artifact is made.
+TYPE_OVERRIDES_ARTIFACT = "type_overrides"
+TYPE_OVERRIDES_FILE = "type_overrides.json"
+
+
+def read_type_overrides(configs):
+    """``{uri: class}`` from the ``type_overrides`` artifact; ``{}`` when
+    there is none. A configuration without `artifact_path` (a test's stub)
+    reads ``<data_dir>/type_overrides.json``, as before artifacts."""
+    finder = getattr(configs, "artifact_path", None)
+    if callable(finder):
+        fn = finder(TYPE_OVERRIDES_ARTIFACT, TYPE_OVERRIDES_FILE)
+    else:
+        fn = os.path.join(configs.data_dir, TYPE_OVERRIDES_FILE)
+    if not isinstance(fn, str) or not os.path.exists(fn):
+        return {}
+    with open(fn) as fh:
+        return json.load(fh)
+
+
 class Mapper(object):
     def __init__(self, config):
         # Not sure if this is useful, but worth configuration once
@@ -125,11 +148,7 @@ class Mapper(object):
         self.config = config
         self.configs = config["all_configs"]
         idmap = self.configs.get_idmap()
-        fn = os.path.join(self.configs.data_dir, "type_overrides.json")
-        self.type_overrides = {}
-        if os.path.exists(fn):
-            with open(fn) as fh:
-                self.type_overrides = json.load(fh)
+        self.type_overrides = read_type_overrides(self.configs)
 
         # Mapping might need preferred URI for source
         self.namespace = config["namespace"]

@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lux_pipeline import config_schema, config_store
 from lux_pipeline.artifacts import cache as artifact_cache
+from lux_pipeline.artifacts import base as artifact_base
 from lux_pipeline.artifacts import getty
 from lux_pipeline.artifacts.base import ArtifactError, json_rows, line_rows
 from lux_pipeline.artifacts.cache import (code_version, config_version, file_problem,
@@ -37,8 +38,9 @@ ROWS = [("http://vocab.getty.edu/aat/300281837", "http://vocab.getty.edu/aat/300
 @pytest.fixture(autouse=True)
 def _fresh(monkeypatch):
     """Each test starts with no warning already given and the logger as
-    it was."""
+    it was, and a SPARQL endpoint asked again is asked at once."""
     monkeypatch.setattr(artifact_cache, "_warned", set())
+    monkeypatch.setattr(artifact_base.time, "sleep", lambda s: None)
     saved = (list(LOGGER.handlers), LOGGER.level)
     yield
     LOGGER.handlers[:], LOGGER.level = saved
@@ -79,7 +81,7 @@ def getty_answers(monkeypatch, text, status=200):
     def get(url, params=None, timeout=None, headers=None):
         seen.append((url, params))
         return Answer(text, status)
-    monkeypatch.setattr(getty.requests, "get", get)
+    monkeypatch.setattr(artifact_base.requests, "get", get)
     return seen
 
 
@@ -406,6 +408,14 @@ def test_the_getty_generator_uses_the_records_endpoint_and_query(tmp_path, monke
     seen = getty_answers(monkeypatch, sparql())
     make_configs(tmp_path).artifacts_cache.make("getty_replacement_uris")
     assert seen == [("https://example.org/sparql", {"query": "SELECT 1"})]
+
+
+def test_a_bad_answer_is_asked_again(tmp_path, monkeypatch):
+    install(tmp_path, getty_record())
+    answers = [Answer(""), Answer("busy", 429), Answer(sparql())]
+    monkeypatch.setattr(artifact_base.requests, "get", lambda *a, **kw: answers.pop(0))
+    entry = make_configs(tmp_path).artifacts_cache.make("getty_replacement_uris")
+    assert entry["files"][0]["rows"] == 2 and answers == []
 
 
 @pytest.mark.parametrize("text,status,message", [

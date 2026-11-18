@@ -8,37 +8,14 @@ Getty fetcher fetches the replacement instead
 (`lux_pipeline.process.reference_manager.load_redirects`).
 """
 
-import json
 import logging
 
-import requests
-
-from .base import ArtifactError, ArtifactGenerator
+from .base import ArtifactError, ArtifactGenerator, sparql_json
 
 logger = logging.getLogger("lux_pipeline")
 
 ENDPOINT = "https://vocab.getty.edu/sparql.json"
 QUERY = "SELECT ?from ?to WHERE { ?from <http://purl.org/dc/terms/isReplacedBy> ?to }"
-USER_AGENT = "lux-pipeline (artifact generator)"
-
-
-def sparql_json(endpoint, query, timeout=600):
-    """The SPARQL JSON result of `query` at `endpoint`, as text, checked to
-    be one (an endpoint in trouble answers with an HTML page or a Java
-    stack trace and a 200)."""
-    resp = requests.get(endpoint, params={"query": query}, timeout=timeout,
-                        headers={"Accept": "application/sparql-results+json",
-                                 "User-Agent": USER_AGENT})
-    if resp.status_code != 200:
-        raise ArtifactError(f"{endpoint} answered {resp.status_code}: {resp.text[:200]}")
-    try:
-        js = json.loads(resp.text)
-        bindings = js["results"]["bindings"]
-    except (ValueError, KeyError, TypeError):
-        raise ArtifactError(f"{endpoint} did not answer with a SPARQL JSON result: {resp.text[:200]}")
-    if not isinstance(bindings, list):
-        raise ArtifactError(f"{endpoint}: results.bindings is not a list")
-    return resp.text, bindings
 
 
 class ReplacementUris(ArtifactGenerator):

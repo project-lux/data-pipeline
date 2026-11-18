@@ -1,7 +1,8 @@
 # Artifacts: generated files with a record of when and how
 
-Status: the framework and `getty_replacement_uris` (item 1 of "The first
-artifacts") are implemented; items 2 to 4 are planned.
+Status: the framework, `getty_replacement_uris` and `type_overrides` (items
+1 and 2 of "The first artifacts") are implemented; items 3 and 4 are
+planned.
 
 ## Why
 
@@ -309,9 +310,28 @@ One PR each, in this order. Each adds its record to pipeline-configs (and the
      against today's file, this drops 74 of its 75 AAT ids outside the
      languages range (all but Ga'anda, a language in the alphabetical list),
      the malformed `aat/6000320089674`, 12 ids Getty has replaced and 3
-     non-language concepts. A replaced id whose replacement is in the set
-     could be kept as the replacement; decided when writing it;
-   * every kept URI to `"Language"`, the file's shape today.
+     non-language concepts. All 12 replaced ids were replaced by concepts in
+     the set, so a replaced id is kept along with its replacement;
+   * every kept URI to `"Language"`, the file's shape today, written one
+     entry per line in key order.
+
+   As built: the codes are asked for as a property path
+   (`wdt:P218|wdt:P219|wdt:P220`), one query for the items and one per
+   identifier property. A `VALUES` list of them is not narrowed by
+   Wikidata's Blazegraph, which answers with 285 MB of every triple and a
+   stack trace. `lcVocabularies` (default `["languages"]`) says which LC
+   vocabularies count; Wikidata also gives `iso639-1/-2/-3/-5` ids. A SPARQL
+   answer that is not a result is asked again (three tries, 10 s then 20 s
+   apart), since Wikidata sometimes answers with nothing.
+
+   First run (2026-11-18): 11,318 identifiers, against 11,511 in the 2022
+   file: 8,330 Wikidata items, 1,452 AAT, 1,055 LCSH, 481 LC languages.
+   10,717 are in both. The old file's 794 not kept are 388 items that no
+   longer carry a code, 271 AAT ids (85 outside the hierarchy, and 182
+   languages whose Wikidata items lost their codes), 131 LCSH and 4 LC ids.
+   The hierarchy holds 2,327 concepts, 2,064 of them labelled
+   "(language)"; it also has writing systems, writing styles,
+   transliterations and guide terms, so it is not taken whole.
 
    `maxAgeDays: 180`. The applying code is unchanged here (see "Not in
    these PRs").

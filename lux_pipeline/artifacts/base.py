@@ -18,9 +18,18 @@ never by `Config.instantiate_all`, and like every component their
 """
 
 import json
+import logging
 import os
+import time
+
+import requests
 
 from lux_pipeline.progress import null_progress
+
+logger = logging.getLogger("lux_pipeline")
+
+# what a generator says it is to the services it asks (no contact details)
+USER_AGENT = "lux-pipeline (artifact generator)"
 
 
 class ArtifactError(Exception):
@@ -61,6 +70,44 @@ class ArtifactGenerator:
         ``{relative path: row count}``; a count may be None when the format
         has no rows to speak of."""
         raise NotImplementedError
+
+
+# --- asking SPARQL endpoints --------------------------------------------------------------------
+
+
+def _sparql_once(endpoint, query, timeout):
+    resp = requests.get(endpoint, params={"query": query}, timeout=timeout,
+                        headers={"Accept": "application/sparql-results+json",
+                                 "User-Agent": USER_AGENT})
+    if resp.status_code != 200:
+        raise ArtifactError(f"{endpoint} answered {resp.status_code}: {resp.text[:200]}")
+    try:
+        js = json.loads(resp.text)
+        bindings = js["results"]["bindings"]
+    except (ValueError, KeyError, TypeError):
+        raise ArtifactError(f"{endpoint} did not answer with a SPARQL JSON result: {resp.text[:200]}")
+    if not isinstance(bindings, list):
+        raise ArtifactError(f"{endpoint}: results.bindings is not a list")
+    return resp.text, bindings
+
+
+def sparql_json(endpoint, query, timeout=600, attempts=3, pause=10):
+    """``(text, bindings)``: the SPARQL JSON result of `query` at `endpoint`
+    as text, checked to be one (an endpoint in trouble answers with an HTML
+    page, a Java stack trace or nothing at all, with a 200), and its
+    bindings. Tried `attempts` times, `pause` seconds apart (doubling), on
+    a bad answer or a network error; the last one's error is raised."""
+    for attempt in range(1, attempts + 1):
+        try:
+            return _sparql_once(endpoint, query, timeout)
+        except (ArtifactError, requests.RequestException) as e:
+            if attempt == attempts:
+                if isinstance(e, ArtifactError):
+                    raise
+                raise ArtifactError(f"{endpoint}: {type(e).__name__}: {e}")
+            wait = pause * 2 ** (attempt - 1)
+            logger.warning(f"{endpoint}: {e}; asking again in {wait}s ({attempt} of {attempts})")
+            time.sleep(wait)
 
 
 # --- counting rows, for the manifest and the shrink check -------------------------------------
