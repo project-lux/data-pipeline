@@ -264,7 +264,7 @@ One PR each, in this order. Each adds its record to pipeline-configs (and the
 
 ## The other files
 
-The audit of `data_dir` (2026-11-18) found these made outside the pipeline.
+The audit of `data_dir` ([data-files.md](data-files.md), 2026-11-18) found these made outside the pipeline.
 Each is to get a generator or move into the codebase; nothing is an artifact
 without a generator.
 
