@@ -240,6 +240,12 @@ that), so a reader needs no knowledge of the record. With:
 * `None` when the file exists in neither place; readers keep their current
   behaviour for a missing file (skip, or warn as `load_redirects` does).
 
+While artifacts are still being brought in, `LUX_ARTIFACT_WARNINGS=0` (or
+`false` / `no` / `off`, in the environment or `.env`) logs the warnings above
+(stale, not made, read from `data_dir`, and `load_redirects`' old file name)
+at debug level instead. A record that names no such file, an unreadable
+manifest, and a file found in neither place still warn.
+
 The readers changed:
 
 | File | Reader |

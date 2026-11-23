@@ -83,10 +83,12 @@ def load_redirects(where, warn=True):
                if os.path.exists(os.path.join(data_dir, o))]
         if old:
             if warn:
-                logger.warning(f"reading {old[0]}: rename it to "
-                               f"{os.path.join(data_dir, REDIRECTS_FILE)} (the file's name since "
-                               f"2026-11), or make the artifact: lux artifact --type "
-                               f"{REDIRECTS_ARTIFACT}")
+                from lux_pipeline.artifacts.cache import catch_up_warnings
+                log = logger.warning if catch_up_warnings() else logger.debug
+                log(f"reading {old[0]}: rename it to "
+                    f"{os.path.join(data_dir, REDIRECTS_FILE)} (the file's name since "
+                    f"2026-11), or make the artifact: lux artifact --type "
+                    f"{REDIRECTS_ARTIFACT}")
             fn = old[0]
         else:
             if warn:
