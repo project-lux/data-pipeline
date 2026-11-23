@@ -51,13 +51,30 @@ CODE_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 
 _warned = set()
 
+# Set to 0 / false / no / off to log the warnings about artifacts not yet
+# caught up (stale, not made, read from data_dir) at debug level instead,
+# while artifacts are still being brought in.
+WARNINGS_ENV = "LUX_ARTIFACT_WARNINGS"
 
-def warn_once(message):
+
+def catch_up_warnings():
+    """False when ``LUX_ARTIFACT_WARNINGS`` turns off the warnings about
+    artifacts that are stale, not made yet, or read from their old place in
+    ``data_dir``. Read on every call, so a ``.env`` loaded later counts."""
+    return os.getenv(WARNINGS_ENV, "").strip().lower() not in ("0", "false", "no", "off")
+
+
+def warn_once(message, catch_up=False):
     """Log `message` as a warning once per process: several mappers in each
-    of many workers read the same artifact."""
+    of many workers read the same artifact. A `catch_up` message (the
+    artifact is stale, not made, or read from ``data_dir``) is logged at
+    debug level instead when `catch_up_warnings` is off."""
     if message not in _warned:
         _warned.add(message)
-        logger.warning(message)
+        if catch_up and not catch_up_warnings():
+            logger.debug(message)
+        else:
+            logger.warning(message)
 
 
 def file_problem(rel):

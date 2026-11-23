@@ -384,7 +384,7 @@ class RayEngine(Engine):
         ray = self.ray
         remote = ray.remote(_run_worker)
         # a local ray's workers inherit these; a cluster's don't
-        env = {k: os.environ[k] for k in ("LUX_PROFILE", "LUX_BASEPATH") if os.getenv(k)}
+        env = {k: os.environ[k] for k in ("LUX_PROFILE", "LUX_BASEPATH", "LUX_ARTIFACT_WARNINGS") if os.getenv(k)}
         if env:
             remote = remote.options(runtime_env={"env_vars": env})
         if prefix:

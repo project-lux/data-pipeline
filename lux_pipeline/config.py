@@ -512,12 +512,12 @@ class Config(object):
                 why = cache.stale(name)
                 if why:
                     warn_once(f"artifact {name} is stale ({why}): lux artifact --type {name} "
-                              f"makes it again")
+                              f"makes it again", catch_up=True)
                 return path
             legacy = os.path.join(self.data_dir, file or rel)
             if os.path.isfile(legacy):
                 warn_once(f"artifact {name} has not been made: reading {legacy} instead "
-                          f"(lux artifact --type {name} makes it)")
+                          f"(lux artifact --type {name} makes it)", catch_up=True)
                 return legacy
             return None
         if not file:
@@ -525,7 +525,7 @@ class Config(object):
         legacy = os.path.join(self.data_dir, file)
         if os.path.isfile(legacy):
             warn_once(f"reading {legacy}: the configuration has no artifact record {name} "
-                      f"to make it (docs/artifacts.md)")
+                      f"to make it (docs/artifacts.md)", catch_up=True)
             return legacy
         return None
 

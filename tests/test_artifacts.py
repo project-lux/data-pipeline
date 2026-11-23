@@ -40,6 +40,7 @@ def _fresh(monkeypatch):
     """Each test starts with no warning already given and the logger as
     it was, and a SPARQL endpoint asked again is asked at once."""
     monkeypatch.setattr(artifact_cache, "_warned", set())
+    monkeypatch.delenv(artifact_cache.WARNINGS_ENV, raising=False)
     monkeypatch.setattr(artifact_base.time, "sleep", lambda s: None)
     saved = (list(LOGGER.handlers), LOGGER.level)
     yield
@@ -361,6 +362,41 @@ def test_artifact_path_reads_the_made_artifact(tmp_path, caplog):
         cfgs.artifact_path("lines")
         cfgs.artifact_path("lines")
     assert caplog.text.count("artifact lines is stale (its configuration record changed") == 1
+
+
+@pytest.mark.parametrize("value", ["0", "false", "No", "off"])
+def test_catch_up_warnings_can_be_turned_off(tmp_path, caplog, monkeypatch, value):
+    monkeypatch.setenv("LUX_ARTIFACT_WARNINGS", value)
+    install(tmp_path, lines_record(), getty_record())
+    cfgs = make_configs(tmp_path)
+    Path(cfgs.data_dir, "lines.txt").write_text("old\n")
+    Path(cfgs.data_dir, "other.txt").write_text("old\n")
+    Path(cfgs.data_dir, "replacements.json").write_text(sparql(ROWS[1:]))
+    with caplog.at_level(logging.WARNING, logger="lux_pipeline"):
+        # not made, no record, the Getty file under its old name
+        assert cfgs.artifact_path("lines") == os.path.join(cfgs.data_dir, "lines.txt")
+        assert cfgs.artifact_path("other", "other.txt") == os.path.join(cfgs.data_dir, "other.txt")
+        assert load_redirects(cfgs) == dict(ROWS[1:])
+        cfgs.artifacts_cache.make("lines")
+        cfgs.artifacts["lines"]["rows"] = 11
+        cfgs.artifact_path("lines")  # stale
+    assert caplog.text == ""
+    with caplog.at_level(logging.DEBUG, logger="lux_pipeline"):
+        cfgs.artifact_path("other", "other.txt")
+    assert "artifact lines has not been made" not in caplog.text  # still once per process
+    monkeypatch.setattr(artifact_cache, "_warned", set())
+    with caplog.at_level(logging.DEBUG, logger="lux_pipeline"):
+        cfgs.artifact_path("other", "other.txt")
+    assert "the configuration has no artifact record other" in caplog.text
+
+
+def test_a_broken_artifact_record_still_warns_with_catch_up_warnings_off(tmp_path, caplog, monkeypatch):
+    monkeypatch.setenv("LUX_ARTIFACT_WARNINGS", "0")
+    install(tmp_path, lines_record(files=("a.txt", "b.txt")))
+    cfgs = make_configs(tmp_path)
+    with caplog.at_level(logging.WARNING, logger="lux_pipeline"):
+        assert cfgs.artifact_path("lines", "c.txt") is None
+    assert caplog.text != ""
 
 
 def test_artifact_path_without_a_record_reads_data_dir(tmp_path, caplog):
