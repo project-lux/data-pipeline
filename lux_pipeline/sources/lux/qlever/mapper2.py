@@ -101,6 +101,27 @@ def clean_datetime(value):
     return None
 
 
+def subject_refs(refs, depth=0):
+    """The linked subjects in ``refs``: every reference with an id, and in
+    place of a compound subject written inline, its components.
+
+    A subdivided heading such as "Hadith--Authorities" has no id of its own: it
+    is an inline ``Type`` whose ``created_by.influenced_by`` lists the linked
+    concepts it is built from (Hadith, Authorities). Skipping it left the work
+    with no subject at all, so it is replaced by those components, and "works
+    about Hadith AND about Authorities" finds it again. A component written
+    inline in turn is unpacked the same way, a few levels at most.
+    """
+    for ref in refs:
+        if type(ref) is not dict:
+            continue
+        if ref.get("id"):
+            yield ref
+        elif depth < 3:
+            parts = (ref.get("created_by") or {}).get("influenced_by") or []
+            yield from subject_refs(parts, depth + 1)
+
+
 # year, year-month or year-month-day with no time
 PARTIAL_DATE = re.compile(r"(-?(?:[1-9]\d{4,}|\d{4}))(?:-(\d\d)(?:-(\d\d))?)?")
 
@@ -563,10 +584,13 @@ class QleverMapper(Mapper):
                     anyt["object"] = o
                     triples.append(f'<{me}> <{anyt["predicate"]}> <{anyt["object"]}> .')
 
-            # Subjects
+            # Subjects, with each inline compound heading's components in its
+            # place; once each, as two headings often share a component
             abouts = data.get("about", []) + data.get("represents", [])
-            for about in abouts:
-                if o := iri(about.get("id")):
+            seen = set()
+            for about in subject_refs(abouts):
+                if (o := iri(about.get("id"))) and o not in seen:
+                    seen.add(o)
                     t["object"] = o
                     abpfx = self.get_prefix(about)
                     t["predicate"] = f"{luxns}{pfx}About{abpfx.title()}"

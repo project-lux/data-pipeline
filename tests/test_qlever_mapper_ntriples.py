@@ -190,6 +190,13 @@ def _ref(v, typ="Type"):
     return {"id": v, "type": typ}
 
 
+def _heading(label, *components):
+    """A compound subject heading as library records write it: an inline Type
+    with no id, created from linked components."""
+    return {"type": "Type", "_label": label,
+            "created_by": {"type": "Creation", "influenced_by": list(components)}}
+
+
 # (label, record type, function from a bad IRI to the record data). Together
 # these reach every `<{...}>` the mapper interpolates from the record.
 IRI_SLOTS = [
@@ -203,6 +210,8 @@ IRI_SLOTS = [
         {"id": v, "classified_as": [{"id": "urn:NAT"}]}]}),
     ("work language", "LinguisticObject", lambda v: {"language": [_ref(v, "Language")]}),
     ("work about", "LinguisticObject", lambda v: {"about": [_ref(v, "Person")]}),
+    ("work about inline heading component", "LinguisticObject",
+     lambda v: {"about": [_heading("A--B", _ref(v))]}),
     ("work represents", "VisualItem", lambda v: {"represents": [_ref(v, "Place")]}),
     ("work created_by agent", "LinguisticObject",
      lambda v: {"created_by": {"carried_out_by": [_ref(v, "Person")]}}),
@@ -494,3 +503,60 @@ def test_partial_dates_are_padded_and_logged(mapper, caplog):
         f"*** padded end date '1815-12-10' to 1815-12-10T23:59:59 in {me} ***",
         f"*** padded end date '1852' to 1852-12-31T23:59:59 in {me} ***",
     ]
+
+
+# Compound subject headings ("Hadith--Authorities") are inline Types with no id;
+# the work must still be about each linked component, or it has no subject at all.
+
+HADITH, AUTHORITIES, CRITICISM = (f"{LUX}concept/{n}" for n in ("hadith", "authorities", "criticism"))
+
+
+def _objects(lines, predicate_suffix):
+    """Objects of the triples whose predicate ends with ``predicate_suffix``."""
+    found = []
+    for line in lines:
+        s, p, rest = line.split(" ", 2)
+        if p.endswith(f"{predicate_suffix}>"):
+            found.append(rest.rsplit(" .", 1)[0].strip("<>"))
+    return found
+
+
+def test_inline_heading_links_the_work_to_each_component_once(mapper):
+    about = [_heading("Hadith--Authorities", _ref(HADITH), _ref(AUTHORITIES)),
+             _heading("Hadith--Criticism, interpretation, etc", _ref(HADITH), _ref(CRITICISM))]
+    lines = mapper.transform({"data": _record("LinguisticObject", {"about": about})})
+    assert sorted(_objects(lines, "workAboutConcept")) == sorted([HADITH, AUTHORITIES, CRITICISM])
+    assert {HADITH, AUTHORITIES, CRITICISM} <= set(_objects(lines, "workAny"))
+    for line in lines:
+        assert ntriples_problems(line) == [], line
+
+
+def test_inline_heading_components_keep_their_own_type(mapper):
+    place = f"{LUX}place/lebanon"
+    about = [_heading("Lebanon--History", _ref(place, "Place"), _ref(f"{LUX}concept/history"))]
+    lines = mapper.transform({"data": _record("LinguisticObject", {"about": about})})
+    assert _objects(lines, "workAboutPlace") == [place]
+    assert _objects(lines, "workAboutConcept") == [f"{LUX}concept/history"]
+
+
+def test_nested_inline_heading_is_unpacked(mapper):
+    inner = _heading("Hadith--Authorities", _ref(HADITH), _ref(AUTHORITIES))
+    lines = mapper.transform({"data": _record("LinguisticObject", {"about": [_heading("outer", inner)]})})
+    assert sorted(_objects(lines, "workAboutConcept")) == sorted([HADITH, AUTHORITIES])
+
+
+def test_linked_and_inline_subjects_together(mapper):
+    about = [_ref(HADITH), _heading("Hadith--Authorities", _ref(HADITH), _ref(AUTHORITIES))]
+    lines = mapper.transform({"data": _record("LinguisticObject", {"about": about})})
+    assert sorted(_objects(lines, "workAboutConcept")) == sorted([HADITH, AUTHORITIES])
+
+
+@pytest.mark.parametrize("heading", [
+    {"type": "Type", "_label": "no components"},
+    {"type": "Type", "_label": "empty", "created_by": {"influenced_by": []}},
+    {"type": "Type", "created_by": None},
+    "not a node",
+], ids=["no created_by", "no components", "null created_by", "not a dict"])
+def test_inline_heading_without_components_adds_nothing(mapper, heading):
+    lines = mapper.transform({"data": _record("LinguisticObject", {"about": [heading]})})
+    assert _objects(lines, "workAboutConcept") == []
