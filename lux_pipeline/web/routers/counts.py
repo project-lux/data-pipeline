@@ -6,6 +6,7 @@ from lux_pipeline.cli.counts import DEFAULT_CACHES
 from lux_pipeline.web.api.counts import counts_data
 from lux_pipeline.web.actions import record
 from lux_pipeline.web.app import page
+from lux_pipeline.web.security import from_this_server
 
 router = APIRouter(include_in_schema=False)
 NAV = ("Counts", "/counts")
@@ -20,6 +21,7 @@ def counts(request: Request, source: str = "", cache: str = "", map: str = "", i
     result = state.last_counts
     status = 200
     if go:
+        from_this_server(request)
         try:
             record(request, "counts.run", **asked)
             result = counts_data(state, **asked)

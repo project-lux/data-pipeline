@@ -207,7 +207,8 @@ Everything a page shows is also JSON under `/api/` (`/api/dashboard`,
 `/api/config`, `/api/config/<key>`, `/api/commands`, `/api/commands/<name>`
 (a command's options), `POST /api/commands/<name>/preview` (a form, or
 JSON `{"values": {option: value}}`, to its command line),
-`/api/health`, `/api/actions`); `/api/docs` lists the routes.
+`/api/health`, `/api/actions`). There is no `/api/docs` page: FastAPI's
+answered without the token and ran a CDN's scripts.
 
 ## How it runs commands
 
@@ -274,8 +275,8 @@ the configuration names.
 * **The token** (above), when the server has one.
 * **Host names**: without a token the server answers only requests that
   name this machine (`127.0.0.1`, `localhost`, `::1`, or the `--host`
-  given), and refuses others (400) before anything else, static files and
-  `/api/docs` included. Otherwise a web page open in the operator's
+  given), and refuses others (400) before anything else, static files
+  included. Otherwise a web page open in the operator's
   browser could point its own domain at 127.0.0.1 (DNS rebinding) and
   read and drive the server. Through an SSH tunnel, open
   `http://127.0.0.1:8321/` or `http://localhost:8321/`. With a token any
@@ -293,6 +294,17 @@ the configuration names.
   the Commands pages (a command with `--force` can be forced). Two phases
   started from the web never run at once. One counts run, one bloat
   report and one set of health checks at a time.
+* **Other sites' pages** (`Sec-Fetch-Site`, which every current browser
+  sends) can link to this server's pages but load or post nothing: an
+  `<img>`, a script, a `fetch` or a form from another site, or another
+  port on this machine, is refused (403). The GETs that start work (counts
+  with `go`, a bloat report, a graph, "map it now", browsing by type, a
+  build's steps, and their `/api` forms) refuse even a link from another
+  site: the page says so, with a link that runs it from here. A client
+  that is not a browser (curl) sends no such header and is not refused.
+* **Command names** from URLs and forms are only those `lux help` lists:
+  `lux` imports a dotted name as an extension command, which a URL must
+  not be able to do.
 * **Values** in URLs reach queries as bound parameters, and a record type
   to browse must be one the configuration knows.
 * **Paths** in URLs stay inside their roots: a run is named relative to
@@ -305,9 +317,8 @@ the configuration names.
 * **Headers**: `Content-Security-Policy: default-src 'self'` (no inline
   scripts or styles anywhere; data reaches the scripts in
   `<script type="application/json">` blocks), `frame-ancestors 'none'`,
-  `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`.
-  `/api/docs` (FastAPI's page, whose scripts come from a CDN) is served
-  without the content security policy.
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, on
+  every response.
 * **The action log** records every change and start (`/actions`).
 
 ## Limits

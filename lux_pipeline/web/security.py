@@ -23,8 +23,7 @@ TOKEN_COOKIE = "lux_token"
 OPEN_PATHS = ("/healthz", "/login", "/favicon.ico")
 OPEN_PREFIXES = ("/static/",)
 # every response: scripts, styles and everything else only from this
-# server, never in a frame. /api/docs (FastAPI's Swagger page, which loads
-# its scripts from a CDN and starts them inline) is the one exception.
+# server, never in a frame
 SECURITY_HEADERS = {
     "Content-Security-Policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'none'; "
                                "base-uri 'self'; form-action 'self'",
@@ -32,7 +31,12 @@ SECURITY_HEADERS = {
     "Referrer-Policy": "same-origin",
     "X-Frame-Options": "DENY",
 }
-NO_CSP_PATHS = ("/api/docs", "/api/docs/oauth2-redirect")
+# Fetch Metadata: what every current browser says about where a request
+# comes from (``Sec-Fetch-Site``). This server's own pages, or the operator
+# typing the address or opening a bookmark; anything else (another site,
+# another port on this machine) is elsewhere. Clients that are not
+# browsers (curl, scripts) send no header and are not anyone's page.
+FROM_HERE = ("same-origin", "none")
 
 
 def host_name(host_header):
@@ -60,6 +64,39 @@ def host_allowed(settings, host_header):
         return True
     name = host_name(host_header)
     return name in LOOPBACK or name == (settings.host or "").strip("[]").lower()
+
+
+def from_elsewhere(request):
+    """Whether a browser says this request comes from another site's page
+    (`FROM_HERE`)."""
+    site = request.headers.get("sec-fetch-site")
+    return site is not None and site not in FROM_HERE
+
+
+def embedded_elsewhere(request):
+    """Whether another site's page is loading or fetching this server (an
+    ``<img>``, a script, ``fetch``, a form posted to it) rather than the
+    operator following a link to one of its pages. Refused for every path
+    (`create_app`): a link in is a navigation, nothing else need be."""
+    if not from_elsewhere(request):
+        return False
+    navigation = (request.method in ("GET", "HEAD")
+                  and request.headers.get("sec-fetch-mode") == "navigate"
+                  and request.headers.get("sec-fetch-dest", "document") == "document")
+    return not navigation
+
+
+class FromElsewhere(Exception):
+    """A request that starts work, from a link on another site's page."""
+
+
+def from_this_server(request: Request):
+    """For a GET that starts work (counts, a bloat report, a graph replay,
+    mapping a record, a scan by type, a build's dry run): refuse it when it
+    comes from a link on another site, which could otherwise start it just
+    by being opened. The page says so, with a link to run it from here."""
+    if from_elsewhere(request):
+        raise FromElsewhere()
 
 
 def is_open(path):

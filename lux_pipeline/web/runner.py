@@ -36,7 +36,7 @@ from lux_pipeline import runtime
 from lux_pipeline.cli._handler import (PARENT_RUN_ENV, RUN_EXTRA_ENV, finish_file,  # noqa: F401
                                        free_prefix, last_line, out_path, refuse_while_building,
                                        start_detached)
-from lux_pipeline.cli.introspect import GROUPS, command_spec
+from lux_pipeline.cli.introspect import GROUPS, listed_command_spec
 from lux_pipeline.progress import RunRecord, list_runs, pid_alive, read_run
 
 logger = logging.getLogger("lux_pipeline")
@@ -125,7 +125,7 @@ class Runner:
     def start(self, command, tail, *, force=False, guarded=None):
         """Start ``lux <command> <tail>``; returns its `RunHandle` at once.
         `guarded`: this run rewrites what a build depends on (`check`)."""
-        spec = command_spec(command)
+        spec = listed_command_spec(command)
         self.check(command, spec, force, guarded)
         cfgs = self.state.configs()
         with self.lock:

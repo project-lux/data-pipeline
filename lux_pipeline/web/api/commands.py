@@ -16,7 +16,7 @@ from fastapi import APIRouter, Request
 
 from lux_pipeline.cli.build import PHASES as BUILD_PHASES
 from lux_pipeline.cli.introspect import (GROUPS, HIDDEN, all_command_specs, argv_from_values,
-                                         command_spec, confirm_reason, option_name,
+                                         confirm_reason, listed_command_spec, option_name,
                                          values_from_argv)
 
 router = APIRouter(prefix="/api/commands", tags=["commands"])
@@ -81,7 +81,7 @@ def form_values(spec, form):
 def build_values(form):
     """`lux build`'s values from its page: the phases ticked become
     ``--skip`` for those that are not (clear is ``--clear``)."""
-    spec = command_spec("build")
+    spec = listed_command_spec("build")
     values = form_values(spec, form)
     if hasattr(form, "getlist") and "phases_shown" in form:
         ticked = set(form.getlist("phase"))
@@ -117,7 +117,7 @@ def preview(spec, values):
 def run_again_url(command, argv):
     """A link to the form, filled in as the run was."""
     try:
-        spec = command_spec(command)
+        spec = listed_command_spec(command)
         if not spec["runnable"]:
             return None
         values = values_from_argv(spec, argv)
@@ -146,7 +146,7 @@ def get_catalogue():
 
 @router.get("/{name}")
 def get_spec(name: str):
-    return command_spec(name)
+    return listed_command_spec(name)
 
 
 @router.post("/{name}/preview")
@@ -154,7 +154,7 @@ async def post_preview(request: Request, name: str):
     """The command line for a form (what the page sends as it is typed
     in: the error, if any, in the answer) or for JSON ``{"values": {dest:
     value}}`` (a value the command cannot take is a 400)."""
-    spec = command_spec(name)
+    spec = listed_command_spec(name)
     if "json" in request.headers.get("content-type", ""):
         body = await request.json()
         values = body.get("values", body) if isinstance(body, dict) else None
@@ -171,5 +171,5 @@ async def post_preview(request: Request, name: str):
 async def post_dry_run(request: Request):
     form = await request.form()
     values = build_values(form)
-    tail, _, _ = command_line(command_spec("build"), values)
+    tail, _, _ = command_line(listed_command_spec("build"), values)
     return {"steps": request.app.state.runner.dry_run(tail)}

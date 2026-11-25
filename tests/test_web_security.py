@@ -60,7 +60,7 @@ def test_the_token(tmp_path, monkeypatch):
 @pytest.mark.parametrize("host", ["attacker.example", "attacker.example:8321", "127.0.0.1.nip.io",
                                   "192.168.1.5:8321", "", "[::2]:8321"])
 @pytest.mark.parametrize("path", ["/", "/config", "/api/dashboard", "/healthz", "/static/app.js",
-                                  "/api/docs", "/api/openapi.json", "/login"])
+                                  "/login"])
 def test_without_a_token_only_this_machines_names_are_answered(web, host, path):
     client, _ = web
     r = client.get(path, headers={"host": host})
@@ -199,11 +199,101 @@ def test_the_security_headers(web, path):
     assert h["x-frame-options"] == "DENY"
 
 
-def test_the_api_docs_page_may_load_its_scripts(web):
+def test_there_are_no_api_docs(tmp_path, monkeypatch):
+    # FastAPI served them outside the token check, with a CDN's scripts
+    client, _ = with_token(tmp_path, monkeypatch)
+    for path in ("/api/docs", "/api/openapi.json", "/api/redoc", "/api/docs/oauth2-redirect"):
+        assert client.get(path).status_code == 404, path
+
+
+# --- command names --------------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", ["this.x", "antigravity.x", "lux_pipeline.cli.counts", "os.path",
+                                  "_handler", "nope"])
+def test_only_listed_commands_are_looked_up(web, monkeypatch, name):
+    # a dotted name is an extension command to `lux`, imported as it stands
     client, _ = web
-    r = client.get("/api/docs")
-    assert r.status_code == 200 and "content-security-policy" not in r.headers
-    assert r.headers["x-content-type-options"] == "nosniff"
+    started = []
+    monkeypatch.setattr(client.app.state.runner, "start", lambda *a, **k: started.append(a))
+    before = set(sys.modules)
+    assert client.get(f"/api/commands/{name}").status_code == 400
+    assert client.get(f"/commands/{name}").status_code == 400
+    assert client.post(f"/commands/{name}", data={"_csrf": csrf(client)}).status_code == 400
+    assert client.post(f"/api/commands/{name}/preview",
+                       data={"_csrf": csrf(client)}).status_code == 400
+    assert set(sys.modules) - before == set() and started == []
+    assert client.get("/api/commands/counts").status_code == 200
+
+
+# --- requests from other sites' pages (Fetch Metadata) --------------------------
+
+IMAGE = {"sec-fetch-site": "cross-site", "sec-fetch-mode": "no-cors", "sec-fetch-dest": "image"}
+FETCH = {"sec-fetch-site": "cross-site", "sec-fetch-mode": "cors", "sec-fetch-dest": "empty"}
+LINK = {"sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate", "sec-fetch-dest": "document"}
+OWN_LINK = {**LINK, "sec-fetch-site": "same-origin"}
+OWN_FETCH = {**FETCH, "sec-fetch-site": "same-origin"}
+TYPED = {**LINK, "sec-fetch-site": "none"}
+
+
+@pytest.mark.parametrize("site", ["cross-site", "same-site"])
+@pytest.mark.parametrize("path", ["/", "/api/dashboard", "/static/app.js", "/healthz", "/config",
+                                  "/records/browse?source=aat"])
+def test_another_sites_page_cannot_load_anything(web, site, path):
+    client, _ = web
+    for h in (IMAGE, FETCH, {**LINK, "sec-fetch-dest": "iframe"}):
+        assert client.get(path, headers={**h, "sec-fetch-site": site}).status_code == 403, (h, path)
+
+
+def test_another_sites_form_cannot_post(web, monkeypatch):
+    client, _ = web
+    started = []
+    monkeypatch.setattr(client.app.state.runner, "start", lambda *a, **k: started.append(a))
+    r = client.post("/commands/counts", headers={**LINK, "sec-fetch-dest": "document"},
+                    data={"_csrf": csrf(client)})
+    assert r.status_code == 403 and started == []
+
+
+def test_links_in_and_this_servers_own_requests_are_answered(web):
+    client, _ = web
+    for h in (LINK, OWN_LINK, OWN_FETCH, TYPED, {}):
+        assert client.get("/", headers=h).status_code == 200, h
+        assert client.get("/records/show?q=aat:300033618", headers=h).status_code == 200, h
+    assert client.get("/api/dashboard", headers=OWN_FETCH).status_code == 200
+
+
+STARTS_WORK = ["/counts?go=1", "/api/counts", "/api/counts/events", "/maintenance?bloat=1",
+               "/api/maintenance/bloat", "/api/maintenance/bloat/events",
+               "/graph?a=aat:300033618&b=wd:Q1", "/api/graph?a=aat:300033618&b=wd:Q1",
+               "/records/show?q=aat:300033618&mapped=1",
+               "/api/records/journey?q=aat:300033618&mapped=1",
+               "/records/browse?source=aat&type=Type", "/api/records/sample?source=aat&type=Type",
+               "/commands/build?preview_steps=1"]
+
+
+@pytest.mark.parametrize("path", STARTS_WORK)
+def test_a_link_from_another_site_starts_no_work(web, monkeypatch, path):
+    client, state = web
+    from lux_pipeline.web import runner
+    monkeypatch.setattr(runner.Runner, "dry_run", lambda self, tail: pytest.fail("dry run"))
+    for name in ("build_all", "source", "idmap"):
+        monkeypatch.setattr(state, name, lambda *a, **k: pytest.fail(f"{name} called"))
+    r = client.get(path, headers=LINK)
+    assert r.status_code == 403, path
+    assert read_actions(state) == []
+    if path.startswith("/api/"):
+        assert r.json()["error"] == "This link came from another site, so it was not run."
+    else:
+        # one click on this server's page runs it
+        assert "This link came from another site" in r.text
+        assert f'<a href="{html.escape(path)}">Run it</a>' in r.text
+
+
+def test_the_same_pages_without_starting_anything_follow_links(web):
+    client, _ = web
+    for path in ("/counts", "/maintenance", "/graph", "/records/browse?source=aat",
+                 "/commands/build", "/api/records/sample?source=aat"):
+        assert client.get(path, headers=LINK).status_code == 200, path
 
 
 def test_no_template_has_inline_script_style_or_handler():

@@ -5,12 +5,13 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
 from lux_pipeline.cli.build import PHASES as BUILD_PHASES
-from lux_pipeline.cli.introspect import command_spec
+from lux_pipeline.cli.introspect import listed_command_spec
 from lux_pipeline.web.api.commands import (build_values, catalogue, command_line, form_values,
                                            preview, shown)
 from lux_pipeline.web.api.runs import full_prefix, rel_prefix
 from lux_pipeline.web.actions import record
 from lux_pipeline.web.app import page, redirect_with
+from lux_pipeline.web.security import from_this_server
 
 router = APIRouter(include_in_schema=False)
 NAV = ("Commands", "/commands")
@@ -31,7 +32,7 @@ def running(state):
 
 
 def form_page(request, name, values, status_code=200, error=None):
-    spec = command_spec(name)
+    spec = listed_command_spec(name)
     state = request.app.state.lux
     p = preview(spec, values)
     options = shown(spec)
@@ -42,7 +43,7 @@ def form_page(request, name, values, status_code=200, error=None):
 
 
 def build_page(request, values, status_code=200, error=None, steps=None, steps_error=None):
-    spec = command_spec("build")
+    spec = listed_command_spec("build")
     state = request.app.state.lux
     skipped = set((values.get("skip") or "").split(","))
     return page(request, "commands/build.html", status_code=status_code, spec=spec, values=values,
@@ -56,7 +57,7 @@ def start(request, name, values, force):
     """Start the command and go to its run page; the form again, saying
     why, when it cannot."""
     state = request.app.state.lux
-    spec = command_spec(name)
+    spec = listed_command_spec(name)
     again = build_page if name == "build" else (lambda req, v, **kw: form_page(req, name, v, **kw))
     try:
         tail, _, reason = command_line(spec, values)
@@ -89,8 +90,9 @@ def build(request: Request, preview_steps: bool = False):
     values = build_values(request.query_params) if request.query_params else {}
     steps = steps_error = None
     if preview_steps:
+        from_this_server(request)
         try:
-            tail, _, _ = command_line(command_spec("build"), values)
+            tail, _, _ = command_line(listed_command_spec("build"), values)
             steps = request.app.state.runner.dry_run(tail)
         except (RuntimeError, ValueError) as e:
             steps_error = str(e)
@@ -107,7 +109,7 @@ async def start_build(request: Request):
 
 @router.get("/commands/{name}")
 def command(request: Request, name: str):
-    spec = command_spec(name)
+    spec = listed_command_spec(name)
     values = form_values(spec, request.query_params) if spec["runnable"] else {}
     return form_page(request, name, values)
 
@@ -116,7 +118,7 @@ def command(request: Request, name: str):
 async def start_command(request: Request, name: str):
     form = await request.form()
     request.state.form = form
-    values = form_values(command_spec(name), form)
+    values = form_values(listed_command_spec(name), form)
     return start(request, name, values, force=bool(values.get("force")))
 
 
