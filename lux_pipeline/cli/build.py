@@ -46,7 +46,6 @@ import logging
 import os
 import shlex
 import subprocess
-import sys
 import time
 from datetime import datetime
 
@@ -54,7 +53,8 @@ from lux_pipeline import runtime
 from lux_pipeline.progress import RunRecord
 
 from ._handler import (PARENT_RUN_ENV, RUN_EXTRA_ENV, BaseHandler, command_argv, default_prefix,
-                       ensure_driver_log, finish_record, refuse_while_building, run_extra)
+                       ensure_driver_log, finish_record, lux_argv, refuse_while_building,
+                       run_extra)
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -125,7 +125,7 @@ class CommandHandler(BaseHandler):
         its ``driver.log`` and has a record. `prefix` is the build's own
         (default ``--prefix``)."""
         prefix = prefix or args.prefix
-        argv = [sys.executable, "-m", "lux_pipeline.cli.entry", command, *opts]
+        argv = [*lux_argv(), command, *opts]
         if args.log:
             argv += ["--log", args.log]
         if args.debug:
@@ -201,8 +201,9 @@ class CommandHandler(BaseHandler):
 
     def record_step(self, phase, argv):
         """Add a step to the build's record as it starts; returns its entry."""
-        entry = {"phase": phase, "command": argv[3] if len(argv) > 3 else None,
-                 "argv": ["lux", *argv[3:]], "prefix": self.step_prefix(argv),
+        n = len(lux_argv())            # python -P -m lux_pipeline.cli.entry
+        entry = {"phase": phase, "command": argv[n] if len(argv) > n else None,
+                 "argv": ["lux", *argv[n:]], "prefix": self.step_prefix(argv),
                  "started": time.time(), "finished": None, "exit": None}
         if self.run_record is not None:
             self.run_record.data["steps"].append(entry)

@@ -19,9 +19,11 @@ import os
 import sys
 from pathlib import Path
 
-from dotenv import dotenv_values, load_dotenv
+from dotenv import dotenv_values
 
 from lux_pipeline.config import Config
+
+logger = logging.getLogger("lux_pipeline")
 
 _cfgs = None
 
@@ -37,24 +39,58 @@ def find_dotenvs():
     return [str(p) for p in dotenv_paths() if p.is_file()]
 
 
+# A .env sets only these. A .env is read from the current directory, and
+# every variable it set reached every worker and child process: PYTHONPATH
+# or LD_PRELOAD in a .env another user left in a directory the operator
+# ran `lux` from ran their code as the operator
+ENV_PREFIX = "LUX_"
+_ignored_warned = set()
+
+
+def dotenv_problem(path):
+    """Why the ``.env`` at `path` must not be read, or None: one another
+    user owns or can write could set ``LUX_BASEPATH``, and with it every
+    class the configuration names."""
+    st = os.stat(path)
+    if hasattr(os, "getuid") and st.st_uid != os.getuid():
+        return f"{path} belongs to another user"
+    if st.st_mode & 0o022:
+        return f"{path} can be written by other users (chmod go-w {path})"
+    return None
+
+
+def read_dotenv(path):
+    """The ``LUX_`` variables of the ``.env`` at `path` (`ENV_PREFIX`); any
+    other is ignored, with a warning once per file."""
+    values = dotenv_values(path)
+    ignored = sorted(k for k in values if not k.startswith(ENV_PREFIX))
+    if ignored and str(path) not in _ignored_warned:
+        _ignored_warned.add(str(path))
+        logger.warning(f"{path}: only {ENV_PREFIX} variables are read from a .env; ignored "
+                       f"{', '.join(ignored)}")
+    return {k: v for k, v in values.items() if k.startswith(ENV_PREFIX) and v is not None}
+
+
 def resolve_env(value):
-    """The ``.env`` file ``--env value`` names: a file; a directory's
-    ``.env``; or, for a bare name, ``~/.lux/<name>.env``. Raises
-    ``FileNotFoundError`` listing what was tried."""
-    p = Path(value).expanduser()
-    tried = [p]
-    if p.is_file():
-        return p
-    if p.is_dir():
-        if (p / ".env").is_file():
-            return p / ".env"
-        tried = [p / ".env"]
-    if os.sep not in value and "/" not in value:
+    """The ``.env`` file ``--env value`` names. A bare name (no ``/``) is
+    ``~/.lux/<name>.env`` and nothing else, so a file or directory of that
+    name in the current directory is never read in its place; a path (a
+    ``/`` in it, as ``./prod`` or ``~/lux/data``) is that file, or that
+    directory's ``.env``. Raises ``FileNotFoundError`` saying what was
+    tried."""
+    if "/" not in value and os.sep not in value and value not in (".", ".."):
         named = Path.home() / ".lux" / f"{value}.env"
         if named.is_file():
             return named
-        tried.append(named)
-    raise FileNotFoundError(f"no .env for --env {value} (tried {', '.join(str(t) for t in tried)})")
+        raise FileNotFoundError(f"no .env for --env {value} (tried {named}; for a file or "
+                                f"directory here, write ./{value})")
+    p = Path(value).expanduser()
+    if p.is_file():
+        return p
+    if p.is_dir() and (p / ".env").is_file():
+        return p / ".env"
+    tried = p / ".env" if p.is_dir() else p
+    raise FileNotFoundError(f"no .env for --env {value} (tried {tried})")
 
 
 def use_env(value):
@@ -62,12 +98,18 @@ def use_env(value):
     (it wins over the shell's variables and over ``./.env`` and
     ``~/.lux/.env``, which `get_basepath` then only fills in around it), and
     record it as ``LUX_ENV_FILE``. Spawned workers and subprocesses inherit
-    the result. Raises ``ValueError`` when the file sets no
-    ``LUX_BASEPATH``. Returns the file."""
+    the result. Only its ``LUX_`` variables are read (`read_dotenv`).
+    Raises ``ValueError`` when the file sets no ``LUX_BASEPATH``, or
+    belongs to or can be written by another user (`dotenv_problem`).
+    Returns the file."""
     fn = resolve_env(value)
-    if not dotenv_values(fn).get("LUX_BASEPATH"):
+    problem = dotenv_problem(fn)
+    if problem:
+        raise ValueError(f"not reading --env {value}: {problem}")
+    values = read_dotenv(fn)
+    if not values.get("LUX_BASEPATH"):
         raise ValueError(f"{fn} does not set LUX_BASEPATH")
-    load_dotenv(fn, override=True)
+    os.environ.update(values)
     os.environ["LUX_ENV_FILE"] = str(fn)
     reset_configs()
     return fn
@@ -76,10 +118,19 @@ def use_env(value):
 def get_basepath():
     """``LUX_BASEPATH``, after loading ``./.env`` and ``~/.lux/.env``. A
     variable already in the environment wins, then the current directory's
-    file, then the one in ``~/.lux``. Empty string when unset."""
+    file, then the one in ``~/.lux``. Empty string when unset. Only ``LUX_``
+    variables are read (`read_dotenv`), and a file another user owns or
+    can write is skipped with a warning (`dotenv_problem`)."""
     for fn in find_dotenvs():
+        problem = dotenv_problem(fn)
+        if problem:
+            if fn not in _ignored_warned:
+                _ignored_warned.add(fn)
+                logger.warning(f"not reading {problem}")
+            continue
         # never overrides: the first to set a variable keeps it
-        load_dotenv(fn, override=False)
+        for k, v in read_dotenv(fn).items():
+            os.environ.setdefault(k, v)
     return os.getenv("LUX_BASEPATH", "")
 
 

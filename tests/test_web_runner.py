@@ -93,7 +93,8 @@ def test_argv_adds_no_ui_and_the_prefix_once(runner):
     assert argv[-6:] == ["reconcile", "--source", "ycba", "--no-ui", "--prefix", "/l/p"]
     assert argv.count("--no-ui") == 1
     plain = Runner(runner.state).argv_for("merge", [], "/l/m")
-    assert plain == [sys.executable, "-m", "lux_pipeline.cli.entry", "merge", "--no-ui", "--prefix", "/l/m"]
+    assert plain == [sys.executable, "-P", "-m", "lux_pipeline.cli.entry", "merge", "--no-ui",
+                     "--prefix", "/l/m"]
 
 
 @pytest.mark.parametrize("bad", ["--my-worker", "--my_worker=2", "--debug", "--prefix", "--env"])

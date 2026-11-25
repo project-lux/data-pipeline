@@ -2,8 +2,10 @@
 status and log files, results come back by worker, failures propagate."""
 
 import io
+import json
 import logging
 import os
+import subprocess
 import sys
 import time
 from argparse import Namespace
@@ -350,6 +352,68 @@ def test_ray_engine_runs_every_worker(tmp_path):
     for n in range(2):
         assert read_status(status_path(prefix, n))["done"] is True
         assert (tmp_path / str(n)).read_text() == str(n)
+
+
+PRIVATE_RAY = r"""
+import json, os, stat, subprocess, sys
+from pathlib import Path
+from lux_pipeline.process.tasks._task_manager import TaskManager, make_engine
+from lux_pipeline.progress import null_progress
+
+class Pid(TaskManager):
+    needs_configs = False
+    def _distributed(self, n, cfgs, progress):
+        return os.getpid()
+
+assert "ray" not in sys.modules
+engine = make_engine("ray", Pid(None, max_workers=1))
+import ray
+from ray._raylet import AuthenticationMode, get_authentication_mode
+node = ray._private.worker.global_worker.node
+temp = Path(node.get_session_dir_path()).parent
+out = {"token": get_authentication_mode() == AuthenticationMode.TOKEN,
+       "temp_dir": str(temp), "parent_mode": stat.S_IMODE(os.stat(temp.parent).st_mode),
+       "ran": engine.run(None, None) is not None}
+code = ("import ray; ray.init(address=%r, log_to_driver=False)\n"
+        "@ray.remote\ndef f(): return 1\nprint('INTRUDER', ray.get(f.remote(), timeout=20))") % node.gcs_address
+def driver(with_token):
+    # another driver on the machine: without the token, and (the control,
+    # so a refusal is the token's doing) with it; a few retries, not 20
+    env = {k: v for k, v in os.environ.items() if with_token or not k.startswith("RAY_AUTH")}
+    env["RAY_NUM_REDIS_GET_RETRIES"] = "3"
+    try:
+        r = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True,
+                           timeout=60)
+        return "INTRUDER" in r.stdout
+    except subprocess.TimeoutExpired:
+        return False
+out["intruder"] = driver(False)
+out["with_token"] = driver(True)
+print("RESULT " + json.dumps(out))
+"""
+
+
+@pytest.mark.skipif(os.environ.get("LUX_TEST_RAY", "1") == "0", reason="LUX_TEST_RAY=0")
+def test_the_ray_engine_starts_a_private_cluster(tmp_path):
+    # in a fresh interpreter: the engine sets the token before importing ray
+    pytest.importorskip("ray")
+    planted = tmp_path / "shared"
+    (planted / "ray").mkdir(parents=True)
+    # another user's cluster, named where ray.init() with no address looks
+    (planted / "ray" / "ray_current_cluster").write_text("127.0.0.1:1")
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("RAY_", "LUX_"))}
+    env["RAY_TMPDIR"] = str(planted)
+    r = subprocess.run([sys.executable, "-c", PRIVATE_RAY], env=env, capture_output=True,
+                       text=True, timeout=120, cwd=str(Path(__file__).parent.parent))
+    line = [l for l in r.stdout.splitlines() if l.startswith("RESULT ")]
+    assert line, r.stderr[-3000:]
+    out = json.loads(line[0][len("RESULT "):])
+    assert out["ran"] and out["token"]
+    assert not out["temp_dir"].startswith(str(planted))
+    assert out["parent_mode"] == 0o700
+    assert not Path(out["temp_dir"]).parent.exists(), "removed at exit"
+    assert out["with_token"] is True, "the control: a driver with the token runs"
+    assert out["intruder"] is False, "a driver without the token ran a task"
 
 
 def test_ray_engine_without_ray_is_a_one_line_error(monkeypatch):

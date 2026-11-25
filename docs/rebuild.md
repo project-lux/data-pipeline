@@ -197,8 +197,12 @@ Every parallel command runs its workers on an engine, chosen with
   can start the slices separately under `nohup`, as the `*_parallel2.sh`
   scripts and `run-all2.sh` do (their default, `ENGINE=null`).
   `ENGINE=mp ./run-all2.sh --all` runs each phase as one `mp` command instead.
-* `ray`: workers as Ray tasks, on a local Ray or the cluster
-  `RAY_ADDRESS` names. Needs `pip install -e .[ray]`.
+* `ray`: workers as Ray tasks, on the cluster `RAY_ADDRESS` names or,
+  without it, a Ray of the command's own: always a new one (never the one
+  `/tmp/ray` names, which any user on the machine can change), its files in
+  a directory only this user can enter, no dashboard, and a random token
+  every process of it must present, so other users on the machine cannot
+  run tasks on it. Needs `pip install -e .[ray]`.
 
 Whatever the engine, a run is the directory
 `<log_dir>/<command>-<timestamp>/`: every worker writes `w<n>.status` and

@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "lux-pipeline"
 version = "0.1.0"
 description = "The LUX data pipeline: harvest, reconcile, merge and export Linked Art records"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 # Keep in step with requirements.txt (tests/test_cli_entry.py checks they agree)
 dependencies = [
     "redis",

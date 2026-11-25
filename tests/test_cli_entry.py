@@ -438,6 +438,44 @@ def test_an_unknown_env_exits_2(value, two_envs, monkeypatch, capsys, fake_comma
     assert Recorder.calls == []
 
 
+def test_a_bare_env_name_is_only_home_lux(two_envs, monkeypatch, capsys, fake_command, tmp_path):
+    # a file or directory of that name in the current directory is not read
+    # in its place: another user could have left it there
+    _, work, seen = two_envs
+    (work / "prod").mkdir()
+    (work / "prod" / ".env").write_text("LUX_BASEPATH=/planted\n")
+    (work / "test").write_text("LUX_BASEPATH=/planted\n")
+    run(["fake-cmd", "--env", "prod"], monkeypatch)
+    run(["fake-cmd", "--env", "test"], monkeypatch)
+    assert seen == ["/srv/prod", "/srv/test"]
+    # ./name is the path
+    run(["fake-cmd", "--env", "./prod"], monkeypatch)
+    assert seen[-1] == "/planted"
+    assert run(["fake-cmd", "--env", "nosuch"], monkeypatch) == 2
+    assert "for a file or directory here, write ./nosuch" in capsys.readouterr().err
+
+
+def test_an_env_others_can_write_exits_2(two_envs, monkeypatch, capsys, fake_command):
+    home, _, seen = two_envs
+    (home / ".lux" / "prod.env").chmod(0o666)
+    assert run(["fake-cmd", "--env", "prod"], monkeypatch) == 2
+    assert "can be written by other users" in capsys.readouterr().err
+    assert seen == []
+
+
+def test_an_env_sets_only_lux_variables(two_envs, monkeypatch, fake_command):
+    home, _, seen = two_envs
+    monkeypatch.delenv("PYTHONPATH", raising=False)
+    (home / ".lux" / "prod.env").write_text("LUX_BASEPATH=/srv/prod\nPYTHONPATH=/elsewhere\n")
+    run(["fake-cmd", "--env", "prod"], monkeypatch)
+    assert seen == ["/srv/prod"] and "PYTHONPATH" not in runtime.os.environ
+
+
+def test_lux_children_do_not_import_from_the_current_directory():
+    from lux_pipeline.cli._handler import lux_argv
+    assert lux_argv("/py") == ["/py", "-P", "-m", "lux_pipeline.cli.entry"]
+
+
 def test_an_env_without_basepath_exits_2(two_envs, monkeypatch, capsys, fake_command):
     home, _, _ = two_envs
     (home / ".lux" / "empty.env").write_text("OTHER=1\n")
