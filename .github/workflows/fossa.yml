@@ -1,0 +1,30 @@
+name: FOSSA Scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_or_branch:
+        description: 'Git tag or branch to analyze'
+        required: true
+        default: 'main'
+  push:
+    branches:
+      - main
+
+jobs:
+  scan:
+    runs-on: [self-hosted, X64]
+    env:
+      TAG_OR_BRANCH: ${{ inputs.tag_or_branch || github.ref_name }}
+    steps:
+      - name: FOSSA Scan
+        run: |
+          REPO_NAME=$(basename "${{ github.repository }}")
+          # Remove existing repository directory if it exists
+          rm -rf $REPO_NAME
+          # Clone source code repository
+          git clone \
+            https://github.com/${{ github.repository }}.git \
+            --branch ${{ env.TAG_OR_BRANCH }} --single-branch --depth 1
+          cd $REPO_NAME
+          FOSSA_API_KEY=${{ secrets.FOSSA_API_KEY }} fossa analyze --team "${{ vars.FOSSA_TEAM }}"
