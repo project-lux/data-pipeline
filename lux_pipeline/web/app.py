@@ -18,7 +18,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -26,8 +26,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from lux_pipeline import runtime
 from lux_pipeline.process.utils.timing_report import fmt_duration, fmt_time
 
-from .security import (NO_CSP_PATHS, SECURITY_HEADERS, TOKEN_COOKIE, new_csrf_token, require_csrf,
-                       require_token, safe_next, token_ok)
+from .security import (NO_CSP_PATHS, SECURITY_HEADERS, TOKEN_COOKIE, host_allowed, new_csrf_token,
+                       require_csrf, require_token, safe_next, token_ok)
 from .settings import Settings
 from .state import AppState, ConfigUnavailable
 
@@ -190,6 +190,19 @@ def create_app(settings=None):
                 continue
             response.headers.setdefault(k, v)
         return response
+
+    # added last, so it runs first: before the routes, static files and
+    # /api/docs, which the dependencies above do not cover
+    @app.middleware("http")
+    async def check_host(request: Request, call_next):
+        """400 for a ``Host`` this server must not answer (`host_allowed`:
+        DNS rebinding)."""
+        if not host_allowed(settings, request.headers.get("host")):
+            logger.warning(f"web: refused a request for host {request.headers.get('host')!r} "
+                           f"({request.method} {request.url.path})")
+            return PlainTextResponse("This server answers only on this machine's own names.",
+                                     status_code=400)
+        return await call_next(request)
 
     @app.exception_handler(ConfigUnavailable)
     async def no_config(request, exc):

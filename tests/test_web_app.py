@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lux_pipeline.web.app import AREAS, create_app
 from lux_pipeline.web.settings import Settings
-from web_client import csrf, make_client
+from web_client import api_routes, csrf, make_client
 
 
 def test_healthz_answers_without_a_configuration(tmp_path, monkeypatch):
@@ -57,7 +57,7 @@ def test_unknown_paths_and_static_files(tmp_path, monkeypatch):
 
 def test_every_change_needs_the_csrf_token(tmp_path, monkeypatch):
     client, _ = make_client(tmp_path, monkeypatch, seed=False)
-    posts = [r.path for r in client.app.routes if "POST" in getattr(r, "methods", ())]
+    posts = [r.path for r in api_routes(client.app.routes) if "POST" in r.methods]
     assert posts, "there are POST routes to check"
     for path in posts:
         assert client.post(path).status_code == 403, path

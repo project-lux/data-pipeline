@@ -41,7 +41,21 @@ def make_client(tmp_path, monkeypatch, *, seed=True, root="inst", settings=None,
 
     monkeypatch.setattr(_services, "probe_postgres", probe)
     app = create_app(settings or Settings(open_browser=False, token=None))
-    return TestClient(app), app.state.lux
+    # a browser on this machine names it 127.0.0.1 (security.host_allowed)
+    return TestClient(app, base_url="http://127.0.0.1"), app.state.lux
+
+
+def api_routes(routes):
+    """Every APIRoute of `routes` (``client.app.routes``), also inside
+    included routers: FastAPI 0.165 keeps each `include_router` as one
+    ``_IncludedRouter`` there, and applies the app's dependencies to it,
+    not to the route."""
+    from fastapi.routing import APIRoute
+    for r in routes:
+        if isinstance(r, APIRoute):
+            yield r
+        elif hasattr(r, "original_router"):
+            yield from api_routes(r.original_router.routes)
 
 
 def csrf(client):
