@@ -1,7 +1,6 @@
 import logging
 import os
 from lux_pipeline.process.utils.mapper_utils import get_year_from_timespan
-from sqlitedict import SqliteDict
 from lux_pipeline.storage.idmap.lmdb import TabLmdb
 from lux_pipeline.config import index_path, resolve_object
 import re
@@ -331,101 +330,6 @@ class LmdbReconciler(LazyIndexes, Reconciler):
                         except Exception:
                             self.debug_graph[e] = [(f"{self.namespace}{uri}", "uri")]
 
-        if len(matches) == 1:
-            return f"{self.namespace}{list(matches.keys())[0]}"
-        elif matches:
-            ms = list(matches.items())
-            # Most supporting matches first; the old key len(x) was always 2
-            # (a (uri, [matches]) tuple), making the "best match" whichever
-            # landed last in dict order. Tie-break on uri for determinism.
-            ms.sort(key=lambda x: (-len(x[1]), x[0]))
-            if self.debug:
-                logger.debug(f"Found multiple matches: {ms}")
-            return f"{self.namespace}{ms[0][0]}"
-        else:
-            return None
-
-
-# Old SQLite Reconciler
-class SqliteReconciler(LazyIndexes, Reconciler):
-    def __init__(self, config):
-        Reconciler.__init__(self, config)
-        self._init_indexes(config)
-
-    def _open_index(self, fn, which):
-        # Same rationale as LmdbReconciler: a silently-None index disables
-        # reconciliation for the whole worker. Sqlite read-locks are the
-        # known transient failure, so retry before giving up loudly.
-        if not fn:
-            return None
-        last_err = None
-        for attempt in range(5):
-            try:
-                return SqliteDict(fn, autocommit=False, flag="r")
-            except Exception as e:
-                last_err = e
-                time.sleep(0.5 * (attempt + 1))
-        raise RuntimeError(
-            f"Could not open {which} index {fn} for {self.config.get('name', '?')}: "
-            f"{last_err}. Reconciliation would silently be disabled for this worker."
-        )
-
-    def get_keys_like(self, which, key):
-        # WARNING: This is HORRIBLY SLOW in Sqlite compared to LMDB
-        if which == "name":
-            idx = self.name_index
-        elif which == "id":
-            idx = self.id_index
-        else:
-            raise ValueError(f"Unknown sqlitedict type {which}")
-        QUERY = 'SELECT key FROM "%s" WHERE key LIKE ?' % idx.tablename
-        items = idx.conn.select(QUERY, (f"{key}%",))
-        return [x[0] for x in items]
-
-    def reconcile(self, rec, reconcileType="all"):
-        # Match by primary name
-        if reconcileType not in ["all", "name", "uri"]:
-            return None
-        if not self.should_reconcile(rec, reconcileType):
-            return None
-        if "data" in rec:
-            rec = rec["data"]
-
-        matches = {}
-        my_type = rec["type"]
-
-        if reconcileType in ["all", "name"]:
-            # Get name from Record
-            vals = self.extract_names(rec)
-            vals = sorted(vals.items(), key=lambda item: (item[1], -len(item[0])))
-            vals = [x[0] for x in vals]
-            for val in vals:
-                if val in self.name_index:
-                    try:
-                        (k, typ) = self.name_index[val]
-                    except Exception:
-                        k = self.name_index[val]
-                        typ = None
-                    if typ is not None and my_type == typ:
-                        try:
-                            matches[k].append(val)
-                        except Exception:
-                            matches[k] = [val]
-                        break
-
-        if reconcileType in ["all", "uri"]:
-            for e in self.extract_uris(rec):
-                if e in self.id_index:
-                    (uri, typ) = self.id_index[e]
-                    if my_type != typ:
-                        if self.debug:
-                            logger.debug(
-                                f"cross-type match: record has {my_type} and external has {typ}"
-                            )
-                    try:
-                        matches[uri].append(e)
-                    except:
-                        matches[uri] = [e]
         if len(matches) == 1:
             return f"{self.namespace}{list(matches.keys())[0]}"
         elif matches:

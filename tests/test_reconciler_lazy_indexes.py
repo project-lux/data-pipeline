@@ -1,4 +1,4 @@
-"""The reconcilers open their LMDB / sqlite indexes on first use, not in
+"""The reconcilers open their LMDB indexes on first use, not in
 __init__, so a source can be instantiated before its index is built
 (`lux load-index` on a fresh machine); a missing configured index still
 fails loudly, at first access."""
@@ -12,7 +12,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from lux_pipeline.process.base import reconciler as rmod
-from lux_pipeline.process.base.reconciler import LmdbReconciler, SqliteReconciler
+from lux_pipeline.process.base.reconciler import LmdbReconciler
 from lux_pipeline.sources.lux.final.reconciler import GlobalReconciler
 from lux_pipeline.storage.idmap.lmdb import TabLmdb
 
@@ -63,13 +63,6 @@ def test_indexes_stay_assignable(tmp_path):
     r = object.__new__(LmdbReconciler)
     r.name_index = {"y": ["2", "Type"]}
     assert r.name_index == {"y": ["2", "Type"]} and r.id_index is None
-
-
-def test_sqlite_reconciler_is_lazy_too(tmp_path):
-    r = SqliteReconciler(config(tmp_path, id_path=str(tmp_path / "missing.sqlite")))
-    assert r.name_index is None
-    with pytest.raises(RuntimeError, match="Could not open id index"):
-        r.id_index
 
 
 def test_global_reconciler_builds_before_its_indexes_exist(tmp_path, caplog):

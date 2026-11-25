@@ -18,16 +18,14 @@ than one slice. ``load()`` is the legacy entry point (``manage-data.py
 --load-index``) and the subclasses that override it (`ViafIndexLoader`,
 `WdFileIndexLoader`, `GlobalIndexLoader`, ...) keep working unchanged.
 
-The storage subclasses, `LmdbIndexLoader` and `SqliteIndexLoader`, open
-the two indexes by path in `get_storage()`.
+The storage subclass, `LmdbIndexLoader`, opens the two indexes by path
+in `get_storage()`.
 """
 
 import csv
 import logging
 import os
 import time
-
-from sqlitedict import SqliteDict
 
 from lux_pipeline.config import index_path
 from lux_pipeline.progress import Sliced, null_progress
@@ -185,7 +183,7 @@ class IndexLoader(Sliced):
 
     @staticmethod
     def close_index(idx):
-        """Commit (a store that needs it, SqliteDict) and close an index so
+        """Commit (a store that needs it) and close an index so
         the file is complete and another opener in this process can use
         it."""
         if idx is None:
@@ -252,18 +250,3 @@ class LmdbIndexLoader(IndexLoader):
     def open_index_readonly(self, path):
         return TabLmdb.open(path, "r", readahead=False, writemap=True)
 
-
-class SqliteIndexLoader(IndexLoader):
-    def get_storage(self):
-        if self.out_path is not None:
-            index = SqliteDict(self.out_path, autocommit=False)
-        else:
-            index = None
-        if self.inverse_path is not None:
-            eqindex = SqliteDict(self.inverse_path, autocommit=False)
-        else:
-            eqindex = None
-        return (index, eqindex)
-
-    def open_index_readonly(self, path):
-        return SqliteDict(path, autocommit=False)

@@ -12,7 +12,6 @@ shapely
 lxml
 jsonschema
 lmdb>=1.4.1
-sqlitedict
 numpy
 bs4
 python-dotenv
