@@ -92,21 +92,27 @@ def matches_problems(data):
     if not isinstance(ns, str) or not ns or not isinstance(ms, list):
         return []
     uri = ns + "ID"
+    entries = [m for m in ms if isinstance(m, str) and m and m in uri]
+    # split_uri matches an entry only where a URI's host starts
+    problems = [f"matches entry {m!r} is inside the path of the namespace {ns!r}: an entry "
+                f"names a URI only where its host starts (a scheme, slashes and whole host "
+                f"labels before it), so this one never names the source's records"
+                for m in entries if not _config.match_at_start(uri, m)]
     # split_uri: the first entry found in the URI, the identifier after its last occurrence
-    m = next((m for m in ms if isinstance(m, str) and m and m in uri), None)
+    m = next((m for m in entries if _config.match_at_start(uri, m)), None)
     if m is None:
-        return []
+        return problems
     ident = uri.rsplit(m, 1)[1]
     if ident == "ID":
-        return []
+        return problems
     rest = ident[: -len("ID")]
     problem = (f"matches entry {m!r} stops short of the namespace {ns!r}: "
                f"{uri} splits to the identifier {ident!r} and canonicalizes to "
                f"{ns + ident}, so references never reach the records; write {m + rest!r}")
     if _overrides_fix_identifier(data.get("mapperClass")):
-        return [f"warning: {problem} (unless {data['mapperClass']}.fix_identifier removes "
-                f"{rest!r})"]
-    return [problem]
+        return problems + [f"warning: {problem} (unless {data['mapperClass']}.fix_identifier "
+                           f"removes {rest!r})"]
+    return problems + [problem]
 
 
 def _overrides_fix_identifier(path):

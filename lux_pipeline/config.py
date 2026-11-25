@@ -8,6 +8,25 @@ from .storage.uricache import URICache, _MISSING
 
 logger = logging.getLogger("lux_pipeline")
 
+# What may come before a source's `matches` entry in a URI it names: a
+# scheme, slashes, and whole host labels ("https://sws." before
+# "geonames.org/", "https:/" before "/orcid.org/"); never a path or a
+# query. A match found further in ("http://vocab.getty.edu/ulan/1/https://
+# ycba-lux.s3.amazonaws.com/v3/...", from a Wikidata ULAN ID anyone can
+# edit) names nothing.
+MATCH_PREFIX = re.compile(r"(?:[A-Za-z][A-Za-z0-9+.-]*:)?/*(?:[A-Za-z0-9-]+\.)*")
+# characters no identifier has: control characters. A tab or a newline
+# would split the assertions, references and other files written a line
+# per record into lines nobody wrote (forged identity edges)
+CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def match_at_start(uri, m):
+    """Whether `uri` names `m` where a source's namespace starts
+    (`MATCH_PREFIX`), not somewhere in its path."""
+    i = uri.find(m)
+    return i >= 0 and MATCH_PREFIX.fullmatch(uri, 0, i) is not None
+
 # Object paths from configs written before the package was renamed from
 # `pipeline` to `lux_pipeline` and the category level (`sources.authorities.lc`
 # -> `sources.lc`) was removed. Each distinct legacy path is warned about once.
@@ -579,6 +598,11 @@ class Config(object):
 
     def fix_identifier(self, source, identifier):
         identifier = identifier.strip()
+        if CONTROL_CHARS.search(identifier):
+            # a tab or newline inside: never an identifier (CONTROL_CHARS)
+            logger.debug(f"refused an identifier of {source.get('name')} with a control "
+                         f"character: {identifier!r}")
+            return None
         identifier = identifier.replace(" ", "")
         identifier = identifier.replace('"', "")
         identifier = identifier.replace("”", "")
@@ -630,8 +654,16 @@ class Config(object):
             logger.error(f"Failed in split_uri() m: {m} source: {source['name']}")
             return None
         if identifier.startswith("http://") or identifier.startswith("https://"):
-            # Urgh, fix double wrapping
-            return self.split_uri(identifier)
+            # Urgh, fix double wrapping: the source's namespace around one of
+            # its own URIs. Around another source's it is not wrapping but a
+            # way to name any record from an identifier field ("ULAN ID" =
+            # a Yale object's URI), so it names nothing
+            inner = self.split_uri(identifier)
+            if inner is not None and inner[0].get("name") != source.get("name"):
+                logger.debug(f"refused {uri!r}: {source.get('name')}'s namespace around "
+                             f"{inner[0].get('name')}'s URI")
+                return None
+            return inner
         identifier = self.fix_identifier(source, identifier)
         if not identifier:
             return None
@@ -646,7 +678,7 @@ class Config(object):
             if type(ms) != list:
                 ms = [ms]
             for m in ms:
-                if m in uri:
+                if m in uri and match_at_start(uri, m):
                     source = s
                     break
             if source:
@@ -663,7 +695,7 @@ class Config(object):
         if pairs is None:
             pairs = self.build_match_index()
         for m, source in pairs:
-            if m in uri:
+            if m in uri and match_at_start(uri, m):
                 return self._finish_split(uri, m, source)
         return None
 

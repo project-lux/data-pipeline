@@ -1,7 +1,7 @@
 from lux_pipeline.process.base.mapper import Mapper
 from lux_pipeline.process.utils.mapper_utils import make_datetime
 from cromulent import model, vocab
-from lxml import etree
+from lux_pipeline.process.utils import safe_xml
 
 ### Documentation
     ##some properties not handled:
@@ -37,7 +37,7 @@ class BnfXmlMapper(Mapper):
         if '<?xml' in xml:
             xml = bytes(xml, 'utf-8')
         try:
-            dom = etree.XML(xml)
+            dom = safe_xml.XML(xml)
         except:
             raise
             return None

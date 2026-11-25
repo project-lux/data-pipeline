@@ -2,6 +2,7 @@ import logging
 from lux_pipeline.process.base.loader import Loader
 import zipfile
 from lxml import etree
+from lux_pipeline.process.utils import safe_xml
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -68,7 +69,7 @@ class FastLoader(Loader):
                     logger.info(f"Processing file: {fn}")
                     with fh.open(fn) as f:
                         try:
-                            tree = etree.parse(f)
+                            tree = safe_xml.parse(f)
                             root = tree.getroot()
 
                             for record in root.findall(".//mx:record", namespaces=nss):

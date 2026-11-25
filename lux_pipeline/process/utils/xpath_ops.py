@@ -4,7 +4,7 @@
 # and then use the XML to find the XPath given, and find it in the JSON
 # and then manipulate the JSON (yes, the XML is entirely throwaway)
 
-from lxml import etree
+from lux_pipeline.process.utils import safe_xml
 
 from lux_pipeline.log import logger
 
@@ -49,7 +49,7 @@ def dicttoxml(what):
 def xpath_on_record(what, xpath):
     xml = dicttoxml(what)
     try:
-        dom = etree.XML(xml)
+        dom = safe_xml.XML(xml)
     except:
         logger.warning(f"failed to parse XML:\n{xml}")
         return []

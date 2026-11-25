@@ -27,6 +27,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 
 from lxml import etree
+from lux_pipeline.process.utils import safe_xml
 
 # how much content (after inflation) the decisions are made on
 SAMPLE_BYTES = 1024 * 1024
@@ -298,11 +299,11 @@ def _sniff_xml(ctx):
     lines = _non_blank_lines(ctx["text"], 2)
     if len(lines) > 1 and lines[1].startswith("<") and not lines[0].startswith("<?"):
         try:
-            etree.fromstring(lines[0].encode("utf-8"))
+            safe_xml.fromstring(lines[0].encode("utf-8"))
             return "lines/other"
         except etree.XMLSyntaxError:
             pass
-    parser = etree.XMLPullParser(events=("start", "end"))
+    parser = safe_xml.XMLPullParser(events=("start", "end"))
     depth = 0
     children = []          # tags of the root's complete children
     root_closed = False
