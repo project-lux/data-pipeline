@@ -77,6 +77,15 @@ def out_path(prefix):
     return stdout_path(prefix)
 
 
+def lux_argv(python=None):
+    """The command line that runs `lux` in a child process (a build's steps,
+    a ``--background`` run, a run the web UI starts). ``-P``: the child's
+    ``sys.path`` does not begin with the current directory, as ``python -m``
+    alone would make it, so an ``argparse.py`` (or any module name) another
+    user left in a directory the operator runs `lux` from is never imported."""
+    return [python or sys.executable, "-P", "-m", "lux_pipeline.cli.entry"]
+
+
 def start_detached(argv, out, env=None, cwd=None):
     """Start `argv` as a process that outlives this one, as ``nohup ... &``
     would: in a session of its own (no controlling terminal, so closing

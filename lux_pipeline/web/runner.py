@@ -24,6 +24,7 @@ can be); and two phases the web started are never run at once.
 import json
 import logging
 import os
+import shlex
 import signal
 import socket
 import subprocess
@@ -34,8 +35,8 @@ from dataclasses import dataclass, field
 
 from lux_pipeline import runtime
 from lux_pipeline.cli._handler import (PARENT_RUN_ENV, RUN_EXTRA_ENV, finish_file,  # noqa: F401
-                                       free_prefix, last_line, out_path, refuse_while_building,
-                                       start_detached)
+                                       free_prefix, last_line, lux_argv, out_path,
+                                       refuse_while_building, start_detached)
 from lux_pipeline.cli.introspect import GROUPS, listed_command_spec
 from lux_pipeline.progress import RunRecord, list_runs, pid_alive, read_run
 
@@ -71,7 +72,7 @@ class Runner:
     # --- command lines ---------------------------------------------------------------
 
     def base_argv(self):
-        return [self.python, "-m", "lux_pipeline.cli.entry"]
+        return lux_argv(self.python)
 
     def argv_for(self, command, tail, prefix):
         """The process's command line. `tail` is what a form produced
@@ -166,7 +167,7 @@ class Runner:
         if done.returncode != 0:
             raise RuntimeError((done.stderr or done.stdout).strip().splitlines()[-1]
                                if (done.stderr or done.stdout).strip() else f"exit {done.returncode}")
-        return [l.replace(f"{self.python} -m lux_pipeline.cli.entry", "lux") for l in lines]
+        return [l.replace(shlex.join(lux_argv(self.python)), "lux") for l in lines]
 
     # --- cancelling ------------------------------------------------------------------
 

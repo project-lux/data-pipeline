@@ -24,12 +24,16 @@ exists: ``process()`` takes an optional object with a ``refresh()`` method
 and calls it while waiting.
 """
 
+import atexit
 import glob
 import io
 import logging
 import multiprocessing
 import os
+import secrets
+import shutil
 import sys
+import tempfile
 import time
 from concurrent.futures import ProcessPoolExecutor, wait as wait_futures
 
@@ -367,18 +371,62 @@ class MpEngine(Engine):
         return self._finish(results, errors, view)
 
 
+def private_ray_settings(token=True):
+    """The `ray.init` keywords for a Ray cluster of this process's own and,
+    with `token`, an authentication token for it, set in the environment
+    (before ``import ray``: Ray reads the mode as it is imported).
+
+    ``ray.init()`` with no address joins the cluster named in
+    ``/tmp/ray/ray_current_cluster``, which Ray makes writable by every
+    user, so another user could have the driver join (and unpickle results
+    from) their cluster; and the cluster it starts answers anyone on the
+    machine. So: ``address="local"`` (always a new cluster); its files in a
+    directory only this user can enter (Ray makes the one it is given
+    world-writable, so it is given one inside a 0700 one, removed at exit;
+    in ``/tmp``, since Ray's socket paths must stay short); a random token
+    every process of the cluster must present (``RAY_AUTH_MODE=token``,
+    passed to them in the environment); and no dashboard (its job API runs
+    any command)."""
+    parent = tempfile.mkdtemp(prefix="lux-ray-", dir="/tmp" if os.path.isdir("/tmp") else None)
+    atexit.register(shutil.rmtree, parent, True)
+    if token:
+        os.environ.setdefault("RAY_AUTH_MODE", "token")
+        if os.environ["RAY_AUTH_MODE"] == "token":
+            os.environ.setdefault("RAY_AUTH_TOKEN", secrets.token_hex(32))
+    return {"address": "local", "include_dashboard": False,
+            "_temp_dir": os.path.join(parent, "ray")}
+
+
 class RayEngine(Engine):
-    """Ray remote tasks; the optional extra for multi-node runs."""
+    """Ray remote tasks; the optional extra for multi-node runs.
+
+    With ``RAY_ADDRESS`` set (the operator's own environment: a ``.env``
+    sets only ``LUX_`` variables) it joins that cluster; otherwise it starts
+    a private one (`private_ray_settings`)."""
 
     def __init__(self, manager):
         super().__init__(manager)
+        cluster = os.environ.get("RAY_ADDRESS")
+        imported = "ray" in sys.modules
+        settings = {"address": cluster} if cluster else None
+        if settings is None and not imported:
+            settings = private_ray_settings(token=True)
         try:
             import ray
         except ImportError:
             raise RuntimeError("--engine ray needs the ray package: pip install -e '.[ray]'") from None
         self.ray = ray
         if not ray.is_initialized():
-            ray.init(log_to_driver=False)
+            if settings is None:
+                # imported before this engine could set a token: it runs with
+                # whatever mode Ray read then
+                from ray._raylet import AuthenticationMode, get_authentication_mode
+                if get_authentication_mode() != AuthenticationMode.TOKEN:
+                    logger.warning("ray was imported before the Ray engine started, so its "
+                                   "cluster runs without an authentication token")
+                settings = private_ray_settings(token=False)
+            ray.init(log_to_driver=False, **settings)
+            atexit.register(ray.shutdown)
 
     def run(self, prefix, view):
         ray = self.ray

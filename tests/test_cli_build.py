@@ -52,8 +52,9 @@ def make(tmp_path, results=None):
 
 
 def name_of(argv):
-    assert argv[1:3] == ["-m", "lux_pipeline.cli.entry"], "every step is a lux command"
-    return argv[3]
+    # -P: the step's sys.path does not begin with the current directory
+    assert argv[1:4] == ["-P", "-m", "lux_pipeline.cli.entry"], "every step is a lux command"
+    return argv[4]
 
 
 def run(hdlr, argv):
@@ -71,7 +72,7 @@ def test_default_plan_is_run_all_order(tmp_path, monkeypatch):
     assert [name_of(a) for a in hdlr.ran] == ["sheets", "reconcile", "identify", "metatypes",
                                               "write-refs", "merge", "portal", "export"]
     reconcile = next(a for a in hdlr.ran if name_of(a) == "reconcile")
-    assert reconcile[4:6] == ["--source", "all"]
+    assert reconcile[5:7] == ["--source", "all"]
     # identify, metatypes and write-refs are the identify phase's, not
     # reconcile's tail
     assert "--no-finish" in reconcile
@@ -84,7 +85,7 @@ def test_clear_runs_first(tmp_path, monkeypatch):
     hdlr = make(tmp_path)
     run(hdlr, ["--clear", "--to", "reconcile", "--skip", "sheets"])
     base = hdlr.build_prefix
-    assert [a[3:] for a in hdlr.ran[:3]] == [
+    assert [a[4:] for a in hdlr.ran[:3]] == [
         ["clear", "--source", "all", "--force", "--prefix", os.path.join(base, "clear")],
         ["clear", "--refs", "--force", "--prefix", os.path.join(base, "clear-refs")],
         ["new-token", "--prefix", os.path.join(base, "new-token")]]
@@ -130,7 +131,7 @@ def test_global_options_go_to_the_phases(tmp_path, monkeypatch):
     for a in hdlr.ran:
         by.setdefault(name_of(a), a)
     rec = by["reconcile"]
-    assert rec[4:6] == ["--source", "ycba,aat"]
+    assert rec[5:7] == ["--source", "ycba,aat"]
     for opt in (["--max-workers", "8"], ["--engine", "ray"], ["--prefix", "/logs/b1/reconcile"],
                 ["--log", "DEBUG"]):
         i = rec.index(opt[0])
@@ -143,7 +144,7 @@ def test_global_options_go_to_the_phases(tmp_path, monkeypatch):
     assert by["new-token"][by["new-token"].index("--prefix") + 1] == "/logs/b1/new-token"
     assert by["clear"][by["clear"].index("--log") + 1] == "DEBUG"
     # portal runs its own pool: the worker count and its prefix, nothing else
-    assert by["portal"][4:] == ["--log", "DEBUG", "--max-workers", "8", "--prefix", "/logs/b1/portal"]
+    assert by["portal"][5:] == ["--log", "DEBUG", "--max-workers", "8", "--prefix", "/logs/b1/portal"]
 
 
 # --- housekeeping, failure, status -------------------------------------------
@@ -289,7 +290,7 @@ def test_the_identify_phase_steps_are_one_shot(tmp_path, monkeypatch):
     hdlr = make(tmp_path)
     run(hdlr, ["--from", "identify", "--to", "identify", "--max-workers", "8", "--engine", "mp",
                "--no-ui", "--prefix", "/logs/b2", "--log", "DEBUG"])
-    assert [a[3:] for a in hdlr.ran] == [
+    assert [a[4:] for a in hdlr.ran] == [
         ["identify", "--log", "DEBUG", "--prefix", "/logs/b2/identify"],
         ["metatypes", "--log", "DEBUG", "--prefix", "/logs/b2/metatypes"],
         ["write-refs", "--log", "DEBUG", "--prefix", "/logs/b2/write-refs"]]

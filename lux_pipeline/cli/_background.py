@@ -25,7 +25,7 @@ import sys
 import time
 
 from lux_pipeline.cli._handler import (PARENT_RUN_ENV, RUN_EXTRA_ENV, finish_file, free_prefix,
-                                       last_lines, out_path, run_extra, start_detached)
+                                       last_lines, lux_argv, out_path, run_extra, start_detached)
 from lux_pipeline.progress import RunRecord, read_run, worker_out_path
 
 FLAG = "--background"
@@ -95,7 +95,7 @@ def start(args, cfgs, out=None, err=None, python=None, wait=None):
     prefix = args.prefix or free_prefix(cfgs, args.command)
     stdout = worker_out_path(prefix, args.my_worker) if one_slice else out_path(prefix)
     tail = child_args(args.cli_argv, args, prefix)
-    argv = [python or sys.executable, "-m", "lux_pipeline.cli.entry", *tail]
+    argv = [*lux_argv(python), *tail]
     shown = ["lux", *(a for a in args.cli_argv if not is_flag(a))]
 
     proc = start_detached(argv, stdout, env=child_env(stdout))

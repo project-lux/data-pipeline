@@ -116,6 +116,40 @@ def test_parent_directories_are_not_searched(places, monkeypatch):
     assert runtime.get_basepath() == ""
 
 
+# --- what a .env may set, and whose .env is read --------------------------------------
+
+
+def test_a_dotenv_sets_only_lux_variables(places, monkeypatch, caplog):
+    cwd, _ = places
+    for var in ("PYTHONPATH", "LD_PRELOAD"):
+        monkeypatch.delenv(var, raising=False)
+    (cwd / ".env").write_text("LUX_BASEPATH=/from-cwd\nPYTHONPATH=/elsewhere\nLD_PRELOAD=/x.so\n")
+    with caplog.at_level(logging.WARNING, logger="lux_pipeline"):
+        assert runtime.get_basepath() == "/from-cwd"
+    assert "PYTHONPATH" not in runtime.os.environ and "LD_PRELOAD" not in runtime.os.environ
+    assert "only LUX_ variables are read from a .env; ignored LD_PRELOAD, PYTHONPATH" in caplog.text
+
+
+@pytest.mark.parametrize("mode", [0o666, 0o664, 0o646])
+def test_a_dotenv_others_can_write_is_not_read(places, caplog, mode):
+    cwd, home = places
+    (cwd / ".env").write_text("LUX_BASEPATH=/planted\n")
+    (cwd / ".env").chmod(mode)
+    (home / ".lux" / ".env").write_text("LUX_BASEPATH=/from-home\n")
+    with caplog.at_level(logging.WARNING, logger="lux_pipeline"):
+        assert runtime.get_basepath() == "/from-home"
+    assert "can be written by other users" in caplog.text
+
+
+def test_another_users_dotenv_is_not_read(places, monkeypatch, caplog):
+    cwd, _ = places
+    (cwd / ".env").write_text("LUX_BASEPATH=/planted\n")
+    monkeypatch.setattr(runtime.os, "getuid", lambda: runtime.os.stat(cwd / ".env").st_uid + 1)
+    with caplog.at_level(logging.WARNING, logger="lux_pipeline"):
+        assert runtime.get_basepath() == ""
+    assert "belongs to another user" in caplog.text
+
+
 def test_basepath_is_empty_when_unset():
     assert runtime.get_basepath() == ""
 

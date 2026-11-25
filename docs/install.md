@@ -1,6 +1,6 @@
 # Installing the LUX pipeline
 
-From a fresh machine to `lux counts`. The pipeline needs Python 3.10 or
+From a fresh machine to `lux counts`. The pipeline needs Python 3.11 or
 later and PostgreSQL. Redis is optional: the samples and the build
 machine keep `networkmap` (and `redirects`, `record_refs`, which nothing
 reads) in it, and `lux initialize` asks whether to keep them there or move
@@ -155,7 +155,10 @@ and the web editor refuse to write one.
 
 `lux` finds its configuration through `LUX_BASEPATH`: from the
 environment, else the `.env` in the current directory, else
-`~/.lux/.env` (parent directories are not searched). `lux initialize`
+`~/.lux/.env` (parent directories are not searched). A `.env` sets only
+`LUX_` variables (others are ignored, with a warning), and one owned by
+another user or writable by others is not read: the configuration names
+the code `lux` runs. `lux initialize`
 writes the `.env` into the installation directory, and offers to write
 `~/.lux/.env` too when there is none (`--home-dotenv` / `--no-home-dotenv`
 answer for a script), so `lux` works from any directory; a `.env` in the
@@ -175,7 +178,11 @@ cp ~/lux-test/data/.env ~/.lux/test.env
 lux --env test counts          # ~/.lux/test.env
 lux --env prod counts          # ~/.lux/prod.env
 lux --env ~/lux-test/data ...  # a directory's .env, or a file's path
+lux --env ./staging ...        # one in the current directory: write ./
 ```
+
+A bare name is only ever `~/.lux/<name>.env`; a file or directory in the
+current directory needs a `/` (`./staging`).
 
 `LUX_BASEPATH=/path lux ...` also works for a single command.
 
