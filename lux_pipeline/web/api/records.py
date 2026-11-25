@@ -138,6 +138,10 @@ def sample_data(state, source, cache="recordcache", typ=None, since=None, n=50):
     that looks it up."""
     if cache not in SAMPLE_CACHES:
         raise ValueError(f"a source's caches are {', '.join(SAMPLE_CACHES)}, not {cache!r}")
+    if typ:
+        types = browse_options(state)["types"]
+        if typ not in types:
+            raise ValueError(f"type: {typ!r} is not one of {', '.join(types)}")
     cfg = state.source(source)
     store = cfg.get(SAMPLE_CACHES[cache])
     if store is None:

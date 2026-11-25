@@ -17,8 +17,7 @@ import pytest
 pytest.importorskip("fastapi")
 sys.path.insert(0, str(Path(__file__).parent))
 
-from fastapi.routing import APIRoute  # noqa: E402
-from web_client import csrf, make_client  # noqa: E402
+from web_client import api_routes, csrf, make_client  # noqa: E402
 from webui_fixtures import write_fake_run  # noqa: E402
 
 from lux_pipeline.web import security  # noqa: E402
@@ -53,6 +52,51 @@ def test_the_token(tmp_path, monkeypatch):
     # what needs no token: a monitor's check, the sign-in page and what it loads
     for path in ("/healthz", "/login", "/static/lux.css", "/static/app.js"):
         assert client.get(path).status_code == 200, path
+
+
+# --- the Host header (DNS rebinding) ---------------------------------------------
+
+
+@pytest.mark.parametrize("host", ["attacker.example", "attacker.example:8321", "127.0.0.1.nip.io",
+                                  "192.168.1.5:8321", "", "[::2]:8321"])
+@pytest.mark.parametrize("path", ["/", "/config", "/api/dashboard", "/healthz", "/static/app.js",
+                                  "/api/docs", "/api/openapi.json", "/login"])
+def test_without_a_token_only_this_machines_names_are_answered(web, host, path):
+    client, _ = web
+    r = client.get(path, headers={"host": host})
+    assert r.status_code == 400 and "csrf" not in r.text.lower(), (host, path)
+
+
+def test_a_rebound_post_is_refused_before_it_reaches_a_route(web, monkeypatch):
+    client, _ = web
+    started = []
+    monkeypatch.setattr(client.app.state.runner, "start", lambda *a, **k: started.append(a))
+    r = client.post("/commands/counts", headers={"host": "attacker.example:8321"},
+                    data={"_csrf": csrf(client)})
+    assert r.status_code == 400 and started == []
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "127.0.0.1:8321", "localhost:8321", "LOCALHOST",
+                                  "[::1]:8321", "::1"])
+def test_without_a_token_loopback_names_are_answered(web, host):
+    client, _ = web
+    assert client.get("/", headers={"host": host}).status_code == 200, host
+
+
+def test_with_a_token_any_host_name_will_do(tmp_path, monkeypatch):
+    # the browser sends the cookie to the name it was set for, so a rebound
+    # page has no token; the server can be reached by the machine's name
+    client, _ = with_token(tmp_path, monkeypatch)
+    auth = {"Authorization": "Bearer s3cret"}
+    assert client.get("/", headers={**auth, "host": "build.example.org:8321"}).status_code == 200
+    assert client.get("/", headers={"host": "attacker.example"}).status_code == 401
+
+
+@pytest.mark.parametrize("header,name", [("127.0.0.1:8321", "127.0.0.1"), ("[::1]:8321", "::1"),
+                                         ("::1", "::1"), ("LocalHost", "localhost"), ("", ""),
+                                         ("[::1", "")])
+def test_host_name(header, name):
+    assert security.host_name(header) == name
 
 
 def test_signing_in(tmp_path, monkeypatch):
@@ -122,17 +166,24 @@ def fill(path):
     return re.sub(r"\{[^}]+\}", "x", path)
 
 
-def test_every_mutating_route_checks_csrf_first(web):
+def test_every_mutating_route_checks_csrf_first(web, tmp_path, monkeypatch):
     client, _ = web
-    routes = [r for r in client.app.routes if isinstance(r, APIRoute) and r.methods & MUTATING]
+    routes = [r for r in api_routes(client.app.routes) if r.methods & MUTATING]
     assert len(routes) >= 12
     for route in routes:
-        calls = [d.call for d in route.dependant.dependencies]
-        assert security.require_token in calls and security.require_csrf in calls, route.path
         for method in route.methods & MUTATING:
             for kw in ({}, {"data": {"_csrf": "wrong"}}, {"headers": {"X-CSRF-Token": "wrong"}}):
                 r = client.request(method, fill(route.path), **kw)
                 assert r.status_code == 403, (method, route.path, kw, r.status_code)
+    # and the token before that, when the server has one
+    (tmp_path / "token").mkdir()
+    client, _ = with_token(tmp_path / "token", monkeypatch)
+    for route in routes:
+        for method in route.methods & MUTATING:
+            r = client.request(method, fill(route.path), data={"_csrf": csrf(client)})
+            assert r.status_code == 401, (method, route.path, r.status_code)
+            r = client.request(method, fill(route.path), headers={"Authorization": "Bearer s3cret"})
+            assert r.status_code == 403, (method, route.path, r.status_code)
 
 
 # --- headers, and nothing inline -------------------------------------------------

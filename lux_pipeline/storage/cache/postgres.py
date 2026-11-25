@@ -851,12 +851,15 @@ class PooledCache(AbstractCache):
         # CREATE INDEX merged_type_idx ON merged_merged_record_cache USING BTREE ((data->'type'));
         # is important!
 
+        # the type is a value (from a web form too): bound, never pasted in
+        params = None
         if t == "Concept":
             qry = f"SELECT * FROM {self.name} WHERE data->>'type' IN ('Type', 'Currency', 'Language', 'Material', 'MeasurementUnit')"
         else:
-            qry = f"SELECT * FROM {self.name} WHERE data->'type' = '\"{t}\"'"
+            qry = f"SELECT * FROM {self.name} WHERE data->'type' = %s::jsonb"
+            params = (ujson.dumps(t),)
         with self._cursor(iter=True) as cursor:
-            cursor.execute(qry)
+            cursor.execute(qry, params)
             for res in cursor:
                 yield res
 
@@ -869,13 +872,16 @@ class PooledCache(AbstractCache):
         # result set gives each parallel worker a different view of "row N"
         # (synchronized seq scans start at arbitrary heap offsets), so
         # records get double-processed by some workers and skipped by others
+        # the type is a value (from a web form too): bound, never pasted in
+        params = None
         if t == "Concept":
             qry = f"SELECT * FROM {self.name} WHERE data->>'type' IN ('Type', 'Currency', 'Language', 'Material', 'MeasurementUnit') ORDER BY {self.key} ASC"
         else:
-            qry = f"SELECT * FROM {self.name} WHERE data->'type' = '\"{t}\"' ORDER BY {self.key} ASC"
+            qry = f"SELECT * FROM {self.name} WHERE data->'type' = %s::jsonb ORDER BY {self.key} ASC"
+            params = (ujson.dumps(t),)
         ct = 0
         with self._cursor(iter=True, size=50000) as cursor:
-            cursor.execute(qry)
+            cursor.execute(qry, params)
             for res in cursor:
                 if (ct % maxSlice) - mySlice == 0:
                     yield res[self.key]
@@ -886,12 +892,15 @@ class PooledCache(AbstractCache):
         # CREATE INDEX merged_type_idx ON merged_merged_record_cache USING BTREE ((data->'type'));
         # is important!
 
+        # the type is a value (from a web form too): bound, never pasted in
+        params = None
         if t == "Concept":
             qry = f"SELECT {self.key} FROM {self.name} WHERE data->>'type' IN ('Type', 'Currency', 'Language', 'Material', 'MeasurementUnit')"
         else:
-            qry = f"SELECT {self.key} FROM {self.name} WHERE data->'type' = '\"{t}\"'"
+            qry = f"SELECT {self.key} FROM {self.name} WHERE data->'type' = %s::jsonb"
+            params = (ujson.dumps(t),)
         with self._cursor(iter=True) as cursor:
-            cursor.execute(qry)
+            cursor.execute(qry, params)
             for res in cursor:
                 yield res[self.key]
 

@@ -1,5 +1,7 @@
 """What every request passes through: the token, when the server has one,
-and the CSRF check on anything that changes something.
+and the CSRF check on anything that changes something. With no token, a
+``Host`` header that names anything but this machine is refused
+(`host_allowed`, applied by a middleware in `create_app`).
 
 Both are application-wide FastAPI dependencies (`create_app`), so no
 route can be added without them. The CSRF token is one random value per
@@ -31,6 +33,33 @@ SECURITY_HEADERS = {
     "X-Frame-Options": "DENY",
 }
 NO_CSP_PATHS = ("/api/docs", "/api/docs/oauth2-redirect")
+
+
+def host_name(host_header):
+    """The host name of a ``Host`` header: lower case, no port, no IPv6
+    brackets; "" for none."""
+    host = (host_header or "").strip().lower()
+    if host.startswith("["):
+        return host[1:host.find("]")] if "]" in host else ""
+    return host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+
+
+def host_allowed(settings, host_header):
+    """Whether a request naming `host_header` may be answered.
+
+    With no token the server is loopback only (`Settings.check`) and
+    answers anyone who can reach it, so a web page could rebind its own
+    domain to 127.0.0.1 (DNS rebinding) and read and drive this server
+    from the browser of whoever opened it. Such a request names the
+    page's domain in ``Host``, so only loopback names and the configured
+    host are answered. With a token the browser never sends the cookie to
+    another name, so any ``Host`` will do (the server can be reached by
+    the machine's DNS name)."""
+    from .settings import LOOPBACK
+    if settings.token:
+        return True
+    name = host_name(host_header)
+    return name in LOOPBACK or name == (settings.host or "").strip("[]").lower()
 
 
 def is_open(path):

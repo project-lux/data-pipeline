@@ -173,6 +173,11 @@ def test_browse(web):
     assert {k["source"] for k in merged["results"]} == {None}       # a YUID needs no source
     assert client.get("/records/browse?source=aat&cache=nope").status_code == 400
     assert client.get("/records/browse?source=aat&since=yesterday").status_code == 400
+    # only the classes the configuration knows (the type reaches a query)
+    bad = client.get("/api/records/sample?source=aat&type=x%22%27%20OR%201%3D1%20--")
+    assert bad.status_code == 400 and "is not one of" in bad.json()["error"]
+    assert client.get("/records/browse?source=aat&type=Nope").status_code == 400
+    assert client.get("/api/records/sample?source=aat&type=Concept").status_code == 200
 
 
 def test_recent_lookups_and_links_from_elsewhere(web):

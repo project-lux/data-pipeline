@@ -272,6 +272,14 @@ the configuration names.
 ## Safety
 
 * **The token** (above), when the server has one.
+* **Host names**: without a token the server answers only requests that
+  name this machine (`127.0.0.1`, `localhost`, `::1`, or the `--host`
+  given), and refuses others (400) before anything else, static files and
+  `/api/docs` included. Otherwise a web page open in the operator's
+  browser could point its own domain at 127.0.0.1 (DNS rebinding) and
+  read and drive the server. Through an SSH tunnel, open
+  `http://127.0.0.1:8321/` or `http://localhost:8321/`. With a token any
+  name will do (the cookie never goes to another name).
 * **CSRF**: every request that changes something carries the page's CSRF
   token (a new one each server start), or is refused (403) before
   anything else is looked at.
@@ -285,6 +293,8 @@ the configuration names.
   the Commands pages (a command with `--force` can be forced). Two phases
   started from the web never run at once. One counts run, one bloat
   report and one set of health checks at a time.
+* **Values** in URLs reach queries as bound parameters, and a record type
+  to browse must be one the configuration knows.
 * **Paths** in URLs stay inside their roots: a run is named relative to
   `log_dir`, timing directories must be inside the installation's
   directories, and a record key is a name (letters, digits, `_ . -`),
