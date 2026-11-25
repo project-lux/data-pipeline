@@ -68,11 +68,11 @@ The function continues to attempt to find new equivalents iteratively until no n
 * Complexity: Currently quite low, but could be more sophisticated in the future
 * Entry Point: reconcile()
 
-Start with sources/reconciler.py and look at SqliteReconciler. 
+Start with lux_pipeline/process/base/reconciler.py and look at LmdbReconciler.
 
-The SQLite databases interact like dictionaries. The keys are either external URIs (e.g. an LC uri in the wikidata identifier index) or lowercase, strip()ed labels. The values are the identifier of the source's record that matches, and its class. 
+The LMDB indexes interact like dictionaries. The keys are either external URIs (e.g. an LC uri in the wikidata identifier index) or lowercase, strip()ed labels. The values are the identifier of the source's record that matches, and its class. 
 
-The reconcile() function takes a record and the type of reconciliation to attempt. For either identifier or name it finds the value from the record (primary name in identified_by or id in equivalent) and then looks in the SQLite index for that value. It returns None if there are no matches, or the identifier if there is one.
+The reconcile() function takes a record and the type of reconciliation to attempt. For either identifier or name it finds the value from the record (primary name in identified_by or id in equivalent) and then looks in the LMDB index for that value. It returns None if there are no matches, or the identifier if there is one.
 
 The should_reconcile() function determines if it is useful to try and reconcile at all. For example, we do not want to try and reconcile a physical object against data that doesn't have physical objects.
 
