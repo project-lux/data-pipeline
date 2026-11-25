@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from lux_pipeline import records
 from lux_pipeline.cli.show import SAMPLE_CACHES
+from lux_pipeline.web.security import from_this_server
 
 router = APIRouter(prefix="/api/records", tags=["records"])
 
@@ -170,12 +171,16 @@ def get_resolve(request: Request, q: str, source: str = ""):
 
 @router.get("/journey")
 def get_journey(request: Request, q: str, source: str = "", mapped: bool = False):
+    if mapped:
+        from_this_server(request)
     return journey_data(request.app.state.lux, q, source, mapped)
 
 
 @router.get("/sample")
 def get_sample(request: Request, source: str, cache: str = "recordcache", type: str = "",
                since: str = "", n: int = 50):
+    if type:
+        from_this_server(request)          # reads every record of the cache
     return sample_data(request.app.state.lux, source, cache, type, since, n)
 
 

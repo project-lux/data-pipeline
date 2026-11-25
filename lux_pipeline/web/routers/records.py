@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from lux_pipeline.web.api.records import (STAGES, browse_options, journey_data, sample_data,
                                           stage_row, validate_data)
 from lux_pipeline.web.app import page
+from lux_pipeline.web.security import from_this_server
 
 router = APIRouter(include_in_schema=False)
 NAV = ("Records", "/records")
@@ -40,6 +41,8 @@ def show(request: Request, q: str = "", source: str = "", mapped: bool = False, 
          validate: str = ""):
     if not q.strip():
         return index_page(request)
+    if mapped:
+        from_this_server(request)          # builds and runs the source's mapper
     state = request.app.state.lux
     try:
         j = journey_data(state, q, source or None, mapped)
@@ -77,6 +80,8 @@ def browse(request: Request, source: str = "", cache: str = "recordcache", type:
     form = {"source": source, "cache": cache, "type": type, "since": since, "n": n}
     if not source:
         return index_page(request, browse=form)
+    if type:
+        from_this_server(request)          # reads every record of the cache
     try:
         sample = sample_data(request.app.state.lux, source, cache, type, since, n)
     except ValueError as e:

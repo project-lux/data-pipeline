@@ -14,11 +14,12 @@ import json
 import time
 from argparse import Namespace
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
 from lux_pipeline.cli import counts
 from lux_pipeline.web.actions import record
+from lux_pipeline.web.security import from_this_server
 
 router = APIRouter(prefix="/api/counts", tags=["counts"])
 SECTIONS = ("caches", "maps", "indexes")
@@ -119,13 +120,13 @@ async def count_events(state, source="", cache="", map="", index=""):
     yield sse("done", {"totals": result["totals"], "seconds": result["seconds"]})
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(from_this_server)])
 def get_counts(request: Request, source: str = "", cache: str = "", map: str = "", index: str = ""):
     record(request, "counts.run", source=source, cache=cache, map=map, index=index)
     return counts_data(request.app.state.lux, source, cache, map, index)
 
 
-@router.get("/events")
+@router.get("/events", dependencies=[Depends(from_this_server)])
 async def get_events(request: Request, source: str = "", cache: str = "", map: str = "",
                      index: str = ""):
     state = request.app.state.lux

@@ -13,13 +13,14 @@ import json
 import time
 from argparse import Namespace
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
 from lux_pipeline.cli import pg_maintain
 from lux_pipeline.cli.pg_tune import pipeline_settings
 from lux_pipeline.storage import pg_tune
 from lux_pipeline.web.actions import record
+from lux_pipeline.web.security import from_this_server
 
 router = APIRouter(prefix="/api/maintenance", tags=["maintenance"])
 GB = 1024 ** 3
@@ -141,7 +142,7 @@ def get_tune(request: Request, workers: int | None = None):
     return tune_data(request.app.state.lux, workers)
 
 
-@router.get("/bloat")
+@router.get("/bloat", dependencies=[Depends(from_this_server)])
 def get_bloat(request: Request, source: str = "", cache: str = ""):
     record(request, "bloat.run", source=source, cache=cache)
     rows = bloat_rows(request.app.state.lux, source, cache)
@@ -149,7 +150,7 @@ def get_bloat(request: Request, source: str = "", cache: str = ""):
             "skipped": [r["skipped"] for r in rows if "skipped" in r]}
 
 
-@router.get("/bloat/events")
+@router.get("/bloat/events", dependencies=[Depends(from_this_server)])
 async def get_bloat_events(request: Request, source: str = "", cache: str = ""):
     state = request.app.state.lux
     await asyncio.to_thread(bloat_targets, state, source, cache)

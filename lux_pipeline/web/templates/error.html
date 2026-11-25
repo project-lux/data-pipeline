@@ -5,6 +5,7 @@
   <h1>{{ status }}</h1>
   <p class="message">{{ message }}</p>
   {% if hint %}<p class="hint">{{ hint }}</p>{% endif %}
+  {% if link %}<p><a href="{{ link.href }}">{{ link.label }}</a></p>{% endif %}
   <p><a href="/">Back to the dashboard</a></p>
 </section>
 {% endblock %}

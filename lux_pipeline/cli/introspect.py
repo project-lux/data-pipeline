@@ -25,6 +25,7 @@ across every Python the package supports.
 """
 
 import argparse
+import functools
 import json
 import logging
 
@@ -199,6 +200,23 @@ def command_spec(name):
         "confirms": CONFIRM.get(name),
         "options": glob + own,
     }
+
+
+@functools.cache
+def listed_names():
+    """The names `lux help` lists (read once: `list_commands` parses every
+    command module)."""
+    return frozenset(n for n, _ in list_commands())
+
+
+def listed_command_spec(name):
+    """`command_spec` for a command `lux help` lists, ``ValueError`` for any
+    other name. For names from outside (the web UI's URLs and forms):
+    `entry.resolve_command` imports a dotted name as an extension command,
+    so a name never checked could import any module on the path."""
+    if name not in listed_names():
+        raise ValueError(f"Unknown command '{name}'. See 'lux help' for the list.")
+    return command_spec(name)
 
 
 def all_command_specs():

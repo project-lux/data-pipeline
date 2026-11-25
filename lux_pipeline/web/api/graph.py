@@ -15,9 +15,10 @@ import asyncio
 import threading
 import zlib
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from lux_pipeline import records
+from lux_pipeline.web.security import from_this_server
 
 router = APIRouter(prefix="/api/graph", tags=["graph"])
 
@@ -153,7 +154,7 @@ async def graph_data(state, a, b, timeout=None):
     return shape(data)
 
 
-@router.get("")
+@router.get("", dependencies=[Depends(from_this_server)])
 async def get_graph(request: Request, a: str, b: str):
     try:
         return await graph_data(request.app.state.lux, a.strip(), b.strip())

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Request
 
 from lux_pipeline.web.api.graph import KINDS, GraphTimeout, graph_data
 from lux_pipeline.web.app import page
+from lux_pipeline.web.security import from_this_server
 
 router = APIRouter(include_in_schema=False)
 NAV = ("Graph", "/graph")
@@ -19,6 +20,7 @@ async def graph(request: Request, a: str = "", b: str = ""):
                "network": bool(getattr(cfgs, "allow_network", False))}
     status = 200
     if a and b:
+        from_this_server(request)
         try:
             context["g"] = await graph_data(state, a, b)
         except ValueError as e:

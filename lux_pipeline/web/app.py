@@ -26,8 +26,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from lux_pipeline import runtime
 from lux_pipeline.process.utils.timing_report import fmt_duration, fmt_time
 
-from .security import (NO_CSP_PATHS, SECURITY_HEADERS, TOKEN_COOKIE, host_allowed, new_csrf_token,
-                       require_csrf, require_token, safe_next, token_ok)
+from .security import (SECURITY_HEADERS, TOKEN_COOKIE, FromElsewhere, embedded_elsewhere,
+                       host_allowed, new_csrf_token, require_csrf, require_token, safe_next,
+                       token_ok)
 from .settings import Settings
 from .state import AppState, ConfigUnavailable
 
@@ -124,7 +125,10 @@ def create_app(settings=None):
     settings = settings or Settings()
     app = FastAPI(title="LUX data pipeline", version=_version(),
                   dependencies=[Depends(require_token), Depends(require_csrf)],
-                  docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
+                  # no /api/docs or /api/openapi.json: they answered without the token
+                  # (FastAPI adds them outside the dependencies) and the docs page ran
+                  # a CDN's scripts on this origin
+                  docs_url=None, openapi_url=None, redoc_url=None)
     app.state.lux = AppState(settings)
     # starts, cancels and reaps the commands run from the web (W10)
     from .runner import Runner
@@ -186,13 +190,23 @@ def create_app(settings=None):
         if token and request.query_params.get("token") and token_ok(request, request.query_params["token"]):
             response.set_cookie(TOKEN_COOKIE, token, httponly=True, samesite="strict")
         for k, v in SECURITY_HEADERS.items():
-            if k == "Content-Security-Policy" and request.url.path in NO_CSP_PATHS:
-                continue
             response.headers.setdefault(k, v)
         return response
 
-    # added last, so it runs first: before the routes, static files and
-    # /api/docs, which the dependencies above do not cover
+    # added last, so these run first: before the routes and the static
+    # files, which the dependencies above do not cover
+    @app.middleware("http")
+    async def check_origin(request: Request, call_next):
+        """403 for another site's page loading or fetching anything here
+        (`embedded_elsewhere`); a link in is still followed."""
+        if embedded_elsewhere(request):
+            logger.warning(f"web: refused a request from another site's page "
+                           f"({request.method} {request.url.path}, "
+                           f"{request.headers.get('sec-fetch-site')} "
+                           f"{request.headers.get('sec-fetch-mode')})")
+            return PlainTextResponse("This server answers only its own pages.", status_code=403)
+        return await call_next(request)
+
     @app.middleware("http")
     async def check_host(request: Request, call_next):
         """400 for a ``Host`` this server must not answer (`host_allowed`:
@@ -203,6 +217,16 @@ def create_app(settings=None):
             return PlainTextResponse("This server answers only on this machine's own names.",
                                      status_code=400)
         return await call_next(request)
+
+    @app.exception_handler(FromElsewhere)
+    async def from_elsewhere(request, exc):
+        message = "This link came from another site, so it was not run."
+        if wants_json(request):
+            return JSONResponse({"error": message, "status": 403, "hint": None}, status_code=403)
+        here = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+        return page(request, "error.html", status_code=403, status=403, message=message,
+                    hint="Follow the link below to run it from this server's own page.",
+                    link={"href": safe_next(here), "label": "Run it"}, with_configs=False)
 
     @app.exception_handler(ConfigUnavailable)
     async def no_config(request, exc):

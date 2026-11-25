@@ -7,6 +7,7 @@ from lux_pipeline.cli.pg_maintain import RESULT_CACHES, SOURCE_CACHES
 from lux_pipeline.web.actions import record
 from lux_pipeline.web.api.maintenance import bloat_rows, tune_data
 from lux_pipeline.web.app import page
+from lux_pipeline.web.security import from_this_server
 
 router = APIRouter(include_in_schema=False)
 NAV = ("Maintenance", "/maintenance")
@@ -23,6 +24,7 @@ def maintenance(request: Request, workers: int | None = None, bloat: bool = Fals
     rows = skipped = None
     error = None
     if bloat:
+        from_this_server(request)
         try:
             record(request, "bloat.run", source=source, cache=cache)
             got = bloat_rows(state, source, cache)
