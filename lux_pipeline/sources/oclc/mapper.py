@@ -2,7 +2,7 @@ import logging
 from lux_pipeline.process.base.mapper import Mapper
 from cromulent import model, vocab
 from lux_pipeline.process.utils.mapper_utils import make_datetime, test_birth_death
-from lxml import etree
+from lux_pipeline.process.utils import safe_xml
 import re
 
 logger = logging.getLogger("lux_pipeline")
@@ -103,7 +103,7 @@ class ViafMapper(Mapper):
         if "<?xml" in xml:
             xml = bytes(xml, "utf-8")
         try:
-            dom = etree.XML(xml)
+            dom = safe_xml.XML(xml)
         except:
             raise
             return None

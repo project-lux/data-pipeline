@@ -131,6 +131,15 @@ def test_matches_must_end_where_the_namespace_does(matches, ok):
         assert len(problems) == 1 and not problems[0].startswith("warning:")
 
 
+def test_a_match_inside_the_namespaces_path_is_a_problem():
+    # split_uri names a URI only where its host starts (config.match_at_start)
+    [p] = store.matches_problems({**SAM, "matches": ["datasets/source-records/"]})
+    assert "is inside the path of the namespace" in p and not p.startswith("warning:")
+    problems = store.matches_problems({**SAM, "matches": ["datasets/source-records/",
+                                                          "data.example.org/datasets/source-records/"]})
+    assert len(problems) == 1 and "is inside the path" in problems[0]
+
+
 def test_a_short_match_says_what_happens_and_what_to_write():
     [p] = store.matches_problems({**SAM, "matches": ["data.example.org/datasets/source-records"]})
     assert "splits to the identifier '/ID'" in p

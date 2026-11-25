@@ -2,7 +2,7 @@ import logging
 from lux_pipeline.process.base.mapper import Mapper
 from cromulent import model, vocab
 from lux_pipeline.process.utils.mapper_utils import make_datetime, test_birth_death, get_wikidata_qid
-from lxml import etree
+from lux_pipeline.process.utils import safe_xml
 import re
 
 logger = logging.getLogger("lux_pipeline")
@@ -695,7 +695,7 @@ class FastMapper(Mapper):
     def transform(self, record, rectype=None):
         """Transforms a MARC record into Linked.art JSON."""
         try:
-            root = etree.fromstring(record["data"]['xml'])
+            root = safe_xml.fromstring(record["data"]['xml'])
         except Exception as e:
             logger.warning(f"Error parsing XML: {e}")
             return None  # Return None if XML parsing fails

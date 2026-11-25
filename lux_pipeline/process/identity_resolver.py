@@ -49,7 +49,7 @@ from contextlib import contextmanager
 import ujson as json
 
 from lux_pipeline.process.utils.timing import PhaseTimer, timing_out_dir
-from lux_pipeline.config import index_path
+from lux_pipeline.config import CONTROL_CHARS, index_path
 from lux_pipeline.storage.idmap.lmdb import TabLmdb
 
 logger = logging.getLogger("lux_pipeline")
@@ -109,6 +109,12 @@ class IdentityResolver(object):
     # its enclosing step's would be summed alongside it -- which is the
     # double-count that made a phase report -53% unattributed.
     _step_label = None
+    # assertions not written because a URI had a control character in it
+    # (a tab or newline would split the line into lines nobody wrote);
+    # canonicalize refuses such identifiers, so this guards the record's own
+    # key and anything that reached here another way
+    refused = 0
+    refused_example = None
 
     """Per-slice append-only log of sameAs assertions.
 
@@ -220,6 +226,9 @@ class IdentityResolver(object):
         recid = rec["data"]["id"]
         typ = rec["data"]["type"]
         qrecid = self.shorten(self.configs.make_qua(recid, typ))
+        if CONTROL_CHARS.search(qrecid):
+            self._refuse(qrecid)
+            return
         fh = self._writer()
         wrote = False
         for eq in rec["data"].get("equivalent", []):
@@ -227,6 +236,9 @@ class IdentityResolver(object):
             if not eqid or eqid == recid:
                 continue
             qeq = self.shorten(self.configs.make_qua(eqid, typ))
+            if CONTROL_CHARS.search(qeq):
+                self._refuse(qeq)
+                continue
             lo, hi = (qrecid, qeq) if qrecid <= qeq else (qeq, qrecid)
             fh.write(f"{lo}\t{hi}\t{qrecid}\n")
             wrote = True
@@ -237,7 +249,16 @@ class IdentityResolver(object):
         # mid-slice has to be re-run anyway -- its assertions are only
         # consumed once every slice has finished.
 
+    def _refuse(self, uri):
+        self.refused += 1
+        if self.refused_example is None:
+            self.refused_example = uri
+
     def close(self):
+        if self.refused:
+            logger.warning(f"{self.refused} assertion(s) not written: a URI with a control "
+                           f"character in it, as {self.refused_example!r}")
+            self.refused, self.refused_example = 0, None
         # None when nothing was ever written -- there is no handle to close
         # and, deliberately, no file on disk either
         if self.fh is not None:

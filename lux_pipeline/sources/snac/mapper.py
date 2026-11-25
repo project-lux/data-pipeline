@@ -1,7 +1,7 @@
 from lux_pipeline.process.base.mapper import Mapper
 from lux_pipeline.process.utils.mapper_utils import make_datetime
 from cromulent import model, vocab
-import lxml.etree as ET
+from lux_pipeline.process.utils import safe_xml
 import re 
 
 # keys:
@@ -120,7 +120,7 @@ class SNACMapper(Mapper):
             for b in biog:
                 text = self.to_plain_string(b.get("text", "")) 
                 if text.startswith("<biogHist>"):
-                    root = ET.fromstring(text)
+                    root = safe_xml.fromstring(text)
                     text = ''.join(root.itertext())
                     text = re.sub(r'\s+', ' ', text.strip())
                 bstat = vocab.BiographyStatement(content=text)

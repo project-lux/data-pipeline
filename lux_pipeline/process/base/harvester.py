@@ -61,7 +61,7 @@ from types import SimpleNamespace
 
 import requests
 import ujson as json
-from lxml import etree
+from lux_pipeline.process.utils import safe_xml
 
 from lux_pipeline.config import importObject
 from lux_pipeline.process.update_manager import UpdateManager
@@ -193,7 +193,7 @@ class PmhProtocol(HarvestProtocol):
 
     def fetch_pmh(self, uri):
         resp = self.session.get(uri)
-        dom = etree.XML(resp.text.encode("utf-8"))
+        dom = safe_xml.XML(resp.text.encode("utf-8"))
         return dom
 
     def get_token(self, dom):

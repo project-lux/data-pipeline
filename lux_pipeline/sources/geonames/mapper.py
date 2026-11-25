@@ -1,7 +1,7 @@
 import logging
 from lux_pipeline.process.base.mapper import Mapper
 from cromulent import model, vocab
-from lxml import etree
+from lux_pipeline.process.utils import safe_xml
 
 logger = logging.getLogger("lux_pipeline")
 
@@ -39,7 +39,7 @@ class GnMapper(Mapper):
                 return None
 
         try:
-            dom = etree.XML(xml.encode('utf-8'))
+            dom = safe_xml.XML(xml.encode('utf-8'))
         except:
             # print(f"Broken XML in geonames {record['identifier']}")
             return None

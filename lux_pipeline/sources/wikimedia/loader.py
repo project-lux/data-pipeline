@@ -44,7 +44,7 @@ import os
 from collections import Counter
 from urllib.parse import quote
 
-from lxml import etree
+from lux_pipeline.process.utils import safe_xml
 
 from lux_pipeline.process.base.loader import Loader
 from lux_pipeline.sources.wikimedia import wikitext
@@ -92,7 +92,7 @@ class WmLoader(Loader):
         """The File pages of a MediaWiki XML export, as dicts."""
         before = Counter(self.pages)
         with self.file_opener(path, comp) as fh:
-            for _, page in etree.iterparse(fh, events=("end",), tag="{*}page"):
+            for _, page in safe_xml.iterparse(fh, events=("end",), tag="{*}page"):
                 rec = self.file_page(page)
                 # free what has been read: the dump is far larger than memory
                 page.clear()

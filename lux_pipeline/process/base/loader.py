@@ -111,6 +111,7 @@ import zlib
 import lmdb
 import ujson as json
 from lxml import etree
+from lux_pipeline.process.utils import safe_xml
 
 from lux_pipeline.progress import Sliced, null_progress
 from lux_pipeline.process.utils.sniff import sniff_spec
@@ -603,7 +604,7 @@ class Loader(Sliced):
         with self.file_opener(path, comp) as fh:
             data = fh.read()
         try:
-            dom = etree.XML(data)
+            dom = safe_xml.XML(data)
         except Exception as e:
             logger.error(f"Error parsing XML {path} for {self.name}: {e}")
             return
